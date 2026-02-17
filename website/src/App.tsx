@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 
 function applyTheme() {
@@ -21,14 +20,7 @@ const App = () => {
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <Index />;
 };
 
 export default App;
