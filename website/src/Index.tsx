@@ -704,7 +704,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-4 py-2 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-primary">MapArt PNG → NBT</h1>
+        <h1 className="text-lg font-bold text-primary">MapArt PNG → NBT Converter</h1>
         <button
           onClick={toggleTheme}
           className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
