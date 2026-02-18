@@ -641,13 +641,13 @@ const Index = () => {
     return Math.max(70, maxLen * 6 + 12);
   }, [materialCounts, colorRequiredMap, showStacks]);
 
-  const gridCols = useMemo(() => {
+  const gridColsStyle = useMemo(() => {
     const parts = ["24px"];
     if (showIds) parts.push("24px");
     if (showNames) parts.push("135px");
-    parts.push("auto", "46px");
+    parts.push("minmax(0,1fr)", "46px");
     if (hasRequiredCol) parts.push(`${requiredColWidth}px`);
-    return `grid-cols-[${parts.join("_")}]`;
+    return { gridTemplateColumns: parts.join(" ") };
   }, [showIds, showNames, hasRequiredCol, requiredColWidth]);
 
   const getAllBlocks = (idx: number) => {
@@ -668,7 +668,8 @@ const Index = () => {
       <div
         key={idx}
         ref={el => { colorRowRefs.current[idx] = el; }}
-        className={`grid ${gridCols} gap-1 items-center py-px text-xs transition-colors ${isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""} ${isHighlighted ? "bg-primary/20 ring-1 ring-primary/60 rounded" : ""}`}
+        className={`grid gap-1 items-center py-px text-xs transition-colors ${isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""} ${isHighlighted ? "bg-primary/20 ring-1 ring-primary/60 rounded" : ""}`}
+        style={gridColsStyle}
       >
         <div
           className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow"
@@ -820,8 +821,8 @@ const Index = () => {
                 </label>
               )}
             </div>
-            <div key={`${showIds}-${showNames}`} className="relative">
-              <div className={`grid ${gridCols} gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border`}>
+            <div key={`${showIds}-${showNames}`} className="relative overflow-hidden">
+              <div className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border" style={gridColsStyle}>
                 <span className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort("color")} title="Sort by color hue">
                   Clr{sortArrow("color")}
                 </span>
