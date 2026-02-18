@@ -1,5 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import Index from "./Index";
 import { useEffect } from "react";
 
 function applyTheme() {
