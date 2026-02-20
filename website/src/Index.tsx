@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { BASE_COLORS, getColorLookup, getShadedRgb } from "@/data/mapColors";
-import { validatePng, convertToNbt, computeMaterialCounts, type CustomColor, type BuildMode, type SupportMode } from "@/lib/converter";
-
+import {
+  validatePng,
+  convertToNbt,
+  computeMaterialCounts,
+  type CustomColor,
+  type BuildMode,
+  type SupportMode,
+} from "@/lib/converter";
 
 // ── Preset types ──
 interface Preset {
@@ -13,19 +19,27 @@ const BUILTIN_PRESET_NAMES = ["Default", "Carpets", "Fullblock"] as const;
 
 function buildDefaultPreset(): Preset {
   const overrides: Record<string, string> = {
-    SNOW: "white_carpet", FIRE: "redstone_block", WOOL: "white_candle",
-    WOOD: "oak_pressure_plate", WATER: "oak_leaves[waterlogged=true]",
-    NETHER: "crimson_roots", PLANT: "pink_petals", DIAMOND: "prismarine_bricks",
-    TERRACOTTA_RED: "decorated_pot", TERRACOTTA_ORANGE: "resin_clump[south=true]",
+    SNOW: "white_carpet",
+    FIRE: "redstone_block",
+    WOOL: "white_candle",
+    WOOD: "oak_pressure_plate",
+    WATER: "oak_leaves[waterlogged=true]",
+    NETHER: "crimson_roots",
+    PLANT: "pink_petals",
+    DIAMOND: "prismarine_bricks",
+    TERRACOTTA_RED: "decorated_pot",
+    TERRACOTTA_ORANGE: "resin_clump[south=true]",
     TERRACOTTA_CYAN: "mud",
   };
   const blocks: Record<number, string> = {};
   for (let i = 1; i < BASE_COLORS.length; i++) {
     const c = BASE_COLORS[i];
-    blocks[i] = overrides[c.name]
-      ?? (c.name.startsWith("COLOR_") ? c.blocks.find(b => b.endsWith("_carpet")) : undefined)
-      ?? c.blocks.find(b => b.endsWith("_pressure_plate"))
-      ?? c.blocks[0] ?? "";
+    blocks[i] =
+      overrides[c.name] ??
+      (c.name.startsWith("COLOR_") ? c.blocks.find(b => b.endsWith("_carpet")) : undefined) ??
+      c.blocks.find(b => b.endsWith("_pressure_plate")) ??
+      c.blocks[0] ??
+      "";
   }
   return { name: "Default", blocks };
 }
@@ -39,18 +53,44 @@ function buildCarpetsPreset(): Preset {
 function buildFullblockPreset(): Preset {
   const { blocks: def } = buildDefaultPreset();
   const specific: Record<number, string> = {
-    1: "grass_block", 2: "sandstone", 3: "mushroom_stem", 4: "tnt",
-    5: "ice", 6: "iron_block", 7: "oak_leaves", 8: "white_concrete",
-    10: "granite", 11: "andesite", 12: "oak_leaves[waterlogged=true]",
-    13: "oak_planks", 14: "diorite", 15: "orange_concrete",
-    16: "magenta_concrete", 17: "light_blue_concrete", 18: "yellow_concrete",
-    19: "lime_concrete", 20: "pink_concrete", 21: "gray_concrete",
-    22: "light_gray_concrete", 23: "cyan_concrete", 24: "purple_concrete",
-    25: "blue_concrete", 26: "brown_concrete", 27: "green_concrete",
-    28: "red_concrete", 29: "black_concrete", 30: "gold_block",
-    31: "prismarine_bricks", 34: "spruce_planks", 35: "netherrack",
-    36: "white_terracotta", 37: "orange_terracotta", 43: "gray_terracotta",
-    44: "light_gray_terracotta", 53: "crimson_planks", 56: "warped_planks",
+    1: "grass_block",
+    2: "sandstone",
+    3: "mushroom_stem",
+    4: "tnt",
+    5: "ice",
+    6: "iron_block",
+    7: "oak_leaves",
+    8: "white_concrete",
+    10: "granite",
+    11: "andesite",
+    12: "oak_leaves[waterlogged=true]",
+    13: "oak_planks",
+    14: "diorite",
+    15: "orange_concrete",
+    16: "magenta_concrete",
+    17: "light_blue_concrete",
+    18: "yellow_concrete",
+    19: "lime_concrete",
+    20: "pink_concrete",
+    21: "gray_concrete",
+    22: "light_gray_concrete",
+    23: "cyan_concrete",
+    24: "purple_concrete",
+    25: "blue_concrete",
+    26: "brown_concrete",
+    27: "green_concrete",
+    28: "red_concrete",
+    29: "black_concrete",
+    30: "gold_block",
+    31: "prismarine_bricks",
+    34: "spruce_planks",
+    35: "netherrack",
+    36: "white_terracotta",
+    37: "orange_terracotta",
+    43: "gray_terracotta",
+    44: "light_gray_terracotta",
+    53: "crimson_planks",
+    56: "warped_planks",
     61: "verdant_froglight",
   };
   const blocks = Object.fromEntries(Object.entries(def).map(([k, v]) => [k, specific[Number(k)] ?? v]));
@@ -71,9 +111,14 @@ function loadPresets(): Preset[] {
     const raw = localStorage.getItem("mapart_presets");
     if (raw) {
       const parsed: Preset[] = JSON.parse(raw);
-      return [...builtins, ...parsed.filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as typeof BUILTIN_PRESET_NAMES[number]))];
+      return [
+        ...builtins,
+        ...parsed.filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number])),
+      ];
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return builtins;
 }
 
@@ -81,7 +126,9 @@ function loadCached<T>(key: string, fallback: T): T {
   try {
     const v = localStorage.getItem(key);
     if (v !== null) return JSON.parse(v);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return fallback;
 }
 
@@ -102,7 +149,8 @@ const DEFAULT_SORTED = (() => {
 
 function getHue(r: number, g: number, b: number): number {
   const [rn, gn, bn] = [r / 255, g / 255, b / 255];
-  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const max = Math.max(rn, gn, bn),
+    min = Math.min(rn, gn, bn);
   if (max === min) return 0;
   const d = max - min;
   let h: number;
@@ -193,23 +241,35 @@ function formatStacks(count: number): string {
 }
 
 function encodePreset(
-  preset: Preset, fillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: CustomColor[], sortKey: SortKey, sortDir: SortDir,
+  preset: Preset,
+  fillerBlock: string,
+  supportMode: SupportMode,
+  buildMode: BuildMode,
+  customColors: CustomColor[],
+  sortKey: SortKey,
+  sortDir: SortDir,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
     const block = preset.blocks[i + 1] || "";
     const idx = BASE_COLORS[i + 1].blocks.indexOf(block);
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
-  const ccStr = customColors.length > 0
-    ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${cc.block}`).join(";") : "";
-  const s = [preset.name, parts.join(","), fillerBlock, supportMode, buildMode, ccStr, `${sortKey}:${sortDir}`].join("|");
+  const ccStr =
+    customColors.length > 0 ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${cc.block}`).join(";") : "";
+  const s = [preset.name, parts.join(","), fillerBlock, supportMode, buildMode, ccStr, `${sortKey}:${sortDir}`].join(
+    "|",
+  );
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function decodePreset(encoded: string): {
-  preset: Preset; filler?: string; supportMode?: SupportMode;
-  buildMode?: BuildMode; customColors?: CustomColor[]; sortKey?: SortKey; sortDir?: SortDir;
+  preset: Preset;
+  filler?: string;
+  supportMode?: SupportMode;
+  buildMode?: BuildMode;
+  customColors?: CustomColor[];
+  sortKey?: SortKey;
+  sortDir?: SortDir;
 } | null {
   try {
     let s = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -219,7 +279,7 @@ function decodePreset(encoded: string): {
 
     const supportRaw = sections[3] || "none";
     const supportMode: SupportMode =
-      supportRaw === "1" ? "steps" : supportRaw === "0" ? "none" : supportRaw as SupportMode;
+      supportRaw === "1" ? "steps" : supportRaw === "0" ? "none" : (supportRaw as SupportMode);
 
     const blocks: Record<number, string> = {};
     for (const [i, p] of sections[1].split(",").entries()) {
@@ -252,9 +312,13 @@ function decodePreset(encoded: string): {
       filler: sections[2] || undefined,
       supportMode,
       buildMode: (sections[4] || undefined) as BuildMode | undefined,
-      customColors, sortKey, sortDir,
+      customColors,
+      sortKey,
+      sortDir,
     };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 // ── Cached localStorage keys ──
@@ -278,12 +342,18 @@ const Index = () => {
         const idx = loadPresets().findIndex(p => p.name === name);
         if (idx >= 0) return idx;
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return 0;
   });
   const [fillerBlock, setFillerBlock] = useState(() => loadCached(LS_KEYS.filler, "resin_block"));
-  const [buildMode, setBuildMode] = useState<BuildMode>(() => loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode));
-  const [supportMode, setSupportMode] = useState<SupportMode>(() => loadCached(LS_KEYS.supportMode, "none" as SupportMode));
+  const [buildMode, setBuildMode] = useState<BuildMode>(() =>
+    loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
+  );
+  const [supportMode, setSupportMode] = useState<SupportMode>(() =>
+    loadCached(LS_KEYS.supportMode, "none" as SupportMode),
+  );
   const [customColors, setCustomColors] = useState<CustomColor[]>([]);
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
@@ -308,7 +378,9 @@ const Index = () => {
   const preset = presets[activeIdx] || buildDefaultPreset();
 
   // Persist settings to localStorage
-  useEffect(() => { localStorage.setItem("mapart_presets", JSON.stringify(presets)); }, [presets]);
+  useEffect(() => {
+    localStorage.setItem("mapart_presets", JSON.stringify(presets));
+  }, [presets]);
   useEffect(() => {
     const entries: [string, unknown][] = [
       [LS_KEYS.filler, fillerBlock],
@@ -352,7 +424,7 @@ const Index = () => {
 
   const fillerIsNoneColor = useMemo(() => {
     const stripped = fillerBlock.split("[")[0];
-    return !BASE_COLORS.slice(1).some((bc) => bc.blocks.some((b) => b.split("[")[0] === stripped));
+    return !BASE_COLORS.slice(1).some(bc => bc.blocks.some(b => b.split("[")[0] === stripped));
   }, [fillerBlock]);
 
   const missingBlocks = useMemo(() => {
@@ -371,16 +443,25 @@ const Index = () => {
     if (!imageData || !imageValid) return null;
     try {
       return computeMaterialCounts(imageData, {
-        blockMapping: preset.blocks, fillerBlock, customColors,
-        buildMode: effectiveBuildMode, supportMode, baseName: "",
+        blockMapping: preset.blocks,
+        fillerBlock,
+        customColors,
+        buildMode: effectiveBuildMode,
+        supportMode,
+        baseName: "",
       });
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, [imageData, imageValid, preset.blocks, fillerBlock, customColors, effectiveBuildMode, supportMode]);
 
   const sortedMaterials = useMemo(
-    () => materialCounts
-      ? Object.entries(materialCounts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1])
-      : [],
+    () =>
+      materialCounts
+        ? Object.entries(materialCounts)
+            .filter(([, c]) => c > 0)
+            .sort((a, b) => b[1] - a[1])
+        : [],
     [materialCounts],
   );
 
@@ -389,11 +470,17 @@ const Index = () => {
     try {
       const sentinel = "\x00sentinel";
       const alt = computeMaterialCounts(imageData, {
-        blockMapping: preset.blocks, fillerBlock: sentinel, customColors,
-        buildMode: effectiveBuildMode, supportMode, baseName: "",
+        blockMapping: preset.blocks,
+        fillerBlock: sentinel,
+        customColors,
+        buildMode: effectiveBuildMode,
+        supportMode,
+        baseName: "",
       });
       return alt[sentinel] || 0;
-    } catch { return 0; }
+    } catch {
+      return 0;
+    }
   }, [imageData, imageValid, materialCounts, preset.blocks, customColors, effectiveBuildMode, supportMode]);
 
   const colorRequiredMap = useMemo(() => {
@@ -449,7 +536,8 @@ const Index = () => {
   useEffect(() => {
     if (!imageData) return;
     if (!hasNonFlatShades) setBuildMode("flat");
-    else if (hasSuppressPattern) setBuildMode(prev => prev.startsWith("staircase") || prev === "flat" ? "suppress_pairs_ew" : prev);
+    else if (hasSuppressPattern)
+      setBuildMode(prev => prev.startsWith("staircase") || prev === "flat" ? "suppress_pairs_ew" : prev);
     else setBuildMode(prev => prev === "flat" ? "staircase_classic" : prev);
   }, [imageData, hasNonFlatShades, hasSuppressPattern]);
 
@@ -484,7 +572,10 @@ const Index = () => {
     const sorters: Record<string, (a: number, b: number) => number> = {
       name: (a, b) => dir * getDisplayName(BASE_COLORS[a].name).localeCompare(getDisplayName(BASE_COLORS[b].name)),
       options: (a, b) => dir * (BASE_COLORS[a].blocks.length - BASE_COLORS[b].blocks.length),
-      color: (a, b) => dir * (getHue(BASE_COLORS[a].r, BASE_COLORS[a].g, BASE_COLORS[a].b) - getHue(BASE_COLORS[b].r, BASE_COLORS[b].g, BASE_COLORS[b].b)),
+      color: (a, b) =>
+        dir *
+        (getHue(BASE_COLORS[a].r, BASE_COLORS[a].g, BASE_COLORS[a].b) -
+          getHue(BASE_COLORS[b].r, BASE_COLORS[b].g, BASE_COLORS[b].b)),
       id: (a, b) => dir * (a - b),
       required: (a, b) => dir * ((colorRequiredMap[a] || 0) - (colorRequiredMap[b] || 0)),
     };
@@ -508,7 +599,7 @@ const Index = () => {
     }
   };
 
-  const sortArrow = (key: SortKey) => sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+  const sortArrow = (key: SortKey) => (sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "");
 
   const updateBlock = (baseIndex: number, block: string) =>
     setPresets(prev => {
@@ -519,7 +610,12 @@ const Index = () => {
 
   const selectPreset = (idx: number) => {
     const builtin = getBuiltinPreset(presets[idx].name);
-    if (builtin) setPresets(prev => { const n = [...prev]; n[idx] = builtin; return n; });
+    if (builtin)
+      setPresets(prev => {
+        const n = [...prev];
+        n[idx] = builtin;
+        return n;
+      });
     setActiveIdx(idx);
   };
 
@@ -531,7 +627,8 @@ const Index = () => {
   };
 
   const deletePreset = () => {
-    if (BUILTIN_PRESET_NAMES.includes(preset.name as typeof BUILTIN_PRESET_NAMES[number]) || presets.length <= 1) return;
+    if (BUILTIN_PRESET_NAMES.includes(preset.name as (typeof BUILTIN_PRESET_NAMES)[number]) || presets.length <= 1)
+      return;
     setPresets(prev => prev.filter((_, i) => i !== activeIdx));
     setActiveIdx(0);
   };
@@ -543,11 +640,8 @@ const Index = () => {
   };
 
   const clearImage = () => {
-    setImageData(null);
-    setImageName("");
-    setImageValid(false);
-    setPaletteErrors([]);
-    setShowUnusedColors(false);
+    setImageData(null); setImageName(""); setImageValid(false);
+    setPaletteErrors([]); setShowUnusedColors(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -565,9 +659,7 @@ const Index = () => {
           // Check if the only errors are palette errors and conversion is enabled
           const sizeError = result.errors.find(e => e.includes("128×128"));
           if (sizeError || !convertUnsupported) {
-            setImageData(null);
-            setImageName("");
-            setImageValid(false);
+            setImageData(null); setImageName(""); setImageValid(false);
             setPaletteErrors(result.errors);
             if (fileRef.current) fileRef.current.value = "";
             return;
@@ -586,38 +678,65 @@ const Index = () => {
           }
 
           const d = data.data;
+          const allInputColors = new Set<string>();
           const convertedColors = new Set<string>();
+          const targetColors = new Set<string>();
           for (let i = 0; i < d.length; i += 4) {
             if (d[i + 3] === 0) continue;
             const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
+            allInputColors.add(key);
             if (lookup.has(key) || customLookup.has(key)) continue;
             // Find nearest color
-            let bestDist = Infinity;
-            let bestR = 0, bestG = 0, bestB = 0;
+            let bestDist = Infinity, bestR = 0, bestG = 0, bestB = 0;
             for (const ac of availableColors) {
-              const dr = d[i] - ac.r, dg = d[i + 1] - ac.g, db = d[i + 2] - ac.b;
+              const dr = d[i] - ac.r,
+                dg = d[i + 1] - ac.g,
+                db = d[i + 2] - ac.b;
               const dist = dr * dr + dg * dg + db * db;
-              if (dist < bestDist) { bestDist = dist; bestR = ac.r; bestG = ac.g; bestB = ac.b; }
+              if (dist < bestDist) {
+                bestDist = dist;
+                bestR = ac.r;
+                bestG = ac.g;
+                bestB = ac.b;
+              }
             }
             convertedColors.add(key);
-            d[i] = bestR; d[i + 1] = bestG; d[i + 2] = bestB;
+            targetColors.add(`${bestR},${bestG},${bestB}`);
+            d[i] = bestR;
+            d[i + 1] = bestG;
+            d[i + 2] = bestB;
           }
           // Re-validate after conversion (should pass now)
           const recheck = validatePng(data, customColors);
-          setImageData(data);
-          setImageName(file.name);
-          setImageValid(recheck.valid);
+          setImageData(data); setImageName(file.name); setImageValid(recheck.valid);
           const cc = convertedColors.size;
-          setPaletteErrors(recheck.valid ? [`Converted ${cc} color${cc === 1 ? "" : "s"} to nearest palette match.`] : recheck.errors);
+          const totalUnique = allInputColors.size;
+          // Output unique colors = original colors minus converted ones, plus target palette colors
+          const outputColors = new Set<string>();
+          for (const c of allInputColors) {
+            if (!convertedColors.has(c)) outputColors.add(c);
+          }
+          for (const c of targetColors) outputColors.add(c);
+          const fewer = totalUnique - outputColors.size;
+          const convLine1 = cc === totalUnique
+            ? `Converted ${cc} color${cc === 1 ? "" : "s"} to nearest palette match.`
+            : `Converted ${cc} (of ${totalUnique}) color${totalUnique === 1 ? "" : "s"} to nearest palette match.`;
+          const convLines = [convLine1];
+          if (fewer > 0) {
+            convLines.push(`${fewer} fewer unique color${fewer === 1 ? "" : "s"} than source image.`);
+          }
+          setPaletteErrors(
+            recheck.valid ? convLines : recheck.errors,
+          );
           setShowUnusedColors(false);
-          if (sortKey === "default") { setSortKey("required"); setSortDir("desc"); }
+          if (sortKey === "default") {
+            setSortKey("required");
+            setSortDir("desc");
+          }
           return;
         }
-        setImageData(data);
-        setImageName(file.name);
-        setImageValid(true);
-        setPaletteErrors([]);
-        setShowUnusedColors(false);
+        setImageData(data); setImageName(file.name); setImageValid(true);
+        setPaletteErrors([]); setShowUnusedColors(false);
         if (sortKey === "default") {
           setSortKey("required");
           setSortDir("desc");
@@ -634,8 +753,12 @@ const Index = () => {
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
       const result = await convertToNbt(imageData, {
-        blockMapping: preset.blocks, fillerBlock, customColors,
-        buildMode, supportMode, baseName,
+        blockMapping: preset.blocks,
+        fillerBlock,
+        customColors,
+        buildMode,
+        supportMode,
+        baseName,
       });
       const suffixMap: Record<string, string> = {
         flat: "",
@@ -703,9 +826,12 @@ const Index = () => {
 
   const requiredColWidth = useMemo(() => {
     if (!materialCounts) return 0;
-    const maxLen = Math.max(0, ...Object.values(colorRequiredMap)
-      .filter(c => c > 0)
-      .map(c => (showStacks ? formatStacks(c) : String(c)).length));
+    const maxLen = Math.max(
+      0,
+      ...Object.values(colorRequiredMap)
+        .filter(c => c > 0)
+        .map(c => (showStacks ? formatStacks(c) : String(c)).length),
+    );
     return Math.max(70, maxLen * 6 + 12);
   }, [materialCounts, colorRequiredMap, showStacks]);
 
@@ -761,7 +887,11 @@ const Index = () => {
           onChange={e => updateBlock(idx, e.target.value)}
         >
           <option value="">(none)</option>
-          {allBlocks.map(b => <option key={b} value={b}>{b}</option>)}
+          {allBlocks.map(b => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
         </select>
         <span className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">
           {pad2(allBlocks.length)}
@@ -800,7 +930,11 @@ const Index = () => {
                 value={activeIdx}
                 onChange={e => selectPreset(Number(e.target.value))}
               >
-                {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
+                {presets.map((p, i) => (
+                  <option key={i} value={i}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
               {!isBuiltinUnedited && (
                 <button
@@ -833,8 +967,11 @@ const Index = () => {
           <section className="bg-card border border-border rounded-md p-2 flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-accent whitespace-nowrap">Filler:</span>
             <input
-              ref={fillerInputRef} type="text" value={fillerBlock}
-              onChange={e => setFillerBlock(e.target.value)} placeholder="resin_block"
+              ref={fillerInputRef}
+              type="text"
+              value={fillerBlock}
+              onChange={e => setFillerBlock(e.target.value)}
+              placeholder="resin_block"
               className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
             />
             {imageData && (
@@ -842,13 +979,18 @@ const Index = () => {
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">Support:</span>
                 <select
                   className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs"
-                  value={supportMode} onChange={e => setSupportMode(e.target.value as SupportMode)}
+                  value={supportMode}
+                  onChange={e => setSupportMode(e.target.value as SupportMode)}
                 >
                   <option value="none">None</option>
-                  <option value="steps" disabled={!hasNonFlatShades}>Steps</option>
+                  <option value="steps" disabled={!hasNonFlatShades}>
+                    Steps
+                  </option>
                   <option value="all">All</option>
                   <option value="fragile">Fragile</option>
-                  <option value="water" disabled={!imageHasWater || !fillerIsNoneColor}>Water</option>
+                  <option value="water" disabled={!imageHasWater || !fillerIsNoneColor}>
+                    Water
+                  </option>
                 </select>
               </div>
             )}
@@ -858,7 +1000,9 @@ const Index = () => {
                 <span className="text-foreground">
                   {materialCounts[fillerBlock] !== undefined && materialCounts[fillerBlock] > fillerOnlyCount
                     ? fillerOnlyCount
-                    : showStacks ? formatStacks(fillerOnlyCount) : fillerOnlyCount}
+                    : showStacks
+                      ? formatStacks(fillerOnlyCount)
+                      : fillerOnlyCount}
                 </span>
                 {materialCounts[fillerBlock] !== undefined && materialCounts[fillerBlock] > fillerOnlyCount && (
                   <>
@@ -876,7 +1020,8 @@ const Index = () => {
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">Shading Method:</span>
                 <select
                   className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
-                  value={buildMode} onChange={e => setBuildMode(e.target.value as BuildMode)}
+                  value={buildMode}
+                  onChange={e => setBuildMode(e.target.value as BuildMode)}
                 >
                   <optgroup label="Staircase">
                     <option value="staircase_valley">Staircase (Valley)</option>
@@ -886,10 +1031,16 @@ const Index = () => {
                     <option value="staircase_cancer">Staircase (Cancer)</option>
                   </optgroup>
                   <optgroup label="Suppress">
-                    <option value="suppress_checker" disabled>Suppress (Plaid, N→S)</option>
-                    <option value="suppress_plaid" disabled>Suppress (Plaid, E→W)</option>
+                    <option value="suppress_checker" disabled>
+                      Suppress (Plaid, N→S)
+                    </option>
+                    <option value="suppress_plaid" disabled>
+                      Suppress (Plaid, E→W)
+                    </option>
                     <option value="suppress_pairs_ew">Suppress (Pairs, E→W)</option>
-                    <option value="suppress_dual_layer" disabled>Suppress (Dual-layer, E→W)</option>
+                    <option value="suppress_dual_layer" disabled>
+                      Suppress (Dual-layer, E→W)
+                    </option>
                     <option value="suppress_pairs">Suppress (Row-split, E→W)</option>
                   </optgroup>
                 </select>
@@ -918,7 +1069,12 @@ const Index = () => {
               {imageInfo && imageValid && (
                 <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
                   <span className="font-semibold text-accent">MC units:</span>
-                  <input type="checkbox" checked={showStacks} onChange={e => setShowStacks(e.target.checked)} className="h-3 w-3" />
+                  <input
+                    type="checkbox"
+                    checked={showStacks}
+                    onChange={e => setShowStacks(e.target.checked)}
+                    className="h-3 w-3"
+                  />
                 </label>
               )}
             </div>
@@ -1049,7 +1205,7 @@ const Index = () => {
                   className="w-40 h-6 text-[11px] font-mono px-1 bg-input border border-border rounded"
                   placeholder="e.g. fart_block"
                   value={newCustom.block}
-                  onChange={e => setNewCustom((p) => ({ ...p, block: e.target.value }))}
+                  onChange={e => setNewCustom(p => ({ ...p, block: e.target.value }))}
                 />
               </div>
               <button
@@ -1114,9 +1270,22 @@ const Index = () => {
             </div>
 
             {paletteErrors.length > 0 && (
-              <div className={`mt-2 rounded p-2 ${imageValid ? "bg-primary/10 border-2 border-primary/30" : "bg-destructive/25 border-2 border-destructive/50"}`}>
+              <div
+                className={`mt-2 rounded p-2 ${
+                  !imageValid
+                    ? "bg-destructive/25 border-2 border-destructive/50"
+                    : paletteErrors[0]?.startsWith("Converted")
+                      ? "bg-warning/20 border-2 border-warning/40"
+                      : "bg-primary/10 border-2 border-primary/30"
+                }`}
+              >
                 {paletteErrors.map((e, i) => (
-                  <p key={i} className={`text-xs font-medium whitespace-pre-wrap ${imageValid ? "text-primary" : "text-destructive"}`}>
+                  <p
+                    key={i}
+                    className={`text-xs whitespace-pre-wrap ${
+                      !imageValid ? "text-destructive font-medium" : e.endsWith("than source image.") ? "text-destructive font-bold" : e.startsWith("Converted") ? "text-warning font-medium" : "text-primary font-medium"
+                    }`}
+                  >
                     {e}
                   </p>
                 ))}
@@ -1126,7 +1295,8 @@ const Index = () => {
             {imageValid && missingBlocks.length > 0 && (
               <div className="mt-2 bg-destructive/25 border-2 border-destructive/50 rounded p-2">
                 <p className="text-xs text-destructive font-medium">
-                  {plural(missingBlocks.length, "color")} in the image {missingBlocks.length === 1 ? "has" : "have"} no block assigned in the preset.
+                  {plural(missingBlocks.length, "color")} in the image {missingBlocks.length === 1 ? "has" : "have"} no
+                  block assigned in the preset.
                 </p>
               </div>
             )}
@@ -1153,11 +1323,17 @@ const Index = () => {
               <div className="mt-2 space-y-1">
                 <div className="flex gap-3 text-[11px] text-muted-foreground flex-wrap items-center">
                   {imageInfo.uniqueShadeCount > sortedMaterials.length && (
-                    <span><strong className="text-foreground">{plural(imageInfo.uniqueShadeCount, "unique color")}</strong></span>
+                    <span>
+                      <strong className="text-foreground">{plural(imageInfo.uniqueShadeCount, "unique color")}</strong>
+                    </span>
                   )}
-                  <span><strong className="text-foreground">{plural(sortedMaterials.length, "block type")}</strong></span>
+                  <span>
+                    <strong className="text-foreground">{plural(sortedMaterials.length, "block type")}</strong>
+                  </span>
                   {suppressedCount > 0 && (
-                    <span><strong className="text-foreground">{plural(suppressedCount, "void shadow")}</strong></span>
+                    <span>
+                      <strong className="text-foreground">{plural(suppressedCount, "void shadow")}</strong>
+                    </span>
                   )}
                 </div>
               </div>

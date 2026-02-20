@@ -12,7 +12,16 @@ export interface CustomColor {
   block: string;
 }
 
-export type BuildMode = "flat" | "staircase_valley" | "staircase_classic" | "staircase_northline" | "staircase_southline" | "staircase_cancer" | "suppress_checker" | "suppress_pairs" | "suppress_pairs_ew";
+export type BuildMode =
+  | "flat"
+  | "staircase_valley"
+  | "staircase_classic"
+  | "staircase_northline"
+  | "staircase_southline"
+  | "staircase_cancer"
+  | "suppress_checker"
+  | "suppress_pairs"
+  | "suppress_pairs_ew";
 
 export type SupportMode = "none" | "steps" | "all" | "fragile" | "water";
 
@@ -32,10 +41,7 @@ export interface ValidationResult {
 }
 
 // Validate a PNG image (only checks size + palette validity)
-export function validatePng(
-  imageData: ImageData,
-  customColors: CustomColor[]
-): ValidationResult {
+export function validatePng(imageData: ImageData, customColors: CustomColor[]): ValidationResult {
   const errors: string[] = [];
   const usedBaseColors = new Set<number>();
 
@@ -58,9 +64,7 @@ export function validatePng(
       const a = imageData.data[idx + 3];
       if (a === 0) continue;
 
-      const r = imageData.data[idx];
-      const g = imageData.data[idx + 1];
-      const b = imageData.data[idx + 2];
+      const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
       const key = `${r},${g},${b}`;
 
       const match = lookup.get(key);
@@ -79,7 +83,7 @@ export function validatePng(
   if (invalidColors.length > 0) {
     const shown = invalidColors.slice(0, 10);
     errors.push(
-      `Found ${invalidColors.length} color${invalidColors.length === 1 ? "" : "s"} not in Minecraft map palette:\n\n${shown.map(c => `rgb(${c})`).join(", ")}${invalidColors.length > 10 ? "..." : ""}`
+      `Found ${invalidColors.length} color${invalidColors.length === 1 ? "" : "s"} not in Minecraft map palette:\n\n${shown.map(c => `rgb(${c})`).join(", ")}${invalidColors.length > 10 ? "..." : ""}`,
     );
   }
 
@@ -120,7 +124,7 @@ function resolveBlockName(block: string): string {
   const fullName = `minecraft:${name}`;
   const propKeys = Object.keys(props);
   if (propKeys.length > 0) {
-    return `${fullName}[${propKeys.map(k => `${k}=${props[k]}`).join(",")}]`;
+    return `${fullName}[${propKeys.map((k) => `${k}=${props[k]}`).join(",")}]`;
   }
   return fullName;
 }
@@ -141,10 +145,7 @@ function isWaterBlock(blockName: string): boolean {
 }
 
 // Build staircase blocks from image data
-function buildStaircaseBlocks(
-  imageData: ImageData,
-  options: ConversionOptions
-): BlockEntry[] {
+function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
   const lookup = getColorLookup();
   const customLookup = new Map<string, CustomColor>();
   for (const cc of options.customColors) {
@@ -185,9 +186,7 @@ function buildStaircaseBlocks(
         continue;
       }
 
-      const r = imageData.data[idx];
-      const g = imageData.data[idx + 1];
-      const b = imageData.data[idx + 2];
+      const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
       const key = `${r},${g},${b}`;
 
       const match = lookup.get(key);
@@ -240,7 +239,15 @@ function buildStaircaseBlocks(
           : [{ start: startIdx, count: depth }];
         // y = top so normal/light blocks south reference the pillar's top
         // Dark blocks south will explicitly use waterBottom instead
-        currRow[x] = { y: top, transparent: false, waterBottom: bottom, waterTop: top, waterDepth: depth, waterBlockStart: startIdx, waterChain: chain };
+        currRow[x] = {
+          y: top,
+          transparent: false,
+          waterBottom: bottom,
+          waterTop: top,
+          waterDepth: depth,
+          waterBlockStart: startIdx,
+          waterChain: chain,
+        };
       } else {
         if (shade === 1) {
           // Normal: same y as north reference; filler needed if north is transparent
@@ -261,7 +268,7 @@ function buildStaircaseBlocks(
             addBlock(x, darkY, z, block);
             currRow[x] = { y: darkY, transparent: false };
           } else {
-            const darkRef = (northState.waterBottom !== undefined) ? northState.waterBottom! : northY;
+            const darkRef = northState.waterBottom !== undefined ? northState.waterBottom! : northY;
             if (northTransparent) addBlock(x, darkRef, z - 1, options.fillerBlock);
             addBlock(x, darkRef - 1, z, block);
             currRow[x] = { y: darkRef - 1, transparent: false };
@@ -293,7 +300,8 @@ function addStepSupport(blocks: BlockEntry[], fillerBlock: string) {
   const extra: BlockEntry[] = [];
   for (const [key, y] of topY) {
     const [xs, zs] = key.split(",");
-    const x = parseInt(xs), z = parseInt(zs);
+    const x = parseInt(xs),
+      z = parseInt(zs);
     const northY = topY.get(`${x},${z - 1}`);
     const southY = topY.get(`${x},${z + 1}`);
     const higherThanNorth = northY !== undefined && y > northY;
@@ -364,11 +372,11 @@ function addWaterSupport(blocks: BlockEntry[], fillerBlock: string) {
   for (const w of waterPositions) {
     // NSEW + below
     const neighbors = [
-      { x: w.x, y: w.y, z: w.z - 1 },     // North
-      { x: w.x, y: w.y, z: w.z + 1 },     // South
-      { x: w.x - 1, y: w.y, z: w.z },     // West
-      { x: w.x + 1, y: w.y, z: w.z },     // East
-      { x: w.x, y: w.y - 1, z: w.z },     // Below
+      { x: w.x, y: w.y, z: w.z - 1 }, // North
+      { x: w.x, y: w.y, z: w.z + 1 }, // South
+      { x: w.x - 1, y: w.y, z: w.z }, // West
+      { x: w.x + 1, y: w.y, z: w.z }, // East
+      { x: w.x, y: w.y - 1, z: w.z }, // Below
     ];
     for (const n of neighbors) {
       const key = `${n.x},${n.y},${n.z}`;
@@ -419,7 +427,7 @@ function normalizeAndMeasure(blocks: BlockEntry[]): { sizeX: number; sizeY: numb
 // Convert validated PNG to NBT (returns Uint8Array for .nbt or .zip)
 export async function convertToNbt(
   imageData: ImageData,
-  options: ConversionOptions
+  options: ConversionOptions,
 ): Promise<{ data: Uint8Array; isZip: boolean }> {
   if (options.buildMode === "suppress_pairs") {
     return buildSuppressPairs(imageData, options);
@@ -444,10 +452,7 @@ export async function convertToNbt(
 }
 
 // Build suppress pairs block lists (two halves)
-function buildSuppressPairsBlocks(
-  imageData: ImageData,
-  options: ConversionOptions
-): [BlockEntry[], BlockEntry[]] {
+function buildSuppressPairsBlocks(imageData: ImageData, options: ConversionOptions): [BlockEntry[], BlockEntry[]] {
   const lookup = getColorLookup();
   const customLookup = new Map<string, CustomColor>();
   for (const cc of options.customColors) {
@@ -462,7 +467,7 @@ function buildSuppressPairsBlocks(
     }
 
     for (let z = 0; z < 128; z++) {
-      const isColorRow = (z % 2) === startRow;
+      const isColorRow = z % 2 === startRow;
       if (!isColorRow) continue; // only process color rows
 
       for (let x = 0; x < 128; x++) {
@@ -470,9 +475,7 @@ function buildSuppressPairsBlocks(
         const a = imageData.data[idx + 3];
         if (a === 0) continue;
 
-        const r = imageData.data[idx];
-        const g = imageData.data[idx + 1];
-        const b = imageData.data[idx + 2];
+        const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
         const key = `${r},${g},${b}`;
 
         const match = lookup.get(key);
@@ -481,7 +484,8 @@ function buildSuppressPairsBlocks(
 
         const block = customMatch
           ? customMatch.block
-          : (options.blockMapping[(match as ColorMatch).baseIndex] || BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0]);
+          : options.blockMapping[(match as ColorMatch).baseIndex] ||
+            BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
         if (!block) continue;
 
         // Water: stack from y=0 up by depth, no filler needed
@@ -525,7 +529,7 @@ function buildSuppressPairsBlocks(
 // Suppress (Pairs E→W): generate two NBTs in a zip
 async function buildSuppressPairs(
   imageData: ImageData,
-  options: ConversionOptions
+  options: ConversionOptions,
 ): Promise<{ data: Uint8Array; isZip: boolean }> {
   const [half0, half1] = buildSuppressPairsBlocks(imageData, options);
 
@@ -546,7 +550,12 @@ async function buildSuppressPairs(
 }
 
 // Post-process blocks to apply staircase variants
-function applyStaircaseVariant(blocks: BlockEntry[], mode: BuildMode, imageData?: ImageData, options?: ConversionOptions) {
+function applyStaircaseVariant(
+  blocks: BlockEntry[],
+  mode: BuildMode,
+  imageData?: ImageData,
+  options?: ConversionOptions,
+) {
   if (mode === "staircase_northline" || mode === "flat" || mode.startsWith("suppress")) return;
 
   if (mode === "staircase_cancer" && imageData && options) {
@@ -566,10 +575,12 @@ function applyStaircaseVariant(blocks: BlockEntry[], mode: BuildMode, imageData?
       const minY = colBlocks.reduce((m, b) => Math.min(m, b.y), Infinity);
       for (const b of colBlocks) b.y -= minY;
     } else if (mode === "staircase_southline") {
-      let maxZ = -Infinity;
-      let southY = 0;
+      let maxZ = -Infinity, southY = 0;
       for (const b of colBlocks) {
-        if (b.z > maxZ) { maxZ = b.z; southY = b.y; }
+        if (b.z > maxZ) {
+          maxZ = b.z;
+          southY = b.y;
+        }
       }
       for (const b of colBlocks) b.y -= southY;
     } else if (mode === "staircase_valley" && imageData && options) {
@@ -592,9 +603,7 @@ function applyStaircaseVariant(blocks: BlockEntry[], mode: BuildMode, imageData?
         const idx = (z * 128 + x) * 4;
         const a = imageData.data[idx + 3];
         if (a === 0) continue;
-        const r = imageData.data[idx];
-        const g = imageData.data[idx + 1];
-        const b2 = imageData.data[idx + 2];
+        const r = imageData.data[idx], g = imageData.data[idx + 1], b2 = imageData.data[idx + 2];
         const key = `${r},${g},${b2}`;
         const match = lookup.get(key);
         const customMatch = customLookup.get(key);
@@ -708,7 +717,7 @@ function applyStaircaseVariant(blocks: BlockEntry[], mode: BuildMode, imageData?
         }
 
         // Enforce north constraint: segment's own shade dictates relationship to north
-        const firstNonWaterZ = seg.zList.find(z => !waterZ.has(z));
+        const firstNonWaterZ = seg.zList.find((z) => !waterZ.has(z));
         if (firstNonWaterZ !== undefined) {
           const northOfSegZ = firstNonWaterZ - 1;
           // Skip if northOfSegZ is part of this segment (e.g. the included water pillar)
@@ -738,7 +747,8 @@ function applyStaircaseVariant(blocks: BlockEntry[], mode: BuildMode, imageData?
         // Special water pillar handling for dark/medium shaded water
         const waterPillarZ = seg.waterDepth !== undefined ? seg.zList[0] : undefined;
         const waterShade = waterPillarZ !== undefined ? pixelShade.get(waterPillarZ) : undefined;
-        const isDarkMediumWater = waterShade && (waterShade.shade === 0 || waterShade.shade === 1 || waterShade.shade === 3);
+        const isDarkMediumWater =
+          waterShade && (waterShade.shade === 0 || waterShade.shade === 1 || waterShade.shade === 3);
 
         if (isDarkMediumWater && seg.waterDepth !== undefined && seg.waterDepth > 1) {
           const waterBottomAfter = targetTopY - (seg.waterDepth - 1);
@@ -775,7 +785,10 @@ function applyStaircaseVariant(blocks: BlockEntry[], mode: BuildMode, imageData?
               for (const z of seg.zList) {
                 if (z === waterPillarZ) continue;
                 const fillerBlock: BlockEntry = {
-                  x, y: southY, z, blockName: resolveBlockName(options.fillerBlock)
+                  x,
+                  y: southY,
+                  z,
+                  blockName: resolveBlockName(options.fillerBlock),
                 };
                 if (zToBlocks.has(z)) {
                   zToBlocks.get(z)!.push(fillerBlock);
@@ -831,10 +844,10 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
   // Simple seeded RNG for reproducibility per column
   function mulberry32(seed: number) {
     return () => {
-      let t = seed += 0x6D2B79F5;
-      t = Math.imul(t ^ t >>> 15, t | 1);
-      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      let t = (seed += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
 
@@ -895,7 +908,7 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
         const depth = (origMaxY.get(z) ?? 0) - (origMinY.get(z) ?? 0) + 1;
         const waterTop = lastNonTransparentY + Math.floor(rand() * 4);
         const waterBottom = waterTop - depth + 1;
-        const finalTop = waterBottom < 0 ? waterTop + (-waterBottom) : waterTop;
+        const finalTop = waterBottom < 0 ? waterTop + -waterBottom : waterTop;
         newTopY.set(z, finalTop);
         lastNonTransparentY = finalTop;
         continue;
@@ -961,10 +974,7 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
 }
 
 // Build suppress pairs E→W: zigzag from east to west
-function buildSuppressPairsEWBlocks(
-  imageData: ImageData,
-  options: ConversionOptions
-): BlockEntry[] {
+function buildSuppressPairsEWBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
   const lookup = getColorLookup();
   const customLookup = new Map<string, CustomColor>();
   for (const cc of options.customColors) {
@@ -982,9 +992,7 @@ function buildSuppressPairsEWBlocks(
   // step 2 = x=126,125 (2 cols, even rows)
   // step 3 = x=125,124 (2 cols, odd rows) ...
   // Each step overlaps the previous by 1 column, alternating row parity.
-  let anchor = 127;
-  let step = 0;
-  let baseY = 0;
+    let anchor = 127, step = 0, baseY = 0;
 
   while (anchor >= 0) {
     const cols = step === 0 ? [127] : [anchor + 1, anchor];
@@ -993,16 +1001,14 @@ function buildSuppressPairsEWBlocks(
 
     for (const x of cols) {
       for (let z = 0; z < 128; z++) {
-        const isColorRow = useEvenRows ? (z % 2 === 1) : (z % 2 === 0);
+        const isColorRow = useEvenRows ? z % 2 === 1 : z % 2 === 0;
         if (!isColorRow) continue;
 
         const idx = (z * 128 + x) * 4;
         const a = imageData.data[idx + 3];
         if (a === 0) continue;
 
-        const r = imageData.data[idx];
-        const g = imageData.data[idx + 1];
-        const b = imageData.data[idx + 2];
+        const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
         const key = `${r},${g},${b}`;
 
         const match = lookup.get(key);
@@ -1011,7 +1017,8 @@ function buildSuppressPairsEWBlocks(
 
         const block = customMatch
           ? customMatch.block
-          : (options.blockMapping[(match as ColorMatch).baseIndex] || BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0]);
+          : options.blockMapping[(match as ColorMatch).baseIndex] ||
+            BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
         if (!block) continue;
 
         // Water: stack from baseY upward by depth
@@ -1026,9 +1033,10 @@ function buildSuppressPairsEWBlocks(
           addBlock(x, baseY, z, block);
 
           // Support block under color block if needed
-          const needsSupport = options.supportMode === "all"
-            || (options.supportMode === "fragile" && isFragileBlock(block))
-            || (options.supportMode === "steps");
+          const needsSupport =
+            options.supportMode === "all" ||
+            (options.supportMode === "fragile" && isFragileBlock(block)) ||
+            options.supportMode === "steps";
           if (needsSupport && baseY > 0) {
             addBlock(x, baseY - 1, z, options.fillerBlock);
           }
@@ -1065,10 +1073,7 @@ function buildSuppressPairsEWBlocks(
 }
 
 // Compute material counts from actual block generation
-export function computeMaterialCounts(
-  imageData: ImageData,
-  options: ConversionOptions
-): Record<string, number> {
+export function computeMaterialCounts(imageData: ImageData, options: ConversionOptions): Record<string, number> {
   const counts: Record<string, number> = {};
   function countBlocks(blocks: BlockEntry[]) {
     for (const b of blocks) {
