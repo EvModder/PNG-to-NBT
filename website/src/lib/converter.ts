@@ -1,9 +1,9 @@
 // PNG → NBT conversion logic
 
-import { BASE_COLORS, getColorLookup, type ColorMatch } from "@/data/mapColors";
-import { writeStructureNbt, gzipCompress, type BlockEntry } from "@/lib/nbtWriter";
-import { createZip, type ZipEntry } from "@/lib/zip";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { BASE_COLORS, getColorLookup, type ColorMatch } from "../data/mapColors";
+import { writeStructureNbt, gzipCompress, type BlockEntry } from "./nbtWriter";
+import { createZip, type ZipEntry } from "./zip";
+import { isFragileBlock } from "../data/fragileBlocks";
 
 export interface CustomColor {
   r: number;
@@ -79,7 +79,7 @@ export function validatePng(
   if (invalidColors.length > 0) {
     const shown = invalidColors.slice(0, 10);
     errors.push(
-      `Found ${invalidColors.length} invalid color${invalidColors.length === 1 ? "" : "s"} not in Minecraft map palette: ${shown.map(c => `rgb(${c})`).join(", ")}${invalidColors.length > 10 ? "..." : ""}`
+      `Found ${invalidColors.length} color${invalidColors.length === 1 ? "" : "s"} not in Minecraft map palette:\n\n${shown.map(c => `rgb(${c})`).join(", ")}${invalidColors.length > 10 ? "..." : ""}`
     );
   }
 

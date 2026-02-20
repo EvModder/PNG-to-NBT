@@ -32,9 +32,7 @@ function buildDefaultPreset(): Preset {
 
 function buildCarpetsPreset(): Preset {
   const { blocks: def } = buildDefaultPreset();
-  const blocks = Object.fromEntries(
-    Object.entries(def).map(([k, v]) => [k, v.endsWith("_carpet") ? v : ""])
-  );
+  const blocks = Object.fromEntries(Object.entries(def).map(([k, v]) => [k, v.endsWith("_carpet") ? v : ""]));
   return { name: "Carpets", blocks };
 }
 
@@ -55,9 +53,7 @@ function buildFullblockPreset(): Preset {
     44: "light_gray_terracotta", 53: "crimson_planks", 56: "warped_planks",
     61: "verdant_froglight",
   };
-  const blocks = Object.fromEntries(
-    Object.entries(def).map(([k, v]) => [k, specific[Number(k)] ?? v])
-  );
+  const blocks = Object.fromEntries(Object.entries(def).map(([k, v]) => [k, specific[Number(k)] ?? v]));
   return { name: "Fullblock", blocks };
 }
 
@@ -67,8 +63,7 @@ const BUILTIN_BUILDERS: Record<string, () => Preset> = {
   Fullblock: buildFullblockPreset,
 };
 
-const getBuiltinPreset = (name: string): Preset | null =>
-  BUILTIN_BUILDERS[name]?.() ?? null;
+const getBuiltinPreset = (name: string): Preset | null => BUILTIN_BUILDERS[name]?.() ?? null;
 
 function loadPresets(): Preset[] {
   const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => BUILTIN_BUILDERS[n]());
@@ -173,7 +168,10 @@ function computeImageInfo(imageData: ImageData, customColors: CustomColor[]) {
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
     const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
-    if (customLookup.has(key)) { usedShades.add(`custom:${key}`); continue; }
+    if (customLookup.has(key)) {
+      usedShades.add(`custom:${key}`);
+      continue;
+    }
     const match = lookup.get(key);
     if (match) {
       usedBaseColors.add(match.baseIndex);
@@ -227,17 +225,19 @@ function decodePreset(encoded: string): {
     for (const [i, p] of sections[1].split(",").entries()) {
       if (i >= BASE_COLORS.length - 1) break;
       const baseIdx = i + 1;
-      blocks[baseIdx] = p === "-" || p === "" ? ""
-        : p.startsWith("=") ? p.slice(1)
-        : BASE_COLORS[baseIdx].blocks[parseInt(p)] || "";
+      blocks[baseIdx] =
+        p === "-" || p === "" ? "" : p.startsWith("=") ? p.slice(1) : BASE_COLORS[baseIdx].blocks[parseInt(p)] || "";
     }
 
     const customColors = sections[5]
-      ? sections[5].split(";").map(entry => {
-          const [rgb, block] = entry.split(":");
-          const [r, g, b] = rgb.split(",").map(Number);
-          return { r, g, b, block };
-        }).filter(cc => !isNaN(cc.r) && cc.block)
+      ? sections[5]
+          .split(";")
+          .map(entry => {
+            const [rgb, block] = entry.split(":");
+            const [r, g, b] = rgb.split(",").map(Number);
+            return { r, g, b, block };
+          })
+          .filter(cc => !isNaN(cc.r) && cc.block)
       : undefined;
 
     let sortKey: SortKey | undefined, sortDir: SortDir | undefined;
@@ -299,6 +299,7 @@ const Index = () => {
   const [showUnusedColors, setShowUnusedColors] = useState(false);
   const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, false));
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
+  const [convertUnsupported, setConvertUnsupported] = useState(false);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -310,9 +311,12 @@ const Index = () => {
   useEffect(() => { localStorage.setItem("mapart_presets", JSON.stringify(presets)); }, [presets]);
   useEffect(() => {
     const entries: [string, unknown][] = [
-      [LS_KEYS.filler, fillerBlock], [LS_KEYS.buildMode, buildMode],
-      [LS_KEYS.supportMode, supportMode], [LS_KEYS.showStacks, showStacks],
-      [LS_KEYS.activePreset, preset.name], [LS_KEYS.sortKey, sortKey],
+      [LS_KEYS.filler, fillerBlock],
+      [LS_KEYS.buildMode, buildMode],
+      [LS_KEYS.supportMode, supportMode],
+      [LS_KEYS.showStacks, showStacks],
+      [LS_KEYS.activePreset, preset.name],
+      [LS_KEYS.sortKey, sortKey],
       [LS_KEYS.sortDir, sortDir],
     ];
     entries.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
@@ -348,9 +352,7 @@ const Index = () => {
 
   const fillerIsNoneColor = useMemo(() => {
     const stripped = fillerBlock.split("[")[0];
-    return !BASE_COLORS.slice(1).some(bc =>
-      bc.blocks.some(b => b.split("[")[0] === stripped)
-    );
+    return !BASE_COLORS.slice(1).some((bc) => bc.blocks.some((b) => b.split("[")[0] === stripped));
   }, [fillerBlock]);
 
   const missingBlocks = useMemo(() => {
@@ -428,7 +430,11 @@ const Index = () => {
     if (!decoded) return;
     setPresets(prev => {
       const exists = prev.findIndex(p => p.name === decoded.preset.name);
-      if (exists >= 0) { const n = [...prev]; n[exists] = decoded.preset; return n; }
+      if (exists >= 0) {
+        const n = [...prev];
+        n[exists] = decoded.preset;
+        return n;
+      }
       return [...prev, decoded.preset];
     });
     if (decoded.filler) setFillerBlock(decoded.filler);
@@ -467,7 +473,7 @@ const Index = () => {
   }, [customColors]);
 
   const noneHasCustomBlock = useMemo(
-    () => !!(customBlocksByBase[0]?.length) || !!preset.blocks[0],
+    () => !!customBlocksByBase[0]?.length || !!preset.blocks[0],
     [customBlocksByBase, preset.blocks],
   );
 
@@ -537,32 +543,90 @@ const Index = () => {
   };
 
   const clearImage = () => {
-    setImageData(null); setImageName(""); setImageValid(false);
-    setPaletteErrors([]); setShowUnusedColors(false);
+    setImageData(null);
+    setImageName("");
+    setImageValid(false);
+    setPaletteErrors([]);
+    setShowUnusedColors(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const handleFile = useCallback((file: File) => {
-    setPaletteErrors([]);
-    const img = new Image();
-    img.onload = () => {
-      const canvas = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height });
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0);
-      const data = ctx.getImageData(0, 0, img.width, img.height);
-      const result = validatePng(data, customColors);
-      if (!result.valid) {
-        setImageData(null); setImageName(""); setImageValid(false);
-        setPaletteErrors(result.errors);
-        if (fileRef.current) fileRef.current.value = "";
-        return;
-      }
-      setImageData(data); setImageName(file.name); setImageValid(true);
-      setPaletteErrors([]); setShowUnusedColors(false);
-      if (sortKey === "default") { setSortKey("required"); setSortDir("desc"); }
-    };
-    img.src = URL.createObjectURL(file);
-  }, [customColors]);
+  const handleFile = useCallback(
+    (file: File) => {
+      setPaletteErrors([]);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height });
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, img.width, img.height);
+        const result = validatePng(data, customColors);
+        if (!result.valid) {
+          // Check if the only errors are palette errors and conversion is enabled
+          const sizeError = result.errors.find(e => e.includes("128×128"));
+          if (sizeError || !convertUnsupported) {
+            setImageData(null);
+            setImageName("");
+            setImageValid(false);
+            setPaletteErrors(result.errors);
+            if (fileRef.current) fileRef.current.value = "";
+            return;
+          }
+          // Convert unsupported colors to nearest available palette color
+          const lookup = getColorLookup();
+          const customLookup = new Map<string, boolean>();
+          for (const cc of customColors) customLookup.set(`${cc.r},${cc.g},${cc.b}`, true);
+
+          // Build set of available shaded RGB values (only base colors that have a block mapping in preset)
+          const availableColors: { r: number; g: number; b: number; key: string }[] = [];
+          for (const [key, match] of lookup.entries()) {
+            // Include all palette colors (they might assign blocks later)
+            const [r, g, b] = key.split(",").map(Number);
+            availableColors.push({ r, g, b, key });
+          }
+
+          const d = data.data;
+          const convertedColors = new Set<string>();
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] === 0) continue;
+            const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
+            if (lookup.has(key) || customLookup.has(key)) continue;
+            // Find nearest color
+            let bestDist = Infinity;
+            let bestR = 0, bestG = 0, bestB = 0;
+            for (const ac of availableColors) {
+              const dr = d[i] - ac.r, dg = d[i + 1] - ac.g, db = d[i + 2] - ac.b;
+              const dist = dr * dr + dg * dg + db * db;
+              if (dist < bestDist) { bestDist = dist; bestR = ac.r; bestG = ac.g; bestB = ac.b; }
+            }
+            convertedColors.add(key);
+            d[i] = bestR; d[i + 1] = bestG; d[i + 2] = bestB;
+          }
+          // Re-validate after conversion (should pass now)
+          const recheck = validatePng(data, customColors);
+          setImageData(data);
+          setImageName(file.name);
+          setImageValid(recheck.valid);
+          const cc = convertedColors.size;
+          setPaletteErrors(recheck.valid ? [`Converted ${cc} color${cc === 1 ? "" : "s"} to nearest palette match.`] : recheck.errors);
+          setShowUnusedColors(false);
+          if (sortKey === "default") { setSortKey("required"); setSortDir("desc"); }
+          return;
+        }
+        setImageData(data);
+        setImageName(file.name);
+        setImageValid(true);
+        setPaletteErrors([]);
+        setShowUnusedColors(false);
+        if (sortKey === "default") {
+          setSortKey("required");
+          setSortDir("desc");
+        }
+      };
+      img.src = URL.createObjectURL(file);
+    },
+    [customColors, convertUnsupported, preset.blocks],
+  );
 
   const handleConvertAndDownload = async () => {
     if (!imageData) return;
@@ -574,10 +638,14 @@ const Index = () => {
         buildMode, supportMode, baseName,
       });
       const suffixMap: Record<string, string> = {
-        flat: "", staircase_classic: "-staircase_classic",
-        staircase_northline: "-staircase_northline", staircase_southline: "-staircase_southline",
-        staircase_valley: "-staircase_valley", staircase_cancer: "-staircase_cancer",
-        suppress_checker: "-suppress_plaid_NS", suppress_pairs: "-suppress_rowsplit",
+        flat: "",
+        staircase_classic: "-staircase_classic",
+        staircase_northline: "-staircase_northline",
+        staircase_southline: "-staircase_southline",
+        staircase_valley: "-staircase_valley",
+        staircase_cancer: "-staircase_cancer",
+        suppress_checker: "-suppress_plaid_NS",
+        suppress_pairs: "-suppress_rowsplit",
         suppress_pairs_ew: "-suppress_pairs_EW",
       };
       const suffix = suffixMap[buildMode] ?? `-${buildMode}`;
@@ -677,7 +745,11 @@ const Index = () => {
           title="Click to copy hex"
           onClick={() => copyColorToClipboard(r, g, b)}
         />
-        {showIds && <span className="text-[10px] font-mono text-muted-foreground text-center tabular-nums -ml-[0.3em]">{pad2(idx)}</span>}
+        {showIds && (
+          <span className="text-[10px] font-mono text-muted-foreground text-center tabular-nums -ml-[0.3em]">
+            {pad2(idx)}
+          </span>
+        )}
         {showNames && (
           <span className="text-[10px] font-mono text-muted-foreground truncate" title={getDisplayName(color.name)}>
             {getDisplayName(color.name)}
@@ -691,7 +763,9 @@ const Index = () => {
           <option value="">(none)</option>
           {allBlocks.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">{pad2(allBlocks.length)}</span>
+        <span className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">
+          {pad2(allBlocks.length)}
+        </span>
         {hasRequiredCol && (
           <span className="text-[10px] font-mono text-right pr-1">
             {reqCount > 0 ? (showStacks ? formatStacks(reqCount) : reqCount) : ""}
@@ -704,7 +778,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-4 py-2 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-primary">MapArt PNG → NBT Converter</h1>
+        <h1 className="text-lg font-bold text-primary">MapArt PNG → NBT</h1>
         <button
           onClick={toggleTheme}
           className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
@@ -729,12 +803,29 @@ const Index = () => {
                 {presets.map((p, i) => <option key={i} value={i}>{p.name}</option>)}
               </select>
               {!isBuiltinUnedited && (
-                <button className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground" onClick={sharePreset}>Share</button>
+                <button
+                  className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
+                  onClick={sharePreset}
+                >
+                  Share
+                </button>
               )}
-              {!BUILTIN_PRESET_NAMES.includes(preset.name as typeof BUILTIN_PRESET_NAMES[number]) && presets.length > 1 && (
-                <button className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20" onClick={deletePreset}>Del</button>
-              )}
-              <button className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20" onClick={createPreset} title="New preset">+</button>
+              {!BUILTIN_PRESET_NAMES.includes(preset.name as (typeof BUILTIN_PRESET_NAMES)[number]) &&
+                presets.length > 1 && (
+                  <button
+                    className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
+                    onClick={deletePreset}
+                  >
+                    Del
+                  </button>
+                )}
+              <button
+                className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20"
+                onClick={createPreset}
+                title="New preset"
+              >
+                +
+              </button>
             </div>
           </section>
 
@@ -762,7 +853,7 @@ const Index = () => {
               </div>
             )}
             {materialCounts && fillerOnlyCount > 0 && (
-              <span className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border border-primary/40 bg-primary/5 rounded px-1.5 h-6">
+              <span className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6">
                 <span className="font-semibold">Required:</span>
                 <span className="text-foreground">
                   {materialCounts[fillerBlock] !== undefined && materialCounts[fillerBlock] > fillerOnlyCount
@@ -772,7 +863,9 @@ const Index = () => {
                 {materialCounts[fillerBlock] !== undefined && materialCounts[fillerBlock] > fillerOnlyCount && (
                   <>
                     <span>(Total:</span>
-                    <span className="text-foreground">{showStacks ? formatStacks(materialCounts[fillerBlock]) : materialCounts[fillerBlock]}</span>
+                    <span className="text-foreground">
+                      {showStacks ? formatStacks(materialCounts[fillerBlock]) : materialCounts[fillerBlock]}
+                    </span>
                     <span>)</span>
                   </>
                 )}
@@ -794,8 +887,10 @@ const Index = () => {
                   </optgroup>
                   <optgroup label="Suppress">
                     <option value="suppress_checker" disabled>Suppress (Plaid, N→S)</option>
+                    <option value="suppress_plaid" disabled>Suppress (Plaid, E→W)</option>
                     <option value="suppress_pairs_ew">Suppress (Pairs, E→W)</option>
-                    <option value="suppress_pairs">Suppress (Row-wise split)</option>
+                    <option value="suppress_dual_layer" disabled>Suppress (Dual-layer, E→W)</option>
+                    <option value="suppress_pairs">Suppress (Row-split, E→W)</option>
                   </optgroup>
                 </select>
               </div>
@@ -807,10 +902,16 @@ const Index = () => {
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-accent">Color → Block</h2>
-                <button className="text-[10px] text-muted-foreground hover:text-foreground transition-colors" onClick={() => setShowIds(v => !v)}>
+                <button
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowIds(v => !v)}
+                >
                   {showIds ? "Hide IDs" : "Show IDs"}
                 </button>
-                <button className="text-[10px] text-muted-foreground hover:text-foreground transition-colors" onClick={() => setShowNames(v => !v)}>
+                <button
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowNames(v => !v)}
+                >
                   {showNames ? "Hide names" : "Show names"}
                 </button>
               </div>
@@ -821,33 +922,51 @@ const Index = () => {
                 </label>
               )}
             </div>
-            <div key={`${showIds}-${showNames}`} className="relative overflow-hidden">
-              <div className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border" style={gridColsStyle}>
-                <span className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort("color")} title="Sort by color hue">
+            <div key={`${showIds}-${showNames}`} className="relative">
+              <div
+                className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
+                style={gridColsStyle}
+              >
+                <span
+                  className="cursor-pointer select-none whitespace-nowrap"
+                  onClick={() => toggleSort("color")}
+                  title="Sort by color hue"
+                >
                   Clr{sortArrow("color")}
                 </span>
                 {showIds && (
-                  <span className="cursor-pointer select-none whitespace-nowrap pl-0.5" onClick={() => toggleSort("id")}>
+                  <span
+                    className="cursor-pointer select-none whitespace-nowrap pl-0.5"
+                    onClick={() => toggleSort("id")}
+                  >
                     ID{sortArrow("id")}
                   </span>
                 )}
                 {showNames && (
-                  <span className="cursor-pointer select-none" onClick={() => toggleSort("name")}>Name{sortArrow("name")}</span>
+                  <span className="cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                    Name{sortArrow("name")}
+                  </span>
                 )}
                 <span>Block</span>
-                <span className="cursor-pointer select-none whitespace-nowrap pr-1" onClick={() => toggleSort("options")}>
+                <span
+                  className="cursor-pointer select-none whitespace-nowrap pr-1"
+                  onClick={() => toggleSort("options")}
+                >
                   Options{sortArrow("options")}
                 </span>
                 {hasRequiredCol && (
-                  <span className="cursor-pointer select-none whitespace-nowrap text-right pr-1" onClick={() => toggleSort("required")}>
+                  <span
+                    className="cursor-pointer select-none whitespace-nowrap text-right pr-1"
+                    onClick={() => toggleSort("required")}
+                  >
                     Required{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
                   </span>
                 )}
               </div>
               {hasRequiredCol && usedIndices.length > 0 && (
                 <div
-                  className="absolute top-0 bottom-0 border border-primary/40 bg-primary/5 rounded pointer-events-none"
-                  style={{ width: requiredColWidth - 1, right: -2 }}
+                  className="absolute top-0 bottom-0 border-2 border-primary/60 bg-primary/10 rounded pointer-events-none"
+                  style={{ width: requiredColWidth + 2, right: -4 }}
                 />
               )}
               <div className="relative">{usedIndices.map(renderColorRow)}</div>
@@ -858,7 +977,9 @@ const Index = () => {
                     className="w-full flex items-center gap-1 py-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors border-t border-border mt-1"
                     onClick={() => setShowUnusedColors(v => !v)}
                   >
-                    <span className={`inline-block transition-transform ${showUnusedColors ? "rotate-180" : ""}`}>▼</span>
+                    <span className={`inline-block transition-transform ${showUnusedColors ? "rotate-180" : ""}`}>
+                      ▼
+                    </span>
                     <span>{plural(unusedIndices.length, "unused color")} (not in image)</span>
                   </button>
                   {showUnusedColors && <div className="opacity-50">{unusedIndices.map(renderColorRow)}</div>}
@@ -874,10 +995,20 @@ const Index = () => {
               <div className="space-y-0.5 mb-2">
                 {customColors.map((cc, i) => (
                   <div key={i} className="flex items-center gap-1.5 text-xs">
-                    <div className="w-4 h-4 rounded border border-border flex-shrink-0" style={{ backgroundColor: `rgb(${cc.r},${cc.g},${cc.b})` }} />
-                    <span className="font-mono text-[10px]">({cc.r},{cc.g},{cc.b})</span>
+                    <div
+                      className="w-4 h-4 rounded border border-border flex-shrink-0"
+                      style={{ backgroundColor: `rgb(${cc.r},${cc.g},${cc.b})` }}
+                    />
+                    <span className="font-mono text-[10px]">
+                      ({cc.r},{cc.g},{cc.b})
+                    </span>
                     <span className="font-mono text-[10px] text-primary">→ {cc.block}</span>
-                    <button className="text-destructive text-[10px] hover:underline" onClick={() => setCustomColors(prev => prev.filter((_, j) => j !== i))}>×</button>
+                    <button
+                      className="text-destructive text-[10px] hover:underline"
+                      onClick={() => setCustomColors(prev => prev.filter((_, j) => j !== i))}
+                    >
+                      ×
+                    </button>
                   </div>
                 ))}
               </div>
@@ -890,7 +1021,9 @@ const Index = () => {
               >
                 <option value="custom">Custom RGB</option>
                 {BASE_COLORS.map((_, idx) => (
-                  <option key={idx} value={idx}>{idx} – {getDisplayName(BASE_COLORS[idx].name)}</option>
+                  <option key={idx} value={idx}>
+                    {idx} – {getDisplayName(BASE_COLORS[idx].name)}
+                  </option>
                 ))}
               </select>
               {customMode === "custom" && (
@@ -900,7 +1033,10 @@ const Index = () => {
                       <label className="text-[10px] text-muted-foreground">{ch.toUpperCase()}</label>
                       <input
                         className="w-10 h-6 text-[11px] font-mono no-spinner px-1 bg-input border border-border rounded"
-                        type="number" min={0} max={255} value={newCustom[ch]}
+                        type="number"
+                        min={0}
+                        max={255}
+                        value={newCustom[ch]}
                         onChange={e => setNewCustom(p => ({ ...p, [ch]: e.target.value }))}
                       />
                     </div>
@@ -911,11 +1047,17 @@ const Index = () => {
                 <label className="text-[10px] text-muted-foreground">Block</label>
                 <input
                   className="w-40 h-6 text-[11px] font-mono px-1 bg-input border border-border rounded"
-                  placeholder="e.g. fart_block" value={newCustom.block}
-                  onChange={e => setNewCustom(p => ({ ...p, block: e.target.value }))}
+                  placeholder="e.g. fart_block"
+                  value={newCustom.block}
+                  onChange={e => setNewCustom((p) => ({ ...p, block: e.target.value }))}
                 />
               </div>
-              <button className="h-6 px-2 text-xs rounded border border-border text-muted-foreground hover:text-foreground" onClick={addCustomColor}>Add</button>
+              <button
+                className="h-6 px-2 text-xs rounded border border-border text-muted-foreground hover:text-foreground"
+                onClick={addCustomColor}
+              >
+                Add
+              </button>
             </div>
           </section>
         </div>
@@ -924,22 +1066,44 @@ const Index = () => {
         <div className="lg:w-[360px] lg:sticky lg:top-3 lg:self-start space-y-2">
           <section className="bg-card border border-border rounded-md p-3">
             <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt PNG</h2>
-            <input ref={fileRef} type="file" accept=".png" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={convertUnsupported}
+                onChange={e => setConvertUnsupported(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              <span className="text-xs text-muted-foreground">Convert unsupported colors</span>
+            </label>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".png"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
             />
             {imageName && <p className="text-xs text-primary font-mono truncate mb-1">{imageName}</p>}
             <div
               className="border-2 border-dashed border-border rounded-md w-full aspect-square flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors overflow-hidden"
               onClick={() => fileRef.current?.click()}
               onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+              onDrop={e => {
+                e.preventDefault();
+                const f = e.dataTransfer.files[0];
+                if (f) handleFile(f);
+              }}
             >
               {imageData ? (
                 <canvas
-                  className="w-full h-full" style={{ imageRendering: "pixelated" }}
+                  className="w-full h-full"
+                  style={{ imageRendering: "pixelated" }}
                   ref={el => {
                     if (el && imageData) {
-                      el.width = imageData.width; el.height = imageData.height;
+                      el.width = imageData.width;
+                      el.height = imageData.height;
                       el.getContext("2d")?.putImageData(imageData, 0, 0);
                     }
                   }}
@@ -950,8 +1114,12 @@ const Index = () => {
             </div>
 
             {paletteErrors.length > 0 && (
-              <div className="mt-2 bg-destructive/25 border-2 border-destructive/50 rounded p-2">
-                {paletteErrors.map((e, i) => <p key={i} className="text-xs text-destructive font-medium">{e}</p>)}
+              <div className={`mt-2 rounded p-2 ${imageValid ? "bg-primary/10 border-2 border-primary/30" : "bg-destructive/25 border-2 border-destructive/50"}`}>
+                {paletteErrors.map((e, i) => (
+                  <p key={i} className={`text-xs font-medium whitespace-pre-wrap ${imageValid ? "text-primary" : "text-destructive"}`}>
+                    {e}
+                  </p>
+                ))}
               </div>
             )}
 
@@ -965,9 +1133,15 @@ const Index = () => {
 
             {canGenerate && (
               <div className="mt-2 flex items-center gap-2">
-                <button className="text-xs px-2 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/20 whitespace-nowrap" onClick={clearImage}>Remove</button>
                 <button
-                  onClick={handleConvertAndDownload} disabled={converting}
+                  className="text-xs px-2 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/20 whitespace-nowrap"
+                  onClick={clearImage}
+                >
+                  Remove
+                </button>
+                <button
+                  onClick={handleConvertAndDownload}
+                  disabled={converting}
                   className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
                   {converting ? "Converting..." : buildMode === "suppress_pairs" ? "Generate .zip" : "Generate .nbt"}
