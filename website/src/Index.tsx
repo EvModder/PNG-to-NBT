@@ -241,35 +241,22 @@ function formatStacks(count: number): string {
 }
 
 function encodePreset(
-  preset: Preset,
-  fillerBlock: string,
-  supportMode: SupportMode,
-  buildMode: BuildMode,
-  customColors: CustomColor[],
-  sortKey: SortKey,
-  sortDir: SortDir,
+  preset: Preset, fillerBlock: string, supportMode: SupportMode,
+  buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
     const block = preset.blocks[i + 1] || "";
     const idx = BASE_COLORS[i + 1].blocks.indexOf(block);
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
-  const ccStr =
-    customColors.length > 0 ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${cc.block}`).join(";") : "";
-  const s = [preset.name, parts.join(","), fillerBlock, supportMode, buildMode, ccStr, `${sortKey}:${sortDir}`].join(
-    "|",
-  );
+  const ccStr = customColors.length > 0 ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${cc.block}`).join(";") : "";
+  const s = [preset.name, parts.join(","), fillerBlock, supportMode, buildMode, ccStr, convertUnsupported ? "1" : "0"].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function decodePreset(encoded: string): {
-  preset: Preset;
-  filler?: string;
-  supportMode?: SupportMode;
-  buildMode?: BuildMode;
-  customColors?: CustomColor[];
-  sortKey?: SortKey;
-  sortDir?: SortDir;
+  preset: Preset; filler?: string; supportMode?: SupportMode;
+  buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
 } | null {
   try {
     let s = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -290,31 +277,19 @@ function decodePreset(encoded: string): {
     }
 
     const customColors = sections[5]
-      ? sections[5]
-          .split(";")
-          .map(entry => {
-            const [rgb, block] = entry.split(":");
-            const [r, g, b] = rgb.split(",").map(Number);
-            return { r, g, b, block };
-          })
-          .filter(cc => !isNaN(cc.r) && cc.block)
+      ? sections[5].split(";").map(entry => {
+          const [rgb, block] = entry.split(":");
+          const [r, g, b] = rgb.split(",").map(Number);
+          return { r, g, b, block };
+        }).filter(cc => !isNaN(cc.r) && cc.block)
       : undefined;
 
-    let sortKey: SortKey | undefined, sortDir: SortDir | undefined;
-    if (sections[6]) {
-      const [sk, sd] = sections[6].split(":");
-      if (["default", "name", "options", "color", "id", "required"].includes(sk)) sortKey = sk as SortKey;
-      if (sd === "asc" || sd === "desc") sortDir = sd as SortDir;
-    }
+    const convertUnsupported = sections[6] === "1" ? true : sections[6] === "0" ? false : undefined;
 
     return {
-      preset: { name: sections[0], blocks },
-      filler: sections[2] || undefined,
-      supportMode,
-      buildMode: (sections[4] || undefined) as BuildMode | undefined,
-      customColors,
-      sortKey,
-      sortDir,
+      preset: { name: sections[0], blocks }, filler: sections[2] || undefined,
+      supportMode, buildMode: (sections[4] || undefined) as BuildMode | undefined,
+      customColors, convertUnsupported,
     };
   } catch {
     return null;
@@ -368,7 +343,9 @@ const Index = () => {
   const [sortDir, setSortDir] = useState<SortDir>(() => loadCached(LS_KEYS.sortDir, "asc" as SortDir));
   const [showUnusedColors, setShowUnusedColors] = useState(false);
   const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, false));
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
+  const [isDark, setIsDark] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("mapart_theme") || '"light"') === "dark"; } catch { return false; }
+  });
   const [convertUnsupported, setConvertUnsupported] = useState(false);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -520,16 +497,17 @@ const Index = () => {
       if (exists >= 0) {
         const n = [...prev];
         n[exists] = decoded.preset;
+        setActiveIdx(exists);
         return n;
       }
+      setActiveIdx(prev.length);
       return [...prev, decoded.preset];
     });
     if (decoded.filler) setFillerBlock(decoded.filler);
     if (decoded.supportMode !== undefined) setSupportMode(decoded.supportMode);
     if (decoded.buildMode) setBuildMode(decoded.buildMode);
     if (decoded.customColors) setCustomColors(decoded.customColors);
-    if (decoded.sortKey) setSortKey(decoded.sortKey);
-    if (decoded.sortDir) setSortDir(decoded.sortDir);
+    if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
   }, []);
 
   // Auto-select mode when image changes
@@ -541,11 +519,14 @@ const Index = () => {
     else setBuildMode(prev => prev === "flat" ? "staircase_classic" : prev);
   }, [imageData, hasNonFlatShades, hasSuppressPattern]);
 
+  const fillerDisabled = /^(air|none)$/i.test(fillerBlock.trim());
+
   useEffect(() => {
     if (!imageData) return;
+    if (fillerDisabled) { setSupportMode("none"); return; }
     if (supportMode === "steps" && !hasNonFlatShades) setSupportMode("none");
     if (supportMode === "water" && (!imageHasWater || !fillerIsNoneColor)) setSupportMode("none");
-  }, [imageData, hasNonFlatShades, imageHasWater, fillerIsNoneColor, supportMode]);
+  }, [imageData, hasNonFlatShades, imageHasWater, fillerIsNoneColor, supportMode, fillerDisabled]);
 
   const customBlocksByBase = useMemo(() => {
     const map: Record<number, string[]> = {};
@@ -634,7 +615,7 @@ const Index = () => {
   };
 
   const sharePreset = () => {
-    const url = `${location.origin}${location.pathname}?preset=${encodePreset(preset, fillerBlock, supportMode, buildMode, customColors, sortKey, sortDir)}`;
+    const url = `${location.origin}${location.pathname}?preset=${encodePreset(preset, fillerBlock, supportMode, buildMode, customColors, convertUnsupported)}`;
     navigator.clipboard.writeText(url);
     alert("Preset URL copied to clipboard!");
   };
@@ -974,7 +955,7 @@ const Index = () => {
               placeholder="resin_block"
               className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
             />
-            {imageData && (
+            {imageData && !fillerDisabled && (
               <div className="flex items-center gap-1">
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">Support:</span>
                 <select
@@ -994,7 +975,7 @@ const Index = () => {
                 </select>
               </div>
             )}
-            {materialCounts && fillerOnlyCount > 0 && (
+            {materialCounts && fillerOnlyCount > 0 && !fillerDisabled && (
               <span className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6">
                 <span className="font-semibold">Required:</span>
                 <span className="text-foreground">

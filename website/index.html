@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="./favicon.png" type="image/png" />
     <title>PNG → NBT</title>
-    <meta name="description" content="Convert 128×128 map-art PNG images to Minecraft NBT structure files with multiple shading and build modes." />
+    <meta
+      name="description"
+      content="Convert 128×128 map-art PNG images to Minecraft NBT structure files with multiple shading and build modes."
+    />
 
     <meta property="og:title" content="MapArt PNG → NBT Converter" />
     <meta property="og:description" content="Convert map-art PNGs to Minecraft NBT structure files." />
@@ -13,6 +16,7 @@
   </head>
 
   <body>
+    <script>try{if(localStorage.getItem("mapart_theme")==="\"dark\"")document.documentElement.classList.add("dark")}catch(e){}</script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

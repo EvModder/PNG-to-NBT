@@ -100,6 +100,11 @@ function getWaterDepth(shade: number, x: number, z: number): number {
   return even ? 10 : 7; // dark (shade 0 or 3)
 }
 
+function isFillerDisabled(fillerBlock: string): boolean {
+  const lower = fillerBlock.trim().toLowerCase();
+  return lower === "air" || lower === "none";
+}
+
 function resolveBlockName(block: string): string {
   let name: string;
   const props: Record<string, string> = {};
@@ -202,7 +207,7 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
       const northY = northState.y;
 
       if (customMatch) {
-        if (northTransparent) {
+        if (northTransparent && !isFillerDisabled(options.fillerBlock)) {
           addBlock(x, northY, z - 1, options.fillerBlock);
         }
         addBlock(x, northY, z, customMatch.block);
@@ -251,7 +256,7 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
       } else {
         if (shade === 1) {
           // Normal: same y as north reference; filler needed if north is transparent
-          if (northTransparent) addBlock(x, northY, z - 1, options.fillerBlock);
+          if (northTransparent && !isFillerDisabled(options.fillerBlock)) addBlock(x, northY, z - 1, options.fillerBlock);
           addBlock(x, northY, z, block);
           currRow[x] = { y: northY, transparent: false };
         } else if (shade === 2) {
@@ -264,12 +269,12 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
           const isDeepWater = northState.waterBottom !== undefined && northState.waterDepth! > 1;
           if (isDeepWater) {
             const darkY = northState.waterBottom!;
-            if (northTransparent) addBlock(x, darkY + 1, z - 1, options.fillerBlock);
+            if (northTransparent && !isFillerDisabled(options.fillerBlock)) addBlock(x, darkY + 1, z - 1, options.fillerBlock);
             addBlock(x, darkY, z, block);
             currRow[x] = { y: darkY, transparent: false };
           } else {
             const darkRef = northState.waterBottom !== undefined ? northState.waterBottom! : northY;
-            if (northTransparent) addBlock(x, darkRef, z - 1, options.fillerBlock);
+            if (northTransparent && !isFillerDisabled(options.fillerBlock)) addBlock(x, darkRef, z - 1, options.fillerBlock);
             addBlock(x, darkRef - 1, z, block);
             currRow[x] = { y: darkRef - 1, transparent: false };
           }
@@ -391,6 +396,7 @@ function addWaterSupport(blocks: BlockEntry[], fillerBlock: string) {
 
 // Apply support mode to blocks
 function applySupport(blocks: BlockEntry[], options: ConversionOptions) {
+  if (isFillerDisabled(options.fillerBlock)) return;
   switch (options.supportMode) {
     case "steps": addStepSupport(blocks, options.fillerBlock); break;
     case "all": addAllSupport(blocks, options.fillerBlock); break;
@@ -402,7 +408,7 @@ function applySupport(blocks: BlockEntry[], options: ConversionOptions) {
 
 // Normalize blocks so min Y=0 and min Z=0, return dimensions
 function normalizeAndMeasure(blocks: BlockEntry[]): { sizeX: number; sizeY: number; sizeZ: number } {
-  if (blocks.length === 0) return { sizeX: 128, sizeY: 1, sizeZ: 129 };
+  if (blocks.length === 0) return { sizeX: 128, sizeY: 1, sizeZ: 128 };
 
   let minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (const b of blocks) {
@@ -417,10 +423,13 @@ function normalizeAndMeasure(blocks: BlockEntry[]): { sizeX: number; sizeY: numb
     if (minZ < 0) b.z -= minZ;
   }
 
+  const rawSizeZ = (minZ < 0 ? maxZ - minZ : maxZ) + 1;
+  // Ensure Z dimension is at least 128 (full map width) plus filler row if present
+  const minSizeZ = minZ < 0 ? 129 : 128;
   return {
     sizeX: 128,
     sizeY: maxY - minY + 1,
-    sizeZ: (minZ < 0 ? maxZ - minZ : maxZ) + 1,
+    sizeZ: Math.max(rawSizeZ, minSizeZ),
   };
 }
 
@@ -502,14 +511,16 @@ function buildSuppressPairsBlocks(imageData: ImageData, options: ConversionOptio
           const shade = customMatch ? 1 : (match as ColorMatch).shade;
           if (shade === 2) {
             // Light: no filler
-          } else if (shade === 1) {
-            // Normal: filler at y=0
-            addBlock(x, 0, z - 1, options.fillerBlock);
-          } else {
-            // Dark: filler at y=1
-            addBlock(x, 1, z - 1, options.fillerBlock);
-            if (options.supportMode === "steps" || options.supportMode === "all") {
+          } else if (!isFillerDisabled(options.fillerBlock)) {
+            if (shade === 1) {
+              // Normal: filler at y=0
               addBlock(x, 0, z - 1, options.fillerBlock);
+            } else {
+              // Dark: filler at y=1
+              addBlock(x, 1, z - 1, options.fillerBlock);
+              if (options.supportMode === "steps" || options.supportMode === "all") {
+                addBlock(x, 0, z - 1, options.fillerBlock);
+              }
             }
           }
         }
@@ -782,20 +793,22 @@ function applyStaircaseVariant(
               }
 
               // Place filler blocks at southY under all non-water blocks in segment
-              for (const z of seg.zList) {
-                if (z === waterPillarZ) continue;
-                const fillerBlock: BlockEntry = {
-                  x,
-                  y: southY,
-                  z,
-                  blockName: resolveBlockName(options.fillerBlock),
-                };
-                if (zToBlocks.has(z)) {
-                  zToBlocks.get(z)!.push(fillerBlock);
-                } else {
-                  zToBlocks.set(z, [fillerBlock]);
+              if (!isFillerDisabled(options.fillerBlock)) {
+                for (const z of seg.zList) {
+                  if (z === waterPillarZ) continue;
+                  const fillerBlock: BlockEntry = {
+                    x,
+                    y: southY,
+                    z,
+                    blockName: resolveBlockName(options.fillerBlock),
+                  };
+                  if (zToBlocks.has(z)) {
+                    zToBlocks.get(z)!.push(fillerBlock);
+                  } else {
+                    zToBlocks.set(z, [fillerBlock]);
+                  }
+                  blocks.push(fillerBlock);
                 }
-                blocks.push(fillerBlock);
               }
 
               continue; // skip the generic delta application below
@@ -1033,31 +1046,30 @@ function buildSuppressPairsEWBlocks(imageData: ImageData, options: ConversionOpt
           addBlock(x, baseY, z, block);
 
           // Support block under color block if needed
-          const needsSupport =
+          const needsSupport = !isFillerDisabled(options.fillerBlock) && (
             options.supportMode === "all" ||
             (options.supportMode === "fragile" && isFragileBlock(block)) ||
-            options.supportMode === "steps";
+            options.supportMode === "steps");
           if (needsSupport && baseY > 0) {
             addBlock(x, baseY - 1, z, options.fillerBlock);
           }
           if (needsSupport && baseY > maxYUsed) {
-            // If support is present, ensure next iteration starts 1 higher
             maxYUsed = Math.max(maxYUsed, baseY);
           }
 
           // Filler north of color row based on shade
-          const shade = customMatch ? 1 : (match as ColorMatch).shade;
-          if (shade === 2) {
-            // Light: no filler needed
-          } else if (shade === 1) {
-            // Medium: filler at same level north
-            addBlock(x, baseY, z - 1, options.fillerBlock);
-          } else {
-            // Dark (shade 0 or 3): filler 1 higher north
-            addBlock(x, baseY + 1, z - 1, options.fillerBlock);
-            if (baseY + 1 > maxYUsed) maxYUsed = baseY + 1;
-            if (options.supportMode === "steps" || options.supportMode === "all") {
+          if (!isFillerDisabled(options.fillerBlock)) {
+            const shade = customMatch ? 1 : (match as ColorMatch).shade;
+            if (shade === 1) {
+              // Medium: filler at same level north
               addBlock(x, baseY, z - 1, options.fillerBlock);
+            } else if (shade !== 2) {
+              // Dark (shade 0 or 3): filler 1 higher north
+              addBlock(x, baseY + 1, z - 1, options.fillerBlock);
+              if (baseY + 1 > maxYUsed) maxYUsed = baseY + 1;
+              if (options.supportMode === "steps" || options.supportMode === "all") {
+                addBlock(x, baseY, z - 1, options.fillerBlock);
+              }
             }
           }
         }
