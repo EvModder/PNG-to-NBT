@@ -21,7 +21,8 @@ export type BuildMode =
   | "staircase_cancer"
   | "suppress_checker"
   | "suppress_pairs"
-  | "suppress_pairs_ew";
+  | "suppress_pairs_ew"
+  | "suppress_dual_layer";
 
 export type SupportMode = "none" | "steps" | "all" | "fragile" | "water";
 
@@ -32,6 +33,7 @@ export interface ConversionOptions {
   buildMode: BuildMode;
   supportMode: SupportMode;
   baseName: string;
+  layerGap?: number;
 }
 
 export interface ValidationResult {
@@ -444,6 +446,14 @@ export async function convertToNbt(
 
   if (options.buildMode === "suppress_pairs_ew") {
     const blocks = buildSuppressPairsEWBlocks(imageData, options);
+    applySupport(blocks, options);
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
+    const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
+    return { data: await gzipCompress(nbtData), isZip: false };
+  }
+
+  if (options.buildMode === "suppress_dual_layer") {
+    const blocks = buildSuppressDualLayerBlocks(imageData, options);
     applySupport(blocks, options);
     const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
     const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
@@ -986,31 +996,27 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
   }
 }
 
-// Build suppress pairs E→W: zigzag from east to west
-function buildSuppressPairsEWBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
+// Build suppress pairs E→W: zigzag from east to west, returning blocks grouped by step
+function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: ConversionOptions): BlockEntry[][] {
   const lookup = getColorLookup();
   const customLookup = new Map<string, CustomColor>();
   for (const cc of options.customColors) {
     customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
   }
 
-  const blocks: BlockEntry[] = [];
+  const steps: BlockEntry[][] = [];
 
-  function addBlock(x: number, y: number, z: number, block: string) {
-    blocks.push({ x, y, z, blockName: resolveBlockName(block) });
-  }
-
-  // Build steps: step 0 = x=127 (1 col, even rows)
-  // step 1 = x=127,126 (2 cols, odd rows)
-  // step 2 = x=126,125 (2 cols, even rows)
-  // step 3 = x=125,124 (2 cols, odd rows) ...
-  // Each step overlaps the previous by 1 column, alternating row parity.
-    let anchor = 127, step = 0, baseY = 0;
+  let anchor = 127, step = 0, baseY = 0;
 
   while (anchor >= 0) {
     const cols = step === 0 ? [127] : [anchor + 1, anchor];
     const useEvenRows = step % 2 === 0;
     let maxYUsed = baseY;
+    const stepBlocks: BlockEntry[] = [];
+
+    function addBlock(x: number, y: number, z: number, block: string) {
+      stepBlocks.push({ x, y, z, blockName: resolveBlockName(block) });
+    }
 
     for (const x of cols) {
       for (let z = 0; z < 128; z++) {
@@ -1076,9 +1082,152 @@ function buildSuppressPairsEWBlocks(imageData: ImageData, options: ConversionOpt
       }
     }
 
+    steps.push(stepBlocks);
     anchor--;
     baseY = maxYUsed + 1;
     step++;
+  }
+
+  return steps;
+}
+
+// Flatten all steps into a single block list
+function buildSuppressPairsEWBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
+  return buildSuppressPairsEWBlocksByStep(imageData, options).flat();
+}
+// Build suppress dual-layer blocks: two Y-height layers for 3-shade grid shading
+// Shade mapping: MC shade 2=light→1st(brightest), 1=normal→2nd(middle), 0/3=dark→3rd(darkest)
+// Dominant rows (even z) and submissive rows (odd z) follow different placement rules.
+function buildSuppressDualLayerBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
+  const lookup = getColorLookup();
+  const customLookup = new Map<string, CustomColor>();
+  for (const cc of options.customColors) {
+    customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
+  }
+
+  const blocks: BlockEntry[] = [];
+  const L1 = 0; // layer 1 base Y
+  const L2 = options.layerGap ?? 5; // layer 2 base Y
+
+  function addBlock(x: number, y: number, z: number, block: string) {
+    blocks.push({ x, y, z, blockName: resolveBlockName(block) });
+  }
+
+  // 0=transparent, 1=1st(brightest), 2=2nd(middle), 3=3rd(darkest)
+  type MappedShade = 0 | 1 | 2 | 3;
+
+  function getPixelInfo(x: number, z: number): { shade: MappedShade; block: string; isWater: boolean; mcShade: number } | null {
+    if (z < 0 || z >= 128 || x < 0 || x >= 128) return null;
+    const idx = (z * 128 + x) * 4;
+    if (imageData.data[idx + 3] === 0) return null;
+    const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
+    const key = `${r},${g},${b}`;
+    const match = lookup.get(key);
+    const customMatch = customLookup.get(key);
+    if (!match && !customMatch) return null;
+    const block = customMatch
+      ? customMatch.block
+      : options.blockMapping[(match as ColorMatch).baseIndex] ||
+        BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
+    if (!block) return null;
+    const isWater = !customMatch && BASE_COLORS[(match as ColorMatch).baseIndex].isWater;
+    const mcShade = customMatch ? 1 : (match as ColorMatch).shade;
+    const mapped: MappedShade = mcShade === 2 ? 1 : mcShade === 1 ? 2 : 3;
+    return { shade: mapped, block, isWater, mcShade };
+  }
+
+  const fillerOff = isFillerDisabled(options.fillerBlock);
+
+  for (let x = 0; x < 128; x++) {
+    for (let z = 0; z < 128; z++) {
+      const info = getPixelInfo(x, z);
+      if (!info) continue;
+
+      // Water: place at layer 1 with appropriate depth
+      if (info.isWater) {
+        const depth = getWaterDepth(info.mcShade, x, z);
+        for (let d = 0; d < depth; d++) {
+          addBlock(x, L1 + d, z, info.block);
+        }
+        continue;
+      }
+
+      const isDom = z % 2 === 0; // dominant = even z rows
+      const north = getPixelInfo(x, z - 1);
+      const south = getPixelInfo(x, z + 1);
+      const ns = north ? north.shade : 0; // north shade (0=transparent)
+      const ss = south ? south.shade : 0; // south shade (0=transparent)
+
+      if (info.shade === 3) {
+        // 3rd shade (darkest)
+        if (isDom) {
+          addBlock(x, L1, z, info.block);
+          if (!fillerOff) {
+            if (ns === 1) {
+              // North is brightest: filler at layer1, z-1, y+1
+              addBlock(x, L1 + 1, z - 1, options.fillerBlock);
+            } else {
+              // North is 2nd/3rd/transparent: filler at layer2, z-1
+              addBlock(x, L2, z - 1, options.fillerBlock);
+            }
+          }
+        } else {
+          // Submissive: check exception first
+          if (ss === 1 && (ns === 2 || ns === 3)) {
+            // Exception: south is 1st AND north is 2nd/3rd → block at layer2
+            addBlock(x, L2, z, info.block);
+            if (!fillerOff) addBlock(x, L2 + 1, z - 1, options.fillerBlock);
+          } else {
+            addBlock(x, L1, z, info.block);
+            if (!fillerOff) {
+              if (ns === 1) {
+                addBlock(x, L1 + 1, z - 1, options.fillerBlock);
+              } else {
+                addBlock(x, L2, z - 1, options.fillerBlock);
+              }
+            }
+          }
+        }
+      } else if (info.shade === 2) {
+        // 2nd shade (middle/normal)
+        if (isDom) {
+          if (ns === 1) {
+            // North is brightest: block at layer1, filler at layer1 z-1
+            addBlock(x, L1, z, info.block);
+            if (!fillerOff) addBlock(x, L1, z - 1, options.fillerBlock);
+          } else if (ns === 2 || ns === 3) {
+            // North is 2nd/3rd: block at layer1, no filler
+            addBlock(x, L1, z, info.block);
+          } else {
+            // North is transparent: block at layer2
+            addBlock(x, L2, z, info.block);
+            if (!fillerOff) {
+              // If south is also 2nd shade, filler on layer1; otherwise layer2
+              addBlock(x, ss === 2 ? L1 : L2, z - 1, options.fillerBlock);
+            }
+          }
+        } else {
+          // Submissive
+          if (ns >= 1) {
+            // North is any non-transparent: block at layer1
+            addBlock(x, L1, z, info.block);
+          } else {
+            // North is transparent: block at layer2
+            addBlock(x, L2, z, info.block);
+            if (!fillerOff) {
+              addBlock(x, ss === 2 ? L1 : L2, z - 1, options.fillerBlock);
+            }
+          }
+        }
+      } else {
+        // 1st shade (brightest)
+        if (isDom) {
+          addBlock(x, L1, z, info.block);
+        } else {
+          addBlock(x, L2, z, info.block);
+        }
+      }
+    }
   }
 
   return blocks;
@@ -1099,7 +1248,21 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
     countBlocks(h0);
     countBlocks(h1);
   } else if (options.buildMode === "suppress_pairs_ew") {
-    const blocks = buildSuppressPairsEWBlocks(imageData, options);
+    // Material count = max occurrence of each block across any single step/segment
+    const steps = buildSuppressPairsEWBlocksByStep(imageData, options);
+    for (const stepBlocks of steps) {
+      applySupport(stepBlocks, options);
+      const stepCounts: Record<string, number> = {};
+      for (const b of stepBlocks) {
+        const name = toDisplayName(b.blockName);
+        stepCounts[name] = (stepCounts[name] || 0) + 1;
+      }
+      for (const [name, c] of Object.entries(stepCounts)) {
+        counts[name] = Math.max(counts[name] || 0, c);
+      }
+    }
+  } else if (options.buildMode === "suppress_dual_layer") {
+    const blocks = buildSuppressDualLayerBlocks(imageData, options);
     applySupport(blocks, options);
     countBlocks(blocks);
   } else {

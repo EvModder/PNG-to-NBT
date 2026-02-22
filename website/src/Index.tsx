@@ -305,6 +305,7 @@ const LS_KEYS = {
   activePreset: "mapart_activePreset",
   sortKey: "mapart_sortKey",
   sortDir: "mapart_sortDir",
+  layerGap: "mapart_layerGap",
 } as const;
 
 // ── Component ──
@@ -326,6 +327,7 @@ const Index = () => {
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
   );
+  const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
     loadCached(LS_KEYS.supportMode, "none" as SupportMode),
   );
@@ -367,9 +369,10 @@ const Index = () => {
       [LS_KEYS.activePreset, preset.name],
       [LS_KEYS.sortKey, sortKey],
       [LS_KEYS.sortDir, sortDir],
+      [LS_KEYS.layerGap, layerGap],
     ];
     entries.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
-  }, [fillerBlock, buildMode, supportMode, showStacks, preset.name, sortKey, sortDir]);
+  }, [fillerBlock, buildMode, supportMode, showStacks, preset.name, sortKey, sortDir, layerGap]);
 
   const hasNonFlatShades = useMemo(
     () => imageData ? imageHasNonFlatShades(imageData, customColors) : false,
@@ -426,11 +429,12 @@ const Index = () => {
         buildMode: effectiveBuildMode,
         supportMode,
         baseName: "",
+        layerGap,
       });
     } catch {
       return null;
     }
-  }, [imageData, imageValid, preset.blocks, fillerBlock, customColors, effectiveBuildMode, supportMode]);
+  }, [imageData, imageValid, preset.blocks, fillerBlock, customColors, effectiveBuildMode, supportMode, layerGap]);
 
   const sortedMaterials = useMemo(
     () =>
@@ -453,12 +457,13 @@ const Index = () => {
         buildMode: effectiveBuildMode,
         supportMode,
         baseName: "",
+        layerGap,
       });
       return alt[sentinel] || 0;
     } catch {
       return 0;
     }
-  }, [imageData, imageValid, materialCounts, preset.blocks, customColors, effectiveBuildMode, supportMode]);
+  }, [imageData, imageValid, materialCounts, preset.blocks, customColors, effectiveBuildMode, supportMode, layerGap]);
 
   const colorRequiredMap = useMemo(() => {
     if (!materialCounts) return {} as Record<number, number>;
@@ -740,6 +745,7 @@ const Index = () => {
         buildMode,
         supportMode,
         baseName,
+        layerGap,
       });
       const suffixMap: Record<string, string> = {
         flat: "",
@@ -751,6 +757,7 @@ const Index = () => {
         suppress_checker: "-suppress_plaid_NS",
         suppress_pairs: "-suppress_rowsplit",
         suppress_pairs_ew: "-suppress_pairs_EW",
+        suppress_dual_layer: "-suppress_duallayer_EW",
       };
       const suffix = suffixMap[buildMode] ?? `-${buildMode}`;
       const ext = result.isZip ? "zip" : "nbt";
@@ -1019,12 +1026,23 @@ const Index = () => {
                       Suppress (Plaid, E→W)
                     </option>
                     <option value="suppress_pairs_ew">Suppress (Pairs, E→W)</option>
-                    <option value="suppress_dual_layer" disabled>
-                      Suppress (Dual-layer, E→W)
-                    </option>
+                    <option value="suppress_dual_layer">Suppress (Dual-layer, E→W)</option>
                     <option value="suppress_pairs">Suppress (Row-split, E→W)</option>
                   </optgroup>
                 </select>
+              </div>
+            )}
+            {imageData && hasNonFlatShades && buildMode === "suppress_dual_layer" && (
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-semibold text-accent whitespace-nowrap">Layer gap:</span>
+                <input
+                  type="number"
+                  min={2}
+                  max={20}
+                  value={layerGap}
+                  onChange={e => setLayerGap(Math.max(2, Math.min(20, parseInt(e.target.value) || 5)))}
+                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                />
               </div>
             )}
           </section>
