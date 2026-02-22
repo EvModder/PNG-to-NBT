@@ -14,15 +14,16 @@ export interface CustomColor {
 
 export type BuildMode =
   | "flat"
-  | "staircase_valley"
-  | "staircase_classic"
   | "staircase_northline"
   | "staircase_southline"
+  | "staircase_classic"
+  | "staircase_valley"
   | "staircase_cancer"
-  | "suppress_checker"
-  | "suppress_pairs"
+  | "suppress_rowsplit"
+  | "suppress_plaid_ns"
+  | "suppress_plaid_ew"
   | "suppress_pairs_ew"
-  | "suppress_dual_layer";
+  | "suppress_2layer_ew";
 
 export type SupportMode = "none" | "steps" | "all" | "fragile" | "water";
 
@@ -440,8 +441,8 @@ export async function convertToNbt(
   imageData: ImageData,
   options: ConversionOptions,
 ): Promise<{ data: Uint8Array; isZip: boolean }> {
-  if (options.buildMode === "suppress_pairs") {
-    return buildSuppressPairs(imageData, options);
+  if (options.buildMode === "suppress_rowsplit") {
+    return buildRowSplit(imageData, options);
   }
 
   if (options.buildMode === "suppress_pairs_ew") {
@@ -452,7 +453,7 @@ export async function convertToNbt(
     return { data: await gzipCompress(nbtData), isZip: false };
   }
 
-  if (options.buildMode === "suppress_dual_layer") {
+  if (options.buildMode === "suppress_2layer_ew") {
     const blocks = buildSuppressDualLayerBlocks(imageData, options);
     applySupport(blocks, options);
     const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
@@ -471,7 +472,7 @@ export async function convertToNbt(
 }
 
 // Build suppress pairs block lists (two halves)
-function buildSuppressPairsBlocks(imageData: ImageData, options: ConversionOptions): [BlockEntry[], BlockEntry[]] {
+function buildSuppressRowSplitBlocks(imageData: ImageData, options: ConversionOptions): [BlockEntry[], BlockEntry[]] {
   const lookup = getColorLookup();
   const customLookup = new Map<string, CustomColor>();
   for (const cc of options.customColors) {
@@ -547,12 +548,12 @@ function buildSuppressPairsBlocks(imageData: ImageData, options: ConversionOptio
   return [buildHalf(0), buildHalf(1)];
 }
 
-// Suppress (Pairs E→W): generate two NBTs in a zip
-async function buildSuppressPairs(
+// Suppress (Row-split): generate two NBTs in a zip
+async function buildRowSplit(
   imageData: ImageData,
   options: ConversionOptions,
 ): Promise<{ data: Uint8Array; isZip: boolean }> {
-  const [half0, half1] = buildSuppressPairsBlocks(imageData, options);
+  const [half0, half1] = buildSuppressRowSplitBlocks(imageData, options);
 
   async function toNbt(blocks: BlockEntry[]): Promise<Uint8Array> {
     const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
@@ -1243,8 +1244,8 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
     }
   }
 
-  if (options.buildMode === "suppress_pairs") {
-    const [h0, h1] = buildSuppressPairsBlocks(imageData, options);
+  if (options.buildMode === "suppress_rowsplit") {
+    const [h0, h1] = buildSuppressRowSplitBlocks(imageData, options);
     countBlocks(h0);
     countBlocks(h1);
   } else if (options.buildMode === "suppress_pairs_ew") {
@@ -1261,7 +1262,7 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
         counts[name] = Math.max(counts[name] || 0, c);
       }
     }
-  } else if (options.buildMode === "suppress_dual_layer") {
+  } else if (options.buildMode === "suppress_2layer_ew") {
     const blocks = buildSuppressDualLayerBlocks(imageData, options);
     applySupport(blocks, options);
     countBlocks(blocks);

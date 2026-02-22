@@ -749,15 +749,16 @@ const Index = () => {
       });
       const suffixMap: Record<string, string> = {
         flat: "",
-        staircase_classic: "-staircase_classic",
         staircase_northline: "-staircase_northline",
         staircase_southline: "-staircase_southline",
+        staircase_classic: "-staircase_classic",
         staircase_valley: "-staircase_valley",
         staircase_cancer: "-staircase_cancer",
-        suppress_checker: "-suppress_plaid_NS",
-        suppress_pairs: "-suppress_rowsplit",
+        suppress_rowsplit: "-suppress_rowsplit",
+        suppress_plaid_ns: "-suppress_plaid_NS",
+        suppress_plaid_ew: "-suppress_plaid_EW",
         suppress_pairs_ew: "-suppress_pairs_EW",
-        suppress_dual_layer: "-suppress_duallayer_EW",
+        suppress_2layer_ew: "-suppress_2layer_EW",
       };
       const suffix = suffixMap[buildMode] ?? `-${buildMode}`;
       const ext = result.isZip ? "zip" : "nbt";
@@ -1019,20 +1020,20 @@ const Index = () => {
                     <option value="staircase_cancer">Staircase (Cancer)</option>
                   </optgroup>
                   <optgroup label="Suppress">
-                    <option value="suppress_checker" disabled>
+                    <option value="suppress_rowsplit">Suppress (Row-split, E→W)</option>
+                    <option value="suppress_plaid_ns" disabled>
                       Suppress (Plaid, N→S)
                     </option>
-                    <option value="suppress_plaid" disabled>
+                    <option value="suppress_plaid_ew" disabled>
                       Suppress (Plaid, E→W)
                     </option>
                     <option value="suppress_pairs_ew">Suppress (Pairs, E→W)</option>
-                    <option value="suppress_dual_layer">Suppress (Dual-layer, E→W)</option>
-                    <option value="suppress_pairs">Suppress (Row-split, E→W)</option>
+                    <option value="suppress_2layer_ew">Suppress (2-Layer, E→W)</option>
                   </optgroup>
                 </select>
               </div>
             )}
-            {imageData && hasNonFlatShades && buildMode === "suppress_dual_layer" && (
+            {imageData && hasNonFlatShades && buildMode === "suppress_2layer_ew" && (
               <div className="flex items-center gap-1">
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">Layer gap:</span>
                 <input
@@ -1313,7 +1314,7 @@ const Index = () => {
                   disabled={converting}
                   className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {converting ? "Converting..." : buildMode === "suppress_pairs" ? "Generate .zip" : "Generate .nbt"}
+                  {converting ? "Converting..." : buildMode === "suppress_rowsplit" ? "Generate .zip" : "Generate .nbt"}
                 </button>
               </div>
             )}
