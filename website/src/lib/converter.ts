@@ -1,6 +1,6 @@
 // PNG → NBT conversion logic
 
-import { BASE_COLORS, getColorLookup, type ColorMatch } from "../data/mapColors";
+import { BASE_COLORS, WATER_BASE_INDEX, getColorLookup, type ColorMatch } from "../data/mapColors";
 import { writeStructureNbt, gzipCompress, type BlockEntry } from "./nbtWriter";
 import { createZip, type ZipEntry } from "./zip";
 import { isFragileBlock } from "../data/fragileBlocks";
@@ -35,6 +35,8 @@ export interface ConversionOptions {
   supportMode: SupportMode;
   baseName: string;
   layerGap?: number;
+  columnRange?: [number, number];
+  stepRange?: [number, number];
 }
 
 export interface ValidationResult {
@@ -227,7 +229,7 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
         continue;
       }
 
-      if (baseColor.isWater) {
+      if (baseIndex === WATER_BASE_INDEX) {
         const depth = getWaterDepth(shade, x, z);
         let bottom: number, top: number;
         if (northState.waterBottom !== undefined) {
@@ -509,7 +511,7 @@ function buildSuppressRowSplitBlocks(imageData: ImageData, options: ConversionOp
         if (!block) continue;
 
         // Water: stack from y=0 up by depth, no filler needed
-        if (!customMatch && BASE_COLORS[(match as ColorMatch).baseIndex].isWater) {
+        if (!customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX) {
           const depth = getWaterDepth((match as ColorMatch).shade, x, z);
           for (let d = 0; d < depth; d++) {
             addBlock(x, d, z, block);
@@ -630,7 +632,7 @@ function applyStaircaseVariant(
         const match = lookup.get(key);
         const customMatch = customLookup.get(key);
         if (match) {
-          pixelShade.set(z, { shade: match.shade, isWater: BASE_COLORS[match.baseIndex].isWater });
+          pixelShade.set(z, { shade: match.shade, isWater: match.baseIndex === WATER_BASE_INDEX });
         } else if (customMatch) {
           pixelShade.set(z, { shade: 1, isWater: false });
         }
@@ -893,7 +895,7 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
       const key = `${r},${g},${b2}`;
       const match = lookup.get(key);
       const cm = customLookup.get(key);
-      if (match) pixelInfo.set(z, { shade: match.shade, isWater: BASE_COLORS[match.baseIndex].isWater });
+      if (match) pixelInfo.set(z, { shade: match.shade, isWater: match.baseIndex === WATER_BASE_INDEX });
       else if (cm) pixelInfo.set(z, { shade: 1, isWater: false });
     }
 
@@ -1042,7 +1044,7 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
         if (!block) continue;
 
         // Water: stack from baseY upward by depth
-        if (!customMatch && BASE_COLORS[(match as ColorMatch).baseIndex].isWater) {
+        if (!customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX) {
           const depth = getWaterDepth((match as ColorMatch).shade, x, z);
           for (let d = 0; d < depth; d++) {
             addBlock(x, baseY + d, z, block);
@@ -1053,10 +1055,11 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
           addBlock(x, baseY, z, block);
 
           // Support block under color block if needed
-          const needsSupport = !isFillerDisabled(options.fillerBlock) && (
-            options.supportMode === "all" ||
-            (options.supportMode === "fragile" && isFragileBlock(block)) ||
-            options.supportMode === "steps");
+          const needsSupport =
+            !isFillerDisabled(options.fillerBlock) &&
+            (options.supportMode === "all" ||
+              (options.supportMode === "fragile" && isFragileBlock(block)) ||
+              options.supportMode === "steps");
           if (needsSupport && baseY > 0) {
             addBlock(x, baseY - 1, z, options.fillerBlock);
           }
@@ -1128,10 +1131,9 @@ function buildSuppressDualLayerBlocks(imageData: ImageData, options: ConversionO
     if (!match && !customMatch) return null;
     const block = customMatch
       ? customMatch.block
-      : options.blockMapping[(match as ColorMatch).baseIndex] ||
-        BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
+      : options.blockMapping[(match as ColorMatch).baseIndex] || BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
     if (!block) return null;
-    const isWater = !customMatch && BASE_COLORS[(match as ColorMatch).baseIndex].isWater;
+    const isWater = !customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX;
     const mcShade = customMatch ? 1 : (match as ColorMatch).shade;
     const mapped: MappedShade = mcShade === 2 ? 1 : mcShade === 1 ? 2 : 3;
     return { shade: mapped, block, isWater, mcShade };
@@ -1234,11 +1236,19 @@ function buildSuppressDualLayerBlocks(imageData: ImageData, options: ConversionO
   return blocks;
 }
 
+// Filter blocks by column range if specified
+function filterByColumnRange(blocks: BlockEntry[], range?: [number, number]): BlockEntry[] {
+  if (!range) return blocks;
+  const [start, end] = range;
+  return blocks.filter(b => b.x >= start && b.x <= end);
+}
+
 // Compute material counts from actual block generation
 export function computeMaterialCounts(imageData: ImageData, options: ConversionOptions): Record<string, number> {
   const counts: Record<string, number> = {};
+  const range = options.columnRange;
   function countBlocks(blocks: BlockEntry[]) {
-    for (const b of blocks) {
+    for (const b of filterByColumnRange(blocks, range)) {
       const name = toDisplayName(b.blockName);
       counts[name] = (counts[name] || 0) + 1;
     }
@@ -1251,7 +1261,9 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
   } else if (options.buildMode === "suppress_pairs_ew") {
     // Material count = max occurrence of each block across any single step/segment
     const steps = buildSuppressPairsEWBlocksByStep(imageData, options);
-    for (const stepBlocks of steps) {
+    const [sStart, sEnd] = options.stepRange ?? [0, steps.length - 1];
+    for (let i = sStart; i <= sEnd && i < steps.length; i++) {
+      const stepBlocks = steps[i];
       applySupport(stepBlocks, options);
       const stepCounts: Record<string, number> = {};
       for (const b of stepBlocks) {

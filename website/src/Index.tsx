@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { BASE_COLORS, getColorLookup, getShadedRgb } from "@/data/mapColors";
+import { isFragileBlock } from "@/data/fragileBlocks";
 import {
   validatePng,
   convertToNbt,
@@ -15,43 +16,51 @@ interface Preset {
   blocks: Record<number, string>;
 }
 
-const BUILTIN_PRESET_NAMES = ["Default", "Carpets", "Fullblock"] as const;
+const BUILTIN_PRESET_NAMES = ["PistonClear", "Carpets", "Fullblock"] as const;
 
-function buildDefaultPreset(): Preset {
-  const overrides: Record<string, string> = {
-    SNOW: "white_carpet",
-    FIRE: "redstone_block",
-    WOOL: "white_candle",
-    WOOD: "oak_pressure_plate",
-    WATER: "oak_leaves[waterlogged=true]",
-    NETHER: "crimson_roots",
-    PLANT: "pink_petals",
-    DIAMOND: "prismarine_bricks",
-    TERRACOTTA_RED: "decorated_pot",
-    TERRACOTTA_ORANGE: "resin_clump[south=true]",
-    TERRACOTTA_CYAN: "mud",
-  };
+function buildPistonClearPreset(): Preset {
   const blocks: Record<number, string> = {};
   for (let i = 1; i < BASE_COLORS.length; i++) {
     const c = BASE_COLORS[i];
-    blocks[i] =
-      overrides[c.name] ??
-      (c.name.startsWith("COLOR_") ? c.blocks.find(b => b.endsWith("_carpet")) : undefined) ??
-      c.blocks.find(b => b.endsWith("_pressure_plate")) ??
-      c.blocks[0] ??
-      "";
+    // Use fragile blocks only; prefer carpet for COLOR_ names, then pressure_plate, then any fragile
+    const carpet = c.blocks.find(b => b.endsWith("_carpet"));
+    const plate = c.blocks.find(b => b.endsWith("_pressure_plate"));
+    const anyFragile = c.blocks.find(b => isFragileBlock(b));
+    if (c.name.startsWith("COLOR_") && carpet) {
+      blocks[i] = carpet;
+    } else if (plate) {
+      blocks[i] = plate;
+    } else if (anyFragile) {
+      blocks[i] = anyFragile;
+    } else {
+      blocks[i] = ""; // no fragile option → (none)
+    }
   }
-  return { name: "Default", blocks };
+  // Apply specific overrides from old Default that used fragile blocks
+  const overrides: Record<string, string> = {
+    SNOW: "white_carpet",
+    WOOL: "white_candle",
+    WOOD: "oak_pressure_plate",
+    NETHER: "crimson_roots",
+    PLANT: "pink_petals",
+  };
+  for (let i = 1; i < BASE_COLORS.length; i++) {
+    const name = BASE_COLORS[i].name;
+    if (overrides[name]) blocks[i] = overrides[name];
+  }
+  return { name: "PistonClear", blocks };
 }
 
 function buildCarpetsPreset(): Preset {
-  const { blocks: def } = buildDefaultPreset();
-  const blocks = Object.fromEntries(Object.entries(def).map(([k, v]) => [k, v.endsWith("_carpet") ? v : ""]));
+  const blocks: Record<number, string> = {};
+  for (let i = 1; i < BASE_COLORS.length; i++) {
+    const carpet = BASE_COLORS[i].blocks.find(b => b.endsWith("_carpet"));
+    blocks[i] = carpet ?? "";
+  }
   return { name: "Carpets", blocks };
 }
 
 function buildFullblockPreset(): Preset {
-  const { blocks: def } = buildDefaultPreset();
   const specific: Record<number, string> = {
     1: "grass_block",
     2: "sandstone",
@@ -93,12 +102,15 @@ function buildFullblockPreset(): Preset {
     56: "warped_planks",
     61: "verdant_froglight",
   };
-  const blocks = Object.fromEntries(Object.entries(def).map(([k, v]) => [k, specific[Number(k)] ?? v]));
+  const blocks: Record<number, string> = {};
+  for (let i = 1; i < BASE_COLORS.length; i++) {
+    blocks[i] = specific[i] ?? BASE_COLORS[i].blocks[0] ?? "";
+  }
   return { name: "Fullblock", blocks };
 }
 
 const BUILTIN_BUILDERS: Record<string, () => Preset> = {
-  Default: buildDefaultPreset,
+  PistonClear: buildPistonClearPreset,
   Carpets: buildCarpetsPreset,
   Fullblock: buildFullblockPreset,
 };
@@ -277,11 +289,14 @@ function decodePreset(encoded: string): {
     }
 
     const customColors = sections[5]
-      ? sections[5].split(";").map(entry => {
-          const [rgb, block] = entry.split(":");
-          const [r, g, b] = rgb.split(",").map(Number);
-          return { r, g, b, block };
-        }).filter(cc => !isNaN(cc.r) && cc.block)
+      ? sections[5]
+          .split(";")
+          .map(entry => {
+            const [rgb, block] = entry.split(":");
+            const [r, g, b] = rgb.split(",").map(Number);
+            return { r, g, b, block };
+          })
+          .filter(cc => !isNaN(cc.r) && cc.block)
       : undefined;
 
     const convertUnsupported = sections[6] === "1" ? true : sections[6] === "0" ? false : undefined;
@@ -328,6 +343,13 @@ const Index = () => {
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
   );
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
+  const [colRangeEnabled, setColRangeEnabled] = useState(false);
+  const [colStart, setColStart] = useState(0);
+  const [colEnd, setColEnd] = useState(127);
+  const colStartRef = useRef(0);
+  const colEndRef = useRef(127);
+  useEffect(() => { colStartRef.current = colStart; }, [colStart]);
+  useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
     loadCached(LS_KEYS.supportMode, "none" as SupportMode),
   );
@@ -354,7 +376,38 @@ const Index = () => {
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const fillerInputRef = useRef<HTMLInputElement>(null);
 
-  const preset = presets[activeIdx] || buildDefaultPreset();
+  const preset = presets[activeIdx] || buildPistonClearPreset();
+
+  const [savedBlocks, setSavedBlocks] = useState<Record<number, string> | null>(null);
+
+  // Compute dirty by comparing current blocks to saved snapshot
+  const presetDirty = useMemo(() => {
+    if (!savedBlocks) return false;
+    const current = preset.blocks;
+    const allKeys = new Set([...Object.keys(savedBlocks), ...Object.keys(current)]);
+    for (const k of allKeys) {
+      if ((savedBlocks[Number(k)] ?? "") !== (current[Number(k)] ?? "")) return true;
+    }
+    return false;
+  }, [preset.blocks, savedBlocks]);
+
+  const markSavedDeferred = useCallback(() => {
+    setSavedBlocks(null);
+    markSavedNextRef.current = true;
+  }, []);
+
+  const markSavedImmediate = useCallback(() => {
+    setSavedBlocks({ ...preset.blocks });
+  }, [preset.blocks]);
+
+  const markSavedNextRef = useRef(true);
+
+  useEffect(() => {
+    if (markSavedNextRef.current) {
+      setSavedBlocks({ ...preset.blocks });
+      markSavedNextRef.current = false;
+    }
+  }, [preset.blocks]);
 
   // Persist settings to localStorage
   useEffect(() => {
@@ -421,6 +474,7 @@ const Index = () => {
 
   const materialCounts = useMemo(() => {
     if (!imageData || !imageValid) return null;
+    const isPairs = effectiveBuildMode === "suppress_pairs_ew";
     try {
       return computeMaterialCounts(imageData, {
         blockMapping: preset.blocks,
@@ -430,11 +484,16 @@ const Index = () => {
         supportMode,
         baseName: "",
         layerGap,
+        ...(colRangeEnabled
+          ? isPairs
+            ? { stepRange: [colStart, colEnd] }
+            : { columnRange: [colStart, colEnd] }
+          : {}),
       });
     } catch {
       return null;
     }
-  }, [imageData, imageValid, preset.blocks, fillerBlock, customColors, effectiveBuildMode, supportMode, layerGap]);
+  }, [imageData, imageValid, preset.blocks, fillerBlock, customColors, effectiveBuildMode, supportMode, layerGap, colRangeEnabled, colStart, colEnd]);
 
   const sortedMaterials = useMemo(
     () =>
@@ -587,12 +646,31 @@ const Index = () => {
 
   const sortArrow = (key: SortKey) => (sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "");
 
-  const updateBlock = (baseIndex: number, block: string) =>
-    setPresets(prev => {
-      const n = [...prev];
-      n[activeIdx] = { ...n[activeIdx], blocks: { ...n[activeIdx].blocks, [baseIndex]: block } };
-      return n;
-    });
+  const updateBlock = (baseIndex: number, block: string) => {
+    const isBuiltin = activeIdx < BUILTIN_PRESET_NAMES.length;
+    if (isBuiltin) {
+      // Spawn a new "Custom" preset instead of mutating the builtin
+      const originalBlocks = preset.blocks;
+      setSavedBlocks({ ...originalBlocks });
+      const newBlocks = { ...originalBlocks, [baseIndex]: block };
+      setPresets(prev => {
+        let customName = "Custom";
+        const existingNames = new Set(prev.map(p => p.name));
+        let suffix = 2;
+        while (existingNames.has(customName)) {
+          customName = `Custom ${suffix++}`;
+        }
+        return [...prev, { name: customName, blocks: newBlocks }];
+      });
+      setActiveIdx(presets.length);
+    } else {
+      setPresets(prev => {
+        const n = [...prev];
+        n[activeIdx] = { ...n[activeIdx], blocks: { ...n[activeIdx].blocks, [baseIndex]: block } };
+        return n;
+      });
+    }
+  };
 
   const selectPreset = (idx: number) => {
     const builtin = getBuiltinPreset(presets[idx].name);
@@ -603,31 +681,43 @@ const Index = () => {
         return n;
       });
     setActiveIdx(idx);
+    markSavedDeferred();
   };
 
   const createPreset = () => {
     const name = prompt("Enter preset name:")?.trim();
     if (!name) return;
+    // If a preset with this name already exists, switch to it
+    const existingIdx = presets.findIndex(p => p.name === name);
+    if (existingIdx !== -1) {
+      selectPreset(existingIdx);
+      return;
+    }
     setPresets(prev => [...prev, { name, blocks: { ...preset.blocks } }]);
     setActiveIdx(presets.length);
+    markSavedDeferred();
   };
 
   const deletePreset = () => {
-    if (BUILTIN_PRESET_NAMES.includes(preset.name as (typeof BUILTIN_PRESET_NAMES)[number]) || presets.length <= 1)
-      return;
+    if (activeIdx < BUILTIN_PRESET_NAMES.length) return;
     setPresets(prev => prev.filter((_, i) => i !== activeIdx));
     setActiveIdx(0);
+    markSavedDeferred();
   };
 
   const sharePreset = () => {
+    markSavedImmediate();
     const url = `${location.origin}${location.pathname}?preset=${encodePreset(preset, fillerBlock, supportMode, buildMode, customColors, convertUnsupported)}`;
     navigator.clipboard.writeText(url);
     alert("Preset URL copied to clipboard!");
   };
 
   const clearImage = () => {
-    setImageData(null); setImageName(""); setImageValid(false);
-    setPaletteErrors([]); setShowUnusedColors(false);
+    setImageData(null);
+    setImageName("");
+    setImageValid(false);
+    setPaletteErrors([]);
+    setShowUnusedColors(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -645,7 +735,9 @@ const Index = () => {
           // Check if the only errors are palette errors and conversion is enabled
           const sizeError = result.errors.find(e => e.includes("128×128"));
           if (sizeError || !convertUnsupported) {
-            setImageData(null); setImageName(""); setImageValid(false);
+            setImageData(null);
+            setImageName("");
+            setImageValid(false);
             setPaletteErrors(result.errors);
             if (fileRef.current) fileRef.current.value = "";
             return;
@@ -694,7 +786,9 @@ const Index = () => {
           }
           // Re-validate after conversion (should pass now)
           const recheck = validatePng(data, customColors);
-          setImageData(data); setImageName(file.name); setImageValid(recheck.valid);
+          setImageData(data);
+          setImageName(file.name);
+          setImageValid(recheck.valid);
           const cc = convertedColors.size;
           const totalUnique = allInputColors.size;
           // Output unique colors = original colors minus converted ones, plus target palette colors
@@ -704,16 +798,15 @@ const Index = () => {
           }
           for (const c of targetColors) outputColors.add(c);
           const fewer = totalUnique - outputColors.size;
-          const convLine1 = cc === totalUnique
-            ? `Converted ${cc} color${cc === 1 ? "" : "s"} to nearest palette match.`
-            : `Converted ${cc} (of ${totalUnique}) color${totalUnique === 1 ? "" : "s"} to nearest palette match.`;
+          const convLine1 =
+            cc === totalUnique
+              ? `Converted ${cc} color${cc === 1 ? "" : "s"} to nearest palette match.`
+              : `Converted ${cc} (of ${totalUnique}) color${totalUnique === 1 ? "" : "s"} to nearest palette match.`;
           const convLines = [convLine1];
           if (fewer > 0) {
             convLines.push(`${fewer} fewer unique color${fewer === 1 ? "" : "s"} than source image.`);
           }
-          setPaletteErrors(
-            recheck.valid ? convLines : recheck.errors,
-          );
+          setPaletteErrors(recheck.valid ? convLines : recheck.errors);
           setShowUnusedColors(false);
           if (sortKey === "default") {
             setSortKey("required");
@@ -721,8 +814,11 @@ const Index = () => {
           }
           return;
         }
-        setImageData(data); setImageName(file.name); setImageValid(true);
-        setPaletteErrors([]); setShowUnusedColors(false);
+        setImageData(data);
+        setImageName(file.name);
+        setImageValid(true);
+        setPaletteErrors([]);
+        setShowUnusedColors(false);
         if (sortKey === "default") {
           setSortKey("required");
           setSortDir("desc");
@@ -914,17 +1010,34 @@ const Index = () => {
           <section className="bg-card border border-border rounded-md p-2">
             <div className="flex flex-wrap gap-1.5 items-center">
               <span className="text-xs font-semibold text-accent">Preset:</span>
-              <select
-                className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
-                value={activeIdx}
-                onChange={e => selectPreset(Number(e.target.value))}
-              >
-                {presets.map((p, i) => (
-                  <option key={i} value={i}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <div className="inline-flex items-center gap-1">
+                <select
+                  className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
+                  value={activeIdx}
+                  onChange={e => selectPreset(Number(e.target.value))}
+                >
+                  <optgroup label="Built-in">
+                    {presets.slice(0, BUILTIN_PRESET_NAMES.length).map((p, i) => (
+                      <option key={i} value={i}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                  {presets.length > BUILTIN_PRESET_NAMES.length && (
+                    <optgroup label="Custom">
+                      {presets.slice(BUILTIN_PRESET_NAMES.length).map((p, i) => (
+                        <option key={i + BUILTIN_PRESET_NAMES.length} value={i + BUILTIN_PRESET_NAMES.length}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                {presetDirty && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
+                    title="Unsaved changes"
+                  />
+                )}
+              </div>
               {!isBuiltinUnedited && (
                 <button
                   className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
@@ -933,15 +1046,14 @@ const Index = () => {
                   Share
                 </button>
               )}
-              {!BUILTIN_PRESET_NAMES.includes(preset.name as (typeof BUILTIN_PRESET_NAMES)[number]) &&
-                presets.length > 1 && (
-                  <button
-                    className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
-                    onClick={deletePreset}
-                  >
-                    Del
-                  </button>
-                )}
+              {activeIdx >= BUILTIN_PRESET_NAMES.length && presets.length > BUILTIN_PRESET_NAMES.length && (
+                <button
+                  className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
+                  onClick={deletePreset}
+                >
+                  Del
+                </button>
+              )}
               <button
                 className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20"
                 onClick={createPreset}
@@ -1283,7 +1395,13 @@ const Index = () => {
                   <p
                     key={i}
                     className={`text-xs whitespace-pre-wrap ${
-                      !imageValid ? "text-destructive font-medium" : e.endsWith("than source image.") ? "text-destructive font-bold" : e.startsWith("Converted") ? "text-warning font-medium" : "text-primary font-medium"
+                      !imageValid
+                        ? "text-destructive font-medium"
+                        : e.endsWith("than source image.")
+                          ? "text-destructive font-bold"
+                          : e.startsWith("Converted")
+                            ? "text-warning font-medium"
+                            : "text-primary font-medium"
                     }`}
                   >
                     {e}
@@ -1336,6 +1454,63 @@ const Index = () => {
                     </span>
                   )}
                 </div>
+                <div className="flex items-center gap-1 mt-1">
+                  <button
+                    className={`text-[10px] px-1.5 py-0.5 rounded border ${colRangeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
+                    onClick={() => setColRangeEnabled(v => !v)}
+                  >
+                    {effectiveBuildMode === "suppress_pairs_ew" ? "Step range" : "Column range"}
+                  </button>
+                </div>
+                {colRangeEnabled && (
+                  <div className="mt-1 border border-border rounded p-1.5 bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-foreground w-6 text-right">{colStart}</span>
+                      <div
+                        className="relative flex-1 h-4 select-none touch-none"
+                        onPointerDown={e => {
+                          const el = e.currentTarget;
+                          el.setPointerCapture(e.pointerId);
+                          const rect = el.getBoundingClientRect();
+                          const valFromEvent = (ev: PointerEvent) => {
+                            const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+                            return Math.round(pct * 127);
+                          };
+                          const val = valFromEvent(e.nativeEvent);
+                          // Lock which thumb we're dragging based on initial proximity
+                          const grabStart = Math.abs(val - colStartRef.current) <= Math.abs(val - colEndRef.current);
+                          const update = (v: number) => {
+                            if (grabStart) setColStart(Math.min(v, colEndRef.current));
+                            else setColEnd(Math.max(v, colStartRef.current));
+                          };
+                          update(val);
+                          const onMove = (ev: PointerEvent) => update(valFromEvent(ev));
+                          const onUp = () => {
+                            el.removeEventListener("pointermove", onMove);
+                            el.removeEventListener("pointerup", onUp);
+                          };
+                          el.addEventListener("pointermove", onMove);
+                          el.addEventListener("pointerup", onUp);
+                        }}
+                      >
+                        <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1 rounded bg-border" />
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 h-1 rounded bg-primary"
+                          style={{ left: `${(colStart / 127) * 100}%`, right: `${100 - (colEnd / 127) * 100}%` }}
+                        />
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground -ml-1.5"
+                          style={{ left: `${(colStart / 127) * 100}%` }}
+                        />
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground -ml-1.5"
+                          style={{ left: `${(colEnd / 127) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-mono text-foreground w-6">{colEnd}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </section>
