@@ -175,6 +175,9 @@ function getHue(r: number, g: number, b: number): number {
 type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 type SortDir = "asc" | "desc";
 
+type ColumnId = "clr" | "id" | "name" | "block" | "options" | "required";
+const ALL_COLUMNS: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
+
 // ── Shared pixel helpers ──
 const makeCustomKeySet = (cc: CustomColor[]) => new Set(cc.map(c => `${c.r},${c.g},${c.b}`));
 
@@ -321,6 +324,7 @@ const LS_KEYS = {
   sortKey: "mapart_sortKey",
   sortDir: "mapart_sortDir",
   layerGap: "mapart_layerGap",
+  columnOrder: "mapart_columnOrder",
 } as const;
 
 // ── Component ──
@@ -363,6 +367,7 @@ const Index = () => {
   const [converting, setConverting] = useState(false);
   const [showNames, setShowNames] = useState(false);
   const [showIds, setShowIds] = useState(false);
+  const [showOptions, setShowOptions] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, "default" as SortKey));
   const [sortDir, setSortDir] = useState<SortDir>(() => loadCached(LS_KEYS.sortDir, "asc" as SortDir));
   const [showUnusedColors, setShowUnusedColors] = useState(false);
@@ -371,6 +376,8 @@ const Index = () => {
     try { return JSON.parse(localStorage.getItem("mapart_theme") || '"light"') === "dark"; } catch { return false; }
   });
   const [convertUnsupported, setConvertUnsupported] = useState(false);
+  const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, ALL_COLUMNS));
+  const dragColRef = useRef<ColumnId | null>(null);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -423,9 +430,10 @@ const Index = () => {
       [LS_KEYS.sortKey, sortKey],
       [LS_KEYS.sortDir, sortDir],
       [LS_KEYS.layerGap, layerGap],
+      [LS_KEYS.columnOrder, columnOrder],
     ];
     entries.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
-  }, [fillerBlock, buildMode, supportMode, showStacks, preset.name, sortKey, sortDir, layerGap]);
+  }, [fillerBlock, buildMode, supportMode, showStacks, preset.name, sortKey, sortDir, layerGap, columnOrder]);
 
   const hasNonFlatShades = useMemo(
     () => imageData ? imageHasNonFlatShades(imageData, customColors) : false,
@@ -484,11 +492,7 @@ const Index = () => {
         supportMode,
         baseName: "",
         layerGap,
-        ...(colRangeEnabled
-          ? isPairs
-            ? { stepRange: [colStart, colEnd] }
-            : { columnRange: [colStart, colEnd] }
-          : {}),
+        ...(colRangeEnabled ? (isPairs ? { stepRange: [colStart, colEnd] } : { columnRange: [colStart, colEnd] }) : {}),
       });
     } catch {
       return null;
@@ -920,14 +924,43 @@ const Index = () => {
     return Math.max(70, maxLen * 6 + 12);
   }, [materialCounts, colorRequiredMap, showStacks]);
 
-  const gridColsStyle = useMemo(() => {
-    const parts = ["24px"];
-    if (showIds) parts.push("24px");
-    if (showNames) parts.push("135px");
-    parts.push("minmax(0,1fr)", "46px");
-    if (hasRequiredCol) parts.push(`${requiredColWidth}px`);
-    return { gridTemplateColumns: parts.join(" ") };
-  }, [showIds, showNames, hasRequiredCol, requiredColWidth]);
+  const visibleColumns = useMemo(() =>
+    columnOrder.filter(c => {
+      if (c === "id" && !showIds) return false;
+      if (c === "name" && !showNames) return false;
+      if (c === "options" && !showOptions) return false;
+      if (c === "required" && !hasRequiredCol) return false;
+      return true;
+    }),
+    [columnOrder, showIds, showNames, showOptions, hasRequiredCol]
+  );
+
+  const colWidthMap: Record<ColumnId, string> = {
+    clr: "24px", id: "24px", name: "135px",
+    block: "minmax(0,1fr)", options: "46px",
+    required: `${requiredColWidth}px`,
+  };
+
+  const gridColsStyle = useMemo(() => ({
+    gridTemplateColumns: visibleColumns.map(c => colWidthMap[c]).join(" "),
+  }), [visibleColumns, requiredColWidth]);
+
+  const colDragProps = (col: ColumnId) => ({
+    draggable: true,
+    onDragStart: () => { dragColRef.current = col; },
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault();
+      const from = dragColRef.current;
+      if (!from || from === col) return;
+      setColumnOrder(prev => {
+        const next = prev.filter(c => c !== from);
+        const idx = next.indexOf(col);
+        next.splice(idx, 0, from);
+        return next;
+      });
+    },
+    onDragEnd: () => { dragColRef.current = null; },
+  });
 
   const getAllBlocks = (idx: number) => {
     const extra = customBlocksByBase[idx] || [];
@@ -943,49 +976,22 @@ const Index = () => {
     const isHighlighted = highlightedColorIdx === idx;
     const allBlocks = getAllBlocks(idx);
     const reqCount = colorRequiredMap[idx] || 0;
+    const cells: Record<ColumnId, React.ReactNode> = {
+      clr: <div key="clr" className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow" style={{ backgroundColor: `rgb(${r},${g},${b})` }} title="Click to copy hex" onClick={() => copyColorToClipboard(r, g, b)} />,
+      id: <span key="id" className="text-[10px] font-mono text-muted-foreground text-center tabular-nums -ml-[0.3em]">{pad2(idx)}</span>,
+      name: <span key="name" className="text-[10px] font-mono text-muted-foreground truncate" title={getDisplayName(color.name)}>{getDisplayName(color.name)}</span>,
+      block: <select key="block" className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full" value={preset.blocks[idx] || ""} onChange={e => updateBlock(idx, e.target.value)}><option value="">(none)</option>{allBlocks.map(b => (<option key={b} value={b}>{b}</option>))}</select>,
+      options: <span key="options" className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">{pad2(allBlocks.length)}</span>,
+      required: <span key="required" className="text-[10px] font-mono text-right pr-1">{reqCount > 0 ? (showStacks ? formatStacks(reqCount) : reqCount) : ""}</span>,
+    };
     return (
       <div
         key={idx}
         ref={el => { colorRowRefs.current[idx] = el; }}
-        className={`grid gap-1 items-center py-px text-xs transition-colors ${isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""} ${isHighlighted ? "bg-primary/20 ring-1 ring-primary/60 rounded" : ""}`}
+        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 overflow-hidden ${isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""} ${isHighlighted ? "bg-primary/20 ring-1 ring-primary/60 rounded" : ""}`}
         style={gridColsStyle}
       >
-        <div
-          className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow"
-          style={{ backgroundColor: `rgb(${r},${g},${b})` }}
-          title="Click to copy hex"
-          onClick={() => copyColorToClipboard(r, g, b)}
-        />
-        {showIds && (
-          <span className="text-[10px] font-mono text-muted-foreground text-center tabular-nums -ml-[0.3em]">
-            {pad2(idx)}
-          </span>
-        )}
-        {showNames && (
-          <span className="text-[10px] font-mono text-muted-foreground truncate" title={getDisplayName(color.name)}>
-            {getDisplayName(color.name)}
-          </span>
-        )}
-        <select
-          className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0"
-          value={preset.blocks[idx] || ""}
-          onChange={e => updateBlock(idx, e.target.value)}
-        >
-          <option value="">(none)</option>
-          {allBlocks.map(b => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
-        </select>
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">
-          {pad2(allBlocks.length)}
-        </span>
-        {hasRequiredCol && (
-          <span className="text-[10px] font-mono text-right pr-1">
-            {reqCount > 0 ? (showStacks ? formatStacks(reqCount) : reqCount) : ""}
-          </span>
-        )}
+        {visibleColumns.map(col => cells[col])}
       </div>
     );
   };
@@ -1032,10 +1038,7 @@ const Index = () => {
                   )}
                 </select>
                 {presetDirty && (
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
-                    title="Unsaved changes"
-                  />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
                 )}
               </div>
               {!isBuiltinUnedited && (
@@ -1177,6 +1180,12 @@ const Index = () => {
                 >
                   {showNames ? "Hide names" : "Show names"}
                 </button>
+                <button
+                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowOptions(v => !v)}
+                >
+                  {showOptions ? "Hide #options" : "Show #options"}
+                </button>
               </div>
               {imageInfo && imageValid && (
                 <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
@@ -1190,54 +1199,24 @@ const Index = () => {
                 </label>
               )}
             </div>
-            <div key={`${showIds}-${showNames}`} className="relative">
+            <div key={`${showIds}-${showNames}-${showOptions}-${columnOrder.join(",")}`} className="relative">
               <div
                 className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
                 style={gridColsStyle}
               >
-                <span
-                  className="cursor-pointer select-none whitespace-nowrap"
-                  onClick={() => toggleSort("color")}
-                  title="Sort by color hue"
-                >
-                  Clr{sortArrow("color")}
-                </span>
-                {showIds && (
-                  <span
-                    className="cursor-pointer select-none whitespace-nowrap pl-0.5"
-                    onClick={() => toggleSort("id")}
-                  >
-                    ID{sortArrow("id")}
-                  </span>
-                )}
-                {showNames && (
-                  <span className="cursor-pointer select-none" onClick={() => toggleSort("name")}>
-                    Name{sortArrow("name")}
-                  </span>
-                )}
-                <span>Block</span>
-                <span
-                  className="cursor-pointer select-none whitespace-nowrap pr-1"
-                  onClick={() => toggleSort("options")}
-                >
-                  Options{sortArrow("options")}
-                </span>
-                {hasRequiredCol && (
-                  <span
-                    className="cursor-pointer select-none whitespace-nowrap text-right pr-1"
-                    onClick={() => toggleSort("required")}
-                  >
-                    Required{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
-                  </span>
-                )}
+                {visibleColumns.map(col => {
+                  const headerMap: Record<ColumnId, React.ReactNode> = {
+                    clr: <span key="clr" className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort("color")} title="Sort by color hue" {...colDragProps("clr")}>Clr{sortArrow("color")}</span>,
+                    id: <span key="id" className="cursor-pointer select-none whitespace-nowrap pl-0.5" onClick={() => toggleSort("id")} {...colDragProps("id")}>ID{sortArrow("id")}</span>,
+                    name: <span key="name" className="cursor-pointer select-none" onClick={() => toggleSort("name")} {...colDragProps("name")}>Name{sortArrow("name")}</span>,
+                    block: <span key="block" {...colDragProps("block")}>Block</span>,
+                    options: <span key="options" className="cursor-pointer select-none whitespace-nowrap pr-1" onClick={() => toggleSort("options")} {...colDragProps("options")}>Options{sortArrow("options")}</span>,
+                    required: <span key="required" className="cursor-pointer select-none whitespace-nowrap text-right pr-1" onClick={() => toggleSort("required")} {...colDragProps("required")}>Required{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}</span>,
+                  };
+                  return headerMap[col];
+                })}
               </div>
-              {hasRequiredCol && usedIndices.length > 0 && (
-                <div
-                  className="absolute top-0 bottom-0 border-2 border-primary/60 bg-primary/10 rounded pointer-events-none"
-                  style={{ width: requiredColWidth + 2, right: -4 }}
-                />
-              )}
-              <div className="relative">{usedIndices.map(renderColorRow)}</div>
+              <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>
 
               {imageValid && unusedIndices.length > 0 && (
                 <div>
