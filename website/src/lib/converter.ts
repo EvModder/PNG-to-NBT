@@ -134,7 +134,7 @@ function resolveBlockName(block: string): string {
   const fullName = `minecraft:${name}`;
   const propKeys = Object.keys(props);
   if (propKeys.length > 0) {
-    return `${fullName}[${propKeys.map((k) => `${k}=${props[k]}`).join(",")}]`;
+    return `${fullName}[${propKeys.map(k => `${k}=${props[k]}`).join(",")}]`;
   }
   return fullName;
 }
@@ -741,7 +741,7 @@ function applyStaircaseVariant(
         }
 
         // Enforce north constraint: segment's own shade dictates relationship to north
-        const firstNonWaterZ = seg.zList.find((z) => !waterZ.has(z));
+        const firstNonWaterZ = seg.zList.find(z => !waterZ.has(z));
         if (firstNonWaterZ !== undefined) {
           const northOfSegZ = firstNonWaterZ - 1;
           // Skip if northOfSegZ is part of this segment (e.g. the included water pillar)

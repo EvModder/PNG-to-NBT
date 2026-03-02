@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { Moon, Sun, Plus, Minus } from "lucide-react";
 import { BASE_COLORS, getColorLookup, getShadedRgb } from "@/data/mapColors";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import {
@@ -375,13 +376,19 @@ const Index = () => {
   const [isDark, setIsDark] = useState(() => {
     try { return JSON.parse(localStorage.getItem("mapart_theme") || '"light"') === "dark"; } catch { return false; }
   });
-  const [convertUnsupported, setConvertUnsupported] = useState(false);
+  const [convertUnsupported, /* setConvertUnsupported */] = useState(true); // always on; checkbox commented out
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, ALL_COLUMNS));
   const dragColRef = useRef<ColumnId | null>(null);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const fillerInputRef = useRef<HTMLInputElement>(null);
+
+  // Dynamic favicon: outlined version when an image is loaded
+  useEffect(() => {
+    const link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
+    if (link) link.href = imageData ? "/favicon-active.png" : "/favicon.png";
+  }, [imageData]);
 
   const preset = presets[activeIdx] || buildPistonClearPreset();
 
@@ -497,7 +504,19 @@ const Index = () => {
     } catch {
       return null;
     }
-  }, [imageData, imageValid, preset.blocks, fillerBlock, customColors, effectiveBuildMode, supportMode, layerGap, colRangeEnabled, colStart, colEnd]);
+  }, [
+    imageData,
+    imageValid,
+    preset.blocks,
+    fillerBlock,
+    customColors,
+    effectiveBuildMode,
+    supportMode,
+    layerGap,
+    colRangeEnabled,
+    colStart,
+    colEnd,
+  ]);
 
   const sortedMaterials = useMemo(
     () =>
@@ -575,7 +594,7 @@ const Index = () => {
     if (decoded.supportMode !== undefined) setSupportMode(decoded.supportMode);
     if (decoded.buildMode) setBuildMode(decoded.buildMode);
     if (decoded.customColors) setCustomColors(decoded.customColors);
-    if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
+    // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
   }, []);
 
   // Auto-select mode when image changes
@@ -924,15 +943,16 @@ const Index = () => {
     return Math.max(70, maxLen * 6 + 12);
   }, [materialCounts, colorRequiredMap, showStacks]);
 
-  const visibleColumns = useMemo(() =>
-    columnOrder.filter(c => {
-      if (c === "id" && !showIds) return false;
-      if (c === "name" && !showNames) return false;
-      if (c === "options" && !showOptions) return false;
-      if (c === "required" && !hasRequiredCol) return false;
-      return true;
-    }),
-    [columnOrder, showIds, showNames, showOptions, hasRequiredCol]
+  const visibleColumns = useMemo(
+    () =>
+      columnOrder.filter(c => {
+        if (c === "id" && !showIds) return false;
+        if (c === "name" && !showNames) return false;
+        if (c === "options" && !showOptions) return false;
+        if (c === "required" && !hasRequiredCol) return false;
+        return true;
+      }),
+    [columnOrder, showIds, showNames, showOptions, hasRequiredCol],
   );
 
   const colWidthMap: Record<ColumnId, string> = {
@@ -941,9 +961,12 @@ const Index = () => {
     required: `${requiredColWidth}px`,
   };
 
-  const gridColsStyle = useMemo(() => ({
-    gridTemplateColumns: visibleColumns.map(c => colWidthMap[c]).join(" "),
-  }), [visibleColumns, requiredColWidth]);
+  const gridColsStyle = useMemo(
+    () => ({
+      gridTemplateColumns: visibleColumns.map(c => colWidthMap[c]).join(" "),
+    }),
+    [visibleColumns, requiredColWidth],
+  );
 
   const colDragProps = (col: ColumnId) => ({
     draggable: true,
@@ -977,12 +1000,54 @@ const Index = () => {
     const allBlocks = getAllBlocks(idx);
     const reqCount = colorRequiredMap[idx] || 0;
     const cells: Record<ColumnId, React.ReactNode> = {
-      clr: <div key="clr" className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow" style={{ backgroundColor: `rgb(${r},${g},${b})` }} title="Click to copy hex" onClick={() => copyColorToClipboard(r, g, b)} />,
-      id: <span key="id" className="text-[10px] font-mono text-muted-foreground text-center tabular-nums -ml-[0.3em]">{pad2(idx)}</span>,
-      name: <span key="name" className="text-[10px] font-mono text-muted-foreground truncate" title={getDisplayName(color.name)}>{getDisplayName(color.name)}</span>,
-      block: <select key="block" className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full" value={preset.blocks[idx] || ""} onChange={e => updateBlock(idx, e.target.value)}><option value="">(none)</option>{allBlocks.map(b => (<option key={b} value={b}>{b}</option>))}</select>,
-      options: <span key="options" className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">{pad2(allBlocks.length)}</span>,
-      required: <span key="required" className="text-[10px] font-mono text-right pr-1">{reqCount > 0 ? (showStacks ? formatStacks(reqCount) : reqCount) : ""}</span>,
+      clr: (
+        <div
+          key="clr"
+          className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow"
+          style={{ backgroundColor: `rgb(${r},${g},${b})` }}
+          title="Click to copy hex"
+          onClick={() => copyColorToClipboard(r, g, b)}
+        />
+      ),
+      id: (
+        <span key="id" className="text-[10px] font-mono text-muted-foreground text-center tabular-nums -ml-[0.3em]">
+          {pad2(idx)}
+        </span>
+      ),
+      name: (
+        <span
+          key="name"
+          className="text-[10px] font-mono text-muted-foreground truncate"
+          title={getDisplayName(color.name)}
+        >
+          {getDisplayName(color.name)}
+        </span>
+      ),
+      block: (
+        <select
+          key="block"
+          className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full"
+          value={preset.blocks[idx] || ""}
+          onChange={e => updateBlock(idx, e.target.value)}
+        >
+          <option value="">(none)</option>
+          {allBlocks.map(b => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
+      ),
+      options: (
+        <span key="options" className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">
+          {pad2(allBlocks.length)}
+        </span>
+      ),
+      required: (
+        <span key="required" className="text-[10px] font-mono text-right pr-1">
+          {reqCount > 0 ? (showStacks ? formatStacks(reqCount) : reqCount) : ""}
+        </span>
+      ),
     };
     return (
       <div
@@ -1002,16 +1067,16 @@ const Index = () => {
         <h1 className="text-lg font-bold text-primary">MapArt PNG → NBT</h1>
         <button
           onClick={toggleTheme}
-          className="text-xs px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
-          title="Toggle light/dark theme"
+          className="p-2 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
+          aria-label="Toggle theme"
         >
-          {isDark ? "☀️" : "🌙"}
+          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
       </header>
 
-      <div className="flex flex-col lg:flex-row gap-3 p-3 max-w-[1600px] mx-auto">
+      <div className="flex flex-col lg:flex-row lg:items-stretch gap-3 p-3 max-w-[2000px] mx-auto">
         {/* LEFT COLUMN */}
-        <div className="flex-1 min-w-0 space-y-2">
+        <div className="lg:flex-[3] min-w-0 space-y-2">
           {/* Preset Manager */}
           <section className="bg-card border border-border rounded-md p-2">
             <div className="flex flex-wrap gap-1.5 items-center">
@@ -1064,6 +1129,48 @@ const Index = () => {
               >
                 +
               </button>
+              {imageData && hasNonFlatShades && (
+                <div className="ml-auto flex items-center gap-1">
+                  <span className="text-xs font-semibold text-accent whitespace-nowrap">Shading Method:</span>
+                  <select
+                    className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
+                    value={buildMode}
+                    onChange={e => setBuildMode(e.target.value as BuildMode)}
+                  >
+                    <optgroup label="Staircase">
+                      <option value="staircase_valley">Staircase (Valley)</option>
+                      <option value="staircase_classic">Staircase (Classic)</option>
+                      <option value="staircase_northline">Staircase (Northline)</option>
+                      <option value="staircase_southline">Staircase (Southline)</option>
+                      <option value="staircase_cancer">Staircase (Cancer)</option>
+                    </optgroup>
+                    <optgroup label="Suppress">
+                      <option value="suppress_rowsplit">Suppress (Row-split, E→W)</option>
+                      <option value="suppress_plaid_ns" disabled>
+                        Suppress (Plaid, N→S)
+                      </option>
+                      <option value="suppress_plaid_ew" disabled>
+                        Suppress (Plaid, E→W)
+                      </option>
+                      <option value="suppress_pairs_ew">Suppress (Pairs, E→W)</option>
+                      <option value="suppress_2layer_ew">Suppress (2-Layer, E→W)</option>
+                    </optgroup>
+                  </select>
+                </div>
+              )}
+              {imageData && hasNonFlatShades && buildMode === "suppress_2layer_ew" && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-semibold text-accent whitespace-nowrap">Layer gap:</span>
+                  <input
+                    type="number"
+                    min={2}
+                    max={20}
+                    value={layerGap}
+                    onChange={e => setLayerGap(Math.max(2, Math.min(20, parseInt(e.target.value) || 5)))}
+                    className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                  />
+                </div>
+              )}
             </div>
           </section>
 
@@ -1119,48 +1226,6 @@ const Index = () => {
                 )}
               </span>
             )}
-            {imageData && hasNonFlatShades && (
-              <div className="ml-auto flex items-center gap-1">
-                <span className="text-xs font-semibold text-accent whitespace-nowrap">Shading Method:</span>
-                <select
-                  className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
-                  value={buildMode}
-                  onChange={e => setBuildMode(e.target.value as BuildMode)}
-                >
-                  <optgroup label="Staircase">
-                    <option value="staircase_valley">Staircase (Valley)</option>
-                    <option value="staircase_classic">Staircase (Classic)</option>
-                    <option value="staircase_northline">Staircase (Northline)</option>
-                    <option value="staircase_southline">Staircase (Southline)</option>
-                    <option value="staircase_cancer">Staircase (Cancer)</option>
-                  </optgroup>
-                  <optgroup label="Suppress">
-                    <option value="suppress_rowsplit">Suppress (Row-split, E→W)</option>
-                    <option value="suppress_plaid_ns" disabled>
-                      Suppress (Plaid, N→S)
-                    </option>
-                    <option value="suppress_plaid_ew" disabled>
-                      Suppress (Plaid, E→W)
-                    </option>
-                    <option value="suppress_pairs_ew">Suppress (Pairs, E→W)</option>
-                    <option value="suppress_2layer_ew">Suppress (2-Layer, E→W)</option>
-                  </optgroup>
-                </select>
-              </div>
-            )}
-            {imageData && hasNonFlatShades && buildMode === "suppress_2layer_ew" && (
-              <div className="flex items-center gap-1">
-                <span className="text-xs font-semibold text-accent whitespace-nowrap">Layer gap:</span>
-                <input
-                  type="number"
-                  min={2}
-                  max={20}
-                  value={layerGap}
-                  onChange={e => setLayerGap(Math.max(2, Math.min(20, parseInt(e.target.value) || 5)))}
-                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
-                />
-              </div>
-            )}
           </section>
 
           {/* Color → Block */}
@@ -1169,22 +1234,25 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-accent">Color → Block</h2>
                 <button
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setShowIds(v => !v)}
                 >
-                  {showIds ? "Hide IDs" : "Show IDs"}
+                  {showIds ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
+                  IDs
                 </button>
                 <button
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setShowNames(v => !v)}
                 >
-                  {showNames ? "Hide names" : "Show names"}
+                  {showNames ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
+                  Names
                 </button>
                 <button
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setShowOptions(v => !v)}
                 >
-                  {showOptions ? "Hide #options" : "Show #options"}
+                  {showOptions ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
+                  #Options
                 </button>
               </div>
               {imageInfo && imageValid && (
@@ -1206,12 +1274,62 @@ const Index = () => {
               >
                 {visibleColumns.map(col => {
                   const headerMap: Record<ColumnId, React.ReactNode> = {
-                    clr: <span key="clr" className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort("color")} title="Sort by color hue" {...colDragProps("clr")}>Clr{sortArrow("color")}</span>,
-                    id: <span key="id" className="cursor-pointer select-none whitespace-nowrap pl-0.5" onClick={() => toggleSort("id")} {...colDragProps("id")}>ID{sortArrow("id")}</span>,
-                    name: <span key="name" className="cursor-pointer select-none" onClick={() => toggleSort("name")} {...colDragProps("name")}>Name{sortArrow("name")}</span>,
-                    block: <span key="block" {...colDragProps("block")}>Block</span>,
-                    options: <span key="options" className="cursor-pointer select-none whitespace-nowrap pr-1" onClick={() => toggleSort("options")} {...colDragProps("options")}>Options{sortArrow("options")}</span>,
-                    required: <span key="required" className="cursor-pointer select-none whitespace-nowrap text-right pr-1" onClick={() => toggleSort("required")} {...colDragProps("required")}>Required{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}</span>,
+                    clr: (
+                      <span
+                        key="clr"
+                        className="cursor-pointer select-none whitespace-nowrap"
+                        onClick={() => toggleSort("color")}
+                        title="Sort by color hue"
+                        {...colDragProps("clr")}
+                      >
+                        Clr{sortArrow("color")}
+                      </span>
+                    ),
+                    id: (
+                      <span
+                        key="id"
+                        className="cursor-pointer select-none whitespace-nowrap pl-0.5"
+                        onClick={() => toggleSort("id")}
+                        {...colDragProps("id")}
+                      >
+                        ID{sortArrow("id")}
+                      </span>
+                    ),
+                    name: (
+                      <span
+                        key="name"
+                        className="cursor-pointer select-none"
+                        onClick={() => toggleSort("name")}
+                        {...colDragProps("name")}
+                      >
+                        Name{sortArrow("name")}
+                      </span>
+                    ),
+                    block: (
+                      <span key="block" {...colDragProps("block")}>
+                        Block
+                      </span>
+                    ),
+                    options: (
+                      <span
+                        key="options"
+                        className="cursor-pointer select-none whitespace-nowrap pr-1"
+                        onClick={() => toggleSort("options")}
+                        {...colDragProps("options")}
+                      >
+                        Options{sortArrow("options")}
+                      </span>
+                    ),
+                    required: (
+                      <span
+                        key="required"
+                        className="cursor-pointer select-none whitespace-nowrap text-right pr-1"
+                        onClick={() => toggleSort("required")}
+                        {...colDragProps("required")}
+                      >
+                        Required{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
+                      </span>
+                    ),
                   };
                   return headerMap[col];
                 })}
@@ -1310,9 +1428,10 @@ const Index = () => {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="lg:w-[360px] lg:sticky lg:top-3 lg:self-start space-y-2">
+        <div className="lg:min-w-[360px] lg:max-w-[720px] lg:flex-1 flex flex-col">
           <section className="bg-card border border-border rounded-md p-3">
             <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt PNG</h2>
+            {/* Convert unsupported colors checkbox – hidden; conversion is now always on
             <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -1322,6 +1441,7 @@ const Index = () => {
               />
               <span className="text-xs text-muted-foreground">Convert unsupported colors</span>
             </label>
+            */}
             <input
               ref={fileRef}
               type="file"
@@ -1493,6 +1613,53 @@ const Index = () => {
               </div>
             )}
           </section>
+
+          {/* Credits */}
+          <div className="mt-auto text-[11px] text-muted-foreground text-left space-y-0.5 px-1 pt-4">
+            <h3 className="text-xs font-semibold text-accent mb-1">Credits</h3>
+            <p>
+              <a
+                href="https://www.youtube.com/@evmodder"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                EvModder
+              </a>{" "}
+              — Primary author
+            </p>
+            <p>
+              <a
+                href="https://youtube.com/@gust4v_"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Gu2t4v
+              </a>{" "}
+              — Color suppression expert; inventor of 2‑layer method
+            </p>
+            <p>
+              <a
+                href="https://rebane2001.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Rebane2001
+              </a>{" "}
+              — Original creator of{" "}
+              <a
+                href="https://mike2b2t.github.io/mapartcraft/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                MapArtCraft
+              </a>
+            </p>
+            <p>And everyone who gave feedback ♥</p>
+          </div>
         </div>
       </div>
     </div>
