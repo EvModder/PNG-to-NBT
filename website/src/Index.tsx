@@ -1,11 +1,15 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
 import { Moon, Sun, Plus, Minus } from "lucide-react";
-import { BASE_COLORS, getColorLookup, getShadedRgb } from "@/data/mapColors";
+import { BASE_COLORS, SHADE_MULTIPLIERS, WATER_BASE_INDEX, getColorLookup, getShadedRgb } from "@/data/mapColors";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import {
   validatePng,
   convertToNbt,
   computeMaterialCounts,
+  computeBuildModeSignature,
+  analyzeFillerNeeds,
+  isFillerDisabled,
+  isShadeFillerDisabled,
   type CustomColor,
   type BuildMode,
   type SupportMode,
@@ -175,21 +179,79 @@ function getHue(r: number, g: number, b: number): number {
 
 type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 type SortDir = "asc" | "desc";
+type ModeOption = { value: BuildMode; label: string; disabled?: boolean; muted?: boolean };
 
 type ColumnId = "clr" | "id" | "name" | "block" | "options" | "required";
 const ALL_COLUMNS: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 
+const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
+  { value: "staircase_valley", label: "Staircase (Valley)" },
+  { value: "staircase_classic", label: "Staircase (Classic)" },
+  { value: "staircase_grouped", label: "Staircase (Grouped)" },
+  { value: "staircase_northline", label: "Staircase (Northline)" },
+  { value: "staircase_southline", label: "Staircase (Southline)" },
+  { value: "staircase_cancer", label: "Staircase (Cancer)" },
+];
+
+const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
+  { value: "suppress_rowsplit", label: "Suppress (Row-split)", muted: true },
+  { value: "suppress_checker", label: "Suppress (Checker)" },
+  { value: "suppress_pairs_ew", label: "Suppress (Pairs, E→W)" },
+];
+
+const CUSTOM_COLOR_TOOLTIP_LINE1 = "Custom RGB is interpreted as the base/light shade for the color ID.";
+const CUSTOM_COLOR_TOOLTIP_LINE2 = "Dark and flat shades are derived automatically using standard multipliers.";
+const CUSTOM_COLOR_TOOLTIP_LINE3 = "Once added, all three new shades will be available to use for input images.";
+const CUSTOM_COLOR_TOOLTIP = `${CUSTOM_COLOR_TOOLTIP_LINE1}\n${CUSTOM_COLOR_TOOLTIP_LINE2}\n${CUSTOM_COLOR_TOOLTIP_LINE3}`;
+const CALC_FILLER_SENTINEL = "__calc_filler__";
+const CALC_DELAYED_FILLER_SENTINEL = "__calc_delayed_filler__";
+
+const SUPPRESS_2LAYER_BASE_FLOW =
+  "Steps:\n" +
+  "1) Build all 'non-late' blocks\n" +
+  "2) Update the full map\n" +
+  "3) Begin remove the upper layer, 1-2 columns at a time\n" +
+  "4) For each removed column, also add in any late-blocks\n" +
+  "5) Carefully update just the dominate pixels for the target column(s)\n" +
+  "6) Repeat for the entire map\n\n" +
+  "Layer gap controls vertical spacing between lower and upper suppress layers.";
+const LAYER_GAP_TOOLTIP = "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.";
+
 // ── Shared pixel helpers ──
-const makeCustomKeySet = (cc: CustomColor[]) => new Set(cc.map(c => `${c.r},${c.g},${c.b}`));
+interface CustomShadeMatch {
+  block: string;
+  shade: number; // 0=dark, 1=flat, 2=light
+  customIndex: number;
+}
+
+const buildCustomShadeLookup = (customColors: CustomColor[]) => {
+  const lookup = new Map<string, CustomShadeMatch>();
+  for (const [customIndex, cc] of customColors.entries()) {
+    const block = cc.block?.trim();
+    if (!block) continue;
+    for (const shade of [0, 1, 2]) {
+      const r = Math.floor((cc.r * SHADE_MULTIPLIERS[shade]) / 255);
+      const g = Math.floor((cc.g * SHADE_MULTIPLIERS[shade]) / 255);
+      const b = Math.floor((cc.b * SHADE_MULTIPLIERS[shade]) / 255);
+      const key = `${r},${g},${b}`;
+      if (!lookup.has(key)) lookup.set(key, { block, shade, customIndex });
+    }
+  }
+  return lookup;
+};
 
 function imageHasNonFlatShades(imageData: ImageData, customColors: CustomColor[]): boolean {
   const lookup = getColorLookup();
-  const customSet = makeCustomKeySet(customColors);
+  const customLookup = buildCustomShadeLookup(customColors);
   const d = imageData.data;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
     const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
-    if (customSet.has(key)) continue;
+    const customMatch = customLookup.get(key);
+    if (customMatch) {
+      if (customMatch.shade !== 1) return true;
+      continue;
+    }
     const match = lookup.get(key);
     if (match?.shade !== undefined && match.shade !== 1) return true;
   }
@@ -199,7 +261,7 @@ function imageHasNonFlatShades(imageData: ImageData, customColors: CustomColor[]
 /** Scan suppress columns; if countMode=true returns count, else returns 0/1 for detect */
 function scanSuppressedPixels(imageData: ImageData, customColors: CustomColor[], countMode: boolean): number {
   const lookup = getColorLookup();
-  const customSet = makeCustomKeySet(customColors);
+  const customLookup = buildCustomShadeLookup(customColors);
   let count = 0;
   for (let x = 0; x < 128; x++) {
     for (let z = 0; z < 128; z++) {
@@ -209,7 +271,14 @@ function scanSuppressedPixels(imageData: ImageData, customColors: CustomColor[],
         const sIdx = (sz * 128 + x) * 4;
         if (imageData.data[sIdx + 3] === 0) continue;
         const sKey = `${imageData.data[sIdx]},${imageData.data[sIdx + 1]},${imageData.data[sIdx + 2]}`;
-        if (customSet.has(sKey)) break;
+        const customMatch = customLookup.get(sKey);
+        if (customMatch) {
+          if (customMatch.shade === 0) {
+            if (!countMode) return 1;
+            count++;
+          }
+          break;
+        }
         const match = lookup.get(sKey);
         if (!match || match.shade === 2) break;
         if (match.shade === 0 || match.shade === 3) {
@@ -223,17 +292,55 @@ function scanSuppressedPixels(imageData: ImageData, customColors: CustomColor[],
   return count;
 }
 
+/** Count pixels whose shade requires a north filler while north is transparent/void inside the 128x128 map area. */
+function countVoidShadows(imageData: ImageData, customColors: CustomColor[], detectOnly = false): number {
+  const lookup = getColorLookup();
+  const customLookup = buildCustomShadeLookup(customColors);
+  let count = 0;
+
+  for (let z = 0; z < 128; z++) {
+    for (let x = 0; x < 128; x++) {
+      const idx = (z * 128 + x) * 4;
+      if (imageData.data[idx + 3] === 0) continue;
+
+      // "Void shadow" excludes the top boundary; north must be an in-map transparent pixel.
+      const northIsTransparent = z > 0 && imageData.data[((z - 1) * 128 + x) * 4 + 3] === 0;
+      if (!northIsTransparent) continue;
+
+      const key = `${imageData.data[idx]},${imageData.data[idx + 1]},${imageData.data[idx + 2]}`;
+      const customMatch = customLookup.get(key);
+      if (customMatch) {
+        if (customMatch.shade === 2) continue;
+        if (detectOnly) return 1;
+        count++;
+        continue;
+      }
+
+      const match = lookup.get(key);
+      if (!match) continue;
+      if (match.baseIndex === WATER_BASE_INDEX) continue; // water shading does not use north fillers
+      if (match.shade === 2) continue; // light shade does not use north fillers
+
+      if (detectOnly) return 1;
+      count++;
+    }
+  }
+
+  return count;
+}
+
 function computeImageInfo(imageData: ImageData, customColors: CustomColor[]) {
   const lookup = getColorLookup();
-  const customLookup = makeCustomKeySet(customColors);
+  const customLookup = buildCustomShadeLookup(customColors);
   const usedBaseColors = new Set<number>();
   const usedShades = new Set<string>();
   const d = imageData.data;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
     const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
-    if (customLookup.has(key)) {
-      usedShades.add(`custom:${key}`);
+    const customMatch = customLookup.get(key);
+    if (customMatch) {
+      usedShades.add(`custom:${customMatch.customIndex}:${customMatch.shade}`);
       continue;
     }
     const match = lookup.get(key);
@@ -243,6 +350,36 @@ function computeImageInfo(imageData: ImageData, customColors: CustomColor[]) {
     }
   }
   return { uniqueShadeCount: usedShades.size, uniqueBaseColorCount: usedBaseColors.size };
+}
+
+function detectUniformNonFlatDirection(imageData: ImageData, customColors: CustomColor[]): "all_light" | "all_dark" | "mixed" {
+  const lookup = getColorLookup();
+  const customLookup = buildCustomShadeLookup(customColors);
+  const d = imageData.data;
+  let sawNonTransparent = false;
+  let allLight = true;
+  let allDark = true;
+
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    sawNonTransparent = true;
+    const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
+    const customMatch = customLookup.get(key);
+    if (customMatch) {
+      if (customMatch.shade !== 2) allLight = false;
+      if (customMatch.shade !== 0) allDark = false;
+      continue;
+    }
+    const match = lookup.get(key);
+    if (!match) continue;
+    if (match.shade !== 2) allLight = false;
+    if (match.shade !== 0) allDark = false;
+  }
+
+  if (!sawNonTransparent) return "mixed";
+  if (allLight) return "all_light";
+  if (allDark) return "all_dark";
+  return "mixed";
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -258,7 +395,7 @@ function formatStacks(count: number): string {
 
 function encodePreset(
   preset: Preset, fillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
+  buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean, suppress2LayerDelayedFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
     const block = preset.blocks[i + 1] || "";
@@ -266,13 +403,22 @@ function encodePreset(
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
   const ccStr = customColors.length > 0 ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${cc.block}`).join(";") : "";
-  const s = [preset.name, parts.join(","), fillerBlock, supportMode, buildMode, ccStr, convertUnsupported ? "1" : "0"].join("|");
+  const s = [
+    preset.name,
+    parts.join(","),
+    fillerBlock,
+    supportMode,
+    buildMode,
+    ccStr,
+    convertUnsupported ? "1" : "0",
+    suppress2LayerDelayedFillerBlock,
+  ].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function decodePreset(encoded: string): {
   preset: Preset; filler?: string; supportMode?: SupportMode;
-  buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
+  buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean; suppress2LayerDelayedFillerBlock?: string;
 } | null {
   try {
     let s = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -304,11 +450,12 @@ function decodePreset(encoded: string): {
       : undefined;
 
     const convertUnsupported = sections[6] === "1" ? true : sections[6] === "0" ? false : undefined;
+    const suppress2LayerDelayedFillerBlock = sections[7] || undefined;
 
     return {
       preset: { name: sections[0], blocks }, filler: sections[2] || undefined,
       supportMode, buildMode: (sections[4] || undefined) as BuildMode | undefined,
-      customColors, convertUnsupported,
+      customColors, convertUnsupported, suppress2LayerDelayedFillerBlock,
     };
   } catch {
     return null;
@@ -325,8 +472,26 @@ const LS_KEYS = {
   sortKey: "mapart_sortKey",
   sortDir: "mapart_sortDir",
   layerGap: "mapart_layerGap",
+  suppress2LayerDelayedFiller: "mapart_suppress2layer_delayed_filler",
   columnOrder: "mapart_columnOrder",
 } as const;
+
+const getStoredTheme = (): "light" | "dark" | null => {
+  const raw = localStorage.getItem("mapart_theme");
+  if (raw === "light" || raw === "dark") return raw;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed === "light" || parsed === "dark" ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const resolveDarkTheme = () => {
+  const stored = getStoredTheme();
+  return stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+};
 
 // ── Component ──
 const Index = () => {
@@ -344,6 +509,10 @@ const Index = () => {
     return 0;
   });
   const [fillerBlock, setFillerBlock] = useState(() => loadCached(LS_KEYS.filler, "resin_block"));
+  const [suppress2LayerDelayedFillerBlock, setSuppress2LayerDelayedFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.suppress2LayerDelayedFiller, "slime_block"),
+  );
+  const calcFillerBlock = useDeferredValue(fillerBlock);
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
   );
@@ -368,27 +537,40 @@ const Index = () => {
   const [converting, setConverting] = useState(false);
   const [showNames, setShowNames] = useState(false);
   const [showIds, setShowIds] = useState(false);
-  const [showOptions, setShowOptions] = useState(true);
+  const [showOptions, setShowOptions] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, "default" as SortKey));
   const [sortDir, setSortDir] = useState<SortDir>(() => loadCached(LS_KEYS.sortDir, "asc" as SortDir));
   const [showUnusedColors, setShowUnusedColors] = useState(false);
-  const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, false));
-  const [isDark, setIsDark] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("mapart_theme") || '"light"') === "dark"; } catch { return false; }
-  });
+  const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, true));
+  const [isDark, setIsDark] = useState(resolveDarkTheme);
   const [convertUnsupported, /* setConvertUnsupported */] = useState(true); // always on; checkbox commented out
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, ALL_COLUMNS));
   const dragColRef = useRef<ColumnId | null>(null);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
+  const [swatchTooltip, setSwatchTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const fillerInputRef = useRef<HTMLInputElement>(null);
+  const blockMeasureSelectRef = useRef<HTMLSelectElement | null>(null);
+  const [blockMeasureFont, setBlockMeasureFont] = useState("11px monospace");
+  const [blockMeasureInsetsPx, setBlockMeasureInsetsPx] = useState(10);
+  const presetToolbarSectionRef = useRef<HTMLElement>(null);
+  const presetToolbarRowRef = useRef<HTMLDivElement>(null);
+  const fillerToolbarSectionRef = useRef<HTMLElement>(null);
+  const [presetToolbarMinWidthPx, setPresetToolbarMinWidthPx] = useState(0);
+  const [fillerToolbarMinWidthPx, setFillerToolbarMinWidthPx] = useState(0);
 
   // Dynamic favicon: outlined version when an image is loaded
   useEffect(() => {
     const link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
     if (link) link.href = imageData ? "/favicon-active.png" : "/favicon.png";
   }, [imageData]);
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => { if (!getStoredTheme()) setIsDark(e.matches); };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
 
   const preset = presets[activeIdx] || buildPistonClearPreset();
 
@@ -437,10 +619,22 @@ const Index = () => {
       [LS_KEYS.sortKey, sortKey],
       [LS_KEYS.sortDir, sortDir],
       [LS_KEYS.layerGap, layerGap],
+      [LS_KEYS.suppress2LayerDelayedFiller, suppress2LayerDelayedFillerBlock],
       [LS_KEYS.columnOrder, columnOrder],
     ];
     entries.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
-  }, [fillerBlock, buildMode, supportMode, showStacks, preset.name, sortKey, sortDir, layerGap, columnOrder]);
+  }, [
+    fillerBlock,
+    buildMode,
+    supportMode,
+    showStacks,
+    preset.name,
+    sortKey,
+    sortDir,
+    layerGap,
+    suppress2LayerDelayedFillerBlock,
+    columnOrder,
+  ]);
 
   const hasNonFlatShades = useMemo(
     () => imageData ? imageHasNonFlatShades(imageData, customColors) : false,
@@ -450,30 +644,47 @@ const Index = () => {
     () => imageData && hasNonFlatShades ? scanSuppressedPixels(imageData, customColors, false) > 0 : false,
     [imageData, customColors, hasNonFlatShades],
   );
-  const suppressedCount = useMemo(
-    () => imageData ? scanSuppressedPixels(imageData, customColors, true) : 0,
+  const voidShadowCount = useMemo(
+    () => imageData ? countVoidShadows(imageData, customColors) : 0,
     [imageData, customColors],
   );
 
-  const usedBaseColors = useMemo(() => {
-    if (!imageData || !imageValid) return new Set<number>();
+  const usedShadesByBase = useMemo(() => {
+    if (!imageData || !imageValid) return new Map<number, Set<number>>();
     const lookup = getColorLookup();
-    const used = new Set<number>();
+    const used = new Map<number, Set<number>>();
     const d = imageData.data;
     for (let i = 0; i < d.length; i += 4) {
       if (d[i + 3] === 0) continue;
       const match = lookup.get(`${d[i]},${d[i + 1]},${d[i + 2]}`);
-      if (match) used.add(match.baseIndex);
+      if (!match) continue;
+      let shades = used.get(match.baseIndex);
+      if (!shades) {
+        shades = new Set<number>();
+        used.set(match.baseIndex, shades);
+      }
+      shades.add(match.shade);
     }
     return used;
   }, [imageData, imageValid]);
+  const usedBaseColors = useMemo(() => new Set<number>(usedShadesByBase.keys()), [usedShadesByBase]);
 
-  const imageHasWater = useMemo(() => usedBaseColors.has(12), [usedBaseColors]);
+  const imageHasWater = useMemo(() => usedBaseColors.has(WATER_BASE_INDEX), [usedBaseColors]);
+  const imageHasTransparency = useMemo(() => {
+    if (!imageData) return false;
+    const d = imageData.data;
+    for (let i = 3; i < d.length; i += 4) {
+      if (d[i] === 0) return true;
+    }
+    return false;
+  }, [imageData]);
 
   const fillerIsNoneColor = useMemo(() => {
-    const stripped = fillerBlock.split("[")[0];
+    const stripped = calcFillerBlock.split("[")[0];
     return !BASE_COLORS.slice(1).some(bc => bc.blocks.some(b => b.split("[")[0] === stripped));
-  }, [fillerBlock]);
+  }, [calcFillerBlock]);
+  const fillerDisabled = useMemo(() => isFillerDisabled(fillerBlock), [fillerBlock]);
+  const fillerShadingDisabled = useMemo(() => isShadeFillerDisabled(fillerBlock), [fillerBlock]);
 
   const missingBlocks = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return [];
@@ -487,13 +698,178 @@ const Index = () => {
 
   const effectiveBuildMode = hasNonFlatShades ? buildMode : "flat";
 
-  const materialCounts = useMemo(() => {
+  const uniformNonFlatDirection = useMemo(
+    () => imageData && imageValid ? detectUniformNonFlatDirection(imageData, customColors) : "mixed",
+    [imageData, imageValid, customColors],
+  );
+
+  const staircaseModeOptions = useMemo((): ModeOption[] => {
+    if (!imageData || !imageValid || !hasNonFlatShades) return DEFAULT_STAIRCASE_OPTIONS;
+
+    if (uniformNonFlatDirection === "all_light") {
+      return [{ value: "staircase_northline", label: "Incline (Down)" }];
+    }
+    if (uniformNonFlatDirection === "all_dark") {
+      return [{ value: "staircase_northline", label: "Incline (Up)" }];
+    }
+
+    const seen = new Set<string>();
+    const unique: ModeOption[] = [];
+    for (const opt of DEFAULT_STAIRCASE_OPTIONS) {
+      try {
+        const signature = computeBuildModeSignature(imageData, {
+          blockMapping: preset.blocks,
+          fillerBlock: fillerShadingDisabled ? fillerBlock : CALC_FILLER_SENTINEL,
+          suppress2LayerDelayedFillerBlock: fillerShadingDisabled
+            ? suppress2LayerDelayedFillerBlock
+            : CALC_DELAYED_FILLER_SENTINEL,
+          customColors,
+          buildMode: opt.value,
+          supportMode,
+          baseName: "",
+          layerGap,
+        });
+        if (seen.has(signature)) continue;
+        seen.add(signature);
+      } catch {
+        // If signature generation fails for any mode, keep option visible.
+      }
+      unique.push(opt);
+    }
+    return unique.length > 0 ? unique : DEFAULT_STAIRCASE_OPTIONS;
+  }, [
+    imageData,
+    imageValid,
+    hasNonFlatShades,
+    uniformNonFlatDirection,
+    preset.blocks,
+    fillerShadingDisabled,
+    fillerBlock,
+    suppress2LayerDelayedFillerBlock,
+    customColors,
+    supportMode,
+    layerGap,
+  ]);
+
+  const twoLayerHasLateVoidNeed = useMemo(() => {
+    if (!imageData || !imageValid || !hasNonFlatShades) return false;
+    try {
+      const stats = analyzeFillerNeeds(imageData, {
+        blockMapping: preset.blocks,
+        fillerBlock: CALC_FILLER_SENTINEL,
+        suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
+        customColors,
+        buildMode: "suppress_2layer_late_fillers",
+        supportMode,
+        baseName: "",
+        layerGap,
+      });
+      return stats.delayedTotal > 0;
+    } catch {
+      return false;
+    }
+  }, [
+    imageData,
+    imageValid,
+    hasNonFlatShades,
+    preset.blocks,
+    customColors,
+    supportMode,
+    layerGap,
+  ]);
+
+  const suppressModeOptions = useMemo((): ModeOption[] => {
+    const options: ModeOption[] = [...BASE_SUPPRESS_OPTIONS];
+    if (twoLayerHasLateVoidNeed) {
+      options.push({ value: "suppress_2layer_late_fillers", label: "Suppress (2-Layer, Late-Fillers)" });
+      options.push({ value: "suppress_2layer_late_pairs", label: "Suppress (2-Layer, Late-Pairs)" });
+    } else {
+      options.push({ value: "suppress_2layer_late_fillers", label: "Suppress (2-Layer)" });
+    }
+    return options;
+  }, [twoLayerHasLateVoidNeed]);
+
+  const getBuildModeTooltip = useCallback(
+    (mode: BuildMode): string => {
+      switch (mode) {
+        case "staircase_valley":
+          return "Minimizes maxY-minY diff, and splits up N→S columns, lowering each segment as much as possible";
+        case "staircase_classic":
+          return "Minimizes maxY-minY diff, while keeping N→S columns contiguous";
+        case "staircase_grouped":
+          return "Valley-style segmentation with safe cross-column grouping to reduce isolated low runs";
+        case "staircase_northline":
+          return "Aligns each column N→S from a reference (noob)line of blocks";
+        case "staircase_southline":
+          return "Aligns each column S→N from a reference line of blocks (the bottom row)";
+        case "staircase_cancer":
+          return "Same MapArt, but makes the build process more fun and exciting!";
+        case "suppress_rowsplit":
+          return "Split-row; available for compatibility, but generally not useful";
+        case "suppress_checker":
+          return "Split NBT generations for dominant/recessive placements";
+        case "suppress_pairs_ew":
+          return "Split into East-West pairs in a interlacing 'brick' pattern; currently only supports updating from E→W";
+        case "suppress_2layer_late_pairs":
+          return (
+            "Suppress-phase placements are isolated on the highest Y-layer, and should be skipped during initial build-phase.\n\n" +
+            SUPPRESS_2LAYER_BASE_FLOW
+          );
+        case "suppress_2layer_late_fillers":
+          if (twoLayerHasLateVoidNeed) return (
+            "Suppress-phase placements use a custom 'late filler' block, and should be skipped during initial build-phase.\n\n" +
+            SUPPRESS_2LAYER_BASE_FLOW
+          );
+          return (
+            "Steps:\n" +
+            "1) Build everything\n" +
+            "2) Update the full map\n" +
+            "3) Begin removing the upper layer, 1-2 columns at a time\n" +
+            "4) Carefully update *just* the dominate pixels for the target column(s)\n" +
+            "5) Repeat, column-by-column, for the entire map\n\n" +
+            "Layer gap controls vertical spacing between lower and upper suppress layers."
+          );
+        case "flat":
+          return "Flat: no staircase/suppress shading needed (all non-transparent pixels are flat shade).";
+        default:
+          return "Selected shading method.";
+      }
+    },
+    [twoLayerHasLateVoidNeed],
+  );
+
+  const shadingMethodTooltip = useMemo(() => getBuildModeTooltip(buildMode), [getBuildModeTooltip, buildMode]);
+
+  const getSupportModeTooltip = useCallback((mode: SupportMode): string => {
+    switch (mode) {
+      case "none":
+        return "No extra support blocks are added.";
+      case "steps":
+        return "Adds support blocks under staircase step transitions.";
+      case "all":
+        return "Adds support blocks below every generated block.";
+      case "fragile":
+        return "Adds support blocks only below fragile blocks.";
+      case "water":
+        return "Adds support blocks around water blocks (N/S/E/W and below).";
+      default:
+        return "Selected support mode.";
+    }
+  }, []);
+  const supportModeTooltip = useMemo(() => getSupportModeTooltip(supportMode), [getSupportModeTooltip, supportMode]);
+
+  const rawMaterialCounts = useMemo(() => {
     if (!imageData || !imageValid) return null;
     const isPairs = effectiveBuildMode === "suppress_pairs_ew";
+    const calcStructuralFiller = fillerShadingDisabled ? fillerBlock : CALC_FILLER_SENTINEL;
+    const calcStructuralDelayed = fillerShadingDisabled
+      ? suppress2LayerDelayedFillerBlock
+      : CALC_DELAYED_FILLER_SENTINEL;
     try {
       return computeMaterialCounts(imageData, {
         blockMapping: preset.blocks,
-        fillerBlock,
+        fillerBlock: calcStructuralFiller,
+        suppress2LayerDelayedFillerBlock: calcStructuralDelayed,
         customColors,
         buildMode: effectiveBuildMode,
         supportMode,
@@ -508,7 +884,9 @@ const Index = () => {
     imageData,
     imageValid,
     preset.blocks,
+    fillerShadingDisabled,
     fillerBlock,
+    suppress2LayerDelayedFillerBlock,
     customColors,
     effectiveBuildMode,
     supportMode,
@@ -517,6 +895,23 @@ const Index = () => {
     colStart,
     colEnd,
   ]);
+
+  const materialCounts = useMemo(() => {
+    if (!rawMaterialCounts) return null;
+    if (fillerShadingDisabled) return rawMaterialCounts;
+
+    const remapped: Record<string, number> = {};
+    for (const [name, count] of Object.entries(rawMaterialCounts)) {
+      const target =
+        name === CALC_FILLER_SENTINEL
+          ? fillerBlock
+          : name === CALC_DELAYED_FILLER_SENTINEL
+            ? suppress2LayerDelayedFillerBlock
+            : name;
+      remapped[target] = (remapped[target] || 0) + count;
+    }
+    return remapped;
+  }, [rawMaterialCounts, fillerShadingDisabled, fillerBlock, suppress2LayerDelayedFillerBlock]);
 
   const sortedMaterials = useMemo(
     () =>
@@ -529,23 +924,10 @@ const Index = () => {
   );
 
   const fillerOnlyCount = useMemo(() => {
-    if (!imageData || !imageValid || !materialCounts) return 0;
-    try {
-      const sentinel = "\x00sentinel";
-      const alt = computeMaterialCounts(imageData, {
-        blockMapping: preset.blocks,
-        fillerBlock: sentinel,
-        customColors,
-        buildMode: effectiveBuildMode,
-        supportMode,
-        baseName: "",
-        layerGap,
-      });
-      return alt[sentinel] || 0;
-    } catch {
-      return 0;
-    }
-  }, [imageData, imageValid, materialCounts, preset.blocks, customColors, effectiveBuildMode, supportMode, layerGap]);
+    if (!rawMaterialCounts) return 0;
+    if (fillerShadingDisabled) return rawMaterialCounts[fillerBlock] || 0;
+    return rawMaterialCounts[CALC_FILLER_SENTINEL] || 0;
+  }, [fillerShadingDisabled, rawMaterialCounts, fillerBlock]);
 
   const colorRequiredMap = useMemo(() => {
     if (!materialCounts) return {} as Record<number, number>;
@@ -594,6 +976,9 @@ const Index = () => {
     if (decoded.supportMode !== undefined) setSupportMode(decoded.supportMode);
     if (decoded.buildMode) setBuildMode(decoded.buildMode);
     if (decoded.customColors) setCustomColors(decoded.customColors);
+    if (decoded.suppress2LayerDelayedFillerBlock) {
+      setSuppress2LayerDelayedFillerBlock(decoded.suppress2LayerDelayedFillerBlock);
+    }
     // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
   }, []);
 
@@ -602,11 +987,24 @@ const Index = () => {
     if (!imageData) return;
     if (!hasNonFlatShades) setBuildMode("flat");
     else if (hasSuppressPattern)
-      setBuildMode(prev => prev.startsWith("staircase") || prev === "flat" ? "suppress_pairs_ew" : prev);
+      setBuildMode(prev => prev.startsWith("staircase") || prev === "flat" ? "suppress_2layer_late_pairs" : prev);
     else setBuildMode(prev => prev === "flat" ? "staircase_classic" : prev);
   }, [imageData, hasNonFlatShades, hasSuppressPattern]);
 
-  const fillerDisabled = /^(air|none)$/i.test(fillerBlock.trim());
+  useEffect(() => {
+    if (!imageData || !hasNonFlatShades) return;
+    const visible = new Set<BuildMode>([
+      ...staircaseModeOptions.map(o => o.value),
+      ...suppressModeOptions.map(o => o.value),
+    ]);
+    if (!visible.has(buildMode)) {
+      if (buildMode === "suppress_2layer_late_pairs" && visible.has("suppress_2layer_late_fillers")) {
+        setBuildMode("suppress_2layer_late_fillers");
+      } else {
+        setBuildMode(staircaseModeOptions[0]?.value ?? "staircase_classic");
+      }
+    }
+  }, [imageData, hasNonFlatShades, buildMode, staircaseModeOptions, suppressModeOptions]);
 
   useEffect(() => {
     if (!imageData) return;
@@ -730,7 +1128,15 @@ const Index = () => {
 
   const sharePreset = () => {
     markSavedImmediate();
-    const url = `${location.origin}${location.pathname}?preset=${encodePreset(preset, fillerBlock, supportMode, buildMode, customColors, convertUnsupported)}`;
+    const url = `${location.origin}${location.pathname}?preset=${encodePreset(
+      preset,
+      fillerBlock,
+      supportMode,
+      buildMode,
+      customColors,
+      convertUnsupported,
+      suppress2LayerDelayedFillerBlock,
+    )}`;
     navigator.clipboard.writeText(url);
     alert("Preset URL copied to clipboard!");
   };
@@ -767,8 +1173,7 @@ const Index = () => {
           }
           // Convert unsupported colors to nearest available palette color
           const lookup = getColorLookup();
-          const customLookup = new Map<string, boolean>();
-          for (const cc of customColors) customLookup.set(`${cc.r},${cc.g},${cc.b}`, true);
+          const customLookup = buildCustomShadeLookup(customColors);
 
           // Build set of available shaded RGB values (only base colors that have a block mapping in preset)
           const availableColors: { r: number; g: number; b: number; key: string }[] = [];
@@ -860,6 +1265,7 @@ const Index = () => {
       const result = await convertToNbt(imageData, {
         blockMapping: preset.blocks,
         fillerBlock,
+        suppress2LayerDelayedFillerBlock,
         customColors,
         buildMode,
         supportMode,
@@ -871,13 +1277,14 @@ const Index = () => {
         staircase_northline: "-staircase_northline",
         staircase_southline: "-staircase_southline",
         staircase_classic: "-staircase_classic",
+        staircase_grouped: "-staircase_grouped",
         staircase_valley: "-staircase_valley",
         staircase_cancer: "-staircase_cancer",
         suppress_rowsplit: "-suppress_rowsplit",
-        suppress_plaid_ns: "-suppress_plaid_NS",
-        suppress_plaid_ew: "-suppress_plaid_EW",
+        suppress_checker: "-suppress_checker",
         suppress_pairs_ew: "-suppress_pairs_EW",
-        suppress_2layer_ew: "-suppress_2layer_EW",
+        suppress_2layer_late_fillers: "-suppress_2layer",
+        suppress_2layer_late_pairs: "-suppress_2layer_late_pairs",
       };
       const suffix = suffixMap[buildMode] ?? `-${buildMode}`;
       const ext = result.isZip ? "zip" : "nbt";
@@ -929,11 +1336,73 @@ const Index = () => {
     }
   };
 
+  const fillerNeedStats = useMemo(() => {
+    if (!imageData || !imageValid) return null;
+    try {
+      return analyzeFillerNeeds(imageData, {
+        blockMapping: preset.blocks,
+        fillerBlock: CALC_FILLER_SENTINEL,
+        suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
+        customColors,
+        buildMode: effectiveBuildMode,
+        supportMode,
+        baseName: "",
+        layerGap,
+      });
+    } catch {
+      return null;
+    }
+  }, [
+    imageData,
+    imageValid,
+    preset.blocks,
+    customColors,
+    effectiveBuildMode,
+    supportMode,
+    layerGap,
+  ]);
+
   const canGenerate = imageValid && missingBlocks.length === 0;
   const hasRequiredCol = materialCounts !== null;
+  const hasInGridFillerNeed = (fillerNeedStats?.inGrid ?? 0) > 0;
+  const inGridFillerCountsAsWarning = hasInGridFillerNeed && (effectiveBuildMode.startsWith("suppress") || imageHasTransparency);
+  const hasComplexNorthNeed = (fillerNeedStats?.north ?? 0) > 0 && !(fillerNeedStats?.northIsSingleLine ?? true);
+  const showNoFillerWarning =
+    imageValid && hasNonFlatShades && fillerShadingDisabled && (inGridFillerCountsAsWarning || hasComplexNorthNeed);
+  const showLateFillerInput =
+    imageData &&
+    buildMode === "suppress_2layer_late_fillers" &&
+    !fillerShadingDisabled &&
+    (fillerNeedStats?.delayedTotal ?? 0) > 0;
+  const showNorthRowAlignmentInfo =
+    canGenerate &&
+    !fillerShadingDisabled &&
+    (fillerNeedStats?.north ?? 0) > 0;
+  const noFillerWarningDetails = useMemo(() => {
+    if (!showNoFillerWarning || !fillerNeedStats) return "";
+    const parts: string[] = [];
+    if (inGridFillerCountsAsWarning) {
+      const suppressLike = effectiveBuildMode.startsWith("suppress") || (fillerNeedStats.delayedInGrid ?? 0) > 0;
+      if (suppressLike) {
+        parts.push("Some shading-critical suppress fillers are required inside the 128x128 grid.");
+      } else {
+        parts.push("Some shading-critical fillers are required inside the 128x128 grid.");
+      }
+    }
+    if (hasComplexNorthNeed) {
+      parts.push("North-row shading requires filler placements.");
+    }
+    return parts.join(" ");
+  }, [
+    showNoFillerWarning,
+    fillerNeedStats,
+    inGridFillerCountsAsWarning,
+    hasComplexNorthNeed,
+    effectiveBuildMode,
+  ]);
 
   const requiredColWidth = useMemo(() => {
-    if (!materialCounts) return 0;
+    if (!materialCounts) return 70;
     const maxLen = Math.max(
       0,
       ...Object.values(colorRequiredMap)
@@ -955,17 +1424,145 @@ const Index = () => {
     [columnOrder, showIds, showNames, showOptions, hasRequiredCol],
   );
 
+  const longestBlockName = useMemo(() => {
+    let longest = "(none)";
+    for (let idx = 0; idx < BASE_COLORS.length; idx++) {
+      const extra = customBlocksByBase[idx] || [];
+      for (const b of BASE_COLORS[idx].blocks) if (b.length > longest.length) longest = b;
+      for (const b of extra) if (b.length > longest.length) longest = b;
+      const selected = preset.blocks[idx] || "";
+      if (selected.length > longest.length) longest = selected;
+    }
+    return longest;
+  }, [customBlocksByBase, preset.blocks]);
+
+  useLayoutEffect(() => {
+    const el = blockMeasureSelectRef.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    if (cs.font) setBlockMeasureFont(cs.font);
+    const insets =
+      parseFloat(cs.paddingLeft || "0") +
+      parseFloat(cs.paddingRight || "0") +
+      parseFloat(cs.borderLeftWidth || "0") +
+      parseFloat(cs.borderRightWidth || "0");
+    if (Number.isFinite(insets) && insets >= 0) setBlockMeasureInsetsPx(insets);
+  }, [isDark, showIds, showNames, showOptions, buildMode, imageData]);
+
+  const blockColMinWidthPx = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.font = blockMeasureFont;
+    const textWidth = ctx ? ctx.measureText(longestBlockName).width : longestBlockName.length * 6.15;
+    const trimmedInsetsPx = Math.max(0, blockMeasureInsetsPx);
+    return Math.ceil(textWidth + trimmedInsetsPx);
+  }, [longestBlockName, blockMeasureFont, blockMeasureInsetsPx]);
+
+  const colorTableMinWidthPx = useMemo(() => {
+    // 6 columns + 5 grid gaps (`gap-1` = 4px).
+    const fixedColsPx = 24 + 24 + 135 + 46 + requiredColWidth;
+    const gapsPx = 5 * 4;
+    // Section wrapper uses `p-2` (8px each side) and `border` (1px each side).
+    const sectionInsetsPx = 8 * 2 + 1 * 2;
+    return fixedColsPx + blockColMinWidthPx + gapsPx + sectionInsetsPx;
+  }, [blockColMinWidthPx, requiredColWidth]);
+
+  const getHorizontalInsets = (el: HTMLElement): number => {
+    const cs = getComputedStyle(el);
+    return (
+      parseFloat(cs.paddingLeft || "0") +
+      parseFloat(cs.paddingRight || "0") +
+      parseFloat(cs.borderLeftWidth || "0") +
+      parseFloat(cs.borderRightWidth || "0")
+    );
+  };
+
+  const measureFlexContentWidth = (el: HTMLElement, extraPx = 0): number => {
+    const cs = getComputedStyle(el);
+    const gap = parseFloat(cs.columnGap || cs.gap || "0");
+    const children = Array.from(el.children) as HTMLElement[];
+    let total = 0;
+    children.forEach((child, i) => {
+      total += child.getBoundingClientRect().width;
+      if (i > 0) total += gap;
+    });
+    return Math.ceil(total + extraPx);
+  };
+
+  const measureToolbarMinWidths = useCallback(() => {
+    const presetEl = presetToolbarSectionRef.current;
+    const presetRowEl = presetToolbarRowRef.current;
+    const fillerEl = fillerToolbarSectionRef.current;
+    const presetMeasured = presetEl && presetRowEl
+      ? measureFlexContentWidth(presetRowEl, getHorizontalInsets(presetEl))
+      : 0;
+    const fillerMeasured = fillerEl
+      ? measureFlexContentWidth(fillerEl, getHorizontalInsets(fillerEl))
+      : 0;
+    setPresetToolbarMinWidthPx(prev => (Math.abs(prev - presetMeasured) > 1 ? presetMeasured : prev));
+    setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerMeasured) > 1 ? fillerMeasured : prev));
+  }, []);
+
+  useLayoutEffect(() => {
+    measureToolbarMinWidths();
+    let rafId = 0;
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measureToolbarMinWidths);
+    };
+
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
+    if (presetToolbarSectionRef.current) ro?.observe(presetToolbarSectionRef.current);
+    if (presetToolbarRowRef.current) ro?.observe(presetToolbarRowRef.current);
+    if (fillerToolbarSectionRef.current) ro?.observe(fillerToolbarSectionRef.current);
+    window.addEventListener("resize", scheduleMeasure);
+    return () => {
+      window.removeEventListener("resize", scheduleMeasure);
+      ro?.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, [measureToolbarMinWidths]);
+
+  useLayoutEffect(() => {
+    measureToolbarMinWidths();
+  }, [
+    measureToolbarMinWidths,
+    presets,
+    activeIdx,
+    presetDirty,
+    isBuiltinUnedited,
+    imageData,
+    hasNonFlatShades,
+    buildMode,
+    layerGap,
+    staircaseModeOptions,
+    suppressModeOptions,
+    fillerBlock,
+    suppress2LayerDelayedFillerBlock,
+    supportMode,
+    fillerDisabled,
+    showLateFillerInput,
+    fillerOnlyCount,
+    materialCounts,
+    showStacks,
+  ]);
+
+  const leftColumnMinWidthPx = useMemo(
+    () => Math.max(colorTableMinWidthPx, presetToolbarMinWidthPx, fillerToolbarMinWidthPx),
+    [colorTableMinWidthPx, presetToolbarMinWidthPx, fillerToolbarMinWidthPx],
+  );
+
   const colWidthMap: Record<ColumnId, string> = {
     clr: "24px", id: "24px", name: "135px",
-    block: "minmax(0,1fr)", options: "46px",
-    required: `${requiredColWidth}px`,
+    block: `minmax(${blockColMinWidthPx}px,1fr)`, options: "46px",
+    required: `${requiredColWidth}px`
   };
 
   const gridColsStyle = useMemo(
     () => ({
       gridTemplateColumns: visibleColumns.map(c => colWidthMap[c]).join(" "),
     }),
-    [visibleColumns, requiredColWidth],
+    [visibleColumns, requiredColWidth, blockColMinWidthPx],
   );
 
   const colDragProps = (col: ColumnId) => ({
@@ -992,9 +1589,62 @@ const Index = () => {
 
   const pad2 = (n: number) => String(n).padStart(2, "\u2007");
 
+  const getColorSwatchShades = useCallback((idx: number): number[] => {
+    if (!imageData || !imageValid) return [2, 1, 0];
+    const used = usedShadesByBase.get(idx);
+    if (!used || used.size === 0) return [2, 1, 0];
+    return [...used].sort((a, b) => b - a);
+  }, [imageData, imageValid, usedShadesByBase]);
+
+  const getColorSwatchStyle = useCallback((idx: number): React.CSSProperties => {
+    const shades = getColorSwatchShades(idx);
+    if (shades.length <= 1) {
+      const shade = shades[0] ?? 2;
+      const [r, g, b] = getShadedRgb(idx, shade);
+      return { backgroundColor: `rgb(${r},${g},${b})` };
+    }
+
+    const stops: string[] = [];
+    for (let i = 0; i < shades.length; i++) {
+      const shade = shades[i];
+      const [r, g, b] = getShadedRgb(idx, shade);
+      const color = `rgb(${r},${g},${b})`;
+      const start = (i * 100) / shades.length;
+      const end = ((i + 1) * 100) / shades.length;
+      stops.push(`${color} ${start}%`, `${color} ${end}%`);
+    }
+    return { backgroundImage: `linear-gradient(to bottom, ${stops.join(", ")})` };
+  }, [getColorSwatchShades]);
+
+  const getShadeLabel = (shade: number): string =>
+    shade === 2 ? "light" : shade === 1 ? "flat" : "dark";
+
+  const getShadeTooltip = (idx: number, shade: number): string => {
+    const [r, g, b] = getShadedRgb(idx, shade);
+    const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
+    return `${hex} - Click to copy (${getShadeLabel(shade)})`;
+  };
+
+  const getSwatchShadeAtPointer = useCallback((e: React.MouseEvent<HTMLDivElement>, swatchShades: number[]): number => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = Math.min(rect.height - 0.001, Math.max(0, e.clientY - rect.top));
+    const bandHeight = rect.height / swatchShades.length;
+    const bandIndex = Math.min(swatchShades.length - 1, Math.max(0, Math.floor(y / bandHeight)));
+    return swatchShades[bandIndex] ?? swatchShades[0] ?? 2;
+  }, []);
+
+  const handleSwatchTooltip = useCallback((e: React.MouseEvent<HTMLDivElement>, idx: number, swatchShades: number[]) => {
+    const shade = getSwatchShadeAtPointer(e, swatchShades);
+    setSwatchTooltip({
+      text: getShadeTooltip(idx, shade),
+      x: e.clientX + 12,
+      y: e.clientY + 12,
+    });
+  }, [getShadeTooltip, getSwatchShadeAtPointer]);
+
   const renderColorRow = (idx: number) => {
     const color = BASE_COLORS[idx];
-    const [r, g, b] = getShadedRgb(idx, 2);
+    const swatchShades = getColorSwatchShades(idx);
     const isMissing = missingBlocks.includes(idx);
     const isHighlighted = highlightedColorIdx === idx;
     const allBlocks = getAllBlocks(idx);
@@ -1004,9 +1654,15 @@ const Index = () => {
         <div
           key="clr"
           className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow"
-          style={{ backgroundColor: `rgb(${r},${g},${b})` }}
-          title="Click to copy hex"
-          onClick={() => copyColorToClipboard(r, g, b)}
+          style={getColorSwatchStyle(idx)}
+          onMouseEnter={e => handleSwatchTooltip(e, idx, swatchShades)}
+          onMouseMove={e => handleSwatchTooltip(e, idx, swatchShades)}
+          onMouseLeave={() => setSwatchTooltip(null)}
+          onClick={e => {
+            const shade = getSwatchShadeAtPointer(e, swatchShades);
+            const [r, g, b] = getShadedRgb(idx, shade);
+            copyColorToClipboard(r, g, b);
+          }}
         />
       ),
       id: (
@@ -1026,6 +1682,7 @@ const Index = () => {
       block: (
         <select
           key="block"
+          ref={idx === usedIndices[0] ? blockMeasureSelectRef : undefined}
           className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full"
           value={preset.blocks[idx] || ""}
           onChange={e => updateBlock(idx, e.target.value)}
@@ -1074,12 +1731,19 @@ const Index = () => {
         </button>
       </header>
 
-      <div className="flex flex-col lg:flex-row lg:items-stretch gap-3 p-3 max-w-[2000px] mx-auto">
+      <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-stretch gap-3 p-3 max-w-[2000px] mx-auto">
         {/* LEFT COLUMN */}
-        <div className="lg:flex-[3] min-w-0 space-y-2">
+        <div
+          className="contents lg:block lg:flex-[3_1_0%] min-w-0 lg:min-w-[var(--left-column-min-width)]"
+          style={{
+            ["--color-table-min-width" as any]: `${colorTableMinWidthPx}px`,
+            ["--left-column-min-width" as any]: `${leftColumnMinWidthPx}px`,
+          }}
+        >
+          <div className="order-1 space-y-2 lg:order-none">
           {/* Preset Manager */}
-          <section className="bg-card border border-border rounded-md p-2">
-            <div className="flex flex-wrap gap-1.5 items-center">
+          <section ref={presetToolbarSectionRef} className="bg-card border border-border rounded-md p-2">
+            <div ref={presetToolbarRowRef} className="flex flex-wrap lg:flex-nowrap gap-1.5 items-center">
               <span className="text-xs font-semibold text-accent">Preset:</span>
               <div className="inline-flex items-center gap-1">
                 <select
@@ -1131,51 +1795,68 @@ const Index = () => {
               </button>
               {imageData && hasNonFlatShades && (
                 <div className="ml-auto flex items-center gap-1">
-                  <span className="text-xs font-semibold text-accent whitespace-nowrap">Shading Method:</span>
+                  {(buildMode === "suppress_2layer_late_fillers" || buildMode === "suppress_2layer_late_pairs") && (
+                    <>
+                      <span
+                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                        title={LAYER_GAP_TOOLTIP}
+                      >
+                        Layer gap:
+                      </span>
+                      <input
+                        type="number"
+                        min={2}
+                        max={20}
+                        value={layerGap}
+                        onChange={e => setLayerGap(Math.max(2, Math.min(20, parseInt(e.target.value) || 5)))}
+                        title={LAYER_GAP_TOOLTIP}
+                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                      />
+                    </>
+                  )}
+                  <span className="text-xs font-semibold text-accent whitespace-nowrap">
+                    Shading Method:
+                  </span>
                   <select
-                    className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
+                    className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
+                      buildMode === "suppress_rowsplit" ? "text-muted-foreground" : "text-foreground"
+                    }`}
                     value={buildMode}
                     onChange={e => setBuildMode(e.target.value as BuildMode)}
+                    title={shadingMethodTooltip}
                   >
                     <optgroup label="Staircase">
-                      <option value="staircase_valley">Staircase (Valley)</option>
-                      <option value="staircase_classic">Staircase (Classic)</option>
-                      <option value="staircase_northline">Staircase (Northline)</option>
-                      <option value="staircase_southline">Staircase (Southline)</option>
-                      <option value="staircase_cancer">Staircase (Cancer)</option>
+                      {staircaseModeOptions.map(opt => (
+                        <option key={opt.value} value={opt.value} title={getBuildModeTooltip(opt.value)}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </optgroup>
                     <optgroup label="Suppress">
-                      <option value="suppress_rowsplit">Suppress (Row-split, E→W)</option>
-                      <option value="suppress_plaid_ns" disabled>
-                        Suppress (Plaid, N→S)
-                      </option>
-                      <option value="suppress_plaid_ew" disabled>
-                        Suppress (Plaid, E→W)
-                      </option>
-                      <option value="suppress_pairs_ew">Suppress (Pairs, E→W)</option>
-                      <option value="suppress_2layer_ew">Suppress (2-Layer, E→W)</option>
+                      {suppressModeOptions.map(opt => (
+                        <option
+                          key={opt.value}
+                          value={opt.value}
+                          disabled={opt.disabled}
+                          data-muted={opt.muted ? "true" : undefined}
+                          style={opt.muted ? { color: "var(--muted-foreground)" } : undefined}
+                          title={getBuildModeTooltip(opt.value)}
+                        >
+                          {opt.label}
+                        </option>
+                      ))}
                     </optgroup>
                   </select>
-                </div>
-              )}
-              {imageData && hasNonFlatShades && buildMode === "suppress_2layer_ew" && (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-semibold text-accent whitespace-nowrap">Layer gap:</span>
-                  <input
-                    type="number"
-                    min={2}
-                    max={20}
-                    value={layerGap}
-                    onChange={e => setLayerGap(Math.max(2, Math.min(20, parseInt(e.target.value) || 5)))}
-                    className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
-                  />
                 </div>
               )}
             </div>
           </section>
 
           {/* Filler Block + Support + Shading Method */}
-          <section className="bg-card border border-border rounded-md p-2 flex items-center gap-2 flex-wrap">
+          <section
+            ref={fillerToolbarSectionRef}
+            className="bg-card border border-border rounded-md p-2 flex items-center gap-2 flex-wrap lg:flex-nowrap"
+          >
             <span className="text-xs font-semibold text-accent whitespace-nowrap">Filler:</span>
             <input
               ref={fillerInputRef}
@@ -1185,21 +1866,36 @@ const Index = () => {
               placeholder="resin_block"
               className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
             />
+            {showLateFillerInput && (
+              <>
+                <span className="text-xs font-semibold text-accent whitespace-nowrap">Late-Filler:</span>
+                <input
+                  type="text"
+                  value={suppress2LayerDelayedFillerBlock}
+                  onChange={e => setSuppress2LayerDelayedFillerBlock(e.target.value)}
+                  placeholder="slime_block"
+                  className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                />
+              </>
+            )}
             {imageData && !fillerDisabled && (
               <div className="flex items-center gap-1">
-                <span className="text-xs font-semibold text-accent whitespace-nowrap">Support:</span>
+                <span className="text-xs font-semibold text-accent whitespace-nowrap">
+                  Support:
+                </span>
                 <select
-                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs"
+                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
                   value={supportMode}
                   onChange={e => setSupportMode(e.target.value as SupportMode)}
+                  title={supportModeTooltip}
                 >
-                  <option value="none">None</option>
-                  <option value="steps" disabled={!hasNonFlatShades}>
+                  <option value="none" title={getSupportModeTooltip("none")}>None</option>
+                  <option value="steps" disabled={!hasNonFlatShades} title={getSupportModeTooltip("steps")}>
                     Steps
                   </option>
-                  <option value="all">All</option>
-                  <option value="fragile">Fragile</option>
-                  <option value="water" disabled={!imageHasWater || !fillerIsNoneColor}>
+                  <option value="all" title={getSupportModeTooltip("all")}>All</option>
+                  <option value="fragile" title={getSupportModeTooltip("fragile")}>Fragile</option>
+                  <option value="water" disabled={!imageHasWater || !fillerIsNoneColor} title={getSupportModeTooltip("water")}>
                     Water
                   </option>
                 </select>
@@ -1227,9 +1923,11 @@ const Index = () => {
               </span>
             )}
           </section>
+          </div>
 
+          <div className="order-3 space-y-2 lg:order-none lg:mt-2">
           {/* Color → Block */}
-          <section className="bg-card border border-border rounded-md p-2">
+          <section className="bg-card border border-border rounded-md p-2 w-full lg:min-w-[var(--color-table-min-width)]">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-accent">Color → Block</h2>
@@ -1268,6 +1966,19 @@ const Index = () => {
               )}
             </div>
             <div key={`${showIds}-${showNames}-${showOptions}-${columnOrder.join(",")}`} className="relative">
+              {hasRequiredCol && usedIndices.length > 0 && visibleColumns.includes("required") && (
+                <div
+                  className="absolute inset-0 pointer-events-none grid gap-1"
+                  style={gridColsStyle}
+                >
+                  {visibleColumns.map(col => (
+                    <div
+                      key={`required-outline-${col}`}
+                      className={col === "required" ? "border-2 border-primary/60 bg-primary/10 rounded" : ""}
+                    />
+                  ))}
+                </div>
+              )}
               <div
                 className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
                 style={gridColsStyle}
@@ -1290,6 +2001,7 @@ const Index = () => {
                         key="id"
                         className="cursor-pointer select-none whitespace-nowrap pl-0.5"
                         onClick={() => toggleSort("id")}
+                        title="Sort by color ID"
                         {...colDragProps("id")}
                       >
                         ID{sortArrow("id")}
@@ -1300,13 +2012,14 @@ const Index = () => {
                         key="name"
                         className="cursor-pointer select-none"
                         onClick={() => toggleSort("name")}
+                        title="Sort by color name"
                         {...colDragProps("name")}
                       >
                         Name{sortArrow("name")}
                       </span>
                     ),
                     block: (
-                      <span key="block" {...colDragProps("block")}>
+                      <span key="block" title="Assigned block used for this color" {...colDragProps("block")}>
                         Block
                       </span>
                     ),
@@ -1315,6 +2028,7 @@ const Index = () => {
                         key="options"
                         className="cursor-pointer select-none whitespace-nowrap pr-1"
                         onClick={() => toggleSort("options")}
+                        title="Sort by number of available block options"
                         {...colDragProps("options")}
                       >
                         Options{sortArrow("options")}
@@ -1325,6 +2039,7 @@ const Index = () => {
                         key="required"
                         className="cursor-pointer select-none whitespace-nowrap text-right pr-1"
                         onClick={() => toggleSort("required")}
+                        title="Sort by required block count in the current output"
                         {...colDragProps("required")}
                       >
                         Required{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
@@ -1355,7 +2070,15 @@ const Index = () => {
 
           {/* Custom Colors */}
           <section className="bg-card border border-border rounded-md p-2">
-            <h2 className="text-sm font-semibold text-accent mb-1">Custom Color Mappings</h2>
+            <div className="flex items-center gap-1 mb-1">
+              <h2
+                className="text-sm font-semibold text-accent cursor-help"
+                title={CUSTOM_COLOR_TOOLTIP}
+                aria-label="Custom color shading info"
+              >
+                Custom Color Mappings
+              </h2>
+            </div>
             {customColors.length > 0 && (
               <div className="space-y-0.5 mb-2">
                 {customColors.map((cc, i) => (
@@ -1425,10 +2148,11 @@ const Index = () => {
               </button>
             </div>
           </section>
+          </div>
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="lg:min-w-[360px] lg:max-w-[720px] lg:flex-1 flex flex-col">
+        <div className="order-2 lg:order-none lg:flex-[1_1_0%] lg:min-w-[320px] lg:max-w-[542px] flex flex-col">
           <section className="bg-card border border-border rounded-md p-3">
             <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt PNG</h2>
             {/* Convert unsupported colors checkbox – hidden; conversion is now always on
@@ -1453,31 +2177,33 @@ const Index = () => {
               }}
             />
             {imageName && <p className="text-xs text-primary font-mono truncate mb-1">{imageName}</p>}
-            <div
-              className="border-2 border-dashed border-border rounded-md w-full aspect-square flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors overflow-hidden"
-              onClick={() => fileRef.current?.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => {
-                e.preventDefault();
-                const f = e.dataTransfer.files[0];
-                if (f) handleFile(f);
-              }}
-            >
-              {imageData ? (
-                <canvas
-                  className="w-full h-full"
-                  style={{ imageRendering: "pixelated" }}
-                  ref={el => {
-                    if (el && imageData) {
-                      el.width = imageData.width;
-                      el.height = imageData.height;
-                      el.getContext("2d")?.putImageData(imageData, 0, 0);
-                    }
-                  }}
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground text-center px-2">Click or drop a 128×128 .png</p>
-              )}
+            <div className="w-full max-w-[516px] mx-auto">
+              <div
+                className="rounded-md w-full aspect-square cursor-pointer border-2 border-dashed border-border hover:border-primary/50 transition-colors overflow-hidden flex items-center justify-center"
+                onClick={() => fileRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const f = e.dataTransfer.files[0];
+                  if (f) handleFile(f);
+                }}
+              >
+                {imageData ? (
+                  <canvas
+                    className="w-full h-full"
+                    style={{ imageRendering: "pixelated" }}
+                    ref={el => {
+                      if (el && imageData) {
+                        el.width = imageData.width;
+                        el.height = imageData.height;
+                        el.getContext("2d")?.putImageData(imageData, 0, 0);
+                      }
+                    }}
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center px-2">Click or drop a 128×128 .png</p>
+                )}
+              </div>
             </div>
 
             {paletteErrors.length > 0 && (
@@ -1518,7 +2244,24 @@ const Index = () => {
               </div>
             )}
 
-            {canGenerate && (
+            {showNoFillerWarning && (
+              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
+                <p className="text-xs text-warning font-medium">
+                  Filler is disabled ({fillerBlock.trim() || "none"}). {noFillerWarningDetails} This shading will need to
+                  be handled manually in-game.
+                </p>
+              </div>
+            )}
+
+            {showNorthRowAlignmentInfo && (
+              <div className="mt-2 bg-muted/30 border border-border rounded p-2">
+                <p className="text-xs text-muted-foreground font-medium">
+                  Note: Align the `128x128` color area to the map grid, with the extra row one block north.
+                </p>
+              </div>
+            )}
+
+            {imageData && (
               <div className="mt-2 flex items-center gap-2">
                 <button
                   className="text-xs px-2 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/20 whitespace-nowrap"
@@ -1526,13 +2269,19 @@ const Index = () => {
                 >
                   Remove
                 </button>
-                <button
-                  onClick={handleConvertAndDownload}
-                  disabled={converting}
-                  className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {converting ? "Converting..." : buildMode === "suppress_rowsplit" ? "Generate .zip" : "Generate .nbt"}
-                </button>
+                {canGenerate && (
+                  <button
+                    onClick={handleConvertAndDownload}
+                    disabled={converting}
+                    className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {converting
+                      ? "Converting..."
+                      : buildMode === "suppress_rowsplit" || buildMode === "suppress_checker"
+                        ? "Generate .zip"
+                        : "Generate .nbt"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -1547,9 +2296,9 @@ const Index = () => {
                   <span>
                     <strong className="text-foreground">{plural(sortedMaterials.length, "block type")}</strong>
                   </span>
-                  {suppressedCount > 0 && (
+                  {voidShadowCount > 0 && (
                     <span>
-                      <strong className="text-foreground">{plural(suppressedCount, "void shadow")}</strong>
+                      <strong className="text-foreground">{plural(voidShadowCount, "void shadow")}</strong>
                     </span>
                   )}
                 </div>
@@ -1630,17 +2379,6 @@ const Index = () => {
             </p>
             <p>
               <a
-                href="https://youtube.com/@gust4v_"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                Gu2t4v
-              </a>{" "}
-              — Color suppression expert; inventor of 2‑layer method
-            </p>
-            <p>
-              <a
                 href="https://rebane2001.com/"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -1658,10 +2396,29 @@ const Index = () => {
                 MapArtCraft
               </a>
             </p>
-            <p>And everyone who gave feedback ♥</p>
+            <p>
+              <a
+                href="https://youtube.com/@gust4v_"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Gu2t4v
+              </a>{" "}
+              — Suppression expert, inventor of 2‑Layer method
+            </p>
+            <p>Note: GPT was used for parts of this site</p>
           </div>
         </div>
       </div>
+      {swatchTooltip && (
+        <div
+          className="fixed z-50 pointer-events-none px-1.5 py-1 rounded border border-border bg-popover text-popover-foreground text-[10px] font-mono whitespace-nowrap"
+          style={{ left: swatchTooltip.x, top: swatchTooltip.y }}
+        >
+          {swatchTooltip.text}
+        </div>
+      )}
     </div>
   );
 };

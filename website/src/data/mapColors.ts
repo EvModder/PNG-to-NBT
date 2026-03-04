@@ -3,7 +3,8 @@
 // Other shades: dark=180/255, flat=220/255, darkest=135/255
 
 export const SHADE_MULTIPLIERS = [180, 220, 255, 135] as const;
-// Index 0=dark, 1=flat, 2=light, 3=darkest
+// Index 0=dark, 1=flat, 2=light, 3=darkest (table-only; not obtainable)
+const OBTAINABLE_SHADE_INDICES = [0, 1, 2] as const;
 
 export interface BaseColor {
   name: string;
@@ -85,7 +86,7 @@ export const BASE_COLORS: BaseColor[] = [
 // Build lookup: "r,g,b" → { baseIndex, shade }
 export interface ColorMatch {
   baseIndex: number;
-  shade: number; // 0=dark, 1=flat, 2=light, 3=darkest
+  shade: number; // 0=dark, 1=flat, 2=light
 }
 
 let _colorLookup: Map<string, ColorMatch> | null = null;
@@ -95,7 +96,7 @@ export function getColorLookup(): Map<string, ColorMatch> {
   _colorLookup = new Map();
   for (let i = 1; i < BASE_COLORS.length; i++) {
     const { r, g, b } = BASE_COLORS[i];
-    for (let s = 0; s < 4; s++) {
+    for (const s of OBTAINABLE_SHADE_INDICES) {
       const mr = Math.floor(r * SHADE_MULTIPLIERS[s] / 255);
       const mg = Math.floor(g * SHADE_MULTIPLIERS[s] / 255);
       const mb = Math.floor(b * SHADE_MULTIPLIERS[s] / 255);

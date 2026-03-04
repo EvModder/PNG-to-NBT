@@ -1,6 +1,6 @@
 // PNG → NBT conversion logic
 
-import { BASE_COLORS, WATER_BASE_INDEX, getColorLookup, type ColorMatch } from "../data/mapColors";
+import { BASE_COLORS, SHADE_MULTIPLIERS, WATER_BASE_INDEX, getColorLookup, type ColorMatch } from "../data/mapColors";
 import { writeStructureNbt, gzipCompress, type BlockEntry } from "./nbtWriter";
 import { createZip, type ZipEntry } from "./zip";
 import { isFragileBlock } from "../data/fragileBlocks";
@@ -17,19 +17,21 @@ export type BuildMode =
   | "staircase_northline"
   | "staircase_southline"
   | "staircase_classic"
+  | "staircase_grouped"
   | "staircase_valley"
   | "staircase_cancer"
   | "suppress_rowsplit"
-  | "suppress_plaid_ns"
-  | "suppress_plaid_ew"
+  | "suppress_checker"
   | "suppress_pairs_ew"
-  | "suppress_2layer_ew";
+  | "suppress_2layer_late_fillers"
+  | "suppress_2layer_late_pairs";
 
 export type SupportMode = "none" | "steps" | "all" | "fragile" | "water";
 
 export interface ConversionOptions {
   blockMapping: Record<number, string>;
   fillerBlock: string;
+  suppress2LayerDelayedFillerBlock?: string;
   customColors: CustomColor[];
   buildMode: BuildMode;
   supportMode: SupportMode;
@@ -45,6 +47,29 @@ export interface ValidationResult {
   usedBaseColors: Set<number>;
 }
 
+interface CustomColorMatch {
+  block: string;
+  shade: number; // 0=dark, 1=flat, 2=light
+}
+
+function buildCustomColorLookup(customColors: CustomColor[]): Map<string, CustomColorMatch> {
+  const lookup = new Map<string, CustomColorMatch>();
+  for (const cc of customColors) {
+    const block = cc.block?.trim();
+    if (!block) continue;
+    for (const shade of [0, 1, 2]) {
+      const r = Math.floor((cc.r * SHADE_MULTIPLIERS[shade]) / 255);
+      const g = Math.floor((cc.g * SHADE_MULTIPLIERS[shade]) / 255);
+      const b = Math.floor((cc.b * SHADE_MULTIPLIERS[shade]) / 255);
+      const key = `${r},${g},${b}`;
+      if (!lookup.has(key)) {
+        lookup.set(key, { block, shade });
+      }
+    }
+  }
+  return lookup;
+}
+
 // Validate a PNG image (only checks size + palette validity)
 export function validatePng(imageData: ImageData, customColors: CustomColor[]): ValidationResult {
   const errors: string[] = [];
@@ -56,10 +81,7 @@ export function validatePng(imageData: ImageData, customColors: CustomColor[]): 
   }
 
   const lookup = getColorLookup();
-  const customLookup = new Map<string, CustomColor>();
-  for (const cc of customColors) {
-    customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
-  }
+  const customLookup = buildCustomColorLookup(customColors);
 
   const invalidColors: string[] = [];
 
@@ -105,9 +127,26 @@ function getWaterDepth(shade: number, x: number, z: number): number {
   return even ? 10 : 7; // dark (shade 0 or 3)
 }
 
-function isFillerDisabled(fillerBlock: string): boolean {
-  const lower = fillerBlock.trim().toLowerCase();
-  return lower === "air" || lower === "none";
+function normalizeBlockId(raw: string): string {
+  const lower = raw.trim().toLowerCase();
+  const base = lower.split("[")[0];
+  return base.startsWith("minecraft:") ? base.slice("minecraft:".length) : base;
+}
+
+const TRANSPARENT_FILLER_BLOCKS = new Set<string>(BASE_COLORS[0].blocks.map(normalizeBlockId));
+const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
+
+export function isFillerDisabled(fillerBlock: string): boolean {
+  const normalized = normalizeBlockId(fillerBlock);
+  if (!normalized) return false;
+  return DISABLED_FILLER_ALIASES.has(normalized);
+}
+
+export function isShadeFillerDisabled(fillerBlock: string): boolean {
+  const normalized = normalizeBlockId(fillerBlock);
+  if (!normalized) return false;
+  if (isFillerDisabled(normalized)) return true;
+  return TRANSPARENT_FILLER_BLOCKS.has(normalized);
 }
 
 function resolveBlockName(block: string): string {
@@ -157,10 +196,7 @@ function isWaterBlock(blockName: string): boolean {
 // Build staircase blocks from image data
 function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
   const lookup = getColorLookup();
-  const customLookup = new Map<string, CustomColor>();
-  for (const cc of options.customColors) {
-    customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
-  }
+  const customLookup = buildCustomColorLookup(options.customColors);
 
   const blocks: BlockEntry[] = [];
   const BASE_Y = 64;
@@ -212,11 +248,30 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
       const northY = northState.y;
 
       if (customMatch) {
-        if (northTransparent && !isFillerDisabled(options.fillerBlock)) {
-          addBlock(x, northY, z - 1, options.fillerBlock);
+        if (customMatch.shade === 1) {
+          // Flat: same y as north reference; filler needed if north is transparent.
+          if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, northY, z - 1, options.fillerBlock);
+          addBlock(x, northY, z, customMatch.block);
+          currRow[x] = { y: northY, transparent: false };
+        } else if (customMatch.shade === 2) {
+          // Light: 1 higher than north; no filler needed.
+          addBlock(x, northY + 1, z, customMatch.block);
+          currRow[x] = { y: northY + 1, transparent: false };
+        } else {
+          // Dark: 1 lower than north reference (or water-bottom reference for deep water).
+          const isDeepWater = northState.waterBottom !== undefined && northState.waterDepth! > 1;
+          if (isDeepWater) {
+            const darkY = northState.waterBottom!;
+            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkY + 1, z - 1, options.fillerBlock);
+            addBlock(x, darkY, z, customMatch.block);
+            currRow[x] = { y: darkY, transparent: false };
+          } else {
+            const darkRef = northState.waterBottom !== undefined ? northState.waterBottom! : northY;
+            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkRef, z - 1, options.fillerBlock);
+            addBlock(x, darkRef - 1, z, customMatch.block);
+            currRow[x] = { y: darkRef - 1, transparent: false };
+          }
         }
-        addBlock(x, northY, z, customMatch.block);
-        currRow[x] = { y: northY, transparent: false };
         continue;
       }
 
@@ -261,7 +316,7 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
       } else {
         if (shade === 1) {
           // Normal: same y as north reference; filler needed if north is transparent
-          if (northTransparent && !isFillerDisabled(options.fillerBlock)) addBlock(x, northY, z - 1, options.fillerBlock);
+          if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, northY, z - 1, options.fillerBlock);
           addBlock(x, northY, z, block);
           currRow[x] = { y: northY, transparent: false };
         } else if (shade === 2) {
@@ -274,12 +329,12 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
           const isDeepWater = northState.waterBottom !== undefined && northState.waterDepth! > 1;
           if (isDeepWater) {
             const darkY = northState.waterBottom!;
-            if (northTransparent && !isFillerDisabled(options.fillerBlock)) addBlock(x, darkY + 1, z - 1, options.fillerBlock);
+            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkY + 1, z - 1, options.fillerBlock);
             addBlock(x, darkY, z, block);
             currRow[x] = { y: darkY, transparent: false };
           } else {
             const darkRef = northState.waterBottom !== undefined ? northState.waterBottom! : northY;
-            if (northTransparent && !isFillerDisabled(options.fillerBlock)) addBlock(x, darkRef, z - 1, options.fillerBlock);
+            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkRef, z - 1, options.fillerBlock);
             addBlock(x, darkRef - 1, z, block);
             currRow[x] = { y: darkRef - 1, transparent: false };
           }
@@ -438,6 +493,152 @@ function normalizeAndMeasure(blocks: BlockEntry[]): { sizeX: number; sizeY: numb
   };
 }
 
+// Add shading-neutral fillers for water-adjacent staircase segments to make in-game
+// placement more contiguous. This mirrors the Valley convenience behavior and is now
+// shared across staircase modes.
+function addStaircaseWaterConvenienceFillers(
+  blocks: BlockEntry[],
+  imageData: ImageData,
+  options: ConversionOptions,
+) {
+  if (isFillerDisabled(options.fillerBlock)) return;
+  if (options.buildMode === "flat" || options.buildMode.startsWith("suppress")) return;
+
+  const lookup = getColorLookup();
+  const customLookup = buildCustomColorLookup(options.customColors);
+
+  const occupied = new Set<string>();
+  for (const b of blocks) occupied.add(`${b.x},${b.y},${b.z}`);
+  const fillerName = resolveBlockName(options.fillerBlock);
+
+  // Group blocks by x/z with current top/min y snapshots (post-variant positions).
+  const columnZ = new Map<number, Map<number, { minY: number; maxY: number }>>();
+  for (const b of blocks) {
+    if (!columnZ.has(b.x)) columnZ.set(b.x, new Map());
+    const zMap = columnZ.get(b.x)!;
+    const current = zMap.get(b.z);
+    if (!current) zMap.set(b.z, { minY: b.y, maxY: b.y });
+    else {
+      if (b.y < current.minY) current.minY = b.y;
+      if (b.y > current.maxY) current.maxY = b.y;
+    }
+  }
+
+  for (let x = 0; x < 128; x++) {
+    const zStats = columnZ.get(x);
+    if (!zStats) continue;
+
+    const pixelInfo = new Map<number, { shade: number; isWater: boolean }>();
+    for (let z = 0; z < 128; z++) {
+      const idx = (z * 128 + x) * 4;
+      if (imageData.data[idx + 3] === 0) continue;
+      const r = imageData.data[idx], g = imageData.data[idx + 1], b2 = imageData.data[idx + 2];
+      const key = `${r},${g},${b2}`;
+      const match = lookup.get(key);
+      const customMatch = customLookup.get(key);
+      if (match) {
+        pixelInfo.set(z, { shade: match.shade, isWater: match.baseIndex === WATER_BASE_INDEX });
+      } else if (customMatch) {
+        pixelInfo.set(z, { shade: customMatch.shade, isWater: false });
+      }
+    }
+
+    const primaryZ = [...pixelInfo.keys()].sort((a, b) => a - b);
+    if (primaryZ.length === 0) continue;
+
+    const waterZ = new Set<number>();
+    for (const z of primaryZ) {
+      if (pixelInfo.get(z)?.isWater) waterZ.add(z);
+    }
+
+    interface Segment {
+      zList: number[];
+      waterDepth?: number;
+    }
+
+    const processed = new Set<number>();
+    const segments: Segment[] = [];
+    const nonWaterPrimary = primaryZ.filter(z => !waterZ.has(z));
+
+    let i = 0;
+    while (i < nonWaterPrimary.length) {
+      const startZ = nonWaterPrimary[i];
+      const startTop = zStats.get(startZ)?.maxY;
+      if (startTop === undefined) {
+        i++;
+        continue;
+      }
+
+      let j = i + 1;
+      while (j < nonWaterPrimary.length) {
+        const prevZ = nonWaterPrimary[j - 1];
+        const currZ = nonWaterPrimary[j];
+        const currTop = zStats.get(currZ)?.maxY;
+        if (currZ !== prevZ + 1 || currTop !== startTop) break;
+        j++;
+      }
+
+      const zList = nonWaterPrimary.slice(i, j);
+      const northZ = zList[0] - 1;
+      let depth: number | undefined;
+      if (waterZ.has(northZ) && zStats.get(northZ)?.maxY === startTop) {
+        const w = zStats.get(northZ)!;
+        depth = w.maxY - w.minY + 1;
+        zList.unshift(northZ);
+      }
+
+      for (const z of zList) processed.add(z);
+      segments.push({ zList, waterDepth: depth });
+      i = j;
+    }
+
+    for (const z of primaryZ) {
+      if (waterZ.has(z) && !processed.has(z)) {
+        const w = zStats.get(z);
+        if (w) segments.push({ zList: [z], waterDepth: w.maxY - w.minY + 1 });
+      }
+    }
+
+    for (const seg of segments) {
+      if (!seg.waterDepth || seg.waterDepth <= 1 || seg.zList.length <= 1) continue;
+
+      const waterPillarZ = seg.zList[0];
+      const waterInfo = pixelInfo.get(waterPillarZ);
+      if (!waterInfo || !waterInfo.isWater) continue;
+      // Light-water pillars are simple enough to build and don't need this extra connector.
+      if (waterInfo.shade === 2) continue;
+
+      const southZ = seg.zList[seg.zList.length - 1] + 1;
+      const southY = zStats.get(southZ)?.maxY;
+      if (southY === undefined) continue;
+
+      const waterBottom = zStats.get(waterPillarZ)?.minY;
+      if (waterBottom === undefined || waterBottom === southY) continue;
+
+      for (const z of seg.zList) {
+        if (z === waterPillarZ) continue;
+        const key = `${x},${southY},${z}`;
+        if (occupied.has(key)) continue;
+        blocks.push({ x, y: southY, z, blockName: fillerName });
+        occupied.add(key);
+      }
+    }
+  }
+}
+
+function buildStaircaseModeBlocks(
+  imageData: ImageData,
+  options: ConversionOptions,
+  includeWaterConvenienceFillers = true,
+): BlockEntry[] {
+  const blocks = buildStaircaseBlocks(imageData, options);
+  applyStaircaseVariant(blocks, options.buildMode, imageData, options);
+  if (includeWaterConvenienceFillers) {
+    addStaircaseWaterConvenienceFillers(blocks, imageData, options);
+  }
+  return blocks;
+}
+
 // Convert validated PNG to NBT (returns Uint8Array for .nbt or .zip)
 export async function convertToNbt(
   imageData: ImageData,
@@ -445,6 +646,9 @@ export async function convertToNbt(
 ): Promise<{ data: Uint8Array; isZip: boolean }> {
   if (options.buildMode === "suppress_rowsplit") {
     return buildRowSplit(imageData, options);
+  }
+  if (options.buildMode === "suppress_checker") {
+    return buildCheckerSplit(imageData, options);
   }
 
   if (options.buildMode === "suppress_pairs_ew") {
@@ -455,17 +659,16 @@ export async function convertToNbt(
     return { data: await gzipCompress(nbtData), isZip: false };
   }
 
-  if (options.buildMode === "suppress_2layer_ew") {
-    const blocks = buildSuppressDualLayerBlocks(imageData, options);
+  if (options.buildMode === "suppress_2layer_late_fillers" || options.buildMode === "suppress_2layer_late_pairs") {
+    const variant = options.buildMode === "suppress_2layer_late_pairs" ? "late_flat_vs" : "classic";
+    const blocks = buildSuppressDualLayerBlocks(imageData, options, variant);
     applySupport(blocks, options);
     const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
     const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
     return { data: await gzipCompress(nbtData), isZip: false };
   }
 
-  const blocks = buildStaircaseBlocks(imageData, options);
-  applyStaircaseVariant(blocks, options.buildMode, imageData, options);
-
+  const blocks = buildStaircaseModeBlocks(imageData, options);
   applySupport(blocks, options);
 
   const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
@@ -476,10 +679,7 @@ export async function convertToNbt(
 // Build suppress pairs block lists (two halves)
 function buildSuppressRowSplitBlocks(imageData: ImageData, options: ConversionOptions): [BlockEntry[], BlockEntry[]] {
   const lookup = getColorLookup();
-  const customLookup = new Map<string, CustomColor>();
-  for (const cc of options.customColors) {
-    customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
-  }
+  const customLookup = buildCustomColorLookup(options.customColors);
 
   function buildHalf(startRow: 0 | 1): BlockEntry[] {
     const blocks: BlockEntry[] = [];
@@ -521,10 +721,10 @@ function buildSuppressRowSplitBlocks(imageData: ImageData, options: ConversionOp
           addBlock(x, 0, z, block);
 
           // Filler north of this color row (z-1) based on shade
-          const shade = customMatch ? 1 : (match as ColorMatch).shade;
+          const shade = customMatch ? customMatch.shade : (match as ColorMatch).shade;
           if (shade === 2) {
             // Light: no filler
-          } else if (!isFillerDisabled(options.fillerBlock)) {
+          } else if (!isShadeFillerDisabled(options.fillerBlock)) {
             if (shade === 1) {
               // Normal: filler at y=0
               addBlock(x, 0, z - 1, options.fillerBlock);
@@ -550,6 +750,78 @@ function buildSuppressRowSplitBlocks(imageData: ImageData, options: ConversionOp
   return [buildHalf(0), buildHalf(1)];
 }
 
+// Build checker suppress block lists (dominant/recessive halves).
+// Dominant cells are (x+z)%2===1, recessive are (x+z)%2===0.
+function buildSuppressCheckerBlocks(imageData: ImageData, options: ConversionOptions): [BlockEntry[], BlockEntry[]] {
+  const lookup = getColorLookup();
+  const customLookup = buildCustomColorLookup(options.customColors);
+
+  function buildHalf(useDominant: boolean): BlockEntry[] {
+    const blocks: BlockEntry[] = [];
+
+    function addBlock(x: number, y: number, z: number, block: string) {
+      blocks.push({ x, y, z, blockName: resolveBlockName(block) });
+    }
+
+    for (let z = 0; z < 128; z++) {
+      for (let x = 0; x < 128; x++) {
+        const isDominant = (x + z) % 2 === 1;
+        if (isDominant !== useDominant) continue;
+
+        const idx = (z * 128 + x) * 4;
+        const a = imageData.data[idx + 3];
+        if (a === 0) continue;
+
+        const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
+        const key = `${r},${g},${b}`;
+
+        const match = lookup.get(key);
+        const customMatch = customLookup.get(key);
+        if (!match && !customMatch) continue;
+
+        const block = customMatch
+          ? customMatch.block
+          : options.blockMapping[(match as ColorMatch).baseIndex] ||
+            BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
+        if (!block) continue;
+
+        if (!customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX) {
+          // Checker suppress: water top is always y=-1 relative to solid color blocks at y=0.
+          const depth = getWaterDepth((match as ColorMatch).shade, x, z);
+          for (let d = 0; d < depth; d++) {
+            addBlock(x, -1 - d, z, block);
+          }
+        } else {
+          // Primary color block at y=0.
+          addBlock(x, 0, z, block);
+
+          // Shade filler north at z-1, y or y+1 for flat/dark respectively.
+          const shade = customMatch ? customMatch.shade : (match as ColorMatch).shade;
+          if (shade !== 2 && !isShadeFillerDisabled(options.fillerBlock)) {
+            if (shade === 1) {
+              addBlock(x, 0, z - 1, options.fillerBlock);
+            } else {
+              addBlock(x, 1, z - 1, options.fillerBlock);
+              if (options.supportMode === "steps" || options.supportMode === "all") {
+                addBlock(x, 0, z - 1, options.fillerBlock);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (options.supportMode !== "none") {
+      applySupport(blocks, options);
+    }
+
+    return blocks;
+  }
+
+  // Zip order: dominant first, recessive second.
+  return [buildHalf(true), buildHalf(false)];
+}
+
 // Suppress (Row-split): generate two NBTs in a zip
 async function buildRowSplit(
   imageData: ImageData,
@@ -573,13 +845,239 @@ async function buildRowSplit(
   return { data: createZip(zipEntries), isZip: true };
 }
 
+// Suppress (Checker): dominant + recessive NBTs in one zip.
+async function buildCheckerSplit(
+  imageData: ImageData,
+  options: ConversionOptions,
+): Promise<{ data: Uint8Array; isZip: boolean }> {
+  const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, options);
+
+  async function toNbt(blocks: BlockEntry[]): Promise<Uint8Array> {
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
+    const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
+    return gzipCompress(nbtData);
+  }
+
+  const [dominantData, recessiveData] = await Promise.all([toNbt(dominant), toNbt(recessive)]);
+
+  const zipEntries: ZipEntry[] = [
+    { name: `${options.baseName}-dominant.nbt`, data: dominantData },
+    { name: `${options.baseName}-recessive.nbt`, data: recessiveData },
+  ];
+
+  return { data: createZip(zipEntries), isZip: true };
+}
+
 // Post-process blocks to apply staircase variants
+function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData, options: ConversionOptions) {
+  const lookup = getColorLookup();
+  const customLookup = buildCustomColorLookup(options.customColors);
+
+  type PixelInfo = { shade: number; isWater: boolean };
+  const pixelByColumn = new Map<number, Map<number, PixelInfo>>();
+  for (let x = 0; x < 128; x++) {
+    const zInfo = new Map<number, PixelInfo>();
+    for (let z = 0; z < 128; z++) {
+      const idx = (z * 128 + x) * 4;
+      if (imageData.data[idx + 3] === 0) continue;
+      const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
+      const key = `${r},${g},${b}`;
+      const match = lookup.get(key);
+      const customMatch = customLookup.get(key);
+      if (match) {
+        zInfo.set(z, { shade: match.shade, isWater: match.baseIndex === WATER_BASE_INDEX });
+      } else if (customMatch) {
+        zInfo.set(z, { shade: customMatch.shade, isWater: false });
+      }
+    }
+    if (zInfo.size > 0) pixelByColumn.set(x, zInfo);
+  }
+
+  const columnZBlocks = new Map<number, Map<number, BlockEntry[]>>();
+  for (const b of blocks) {
+    if (!columnZBlocks.has(b.x)) columnZBlocks.set(b.x, new Map<number, BlockEntry[]>());
+    const zMap = columnZBlocks.get(b.x)!;
+    if (!zMap.has(b.z)) zMap.set(b.z, []);
+    zMap.get(b.z)!.push(b);
+  }
+
+  let valleyMaxY = -Infinity;
+  for (const b of blocks) valleyMaxY = Math.max(valleyMaxY, b.y);
+  if (!Number.isFinite(valleyMaxY)) return;
+
+  interface GroupedSegment {
+    zList: number[]; // primary z rows in this segment (water may be included as northmost row)
+    minY: number; // lowest y among segment primary rows
+  }
+
+  // Per request: process columns after the first.
+  for (let x = 1; x < 128; x++) {
+    const primaryInfo = pixelByColumn.get(x);
+    const zToBlocks = columnZBlocks.get(x);
+    if (!primaryInfo || !zToBlocks) continue;
+
+    const allPrimaryZ = [...primaryInfo.keys()].sort((a, b) => a - b);
+    const topY = new Map<number, number>();
+    const minY = new Map<number, number>();
+    for (const z of allPrimaryZ) {
+      const bs = zToBlocks.get(z);
+      if (!bs || bs.length === 0) continue;
+      let zMin = Infinity, zMax = -Infinity;
+      for (const b of bs) {
+        if (b.y < zMin) zMin = b.y;
+        if (b.y > zMax) zMax = b.y;
+      }
+      minY.set(z, zMin);
+      topY.set(z, zMax);
+    }
+
+    const primaryZ = allPrimaryZ.filter(z => topY.has(z) && minY.has(z));
+    if (primaryZ.length === 0) continue;
+
+    const waterZ = new Set<number>();
+    for (const z of primaryZ) {
+      if (primaryInfo.get(z)?.isWater) waterZ.add(z);
+    }
+
+    const processed = new Set<number>();
+    const segments: GroupedSegment[] = [];
+    const nonWaterPrimary = primaryZ.filter(z => !waterZ.has(z));
+
+    let i = 0;
+    while (i < nonWaterPrimary.length) {
+      const startZ = nonWaterPrimary[i];
+      const runTop = topY.get(startZ)!;
+      let j = i + 1;
+      while (
+        j < nonWaterPrimary.length &&
+        nonWaterPrimary[j] === nonWaterPrimary[j - 1] + 1 &&
+        topY.get(nonWaterPrimary[j]) === runTop
+      ) {
+        j++;
+      }
+      const zList = nonWaterPrimary.slice(i, j);
+
+      const northZ = zList[0] - 1;
+      if (waterZ.has(northZ) && topY.get(northZ) === runTop) {
+        zList.unshift(northZ);
+        processed.add(northZ);
+      }
+
+      for (const z of zList) processed.add(z);
+
+      let segMin = Infinity;
+      for (const z of zList) segMin = Math.min(segMin, minY.get(z)!);
+      segments.push({ zList, minY: segMin });
+      i = j;
+    }
+
+    for (const z of primaryZ) {
+      if (waterZ.has(z) && !processed.has(z)) {
+        segments.push({ zList: [z], minY: minY.get(z)! });
+        processed.add(z);
+      }
+    }
+
+    // Process from highest segment downward (per request: descending min-Y).
+    segments.sort((a, b) => b.minY - a.minY);
+
+    for (const seg of segments) {
+      const primaryRowsToShift = new Set<number>(seg.zList.filter(z => primaryInfo.has(z)));
+      const allRowsToShift = new Set<number>(seg.zList);
+
+      // Shift filler-only row north of each moved primary row by same delta.
+      for (const z of seg.zList) {
+        const fillerZ = z - 1;
+        if (primaryInfo.has(fillerZ)) continue;
+        if (zToBlocks.has(fillerZ)) allRowsToShift.add(fillerZ);
+      }
+
+      let movingMaxY = -Infinity;
+      for (const z of allRowsToShift) {
+        const bs = zToBlocks.get(z);
+        if (!bs) continue;
+        for (const b of bs) movingMaxY = Math.max(movingMaxY, b.y);
+      }
+      if (!Number.isFinite(movingMaxY)) continue;
+
+      const maxLift = valleyMaxY - movingMaxY;
+      if (maxLift <= 0) continue;
+
+      const neighborY = new Set<number>();
+      for (const z of seg.zList) {
+        for (const nx of [x - 1, x + 1]) {
+          if (nx < 0 || nx >= 128) continue;
+          const neighborCol = columnZBlocks.get(nx);
+          if (!neighborCol) continue;
+          const bs = neighborCol.get(z);
+          if (!bs) continue;
+          for (const b of bs) neighborY.add(b.y);
+        }
+      }
+
+      const deltas = [...neighborY]
+        .map(y => y - seg.minY)
+        .filter(d => d > 0 && d <= maxLift)
+        .sort((a, b) => b - a);
+      if (deltas.length === 0) continue;
+
+      const isColumnShadeSafe = (delta: number): boolean => {
+        for (const z of primaryZ) {
+          const info = primaryInfo.get(z);
+          if (!info || info.isWater) continue;
+          const northZ = z - 1;
+          if (!primaryInfo.has(northZ)) continue;
+          const y = topY.get(z)! + (primaryRowsToShift.has(z) ? delta : 0);
+          const northY = topY.get(northZ)! + (primaryRowsToShift.has(northZ) ? delta : 0);
+          if (info.shade === 2) {
+            if (!(y > northY)) return false;
+          } else if (info.shade === 1) {
+            if (y !== northY) return false;
+          } else {
+            if (!(y < northY)) return false;
+          }
+        }
+        return true;
+      };
+
+      let chosenDelta = 0;
+      for (const d of deltas) {
+        if (isColumnShadeSafe(d)) {
+          chosenDelta = d;
+          break;
+        }
+      }
+      if (chosenDelta <= 0) continue;
+
+      for (const z of allRowsToShift) {
+        const bs = zToBlocks.get(z);
+        if (!bs) continue;
+        for (const b of bs) b.y += chosenDelta;
+      }
+
+      for (const z of primaryRowsToShift) {
+        if (topY.has(z)) topY.set(z, topY.get(z)! + chosenDelta);
+        if (minY.has(z)) minY.set(z, minY.get(z)! + chosenDelta);
+      }
+
+      seg.minY += chosenDelta;
+    }
+  }
+}
+
 function applyStaircaseVariant(
   blocks: BlockEntry[],
   mode: BuildMode,
   imageData?: ImageData,
   options?: ConversionOptions,
 ) {
+  if (mode === "staircase_grouped" && imageData && options) {
+    // Grouped starts from valley, then applies cross-column lifts where safe.
+    applyStaircaseVariant(blocks, "staircase_valley", imageData, options);
+    applyGroupedModePostProcess(blocks, imageData, options);
+    return;
+  }
+
   if (mode === "staircase_northline" || mode === "flat" || mode.startsWith("suppress")) return;
 
   if (mode === "staircase_cancer" && imageData && options) {
@@ -616,10 +1114,7 @@ function applyStaircaseVariant(
       // Shade is always read from the source image, not current block positions.
 
       const lookup = getColorLookup();
-      const customLookup = new Map<string, CustomColor>();
-      for (const cc of options.customColors) {
-        customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
-      }
+      const customLookup = buildCustomColorLookup(options.customColors);
 
       // Build pixel info from source image (shade truth)
       const pixelShade = new Map<number, { shade: number; isWater: boolean }>();
@@ -634,7 +1129,7 @@ function applyStaircaseVariant(
         if (match) {
           pixelShade.set(z, { shade: match.shade, isWater: match.baseIndex === WATER_BASE_INDEX });
         } else if (customMatch) {
-          pixelShade.set(z, { shade: 1, isWater: false });
+          pixelShade.set(z, { shade: customMatch.shade, isWater: false });
         }
       }
 
@@ -862,10 +1357,7 @@ function applyStaircaseVariant(
 // Staircase (Cancer): randomize Y positions while preserving shade constraints
 function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: ConversionOptions) {
   const lookup = getColorLookup();
-  const customLookup = new Map<string, CustomColor>();
-  for (const cc of options.customColors) {
-    customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
-  }
+  const customLookup = buildCustomColorLookup(options.customColors);
 
   // Simple seeded RNG for reproducibility per column
   function mulberry32(seed: number) {
@@ -896,7 +1388,7 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
       const match = lookup.get(key);
       const cm = customLookup.get(key);
       if (match) pixelInfo.set(z, { shade: match.shade, isWater: match.baseIndex === WATER_BASE_INDEX });
-      else if (cm) pixelInfo.set(z, { shade: 1, isWater: false });
+      else if (cm) pixelInfo.set(z, { shade: cm.shade, isWater: false });
     }
 
     // Group blocks by z
@@ -1002,10 +1494,7 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
 // Build suppress pairs E→W: zigzag from east to west, returning blocks grouped by step
 function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: ConversionOptions): BlockEntry[][] {
   const lookup = getColorLookup();
-  const customLookup = new Map<string, CustomColor>();
-  for (const cc of options.customColors) {
-    customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
-  }
+  const customLookup = buildCustomColorLookup(options.customColors);
 
   const steps: BlockEntry[][] = [];
 
@@ -1068,8 +1557,8 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
           }
 
           // Filler north of color row based on shade
-          if (!isFillerDisabled(options.fillerBlock)) {
-            const shade = customMatch ? 1 : (match as ColorMatch).shade;
+          if (!isShadeFillerDisabled(options.fillerBlock)) {
+            const shade = customMatch ? customMatch.shade : (match as ColorMatch).shade;
             if (shade === 1) {
               // Medium: filler at same level north
               addBlock(x, baseY, z - 1, options.fillerBlock);
@@ -1099,28 +1588,49 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
 function buildSuppressPairsEWBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
   return buildSuppressPairsEWBlocksByStep(imageData, options).flat();
 }
-// Build suppress dual-layer blocks: two Y-height layers for 3-shade grid shading
-// Shade mapping: MC shade 2=light→1st(brightest), 1=normal→2nd(middle), 0/3=dark→3rd(darkest)
-// Dominant rows (even z) and submissive rows (odd z) follow different placement rules.
-function buildSuppressDualLayerBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
+// Build suppress dual-layer blocks using dominant/recessive checkerboard mechanics.
+// Recessive cells are (x+z)%2==0 (same parity as the top-left pixel), dominant are the other half.
+// Primary solids/water are placed first, then shade-casting fillers are added while avoiding collisions.
+function buildSuppressDualLayerBlocks(
+  imageData: ImageData,
+  options: ConversionOptions,
+  variant: "classic" | "late_flat_vs" = "classic",
+): BlockEntry[] {
   const lookup = getColorLookup();
-  const customLookup = new Map<string, CustomColor>();
-  for (const cc of options.customColors) {
-    customLookup.set(`${cc.r},${cc.g},${cc.b}`, cc);
+  const customLookup = buildCustomColorLookup(options.customColors);
+
+  interface PixelInfo {
+    shade: number; // MC shade: 0=dark, 1=flat, 2=light, 3=darkest(in table)
+    block: string;
+    isWater: boolean;
   }
 
+  const pixelGrid: (PixelInfo | null)[][] = Array.from({ length: 128 }, () => new Array<PixelInfo | null>(128).fill(null));
+  const topYGrid: (number | undefined)[][] = Array.from({ length: 128 }, () => new Array<number | undefined>(128).fill(undefined));
   const blocks: BlockEntry[] = [];
-  const L1 = 0; // layer 1 base Y
-  const L2 = options.layerGap ?? 5; // layer 2 base Y
+  const occupied = new Set<string>();
+  const fillerOff = isShadeFillerDisabled(options.fillerBlock);
+  const lowerY = 0;
+  const upperY = Math.max(1, options.layerGap ?? 5);
+  const lateY = upperY + 2;
+  const loweredRecessive = new Set<string>();
+  const lateDominant = new Set<string>();
+
+  const keyOf = (x: number, y: number, z: number) => `${x},${y},${z}`;
+  const cellKey = (x: number, z: number) => `${x},${z}`;
+  const isRecessive = (x: number, z: number) => (x + z) % 2 === 0;
+  const isDominant = (x: number, z: number) => !isRecessive(x, z);
+  const isDarkShade = (shade: number) => shade === 0 || shade === 3;
+  const shadeDeltaFromSouth = (shade: number) => (shade === 2 ? 1 : shade === 1 ? 0 : -1);
 
   function addBlock(x: number, y: number, z: number, block: string) {
+    const key = keyOf(x, y, z);
+    if (occupied.has(key)) return;
     blocks.push({ x, y, z, blockName: resolveBlockName(block) });
+    occupied.add(key);
   }
 
-  // 0=transparent, 1=1st(brightest), 2=2nd(middle), 3=3rd(darkest)
-  type MappedShade = 0 | 1 | 2 | 3;
-
-  function getPixelInfo(x: number, z: number): { shade: MappedShade; block: string; isWater: boolean; mcShade: number } | null {
+  function getPixelInfo(x: number, z: number): PixelInfo | null {
     if (z < 0 || z >= 128 || x < 0 || x >= 128) return null;
     const idx = (z * 128 + x) * 4;
     if (imageData.data[idx + 3] === 0) return null;
@@ -1133,104 +1643,166 @@ function buildSuppressDualLayerBlocks(imageData: ImageData, options: ConversionO
       ? customMatch.block
       : options.blockMapping[(match as ColorMatch).baseIndex] || BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
     if (!block) return null;
-    const isWater = !customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX;
-    const mcShade = customMatch ? 1 : (match as ColorMatch).shade;
-    const mapped: MappedShade = mcShade === 2 ? 1 : mcShade === 1 ? 2 : 3;
-    return { shade: mapped, block, isWater, mcShade };
+    return {
+      shade: customMatch ? customMatch.shade : (match as ColorMatch).shade,
+      block,
+      isWater: !customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX,
+    };
   }
 
-  const fillerOff = isFillerDisabled(options.fillerBlock);
+  // Snapshot source pixel data up front.
+  for (let x = 0; x < 128; x++) {
+    for (let z = 0; z < 128; z++) {
+      pixelGrid[x][z] = getPixelInfo(x, z);
+    }
+  }
+
+  // Optimization: certain recessive pixels can drop to the dominant layer when they replace
+  // the north filler of the dominant-flat pixel directly south.
+  for (let x = 0; x < 128; x++) {
+    for (let recZ = 0; recZ < 127; recZ++) {
+      if (!isRecessive(x, recZ)) continue;
+      const domZ = recZ + 1;
+      if (!isDominant(x, domZ)) continue;
+
+      const dom = pixelGrid[x][domZ];
+      const rec = pixelGrid[x][recZ];
+      if (!dom || !rec) continue;
+      if (dom.isWater || rec.isWater) continue;
+
+      // Only when replacing the filler for a flat dominant pixel directly south.
+      if (dom.shade !== 1) continue;
+
+      const northZ = recZ - 1;
+      const north = northZ >= 0 ? pixelGrid[x][northZ] : null;
+
+      let canLower = false;
+      if (isDarkShade(rec.shade)) {
+        // Dark recessive can only drop at top row; it still requires +1Y north filler.
+        canLower = recZ === 0;
+      } else if (rec.shade === 1) {
+        // Flat recessive can drop at top row, or if north is a regular dominant block.
+        const hasRegularNorthDominant = northZ >= 0 && isDominant(x, northZ) && !!north && !north.isWater;
+        canLower = recZ === 0 || hasRegularNorthDominant;
+      } else if (rec.shade === 2) {
+        // Light recessive can drop only if north pixel is transparent.
+        canLower = !north;
+      }
+
+      if (canLower) loweredRecessive.add(cellKey(x, recZ));
+    }
+  }
+
+  // Place solids and water pillars first (south -> north per column).
+  for (let x = 0; x < 128; x++) {
+    for (let z = 127; z >= 0; z--) {
+      const info = pixelGrid[x][z];
+      if (!info) continue;
+
+      if (info.isWater) {
+        const south = z < 127 ? pixelGrid[x][z + 1] : null;
+        const southTopY = z < 127 ? topYGrid[x][z + 1] : undefined;
+        let topY = lowerY - 1;
+
+        // Recessive-water may need to provide shading for its dominant south neighbor.
+        // Dominant-water can stay at the standard lowered position.
+        if (isRecessive(x, z) && south && !south.isWater && southTopY !== undefined) {
+          topY = southTopY + shadeDeltaFromSouth(info.shade);
+        }
+
+        const depth = getWaterDepth(info.shade, x, z);
+        for (let d = 0; d < depth; d++) {
+          addBlock(x, topY - d, z, info.block);
+        }
+        topYGrid[x][z] = topY;
+        continue;
+      }
+
+      let y = isDominant(x, z) || loweredRecessive.has(cellKey(x, z)) ? lowerY : upperY;
+      // Late-Flat-VS variant: flat-shaded dominant pixels south of void are moved to the top late layer.
+      if (
+        variant === "late_flat_vs" &&
+        isDominant(x, z) &&
+        info.shade === 1 &&
+        z > 0 &&
+        !pixelGrid[x][z - 1]
+      ) {
+        y = lateY;
+        lateDominant.add(cellKey(x, z));
+      }
+      addBlock(x, y, z, info.block);
+      topYGrid[x][z] = y;
+    }
+  }
+
+  if (fillerOff) return blocks;
+
+  // Add shade-casting fillers after primary placement.
+  const fillerPlacements = new Map<string, string>();
+  const resolvedNormal = resolveBlockName(options.fillerBlock);
+  const resolvedDelayed = resolveBlockName(options.suppress2LayerDelayedFillerBlock || options.fillerBlock);
 
   for (let x = 0; x < 128; x++) {
     for (let z = 0; z < 128; z++) {
-      const info = getPixelInfo(x, z);
-      if (!info) continue;
+      const info = pixelGrid[x][z];
+      if (!info || info.isWater || info.shade === 2) continue; // light shade needs no north filler
 
-      // Water: place at layer 1 with appropriate depth
-      if (info.isWater) {
-        const depth = getWaterDepth(info.mcShade, x, z);
-        for (let d = 0; d < depth; d++) {
-          addBlock(x, L1 + d, z, info.block);
+      const topY = topYGrid[x][z];
+      if (topY === undefined) continue;
+      const fillY = topY + (isDarkShade(info.shade) ? 1 : 0);
+      const fillZ = z - 1;
+      const posKey = keyOf(x, fillY, fillZ);
+
+      // Do not overwrite primary blocks (especially water pillars).
+      if (occupied.has(posKey)) continue;
+
+      const isDelayedDominantVoidShadow = isDominant(x, z) && fillZ >= 0 && !pixelGrid[x][fillZ];
+
+      if (isDelayedDominantVoidShadow) {
+        if (variant === "late_flat_vs") {
+          // In Late-Flat-VS, all delayed placements are moved to a single top late layer.
+          const latePosKey = keyOf(x, lateY, fillZ);
+          if (!occupied.has(latePosKey)) fillerPlacements.set(latePosKey, resolvedNormal);
+        } else {
+          // Classic 2-layer keeps delayed fillers in-grid and allows a separate late-filler block.
+          fillerPlacements.set(posKey, resolvedDelayed);
         }
         continue;
       }
 
-      const isDom = z % 2 === 0; // dominant = even z rows
-      const north = getPixelInfo(x, z - 1);
-      const south = getPixelInfo(x, z + 1);
-      const ns = north ? north.shade : 0; // north shade (0=transparent)
-      const ss = south ? south.shade : 0; // south shade (0=transparent)
-
-      if (info.shade === 3) {
-        // 3rd shade (darkest)
-        if (isDom) {
-          addBlock(x, L1, z, info.block);
-          if (!fillerOff) {
-            if (ns === 1) {
-              // North is brightest: filler at layer1, z-1, y+1
-              addBlock(x, L1 + 1, z - 1, options.fillerBlock);
-            } else {
-              // North is 2nd/3rd/transparent: filler at layer2, z-1
-              addBlock(x, L2, z - 1, options.fillerBlock);
-            }
-          }
-        } else {
-          // Submissive: check exception first
-          if (ss === 1 && (ns === 2 || ns === 3)) {
-            // Exception: south is 1st AND north is 2nd/3rd → block at layer2
-            addBlock(x, L2, z, info.block);
-            if (!fillerOff) addBlock(x, L2 + 1, z - 1, options.fillerBlock);
-          } else {
-            addBlock(x, L1, z, info.block);
-            if (!fillerOff) {
-              if (ns === 1) {
-                addBlock(x, L1 + 1, z - 1, options.fillerBlock);
-              } else {
-                addBlock(x, L2, z - 1, options.fillerBlock);
-              }
-            }
-          }
-        }
-      } else if (info.shade === 2) {
-        // 2nd shade (middle/normal)
-        if (isDom) {
-          if (ns === 1) {
-            // North is brightest: block at layer1, filler at layer1 z-1
-            addBlock(x, L1, z, info.block);
-            if (!fillerOff) addBlock(x, L1, z - 1, options.fillerBlock);
-          } else if (ns === 2 || ns === 3) {
-            // North is 2nd/3rd: block at layer1, no filler
-            addBlock(x, L1, z, info.block);
-          } else {
-            // North is transparent: block at layer2
-            addBlock(x, L2, z, info.block);
-            if (!fillerOff) {
-              // If south is also 2nd shade, filler on layer1; otherwise layer2
-              addBlock(x, ss === 2 ? L1 : L2, z - 1, options.fillerBlock);
-            }
-          }
-        } else {
-          // Submissive
-          if (ns >= 1) {
-            // North is any non-transparent: block at layer1
-            addBlock(x, L1, z, info.block);
-          } else {
-            // North is transparent: block at layer2
-            addBlock(x, L2, z, info.block);
-            if (!fillerOff) {
-              addBlock(x, ss === 2 ? L1 : L2, z - 1, options.fillerBlock);
-            }
-          }
-        }
-      } else {
-        // 1st shade (brightest)
-        if (isDom) {
-          addBlock(x, L1, z, info.block);
-        } else {
-          addBlock(x, L2, z, info.block);
-        }
-      }
+      fillerPlacements.set(posKey, resolvedNormal);
     }
+  }
+
+  if (variant === "late_flat_vs") {
+    // If a recessive pixel was lowered and its north dominant was moved late, preserve recessive flat shading
+    // during the first map update by adding an in-phase north filler at recessive Y.
+    for (const key of loweredRecessive) {
+      const [xs, zs] = key.split(",");
+      const x = parseInt(xs);
+      const z = parseInt(zs);
+      const info = pixelGrid[x][z];
+      if (!info || info.isWater || info.shade !== 1) continue;
+      const northZ = z - 1;
+      if (northZ < 0) continue;
+      if (!lateDominant.has(cellKey(x, northZ))) continue;
+      const recY = topYGrid[x][z];
+      if (recY === undefined) continue;
+      const posKey = keyOf(x, recY, northZ);
+      if (!occupied.has(posKey)) fillerPlacements.set(posKey, resolvedNormal);
+    }
+  }
+
+  for (const [posKey, blockName] of fillerPlacements.entries()) {
+    if (occupied.has(posKey)) continue;
+    const [xs, ys, zs] = posKey.split(",");
+    blocks.push({
+      x: parseInt(xs),
+      y: parseInt(ys),
+      z: parseInt(zs),
+      blockName,
+    });
+    occupied.add(posKey);
   }
 
   return blocks;
@@ -1258,6 +1830,10 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
     const [h0, h1] = buildSuppressRowSplitBlocks(imageData, options);
     countBlocks(h0);
     countBlocks(h1);
+  } else if (options.buildMode === "suppress_checker") {
+    const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, options);
+    countBlocks(dominant);
+    countBlocks(recessive);
   } else if (options.buildMode === "suppress_pairs_ew") {
     // Material count = max occurrence of each block across any single step/segment
     const steps = buildSuppressPairsEWBlocksByStep(imageData, options);
@@ -1274,16 +1850,124 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
         counts[name] = Math.max(counts[name] || 0, c);
       }
     }
-  } else if (options.buildMode === "suppress_2layer_ew") {
-    const blocks = buildSuppressDualLayerBlocks(imageData, options);
+  } else if (options.buildMode === "suppress_2layer_late_fillers" || options.buildMode === "suppress_2layer_late_pairs") {
+    const variant = options.buildMode === "suppress_2layer_late_pairs" ? "late_flat_vs" : "classic";
+    const blocks = buildSuppressDualLayerBlocks(imageData, options, variant);
     applySupport(blocks, options);
     countBlocks(blocks);
   } else {
-    const blocks = buildStaircaseBlocks(imageData, options);
-    applyStaircaseVariant(blocks, options.buildMode, imageData, options);
+    const blocks = buildStaircaseModeBlocks(imageData, options);
     applySupport(blocks, options);
     countBlocks(blocks);
   }
 
   return counts;
+}
+
+function canonicalBlockSignature(blocks: BlockEntry[]): string {
+  const clone = blocks.map(b => ({ ...b }));
+  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(clone);
+  clone.sort((a, b) => a.x - b.x || a.y - b.y || a.z - b.z || a.blockName.localeCompare(b.blockName));
+  return [
+    `${sizeX},${sizeY},${sizeZ},${clone.length}`,
+    ...clone.map(b => `${b.x},${b.y},${b.z},${b.blockName}`),
+  ].join("|");
+}
+
+// Build-mode structural signature for duplicate-trimming UI logic.
+export function computeBuildModeSignature(imageData: ImageData, options: ConversionOptions): string {
+  if (options.buildMode === "suppress_rowsplit") {
+    const [h0, h1] = buildSuppressRowSplitBlocks(imageData, options);
+    return `${canonicalBlockSignature(h0)}||${canonicalBlockSignature(h1)}`;
+  }
+  if (options.buildMode === "suppress_checker") {
+    const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, options);
+    return `${canonicalBlockSignature(dominant)}||${canonicalBlockSignature(recessive)}`;
+  }
+
+  if (options.buildMode === "suppress_pairs_ew") {
+    const blocks = buildSuppressPairsEWBlocks(imageData, options);
+    applySupport(blocks, options);
+    return canonicalBlockSignature(blocks);
+  }
+
+  if (options.buildMode === "suppress_2layer_late_fillers" || options.buildMode === "suppress_2layer_late_pairs") {
+    const variant = options.buildMode === "suppress_2layer_late_pairs" ? "late_flat_vs" : "classic";
+    const blocks = buildSuppressDualLayerBlocks(imageData, options, variant);
+    applySupport(blocks, options);
+    return canonicalBlockSignature(blocks);
+  }
+
+  const blocks = buildStaircaseModeBlocks(imageData, options);
+  applySupport(blocks, options);
+  return canonicalBlockSignature(blocks);
+}
+
+export interface FillerNeedStats {
+  total: number;
+  inGrid: number; // z>=0
+  north: number; // z<0
+  delayedTotal: number;
+  delayedInGrid: number;
+  northIsSingleLine: boolean;
+}
+
+// Analyze where shading fillers are required by the current build mode.
+// Uses sentinel block IDs and ignores optional support-mode fillers.
+export function analyzeFillerNeeds(imageData: ImageData, options: ConversionOptions): FillerNeedStats {
+  const sentinel = "__filler_analysis__";
+  const delayedSentinel = "__filler_analysis_delayed__";
+  const resolvedSentinel = resolveBlockName(sentinel);
+  const resolvedDelayed = resolveBlockName(delayedSentinel);
+
+  const analysisOptions: ConversionOptions = {
+    ...options,
+    fillerBlock: sentinel,
+    suppress2LayerDelayedFillerBlock: delayedSentinel,
+    supportMode: "none",
+  };
+
+  const allBlocks: BlockEntry[] = [];
+
+  if (analysisOptions.buildMode === "suppress_rowsplit") {
+    const [h0, h1] = buildSuppressRowSplitBlocks(imageData, analysisOptions);
+    allBlocks.push(...h0, ...h1);
+  } else if (analysisOptions.buildMode === "suppress_checker") {
+    const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, analysisOptions);
+    allBlocks.push(...dominant, ...recessive);
+  } else if (analysisOptions.buildMode === "suppress_pairs_ew") {
+    allBlocks.push(...buildSuppressPairsEWBlocks(imageData, analysisOptions));
+  } else if (analysisOptions.buildMode === "suppress_2layer_late_fillers" || analysisOptions.buildMode === "suppress_2layer_late_pairs") {
+    const variant = analysisOptions.buildMode === "suppress_2layer_late_pairs" ? "late_flat_vs" : "classic";
+    allBlocks.push(...buildSuppressDualLayerBlocks(imageData, analysisOptions, variant));
+  } else {
+    const blocks = buildStaircaseModeBlocks(imageData, analysisOptions, false);
+    allBlocks.push(...blocks);
+  }
+
+  let total = 0;
+  let inGrid = 0;
+  let north = 0;
+  let delayedTotal = 0;
+  let delayedInGrid = 0;
+  const northY = new Set<number>();
+  const northZ = new Set<number>();
+  for (const b of allBlocks) {
+    if (b.blockName === resolvedSentinel || b.blockName === resolvedDelayed) {
+      total++;
+      const isDelayed = b.blockName === resolvedDelayed;
+      if (isDelayed) delayedTotal++;
+      if (b.z >= 0) {
+        inGrid++;
+        if (isDelayed) delayedInGrid++;
+      } else {
+        north++;
+        northY.add(b.y);
+        northZ.add(b.z);
+      }
+    }
+  }
+
+  const northIsSingleLine = north === 0 || (northY.size === 1 && northZ.size === 1);
+  return { total, inGrid, north, delayedTotal, delayedInGrid, northIsSingleLine };
 }

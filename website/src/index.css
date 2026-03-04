@@ -94,3 +94,9 @@
 .no-spinner {
   -moz-appearance: textfield;
 }
+
+/* Browser-dependent: muted styling hint for selectable legacy options. */
+select option[data-muted="true"] {
+  color: hsl(var(--muted-foreground));
+  -webkit-text-fill-color: hsl(var(--muted-foreground));
+}
