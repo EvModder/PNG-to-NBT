@@ -16,7 +16,7 @@
   </head>
 
   <body>
-    <script>try{if(localStorage.getItem("mapart_theme")==="\"dark\"")document.documentElement.classList.add("dark")}catch(e){}</script>
+    <script>try{const r=localStorage.getItem("mapart_theme");const t=r==="dark"||r==="light"?r:JSON.parse(r||"null");document.documentElement.classList.toggle("dark",t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches)}catch(e){document.documentElement.classList.toggle("dark",matchMedia("(prefers-color-scheme: dark)").matches)}</script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
