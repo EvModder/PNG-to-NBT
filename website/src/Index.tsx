@@ -25,7 +25,7 @@ const BUILTIN_PRESET_NAMES = ["PistonClear", "Carpets", "Fullblock"] as const;
 
 function buildPistonClearPreset(): Preset {
   const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; i++) {
+  for (let i = 1; i < BASE_COLORS.length; ++i) {
     const c = BASE_COLORS[i];
     // Use fragile blocks only; prefer carpet for COLOR_ names, then pressure_plate, then any fragile
     const carpet = c.blocks.find(b => b.endsWith("_carpet"));
@@ -49,7 +49,7 @@ function buildPistonClearPreset(): Preset {
     NETHER: "crimson_roots",
     PLANT: "pink_petals",
   };
-  for (let i = 1; i < BASE_COLORS.length; i++) {
+  for (let i = 1; i < BASE_COLORS.length; ++i) {
     const name = BASE_COLORS[i].name;
     if (overrides[name]) blocks[i] = overrides[name];
   }
@@ -58,7 +58,7 @@ function buildPistonClearPreset(): Preset {
 
 function buildCarpetsPreset(): Preset {
   const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; i++) {
+  for (let i = 1; i < BASE_COLORS.length; ++i) {
     const carpet = BASE_COLORS[i].blocks.find(b => b.endsWith("_carpet"));
     blocks[i] = carpet ?? "";
   }
@@ -108,7 +108,7 @@ function buildFullblockPreset(): Preset {
     61: "verdant_froglight",
   };
   const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; i++) {
+  for (let i = 1; i < BASE_COLORS.length; ++i) {
     blocks[i] = specific[i] ?? BASE_COLORS[i].blocks[0] ?? "";
   }
   return { name: "Fullblock", blocks };
@@ -263,11 +263,11 @@ function scanSuppressedPixels(imageData: ImageData, customColors: CustomColor[],
   const lookup = getColorLookup();
   const customLookup = buildCustomShadeLookup(customColors);
   let count = 0;
-  for (let x = 0; x < 128; x++) {
-    for (let z = 0; z < 128; z++) {
+  for (let x = 0; x < 128; ++x) {
+    for (let z = 0; z < 128; ++z) {
       const idx = (z * 128 + x) * 4;
       if (imageData.data[idx + 3] !== 0) continue;
-      for (let sz = z + 1; sz < 128; sz++) {
+      for (let sz = z + 1; sz < 128; ++sz) {
         const sIdx = (sz * 128 + x) * 4;
         if (imageData.data[sIdx + 3] === 0) continue;
         const sKey = `${imageData.data[sIdx]},${imageData.data[sIdx + 1]},${imageData.data[sIdx + 2]}`;
@@ -275,7 +275,7 @@ function scanSuppressedPixels(imageData: ImageData, customColors: CustomColor[],
         if (customMatch) {
           if (customMatch.shade === 0) {
             if (!countMode) return 1;
-            count++;
+            ++count;
           }
           break;
         }
@@ -283,7 +283,7 @@ function scanSuppressedPixels(imageData: ImageData, customColors: CustomColor[],
         if (!match || match.shade === 2) break;
         if (match.shade === 0 || match.shade === 3) {
           if (!countMode) return 1;
-          count++;
+          ++count;
         }
         break;
       }
@@ -298,8 +298,8 @@ function countVoidShadows(imageData: ImageData, customColors: CustomColor[], det
   const customLookup = buildCustomShadeLookup(customColors);
   let count = 0;
 
-  for (let z = 0; z < 128; z++) {
-    for (let x = 0; x < 128; x++) {
+  for (let z = 0; z < 128; ++z) {
+    for (let x = 0; x < 128; ++x) {
       const idx = (z * 128 + x) * 4;
       if (imageData.data[idx + 3] === 0) continue;
 
@@ -312,7 +312,7 @@ function countVoidShadows(imageData: ImageData, customColors: CustomColor[], det
       if (customMatch) {
         if (customMatch.shade === 2) continue;
         if (detectOnly) return 1;
-        count++;
+        ++count;
         continue;
       }
 
@@ -322,7 +322,7 @@ function countVoidShadows(imageData: ImageData, customColors: CustomColor[], det
       if (match.shade === 2) continue; // light shade does not use north fillers
 
       if (detectOnly) return 1;
-      count++;
+      ++count;
     }
   }
 
@@ -395,7 +395,8 @@ function formatStacks(count: number): string {
 
 function encodePreset(
   preset: Preset, fillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean, suppress2LayerDelayedFillerBlock: string,
+  buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
+  suppress2LayerDelayedFillerBlock: string, cancerPaletteSeed: boolean,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
     const block = preset.blocks[i + 1] || "";
@@ -412,13 +413,15 @@ function encodePreset(
     ccStr,
     convertUnsupported ? "1" : "0",
     suppress2LayerDelayedFillerBlock,
+    cancerPaletteSeed ? "1" : "0",
   ].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function decodePreset(encoded: string): {
   preset: Preset; filler?: string; supportMode?: SupportMode;
-  buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean; suppress2LayerDelayedFillerBlock?: string;
+  buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
+  suppress2LayerDelayedFillerBlock?: string; cancerPaletteSeed?: boolean;
 } | null {
   try {
     let s = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -451,11 +454,12 @@ function decodePreset(encoded: string): {
 
     const convertUnsupported = sections[6] === "1" ? true : sections[6] === "0" ? false : undefined;
     const suppress2LayerDelayedFillerBlock = sections[7] || undefined;
+    const cancerPaletteSeed = sections[8] === "1" ? true : sections[8] === "0" ? false : undefined;
 
     return {
       preset: { name: sections[0], blocks }, filler: sections[2] || undefined,
       supportMode, buildMode: (sections[4] || undefined) as BuildMode | undefined,
-      customColors, convertUnsupported, suppress2LayerDelayedFillerBlock,
+      customColors, convertUnsupported, suppress2LayerDelayedFillerBlock, cancerPaletteSeed,
     };
   } catch {
     return null;
@@ -473,6 +477,7 @@ const LS_KEYS = {
   sortDir: "mapart_sortDir",
   layerGap: "mapart_layerGap",
   suppress2LayerDelayedFiller: "mapart_suppress2layer_delayed_filler",
+  cancerPaletteSeed: "mapart_cancer_palette_seed",
   columnOrder: "mapart_columnOrder",
 } as const;
 
@@ -516,6 +521,8 @@ const Index = () => {
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
   );
+  const [cancerPaletteSeed, setCancerPaletteSeed] = useState(() => loadCached(LS_KEYS.cancerPaletteSeed, false));
+  const calcCancerPaletteSeed = useDeferredValue(cancerPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
   const [colStart, setColStart] = useState(0);
@@ -563,7 +570,9 @@ const Index = () => {
   // Dynamic favicon: outlined version when an image is loaded
   useEffect(() => {
     const link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
-    if (link) link.href = imageData ? "/favicon-active.png" : "/favicon.png";
+    if (!link) return;
+    const base = import.meta.env.BASE_URL || "/";
+    link.href = `${base}${imageData ? "favicon-active.png" : "favicon.png"}`;
   }, [imageData]);
   useEffect(() => {
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
@@ -620,6 +629,7 @@ const Index = () => {
       [LS_KEYS.sortDir, sortDir],
       [LS_KEYS.layerGap, layerGap],
       [LS_KEYS.suppress2LayerDelayedFiller, suppress2LayerDelayedFillerBlock],
+      [LS_KEYS.cancerPaletteSeed, cancerPaletteSeed],
       [LS_KEYS.columnOrder, columnOrder],
     ];
     entries.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
@@ -633,6 +643,7 @@ const Index = () => {
     sortDir,
     layerGap,
     suppress2LayerDelayedFillerBlock,
+    cancerPaletteSeed,
     columnOrder,
   ]);
 
@@ -697,6 +708,7 @@ const Index = () => {
   );
 
   const effectiveBuildMode = hasNonFlatShades ? buildMode : "flat";
+  const structuralCancerSeed = effectiveBuildMode === "staircase_cancer" ? calcCancerPaletteSeed : false;
 
   const uniformNonFlatDirection = useMemo(
     () => imageData && imageValid ? detectUniformNonFlatDirection(imageData, customColors) : "mixed",
@@ -723,6 +735,9 @@ const Index = () => {
           suppress2LayerDelayedFillerBlock: fillerShadingDisabled
             ? suppress2LayerDelayedFillerBlock
             : CALC_DELAYED_FILLER_SENTINEL,
+          // Palette-seed toggle only affects Cancer output randomness;
+          // mode-list dedupe should stay stable/cheap when toggling it.
+          cancerPaletteSeed: false,
           customColors,
           buildMode: opt.value,
           supportMode,
@@ -758,6 +773,7 @@ const Index = () => {
         blockMapping: preset.blocks,
         fillerBlock: CALC_FILLER_SENTINEL,
         suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
+        cancerPaletteSeed: false,
         customColors,
         buildMode: "suppress_2layer_late_fillers",
         supportMode,
@@ -858,6 +874,15 @@ const Index = () => {
   }, []);
   const supportModeTooltip = useMemo(() => getSupportModeTooltip(supportMode), [getSupportModeTooltip, supportMode]);
 
+  const materialStatsCancerSeed = useMemo(
+    () => (
+      effectiveBuildMode === "staircase_cancer" && supportMode === "none"
+        ? false
+        : structuralCancerSeed
+    ),
+    [effectiveBuildMode, supportMode, structuralCancerSeed],
+  );
+
   const rawMaterialCounts = useMemo(() => {
     if (!imageData || !imageValid) return null;
     const isPairs = effectiveBuildMode === "suppress_pairs_ew";
@@ -870,6 +895,7 @@ const Index = () => {
         blockMapping: preset.blocks,
         fillerBlock: calcStructuralFiller,
         suppress2LayerDelayedFillerBlock: calcStructuralDelayed,
+        cancerPaletteSeed: materialStatsCancerSeed,
         customColors,
         buildMode: effectiveBuildMode,
         supportMode,
@@ -887,6 +913,7 @@ const Index = () => {
     fillerShadingDisabled,
     fillerBlock,
     suppress2LayerDelayedFillerBlock,
+    materialStatsCancerSeed,
     customColors,
     effectiveBuildMode,
     supportMode,
@@ -932,7 +959,7 @@ const Index = () => {
   const colorRequiredMap = useMemo(() => {
     if (!materialCounts) return {} as Record<number, number>;
     const map: Record<number, number> = {};
-    for (let i = 1; i < BASE_COLORS.length; i++) {
+    for (let i = 1; i < BASE_COLORS.length; ++i) {
       const block = preset.blocks[i];
       if (!block) continue;
       const total = materialCounts[block] || 0;
@@ -944,7 +971,7 @@ const Index = () => {
 
   const blockToBaseIndex = useMemo(() => {
     const map: Record<string, number> = {};
-    for (let i = 1; i < BASE_COLORS.length; i++) {
+    for (let i = 1; i < BASE_COLORS.length; ++i) {
       const b = preset.blocks[i];
       if (b && !map[b]) map[b] = i;
     }
@@ -979,6 +1006,7 @@ const Index = () => {
     if (decoded.suppress2LayerDelayedFillerBlock) {
       setSuppress2LayerDelayedFillerBlock(decoded.suppress2LayerDelayedFillerBlock);
     }
+    if (decoded.cancerPaletteSeed !== undefined) setCancerPaletteSeed(decoded.cancerPaletteSeed);
     // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
   }, []);
 
@@ -1016,7 +1044,7 @@ const Index = () => {
   const customBlocksByBase = useMemo(() => {
     const map: Record<number, string[]> = {};
     for (const cc of customColors) {
-      for (let i = 0; i < BASE_COLORS.length; i++) {
+      for (let i = 0; i < BASE_COLORS.length; ++i) {
         const bc = BASE_COLORS[i];
         if (bc.r === cc.r && bc.g === cc.g && bc.b === cc.b) {
           (map[i] ??= []).includes(cc.block) || map[i].push(cc.block);
@@ -1136,6 +1164,7 @@ const Index = () => {
       customColors,
       convertUnsupported,
       suppress2LayerDelayedFillerBlock,
+      cancerPaletteSeed,
     )}`;
     navigator.clipboard.writeText(url);
     alert("Preset URL copied to clipboard!");
@@ -1266,6 +1295,7 @@ const Index = () => {
         blockMapping: preset.blocks,
         fillerBlock,
         suppress2LayerDelayedFillerBlock,
+        cancerPaletteSeed,
         customColors,
         buildMode,
         supportMode,
@@ -1343,6 +1373,8 @@ const Index = () => {
         blockMapping: preset.blocks,
         fillerBlock: CALC_FILLER_SENTINEL,
         suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
+        // Filler-need analysis is topology/shade driven and does not depend on Cancer RNG seed.
+        cancerPaletteSeed: false,
         customColors,
         buildMode: effectiveBuildMode,
         supportMode,
@@ -1409,7 +1441,8 @@ const Index = () => {
         .filter(c => c > 0)
         .map(c => (showStacks ? formatStacks(c) : String(c)).length),
     );
-    return Math.max(70, maxLen * 6 + 12);
+    // Keep a small right inset so values don't touch the required-column outline.
+    return Math.max(70, maxLen * 6 + 16);
   }, [materialCounts, colorRequiredMap, showStacks]);
 
   const visibleColumns = useMemo(
@@ -1426,7 +1459,7 @@ const Index = () => {
 
   const longestBlockName = useMemo(() => {
     let longest = "(none)";
-    for (let idx = 0; idx < BASE_COLORS.length; idx++) {
+    for (let idx = 0; idx < BASE_COLORS.length; ++idx) {
       const extra = customBlocksByBase[idx] || [];
       for (const b of BASE_COLORS[idx].blocks) if (b.length > longest.length) longest = b;
       for (const b of extra) if (b.length > longest.length) longest = b;
@@ -1605,7 +1638,7 @@ const Index = () => {
     }
 
     const stops: string[] = [];
-    for (let i = 0; i < shades.length; i++) {
+    for (let i = 0; i < shades.length; ++i) {
       const shade = shades[i];
       const [r, g, b] = getShadedRgb(idx, shade);
       const color = `rgb(${r},${g},${b})`;
@@ -1701,7 +1734,7 @@ const Index = () => {
         </span>
       ),
       required: (
-        <span key="required" className="text-[10px] font-mono text-right pr-1">
+        <span key="required" className="text-[10px] font-mono text-right pr-2">
           {reqCount > 0 ? (showStacks ? formatStacks(reqCount) : reqCount) : ""}
         </span>
       ),
@@ -1813,6 +1846,17 @@ const Index = () => {
                         className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
                       />
                     </>
+                  )}
+                  {buildMode === "staircase_cancer" && (
+                    <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
+                      <span>Palette Seed:</span>
+                      <input
+                        type="checkbox"
+                        checked={cancerPaletteSeed}
+                        onChange={e => setCancerPaletteSeed(e.target.checked)}
+                        className="h-3.5 w-3.5 accent-primary"
+                      />
+                    </label>
                   )}
                   <span className="text-xs font-semibold text-accent whitespace-nowrap">
                     Shading Method:
@@ -2037,7 +2081,7 @@ const Index = () => {
                     required: (
                       <span
                         key="required"
-                        className="cursor-pointer select-none whitespace-nowrap text-right pr-1"
+                        className="cursor-pointer select-none whitespace-nowrap text-right pr-2"
                         onClick={() => toggleSort("required")}
                         title="Sort by required block count in the current output"
                         {...colDragProps("required")}

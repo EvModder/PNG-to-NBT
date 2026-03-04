@@ -94,7 +94,7 @@ let _colorLookup: Map<string, ColorMatch> | null = null;
 export function getColorLookup(): Map<string, ColorMatch> {
   if (_colorLookup) return _colorLookup;
   _colorLookup = new Map();
-  for (let i = 1; i < BASE_COLORS.length; i++) {
+  for (let i = 1; i < BASE_COLORS.length; ++i) {
     const { r, g, b } = BASE_COLORS[i];
     for (const s of OBTAINABLE_SHADE_INDICES) {
       const mr = Math.floor(r * SHADE_MULTIPLIERS[s] / 255);

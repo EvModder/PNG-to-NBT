@@ -32,6 +32,7 @@ export interface ConversionOptions {
   blockMapping: Record<number, string>;
   fillerBlock: string;
   suppress2LayerDelayedFillerBlock?: string;
+  cancerPaletteSeed?: boolean;
   customColors: CustomColor[];
   buildMode: BuildMode;
   supportMode: SupportMode;
@@ -85,8 +86,8 @@ export function validatePng(imageData: ImageData, customColors: CustomColor[]): 
 
   const invalidColors: string[] = [];
 
-  for (let y = 0; y < 128; y++) {
-    for (let x = 0; x < 128; x++) {
+  for (let y = 0; y < 128; ++y) {
+    for (let x = 0; x < 128; ++x) {
       const idx = (y * 128 + x) * 4;
       const a = imageData.data[idx + 3];
       if (a === 0) continue;
@@ -135,6 +136,23 @@ function normalizeBlockId(raw: string): string {
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(BASE_COLORS[0].blocks.map(normalizeBlockId));
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
+
+function hashString32(input: string): number {
+  let h = 2166136261 >>> 0; // FNV-1a basis
+  for (let i = 0; i < input.length; ++i) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function getPaletteSeedOffset(blockMapping: Record<number, string>): number {
+  const serialized = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
+    const idx = i + 1;
+    return `${idx}:${blockMapping[idx] ?? ""}`;
+  }).join("|");
+  return hashString32(serialized);
+}
 
 export function isFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
@@ -220,10 +238,10 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
     blocks.push({ x, y, z, blockName: resolveBlockName(block) });
   }
 
-  for (let z = 0; z < 128; z++) {
+  for (let z = 0; z < 128; ++z) {
     const currRow: ColState[] = new Array(128);
 
-    for (let x = 0; x < 128; x++) {
+    for (let x = 0; x < 128; ++x) {
       const idx = (z * 128 + x) * 4;
       const a = imageData.data[idx + 3];
 
@@ -296,7 +314,7 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
           top = bottom + depth - 1;
         }
         const startIdx = blocks.length;
-        for (let d = 0; d < depth; d++) {
+        for (let d = 0; d < depth; ++d) {
           addBlock(x, bottom + d, z, block);
         }
         const chain = northState.waterChain
@@ -524,12 +542,12 @@ function addStaircaseWaterConvenienceFillers(
     }
   }
 
-  for (let x = 0; x < 128; x++) {
+  for (let x = 0; x < 128; ++x) {
     const zStats = columnZ.get(x);
     if (!zStats) continue;
 
     const pixelInfo = new Map<number, { shade: number; isWater: boolean }>();
-    for (let z = 0; z < 128; z++) {
+    for (let z = 0; z < 128; ++z) {
       const idx = (z * 128 + x) * 4;
       if (imageData.data[idx + 3] === 0) continue;
       const r = imageData.data[idx], g = imageData.data[idx + 1], b2 = imageData.data[idx + 2];
@@ -565,7 +583,7 @@ function addStaircaseWaterConvenienceFillers(
       const startZ = nonWaterPrimary[i];
       const startTop = zStats.get(startZ)?.maxY;
       if (startTop === undefined) {
-        i++;
+        ++i;
         continue;
       }
 
@@ -575,7 +593,7 @@ function addStaircaseWaterConvenienceFillers(
         const currZ = nonWaterPrimary[j];
         const currTop = zStats.get(currZ)?.maxY;
         if (currZ !== prevZ + 1 || currTop !== startTop) break;
-        j++;
+        ++j;
       }
 
       const zList = nonWaterPrimary.slice(i, j);
@@ -613,7 +631,10 @@ function addStaircaseWaterConvenienceFillers(
       if (southY === undefined) continue;
 
       const waterBottom = zStats.get(waterPillarZ)?.minY;
-      if (waterBottom === undefined || waterBottom === southY) continue;
+      // If the pillar already reaches y=0, this convenience filler is unnecessary in-game.
+      if (waterBottom === 0) continue;
+      // Match Valley's intended convenience case: water pillar bottom already aligned to southY.
+      if (waterBottom === undefined || waterBottom !== southY) continue;
 
       for (const z of seg.zList) {
         if (z === waterPillarZ) continue;
@@ -631,6 +652,17 @@ function buildStaircaseModeBlocks(
   options: ConversionOptions,
   includeWaterConvenienceFillers = true,
 ): BlockEntry[] {
+  if (options.buildMode === "staircase_grouped") {
+    // Grouped reuses Valley geometry/water-convenience behavior, then applies non-water grouping lifts.
+    const blocks = buildStaircaseBlocks(imageData, options);
+    applyStaircaseVariant(blocks, "staircase_valley", imageData, options);
+    if (includeWaterConvenienceFillers) {
+      addStaircaseWaterConvenienceFillers(blocks, imageData, { ...options, buildMode: "staircase_valley" });
+    }
+    applyGroupedModePostProcess(blocks, imageData, options);
+    return blocks;
+  }
+
   const blocks = buildStaircaseBlocks(imageData, options);
   applyStaircaseVariant(blocks, options.buildMode, imageData, options);
   if (includeWaterConvenienceFillers) {
@@ -688,11 +720,11 @@ function buildSuppressRowSplitBlocks(imageData: ImageData, options: ConversionOp
       blocks.push({ x, y, z, blockName: resolveBlockName(block) });
     }
 
-    for (let z = 0; z < 128; z++) {
+    for (let z = 0; z < 128; ++z) {
       const isColorRow = z % 2 === startRow;
       if (!isColorRow) continue; // only process color rows
 
-      for (let x = 0; x < 128; x++) {
+      for (let x = 0; x < 128; ++x) {
         const idx = (z * 128 + x) * 4;
         const a = imageData.data[idx + 3];
         if (a === 0) continue;
@@ -713,7 +745,7 @@ function buildSuppressRowSplitBlocks(imageData: ImageData, options: ConversionOp
         // Water: stack from y=0 up by depth, no filler needed
         if (!customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX) {
           const depth = getWaterDepth((match as ColorMatch).shade, x, z);
-          for (let d = 0; d < depth; d++) {
+          for (let d = 0; d < depth; ++d) {
             addBlock(x, d, z, block);
           }
         } else {
@@ -763,8 +795,8 @@ function buildSuppressCheckerBlocks(imageData: ImageData, options: ConversionOpt
       blocks.push({ x, y, z, blockName: resolveBlockName(block) });
     }
 
-    for (let z = 0; z < 128; z++) {
-      for (let x = 0; x < 128; x++) {
+    for (let z = 0; z < 128; ++z) {
+      for (let x = 0; x < 128; ++x) {
         const isDominant = (x + z) % 2 === 1;
         if (isDominant !== useDominant) continue;
 
@@ -788,7 +820,7 @@ function buildSuppressCheckerBlocks(imageData: ImageData, options: ConversionOpt
         if (!customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX) {
           // Checker suppress: water top is always y=-1 relative to solid color blocks at y=0.
           const depth = getWaterDepth((match as ColorMatch).shade, x, z);
-          for (let d = 0; d < depth; d++) {
+          for (let d = 0; d < depth; ++d) {
             addBlock(x, -1 - d, z, block);
           }
         } else {
@@ -875,9 +907,9 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
 
   type PixelInfo = { shade: number; isWater: boolean };
   const pixelByColumn = new Map<number, Map<number, PixelInfo>>();
-  for (let x = 0; x < 128; x++) {
+  for (let x = 0; x < 128; ++x) {
     const zInfo = new Map<number, PixelInfo>();
-    for (let z = 0; z < 128; z++) {
+    for (let z = 0; z < 128; ++z) {
       const idx = (z * 128 + x) * 4;
       if (imageData.data[idx + 3] === 0) continue;
       const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
@@ -906,12 +938,12 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
   if (!Number.isFinite(valleyMaxY)) return;
 
   interface GroupedSegment {
-    zList: number[]; // primary z rows in this segment (water may be included as northmost row)
+    zList: number[]; // non-water primary z rows in this segment
     minY: number; // lowest y among segment primary rows
   }
 
   // Per request: process columns after the first.
-  for (let x = 1; x < 128; x++) {
+  for (let x = 1; x < 128; ++x) {
     const primaryInfo = pixelByColumn.get(x);
     const zToBlocks = columnZBlocks.get(x);
     if (!primaryInfo || !zToBlocks) continue;
@@ -939,7 +971,6 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
       if (primaryInfo.get(z)?.isWater) waterZ.add(z);
     }
 
-    const processed = new Set<number>();
     const segments: GroupedSegment[] = [];
     const nonWaterPrimary = primaryZ.filter(z => !waterZ.has(z));
 
@@ -953,29 +984,14 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
         nonWaterPrimary[j] === nonWaterPrimary[j - 1] + 1 &&
         topY.get(nonWaterPrimary[j]) === runTop
       ) {
-        j++;
+        ++j;
       }
       const zList = nonWaterPrimary.slice(i, j);
-
-      const northZ = zList[0] - 1;
-      if (waterZ.has(northZ) && topY.get(northZ) === runTop) {
-        zList.unshift(northZ);
-        processed.add(northZ);
-      }
-
-      for (const z of zList) processed.add(z);
 
       let segMin = Infinity;
       for (const z of zList) segMin = Math.min(segMin, minY.get(z)!);
       segments.push({ zList, minY: segMin });
       i = j;
-    }
-
-    for (const z of primaryZ) {
-      if (waterZ.has(z) && !processed.has(z)) {
-        segments.push({ zList: [z], minY: minY.get(z)! });
-        processed.add(z);
-      }
     }
 
     // Process from highest segment downward (per request: descending min-Y).
@@ -1003,22 +1019,26 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
       const maxLift = valleyMaxY - movingMaxY;
       if (maxLift <= 0) continue;
 
-      const neighborY = new Set<number>();
+      const neighborMinY = new Set<number>();
       for (const z of seg.zList) {
         for (const nx of [x - 1, x + 1]) {
           if (nx < 0 || nx >= 128) continue;
+          const neighborPrimary = pixelByColumn.get(nx);
+          if (!neighborPrimary?.has(z)) continue;
           const neighborCol = columnZBlocks.get(nx);
           if (!neighborCol) continue;
           const bs = neighborCol.get(z);
           if (!bs) continue;
-          for (const b of bs) neighborY.add(b.y);
+          let zMin = Infinity;
+          for (const b of bs) zMin = Math.min(zMin, b.y);
+          if (Number.isFinite(zMin)) neighborMinY.add(zMin);
         }
       }
 
-      const deltas = [...neighborY]
+      const deltas = [...neighborMinY]
         .map(y => y - seg.minY)
         .filter(d => d > 0 && d <= maxLift)
-        .sort((a, b) => b - a);
+        .sort((a, b) => a - b);
       if (deltas.length === 0) continue;
 
       const isColumnShadeSafe = (delta: number): boolean => {
@@ -1071,13 +1091,6 @@ function applyStaircaseVariant(
   imageData?: ImageData,
   options?: ConversionOptions,
 ) {
-  if (mode === "staircase_grouped" && imageData && options) {
-    // Grouped starts from valley, then applies cross-column lifts where safe.
-    applyStaircaseVariant(blocks, "staircase_valley", imageData, options);
-    applyGroupedModePostProcess(blocks, imageData, options);
-    return;
-  }
-
   if (mode === "staircase_northline" || mode === "flat" || mode.startsWith("suppress")) return;
 
   if (mode === "staircase_cancer" && imageData && options) {
@@ -1118,7 +1131,7 @@ function applyStaircaseVariant(
 
       // Build pixel info from source image (shade truth)
       const pixelShade = new Map<number, { shade: number; isWater: boolean }>();
-      for (let z = 0; z < 128; z++) {
+      for (let z = 0; z < 128; ++z) {
         const idx = (z * 128 + x) * 4;
         const a = imageData.data[idx + 3];
         if (a === 0) continue;
@@ -1191,7 +1204,7 @@ function applyStaircaseVariant(
           nonWaterPrimary[j] === nonWaterPrimary[j - 1] + 1 &&
           origMaxY.get(nonWaterPrimary[j])! === y
         ) {
-          j++;
+          ++j;
         }
         const zList = nonWaterPrimary.slice(i, j);
 
@@ -1284,7 +1297,7 @@ function applyStaircaseVariant(
           } else if (waterBottomAfter !== 0) {
             // Case 2: Multi-block segment with water as northmost block
             // Keep water pillar height, place its bottom-y at southY
-            // Rest of segment aligned with water top-y, fillers at southY under non-water blocks
+            // Rest of segment aligned with water top-y; shared post-pass adds convenience fillers.
             const southY = currentMaxY.get(southZ);
             if (southY !== undefined) {
               // Water pillar keeps its depth, bottom placed at southY
@@ -1299,26 +1312,6 @@ function applyStaircaseVariant(
                 currentMaxY.set(z, currentMaxY.get(z)! + delta);
                 deltaApplied.set(z, (deltaApplied.get(z) || 0) + delta);
               }
-
-              // Place filler blocks at southY under all non-water blocks in segment
-              if (!isFillerDisabled(options.fillerBlock)) {
-                for (const z of seg.zList) {
-                  if (z === waterPillarZ) continue;
-                  const fillerBlock: BlockEntry = {
-                    x,
-                    y: southY,
-                    z,
-                    blockName: resolveBlockName(options.fillerBlock),
-                  };
-                  if (zToBlocks.has(z)) {
-                    zToBlocks.get(z)!.push(fillerBlock);
-                  } else {
-                    zToBlocks.set(z, [fillerBlock]);
-                  }
-                  blocks.push(fillerBlock);
-                }
-              }
-
               continue; // skip the generic delta application below
             }
           }
@@ -1358,6 +1351,7 @@ function applyStaircaseVariant(
 function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: ConversionOptions) {
   const lookup = getColorLookup();
   const customLookup = buildCustomColorLookup(options.customColors);
+  const seedBase = options.cancerPaletteSeed ? (42 ^ getPaletteSeedOffset(options.blockMapping)) >>> 0 : 42;
 
   // Simple seeded RNG for reproducibility per column
   function mulberry32(seed: number) {
@@ -1376,11 +1370,26 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
   }
 
   for (const [x, colBlocks] of columns) {
-    const rand = mulberry32(x * 7919 + 42);
+    const rand = mulberry32((x * 7919 + seedBase) >>> 0);
+    const randomInt = (lo: number, hi: number): number => {
+      if (hi <= lo) return lo;
+      return lo + Math.floor(rand() * (hi - lo + 1));
+    };
+    const sampleUniqueSorted = (lo: number, hi: number, count: number): number[] => {
+      if (count <= 0 || hi < lo) return [];
+      const span = hi - lo + 1;
+      if (count >= span) return Array.from({ length: span }, (_, i) => lo + i);
+      const pool = Array.from({ length: span }, (_, i) => lo + i);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0, count).sort((a, b) => a - b);
+    };
 
     // Build pixel info from source image
     const pixelInfo: Map<number, { shade: number; isWater: boolean }> = new Map();
-    for (let z = 0; z < 128; z++) {
+    for (let z = 0; z < 128; ++z) {
       const idx = (z * 128 + x) * 4;
       if (imageData.data[idx + 3] === 0) continue;
       const r = imageData.data[idx], g = imageData.data[idx + 1], b2 = imageData.data[idx + 2];
@@ -1405,72 +1414,327 @@ function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: Co
     // Snapshot original maxY per z
     const origMaxY = new Map<number, number>();
     const origMinY = new Map<number, number>();
+    const depthByZ = new Map<number, number>();
     for (const z of primaryZs) {
       const bs = zToBlocks.get(z);
       if (bs) {
         origMaxY.set(z, Math.max(...bs.map(b => b.y)));
         origMinY.set(z, Math.min(...bs.map(b => b.y)));
+        depthByZ.set(z, Math.max(...bs.map(b => b.y)) - Math.min(...bs.map(b => b.y)) + 1);
       }
     }
 
-    // Assign new random Y positions while maintaining shade constraints
-    // Use small offsets to keep total spread manageable
-    const newTopY = new Map<number, number>();
-    let lastNonTransparentY = Math.floor(rand() * 64) + 32; // random start near middle
+    const lowerBound = (z: number): number => (pixelInfo.get(z)?.isWater ? (depthByZ.get(z) ?? 1) - 1 : 0);
+    const upperBound = (_z: number): number => 127;
+    const hasPrimary = (z: number): boolean => pixelInfo.has(z);
 
-    for (const z of primaryZs) {
-      const info = pixelInfo.get(z)!;
+    // Edge relation for north(z)->south(z+1):
+    // +1: south must be higher (light), -1: south must be lower (dark), 0: equal (flat), null: no strict dependency.
+    const edgeRel = (northZ: number): -1 | 0 | 1 | null => {
+      const southZ = northZ + 1;
+      const north = pixelInfo.get(northZ);
+      const south = pixelInfo.get(southZ);
+      if (!north || !south) return null;
+      if (south.isWater) return null;
+      if (south.shade === 2) return 1;
+      if (south.shade === 1) return 0;
+      return -1;
+    };
 
-      if (info.isWater) {
-        // Water pillar: keep contiguous, place top at a constrained random Y
-        const depth = (origMaxY.get(z) ?? 0) - (origMinY.get(z) ?? 0) + 1;
-        const waterTop = lastNonTransparentY + Math.floor(rand() * 4);
-        const waterBottom = waterTop - depth + 1;
-        const finalTop = waterBottom < 0 ? waterTop + -waterBottom : waterTop;
-        newTopY.set(z, finalTop);
-        lastNonTransparentY = finalTop;
+    const isColumnValid = (topY: Map<number, number>): boolean => {
+      for (const z of primaryZs) {
+        const y = topY.get(z);
+        if (y === undefined) return false;
+        if (y < lowerBound(z) || y > upperBound(z)) return false;
+      }
+      for (let northZ = 0; northZ < 127; ++northZ) {
+        const rel = edgeRel(northZ);
+        if (rel === null) continue;
+        const southZ = northZ + 1;
+        const yN = topY.get(northZ);
+        const yS = topY.get(southZ);
+        if (yN === undefined || yS === undefined) continue;
+        if (rel === 0) {
+          if (yS !== yN) return false;
+        } else if (rel === 1) {
+          if (!(yS > yN)) return false;
+        } else {
+          // Dark dependency is strictly relative to the north column top-Y.
+          if (!(yS < yN)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    interface Segment {
+      start: number;
+      end: number;
+      dir: -1 | 1;
+    }
+    const segments: Segment[] = [];
+    const endpointHints: { zList: number[]; type: "lower" | "upper" }[] = [];
+    const prefTopY = new Map<number, number>();
+
+    // Build monotonic segments directly across contiguous primary rows.
+    // Flats stay in-segment; strict direction flips split segments at local extrema.
+    let segStart: number | null = null;
+    let segDir: -1 | 1 | null = null;
+    let prevZ: number | null = null;
+    const flush = (endZ: number | null) => {
+      if (segStart !== null && segDir !== null && endZ !== null && endZ > segStart) {
+        segments.push({ start: segStart, end: endZ, dir: segDir });
+      }
+      segStart = null;
+      segDir = null;
+    };
+
+    for (let z = 0; z < 128; ++z) {
+      if (!hasPrimary(z)) {
+        flush(prevZ);
+        prevZ = null;
+        continue;
+      }
+      if (prevZ === null) {
+        prevZ = z;
+        continue;
+      }
+      if (z !== prevZ + 1) {
+        flush(prevZ);
+        prevZ = z;
         continue;
       }
 
-      const shade = info.shade;
-      let targetY: number;
-
-      if (shade === 2) {
-        // Light: must be higher than north
-        targetY = lastNonTransparentY + 1 + Math.floor(rand() * 5);
-      } else if (shade === 1) {
-        // Normal: same as north
-        targetY = lastNonTransparentY;
-      } else {
-        // Dark: must be lower than north
-        const drop = 1 + Math.floor(rand() * 5);
-        targetY = lastNonTransparentY - drop;
+      const rel = edgeRel(prevZ);
+      if (rel === null) {
+        flush(prevZ);
+        prevZ = z;
+        continue;
+      }
+      if (rel === 0) {
+        if (segStart === null) segStart = prevZ;
+        prevZ = z;
+        continue;
       }
 
-      // No clamping during iteration to preserve shade constraints
-      newTopY.set(z, targetY);
-      lastNonTransparentY = targetY;
+      const strictDir: -1 | 1 = rel;
+      if (segStart === null) {
+        segStart = prevZ;
+        segDir = strictDir;
+      } else if (segDir === null) {
+        segDir = strictDir;
+      } else if (strictDir !== segDir) {
+        if (prevZ > segStart) segments.push({ start: segStart, end: prevZ, dir: segDir });
+        segStart = prevZ; // pivot becomes first element of the new segment
+        segDir = strictDir;
+      }
+      prevZ = z;
+    }
+    flush(prevZ);
+
+    const applySegmentPreference = (seg: Segment) => {
+      const path: number[] = [];
+      if (seg.dir === 1) {
+        for (let z = seg.start; z <= seg.end; ++z) path.push(z);
+      } else {
+        for (let z = seg.end; z >= seg.start; z--) path.push(z);
+      }
+      if (path.length < 2) return;
+
+      const groups: number[][] = [[path[0]]];
+      for (let i = 1; i < path.length; ++i) {
+        const a = path[i - 1];
+        const b = path[i];
+        const rel = a < b ? edgeRel(a) : edgeRel(b);
+        if (rel === 0) groups[groups.length - 1].push(b);
+        else groups.push([b]);
+      }
+
+      if (groups.length < 2) return;
+      const lowGroup = groups[0];
+      const highGroup = groups[groups.length - 1];
+      let lowY = Math.max(...lowGroup.map(z => lowerBound(z)));
+      const highY = Math.min(...highGroup.map(z => upperBound(z)));
+
+      const minGap = groups.length - 1;
+      if (highY - lowY < minGap) {
+        // Keep solvable under integer Y while still biasing to extreme endpoints.
+        lowY = Math.max(lowY, highY - minGap);
+      }
+
+      // Strict-step framing:
+      // groups = strictSteps + 1, first group fixed at lowY, last group fixed at highY.
+      const strictSteps = groups.length - 1;
+      const randomInteriorCount = Math.max(0, strictSteps - 1);
+      const interior = sampleUniqueSorted(lowY + 1, highY - 1, randomInteriorCount);
+      let values: number[];
+      if (interior.length === randomInteriorCount) values = [lowY, ...interior, highY];
+      else values = Array.from({ length: groups.length }, (_, i) => Math.min(highY, lowY + i));
+
+      for (let i = 0; i < groups.length; ++i) {
+        const y = values[i];
+        for (const z of groups[i]) {
+          prefTopY.set(z, y);
+        }
+      }
+
+      endpointHints.push({ zList: [...lowGroup], type: "lower" });
+      endpointHints.push({ zList: [...highGroup], type: "upper" });
+    };
+
+    for (const seg of segments) applySegmentPreference(seg);
+
+    // Freestanding/default prefs.
+    for (const z of primaryZs) {
+      if (prefTopY.has(z)) continue;
+      prefTopY.set(z, randomInt(lowerBound(z), upperBound(z)));
     }
 
-    // Normalize column to fit within 0-128
-    const yVals = [...newTopY.values()];
-    const minY = Math.min(...yVals);
-    const maxY = Math.max(...yVals);
-    const span = maxY - minY;
-    // Shift so minimum is 0, then scale if spread exceeds 128
-    const shift = -minY;
-    const scale = span > 128 ? 128 / span : 1;
+    // Backward feasible intervals so forward assignment doesn't dead-end.
+    const minFeas = new Map<number, number>();
+    const maxFeas = new Map<number, number>();
+    for (const z of primaryZs) {
+      minFeas.set(z, lowerBound(z));
+      maxFeas.set(z, upperBound(z));
+    }
 
-    const normalizedTopY = new Map<number, number>();
-    for (const [z, y] of newTopY) {
-      normalizedTopY.set(z, Math.round((y + shift) * scale));
+    for (let northZ = 126; northZ >= 0; northZ--) {
+      if (!hasPrimary(northZ)) continue;
+      let lo = minFeas.get(northZ) ?? lowerBound(northZ);
+      let hi = maxFeas.get(northZ) ?? upperBound(northZ);
+      const southZ = northZ + 1;
+      const rel = edgeRel(northZ);
+      if (rel !== null && hasPrimary(southZ)) {
+        const sLo = minFeas.get(southZ) ?? lowerBound(southZ);
+        const sHi = maxFeas.get(southZ) ?? upperBound(southZ);
+        if (rel === 0) {
+          lo = Math.max(lo, sLo);
+          hi = Math.min(hi, sHi);
+        } else if (rel === 1) {
+          hi = Math.min(hi, sHi - 1);
+        } else {
+          lo = Math.max(lo, sLo + 1);
+        }
+      }
+      if (lo > hi) {
+        const p = prefTopY.get(northZ) ?? lowerBound(northZ);
+        const clamped = Math.min(Math.max(p, lowerBound(northZ)), upperBound(northZ));
+        lo = clamped;
+        hi = clamped;
+      }
+      minFeas.set(northZ, lo);
+      maxFeas.set(northZ, hi);
+    }
+
+    // Forward assignment honoring prefs while preserving constraints.
+    const assignedTopY = new Map<number, number>();
+    for (let z = 0; z < 128; ++z) {
+      if (!hasPrimary(z)) continue;
+      let lo = minFeas.get(z) ?? lowerBound(z);
+      let hi = maxFeas.get(z) ?? upperBound(z);
+
+      const northZ = z - 1;
+      if (northZ >= 0 && hasPrimary(northZ) && assignedTopY.has(northZ)) {
+        const rel = edgeRel(northZ);
+        if (rel !== null) {
+          const yN = assignedTopY.get(northZ)!;
+          if (rel === 0) {
+            lo = Math.max(lo, yN);
+            hi = Math.min(hi, yN);
+          } else if (rel === 1) {
+            lo = Math.max(lo, yN + 1);
+          } else {
+            hi = Math.min(hi, yN - 1);
+          }
+        }
+      }
+
+      let y: number;
+      if (lo > hi) {
+        y = Math.min(Math.max(prefTopY.get(z) ?? lo, lowerBound(z)), upperBound(z));
+      } else {
+        const pref = prefTopY.get(z) ?? randomInt(lo, hi);
+        if (pref < lo || pref > hi) y = Math.min(Math.max(pref, lo), hi);
+        else y = pref;
+      }
+      assignedTopY.set(z, y);
+    }
+
+    // Endpoint revisit pass: nudge endpoints inward while preserving validity.
+    const uniqueEndpoints = new Map<string, { zList: number[]; type: "lower" | "upper" }>();
+    for (const ep of endpointHints) {
+      const key = `${ep.type}:${[...ep.zList].sort((a, b) => a - b).join(",")}`;
+      uniqueEndpoints.set(key, ep);
+    }
+
+    for (const ep of uniqueEndpoints.values()) {
+      const zList = ep.zList.filter(z => assignedTopY.has(z));
+      if (zList.length === 0) continue;
+      const snapshot = new Map<number, number>();
+      for (const z of zList) snapshot.set(z, assignedTopY.get(z)!);
+
+      const minY = Math.max(...zList.map(z => lowerBound(z)));
+      const maxY = Math.min(...zList.map(z => upperBound(z)));
+
+      if (ep.type === "upper") {
+        let maxDown = 0;
+        const currTop = Math.min(...zList.map(z => snapshot.get(z)!));
+        for (let d = 1; currTop - d >= minY; ++d) {
+          for (const z of zList) assignedTopY.set(z, snapshot.get(z)! - d);
+          if (isColumnValid(assignedTopY)) maxDown = d;
+          else break;
+        }
+        const chosen = randomInt(0, maxDown);
+        for (const z of zList) assignedTopY.set(z, snapshot.get(z)! - chosen);
+      } else {
+        let maxUp = 0;
+        const currBottom = Math.max(...zList.map(z => snapshot.get(z)!));
+        for (let d = 1; currBottom + d <= maxY; ++d) {
+          for (const z of zList) assignedTopY.set(z, snapshot.get(z)! + d);
+          if (isColumnValid(assignedTopY)) maxUp = d;
+          else break;
+        }
+        const chosen = randomInt(0, maxUp);
+        for (const z of zList) assignedTopY.set(z, snapshot.get(z)! + chosen);
+      }
+    }
+
+    // Safety net: if endpoint pass created any invalid state, restore forward assignment.
+    if (!isColumnValid(assignedTopY)) {
+      assignedTopY.clear();
+      for (let z = 0; z < 128; ++z) {
+        if (!hasPrimary(z)) continue;
+        let lo = minFeas.get(z) ?? lowerBound(z);
+        let hi = maxFeas.get(z) ?? upperBound(z);
+        const northZ = z - 1;
+        if (northZ >= 0 && hasPrimary(northZ) && assignedTopY.has(northZ)) {
+          const rel = edgeRel(northZ);
+          if (rel !== null) {
+            const yN = assignedTopY.get(northZ)!;
+            if (rel === 0) lo = hi = yN;
+            else if (rel === 1) lo = Math.max(lo, yN + 1);
+            else hi = Math.min(hi, yN - 1);
+          }
+        }
+        if (lo > hi) assignedTopY.set(z, Math.min(Math.max(prefTopY.get(z) ?? lo, lowerBound(z)), upperBound(z)));
+        else assignedTopY.set(z, randomInt(lo, hi));
+      }
+    }
+    if (!isColumnValid(assignedTopY)) {
+      // Absolute safety fallback: preserve original valid staircase tops.
+      assignedTopY.clear();
+      for (const z of primaryZs) {
+        const y = origMaxY.get(z);
+        if (y !== undefined) assignedTopY.set(z, y);
+      }
     }
 
     // Apply deltas to blocks
     const deltaApplied = new Map<number, number>();
     for (const z of primaryZs) {
       const origTop = origMaxY.get(z);
-      const newTop = normalizedTopY.get(z);
+      const newTop = assignedTopY.get(z);
       if (origTop === undefined || newTop === undefined) continue;
       const delta = newTop - origTop;
       deltaApplied.set(z, delta);
@@ -1511,7 +1775,7 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
     }
 
     for (const x of cols) {
-      for (let z = 0; z < 128; z++) {
+      for (let z = 0; z < 128; ++z) {
         const isColorRow = useEvenRows ? z % 2 === 1 : z % 2 === 0;
         if (!isColorRow) continue;
 
@@ -1535,7 +1799,7 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
         // Water: stack from baseY upward by depth
         if (!customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX) {
           const depth = getWaterDepth((match as ColorMatch).shade, x, z);
-          for (let d = 0; d < depth; d++) {
+          for (let d = 0; d < depth; ++d) {
             addBlock(x, baseY + d, z, block);
           }
           if (baseY + depth - 1 > maxYUsed) maxYUsed = baseY + depth - 1;
@@ -1578,7 +1842,7 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
     steps.push(stepBlocks);
     anchor--;
     baseY = maxYUsed + 1;
-    step++;
+    ++step;
   }
 
   return steps;
@@ -1651,16 +1915,16 @@ function buildSuppressDualLayerBlocks(
   }
 
   // Snapshot source pixel data up front.
-  for (let x = 0; x < 128; x++) {
-    for (let z = 0; z < 128; z++) {
+  for (let x = 0; x < 128; ++x) {
+    for (let z = 0; z < 128; ++z) {
       pixelGrid[x][z] = getPixelInfo(x, z);
     }
   }
 
   // Optimization: certain recessive pixels can drop to the dominant layer when they replace
   // the north filler of the dominant-flat pixel directly south.
-  for (let x = 0; x < 128; x++) {
-    for (let recZ = 0; recZ < 127; recZ++) {
+  for (let x = 0; x < 128; ++x) {
+    for (let recZ = 0; recZ < 127; ++recZ) {
       if (!isRecessive(x, recZ)) continue;
       const domZ = recZ + 1;
       if (!isDominant(x, domZ)) continue;
@@ -1694,7 +1958,7 @@ function buildSuppressDualLayerBlocks(
   }
 
   // Place solids and water pillars first (south -> north per column).
-  for (let x = 0; x < 128; x++) {
+  for (let x = 0; x < 128; ++x) {
     for (let z = 127; z >= 0; z--) {
       const info = pixelGrid[x][z];
       if (!info) continue;
@@ -1711,7 +1975,7 @@ function buildSuppressDualLayerBlocks(
         }
 
         const depth = getWaterDepth(info.shade, x, z);
-        for (let d = 0; d < depth; d++) {
+        for (let d = 0; d < depth; ++d) {
           addBlock(x, topY - d, z, info.block);
         }
         topYGrid[x][z] = topY;
@@ -1742,8 +2006,8 @@ function buildSuppressDualLayerBlocks(
   const resolvedNormal = resolveBlockName(options.fillerBlock);
   const resolvedDelayed = resolveBlockName(options.suppress2LayerDelayedFillerBlock || options.fillerBlock);
 
-  for (let x = 0; x < 128; x++) {
-    for (let z = 0; z < 128; z++) {
+  for (let x = 0; x < 128; ++x) {
+    for (let z = 0; z < 128; ++z) {
       const info = pixelGrid[x][z];
       if (!info || info.isWater || info.shade === 2) continue; // light shade needs no north filler
 
@@ -1838,7 +2102,7 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
     // Material count = max occurrence of each block across any single step/segment
     const steps = buildSuppressPairsEWBlocksByStep(imageData, options);
     const [sStart, sEnd] = options.stepRange ?? [0, steps.length - 1];
-    for (let i = sStart; i <= sEnd && i < steps.length; i++) {
+    for (let i = sStart; i <= sEnd && i < steps.length; ++i) {
       const stepBlocks = steps[i];
       applySupport(stepBlocks, options);
       const stepCounts: Record<string, number> = {};
@@ -1954,14 +2218,14 @@ export function analyzeFillerNeeds(imageData: ImageData, options: ConversionOpti
   const northZ = new Set<number>();
   for (const b of allBlocks) {
     if (b.blockName === resolvedSentinel || b.blockName === resolvedDelayed) {
-      total++;
+      ++total;
       const isDelayed = b.blockName === resolvedDelayed;
-      if (isDelayed) delayedTotal++;
+      if (isDelayed) ++delayedTotal;
       if (b.z >= 0) {
-        inGrid++;
-        if (isDelayed) delayedInGrid++;
+        ++inGrid;
+        if (isDelayed) ++delayedInGrid;
       } else {
-        north++;
+        ++north;
         northY.add(b.y);
         northZ.add(b.z);
       }
