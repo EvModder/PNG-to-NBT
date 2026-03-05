@@ -192,6 +192,7 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: "staircase_southline", label: "Staircase (Southline)" },
   { value: "staircase_cancer", label: "Staircase (Cancer)" },
 ];
+const PAGE_CONTENT_PADDING_PX = 12; // from outer wrapper `p-3`
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: "suppress_rowsplit", label: "Suppress (Row-split)", muted: true },
@@ -564,8 +565,12 @@ const Index = () => {
   const presetToolbarSectionRef = useRef<HTMLElement>(null);
   const presetToolbarRowRef = useRef<HTMLDivElement>(null);
   const fillerToolbarSectionRef = useRef<HTMLElement>(null);
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+  const creditsRef = useRef<HTMLDivElement>(null);
   const [presetToolbarMinWidthPx, setPresetToolbarMinWidthPx] = useState(0);
   const [fillerToolbarMinWidthPx, setFillerToolbarMinWidthPx] = useState(0);
+  const [creditsFloatGapPx, setCreditsFloatGapPx] = useState(0);
+  const creditsFloatGapRef = useRef(0);
 
   // Dynamic favicon: outlined version when an image is loaded
   useEffect(() => {
@@ -1536,6 +1541,35 @@ const Index = () => {
     setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerMeasured) > 1 ? fillerMeasured : prev));
   }, []);
 
+  const recalcCreditsFloatGap = useCallback(() => {
+    // Keep simple flow order for stacked/mobile layouts.
+    if (window.innerWidth < 1024) {
+      if (creditsFloatGapRef.current !== 0) {
+        creditsFloatGapRef.current = 0;
+        setCreditsFloatGapPx(0);
+      }
+      return;
+    }
+    const leftCol = leftColumnRef.current;
+    const creditsEl = creditsRef.current;
+    if (!leftCol || !creditsEl) return;
+
+    const currentGap = creditsFloatGapRef.current;
+    const leftBottom = leftCol.getBoundingClientRect().bottom;
+    const creditsRect = creditsEl.getBoundingClientRect();
+    const viewportBottom = window.innerHeight;
+    const targetBottomRaw = Math.min(viewportBottom - PAGE_CONTENT_PADDING_PX, leftBottom);
+    // Keep credits visible on-screen even after scrolling past the left-column bottom.
+    const targetBottom = Math.max(creditsRect.height, targetBottomRaw);
+    const naturalTop = creditsRect.top - currentGap;
+    const desiredTop = targetBottom - creditsRect.height;
+    const nextGap = Math.max(0, Math.round(desiredTop - naturalTop));
+    if (Math.abs(nextGap - currentGap) > 1) {
+      creditsFloatGapRef.current = nextGap;
+      setCreditsFloatGapPx(nextGap);
+    }
+  }, []);
+
   useLayoutEffect(() => {
     measureToolbarMinWidths();
     let rafId = 0;
@@ -1557,27 +1591,53 @@ const Index = () => {
   }, [measureToolbarMinWidths]);
 
   useLayoutEffect(() => {
-    measureToolbarMinWidths();
+    recalcCreditsFloatGap();
+    let rafId = 0;
+    const schedule = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(recalcCreditsFloatGap);
+    };
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    if (leftColumnRef.current) ro?.observe(leftColumnRef.current);
+    if (creditsRef.current) ro?.observe(creditsRef.current);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, { passive: true });
+    return () => {
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule);
+      ro?.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, [recalcCreditsFloatGap]);
+
+  // Some image-driven layout updates do not always trigger a reliable resize event chain.
+  // Nudge a follow-up recalc after key state transitions so credits updates stay immediate.
+  useLayoutEffect(() => {
+    let r1 = 0, r2 = 0;
+    r1 = requestAnimationFrame(() => {
+      recalcCreditsFloatGap();
+      r2 = requestAnimationFrame(recalcCreditsFloatGap);
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
   }, [
-    measureToolbarMinWidths,
-    presets,
-    activeIdx,
-    presetDirty,
-    isBuiltinUnedited,
+    recalcCreditsFloatGap,
     imageData,
+    imageValid,
+    paletteErrors.length,
+    missingBlocks.length,
+    showNoFillerWarning,
+    showNorthRowAlignmentInfo,
+    colRangeEnabled,
+    colStart,
+    colEnd,
+    usedIndices.length,
+    unusedIndices.length,
+    showUnusedColors,
     hasNonFlatShades,
     buildMode,
-    layerGap,
-    staircaseModeOptions,
-    suppressModeOptions,
-    fillerBlock,
-    suppress2LayerDelayedFillerBlock,
-    supportMode,
-    fillerDisabled,
-    showLateFillerInput,
-    fillerOnlyCount,
-    materialCounts,
-    showStacks,
   ]);
 
   const leftColumnMinWidthPx = useMemo(
@@ -1764,9 +1824,10 @@ const Index = () => {
         </button>
       </header>
 
-      <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-stretch gap-3 p-3 max-w-[2000px] mx-auto">
+      <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-start gap-3 p-3 max-w-[2000px] mx-auto">
         {/* LEFT COLUMN */}
         <div
+          ref={leftColumnRef}
           className="contents lg:block lg:flex-[3_1_0%] min-w-0 lg:min-w-[var(--left-column-min-width)]"
           style={{
             ["--color-table-min-width" as any]: `${colorTableMinWidthPx}px`,
@@ -2196,8 +2257,11 @@ const Index = () => {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="order-2 lg:order-none lg:flex-[1_1_0%] lg:min-w-[320px] lg:max-w-[542px] flex flex-col">
-          <section className="bg-card border border-border rounded-md p-3">
+        <div
+          className="contents lg:order-none lg:flex-[1_1_0%] lg:min-w-[320px] lg:max-w-[542px] lg:flex lg:flex-col"
+        >
+          <div className="order-2 lg:order-none">
+            <section className="bg-card border border-border rounded-md p-3">
             <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt PNG</h2>
             {/* Convert unsupported colors checkbox – hidden; conversion is now always on
             <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none">
@@ -2405,10 +2469,15 @@ const Index = () => {
                 )}
               </div>
             )}
-          </section>
+            </section>
+          </div>
 
           {/* Credits */}
-          <div className="mt-auto text-[11px] text-muted-foreground text-left space-y-0.5 px-1 pt-4">
+          <div
+            ref={creditsRef}
+            className="order-4 lg:order-none text-[11px] text-muted-foreground text-left space-y-0.5 px-1 pt-4"
+            style={creditsFloatGapPx > 0 ? { transform: `translateY(${creditsFloatGapPx}px)` } : undefined}
+          >
             <h3 className="text-xs font-semibold text-accent mb-1">Credits</h3>
             <p>
               <a
