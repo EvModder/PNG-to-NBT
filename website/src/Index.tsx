@@ -2256,7 +2256,7 @@ const Index = () => {
               placeholder="resin_block"
               className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
             />
-            {imageData && !fillerDisabled && (
+            {!fillerDisabled && (
               <div className="flex items-center gap-1">
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">
                   Support:
