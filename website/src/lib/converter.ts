@@ -33,6 +33,7 @@ export interface ConversionOptions {
   fillerBlock: string;
   suppress2LayerDelayedFillerBlock?: string;
   cancerPaletteSeed?: boolean;
+  forceZ129?: boolean;
   customColors: CustomColor[];
   buildMode: BuildMode;
   supportMode: SupportMode;
@@ -485,8 +486,8 @@ function applySupport(blocks: BlockEntry[], options: ConversionOptions) {
 }
 
 // Normalize blocks so min Y=0 and min Z=0, return dimensions
-function normalizeAndMeasure(blocks: BlockEntry[]): { sizeX: number; sizeY: number; sizeZ: number } {
-  if (blocks.length === 0) return { sizeX: 128, sizeY: 1, sizeZ: 128 };
+function normalizeAndMeasure(blocks: BlockEntry[], forceZ129 = false): { sizeX: number; sizeY: number; sizeZ: number } {
+  if (blocks.length === 0) return { sizeX: 128, sizeY: 1, sizeZ: forceZ129 ? 129 : 128 };
 
   let minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (const b of blocks) {
@@ -504,10 +505,16 @@ function normalizeAndMeasure(blocks: BlockEntry[]): { sizeX: number; sizeY: numb
   const rawSizeZ = (minZ < 0 ? maxZ - minZ : maxZ) + 1;
   // Ensure Z dimension is at least 128 (full map width) plus filler row if present
   const minSizeZ = minZ < 0 ? 129 : 128;
+  let sizeZ = Math.max(rawSizeZ, minSizeZ);
+  if (forceZ129 && sizeZ === 128) {
+    // Add one empty northern row by shifting all occupied rows south by +1.
+    for (const b of blocks) b.z += 1;
+    sizeZ = 129;
+  }
   return {
     sizeX: 128,
     sizeY: maxY - minY + 1,
-    sizeZ: Math.max(rawSizeZ, minSizeZ),
+    sizeZ,
   };
 }
 
@@ -686,7 +693,7 @@ export async function convertToNbt(
   if (options.buildMode === "suppress_pairs_ew") {
     const blocks = buildSuppressPairsEWBlocks(imageData, options);
     applySupport(blocks, options);
-    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
     const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
     return { data: await gzipCompress(nbtData), isZip: false };
   }
@@ -695,7 +702,7 @@ export async function convertToNbt(
     const variant = options.buildMode === "suppress_2layer_late_pairs" ? "late_flat_vs" : "classic";
     const blocks = buildSuppressDualLayerBlocks(imageData, options, variant);
     applySupport(blocks, options);
-    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
     const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
     return { data: await gzipCompress(nbtData), isZip: false };
   }
@@ -703,7 +710,7 @@ export async function convertToNbt(
   const blocks = buildStaircaseModeBlocks(imageData, options);
   applySupport(blocks, options);
 
-  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
+  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
   const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
   return { data: await gzipCompress(nbtData), isZip: false };
 }
@@ -862,7 +869,7 @@ async function buildRowSplit(
   const [half0, half1] = buildSuppressRowSplitBlocks(imageData, options);
 
   async function toNbt(blocks: BlockEntry[]): Promise<Uint8Array> {
-    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
     const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
     return gzipCompress(nbtData);
   }
@@ -885,7 +892,7 @@ async function buildCheckerSplit(
   const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, options);
 
   async function toNbt(blocks: BlockEntry[]): Promise<Uint8Array> {
-    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks);
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
     const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
     return gzipCompress(nbtData);
   }
@@ -2128,9 +2135,9 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
   return counts;
 }
 
-function canonicalBlockSignature(blocks: BlockEntry[]): string {
+function canonicalBlockSignature(blocks: BlockEntry[], forceZ129 = false): string {
   const clone = blocks.map(b => ({ ...b }));
-  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(clone);
+  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(clone, forceZ129);
   clone.sort((a, b) => a.x - b.x || a.y - b.y || a.z - b.z || a.blockName.localeCompare(b.blockName));
   return [
     `${sizeX},${sizeY},${sizeZ},${clone.length}`,
@@ -2142,29 +2149,29 @@ function canonicalBlockSignature(blocks: BlockEntry[]): string {
 export function computeBuildModeSignature(imageData: ImageData, options: ConversionOptions): string {
   if (options.buildMode === "suppress_rowsplit") {
     const [h0, h1] = buildSuppressRowSplitBlocks(imageData, options);
-    return `${canonicalBlockSignature(h0)}||${canonicalBlockSignature(h1)}`;
+    return `${canonicalBlockSignature(h0, options.forceZ129 === true)}||${canonicalBlockSignature(h1, options.forceZ129 === true)}`;
   }
   if (options.buildMode === "suppress_checker") {
     const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, options);
-    return `${canonicalBlockSignature(dominant)}||${canonicalBlockSignature(recessive)}`;
+    return `${canonicalBlockSignature(dominant, options.forceZ129 === true)}||${canonicalBlockSignature(recessive, options.forceZ129 === true)}`;
   }
 
   if (options.buildMode === "suppress_pairs_ew") {
     const blocks = buildSuppressPairsEWBlocks(imageData, options);
     applySupport(blocks, options);
-    return canonicalBlockSignature(blocks);
+    return canonicalBlockSignature(blocks, options.forceZ129 === true);
   }
 
   if (options.buildMode === "suppress_2layer_late_fillers" || options.buildMode === "suppress_2layer_late_pairs") {
     const variant = options.buildMode === "suppress_2layer_late_pairs" ? "late_flat_vs" : "classic";
     const blocks = buildSuppressDualLayerBlocks(imageData, options, variant);
     applySupport(blocks, options);
-    return canonicalBlockSignature(blocks);
+    return canonicalBlockSignature(blocks, options.forceZ129 === true);
   }
 
   const blocks = buildStaircaseModeBlocks(imageData, options);
   applySupport(blocks, options);
-  return canonicalBlockSignature(blocks);
+  return canonicalBlockSignature(blocks, options.forceZ129 === true);
 }
 
 export interface FillerNeedStats {

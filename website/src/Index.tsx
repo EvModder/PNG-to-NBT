@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect, type RefObject } from "react";
 import { Moon, Sun, Plus, Minus } from "lucide-react";
 import { BASE_COLORS, WATER_BASE_INDEX, getColorLookup, getShadedRgb } from "@/data/mapColors";
+import { EXCLUDED_COLORS } from "@/data/excludedColors";
 import {
   validatePng,
   convertToNbt,
@@ -45,9 +46,11 @@ const getDisplayName = (name: string): string =>
   name === "SNOW" ? "WHITE" : name === "WOOL" ? "STEM" : name.startsWith("COLOR_") ? name.slice(6) : name;
 
 const normalizeBlockIconId = (raw: string): string => raw.trim().replace(/^minecraft:/, "").split("[")[0];
-const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set(
+const KNOWN_PRIMARY_ICON_BLOCKS = new Set(
   BASE_COLORS.flatMap(c => c.blocks),
 );
+const KNOWN_EXCLUDED_ICON_BLOCKS = new Set(EXCLUDED_COLORS.flat());
+const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set([...KNOWN_PRIMARY_ICON_BLOCKS, ...KNOWN_EXCLUDED_ICON_BLOCKS]);
 const isTextureHiddenBlock = (blockName: string): boolean => {
   const id = normalizeBlockIconId(blockName);
   return id.endsWith("_door") || id.endsWith("_fence_gate") || id === "bedrock";
@@ -93,8 +96,8 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: "staircase_southline", label: "Staircase (Southline)" },
   { value: "staircase_cancer", label: "Staircase (Cancer)" },
 ];
-const PAGE_CONTENT_PADDING_PX = 12; // from outer wrapper `p-3`
-const LAYOUT_GAP_PX = 12;
+const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
+const LAYOUT_GAP_PX = 8;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: "suppress_rowsplit", label: "Suppress (Row-split)", muted: true },
@@ -129,6 +132,50 @@ function formatStacks(count: number): string {
   const st = Math.floor(rem / 64);
   const items = rem % 64;
   return [sb && `${sb}sb`, st && `${st}st`, items && String(items)].filter(Boolean).join(" ") || "0";
+}
+
+type DeferredTextInputProps = {
+  value: string;
+  onCommit: (next: string) => void;
+  className: string;
+  placeholder?: string;
+  inputRef?: RefObject<HTMLInputElement>;
+  delayMs?: number;
+};
+
+function DeferredTextInput({
+  value,
+  onCommit,
+  className,
+  placeholder,
+  inputRef,
+  delayMs = 180,
+}: DeferredTextInputProps) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (draft === value) return;
+    const id = window.setTimeout(() => onCommit(draft), delayMs);
+    return () => window.clearTimeout(id);
+  }, [draft, value, onCommit, delayMs]);
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== value) onCommit(draft);
+      }}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
 }
 
 function encodePreset(
@@ -222,6 +269,9 @@ const LS_KEYS = {
   suppress2LayerDelayedFiller: "mapart_suppress2layer_delayed_filler",
   cancerPaletteSeed: "mapart_cancer_palette_seed",
   columnOrder: "mapart_columnOrder",
+  showTransparentRow: "mapart_secret_showTransparentRow",
+  showExcludedBlocks: "mapart_secret_showExcludedBlocks",
+  forceZ129: "mapart_secret_forceZ129",
 } as const;
 
 const getStoredTheme = (): "light" | "dark" | null => {
@@ -261,6 +311,7 @@ const Index = () => {
     loadCached(LS_KEYS.suppress2LayerDelayedFiller, "slime_block"),
   );
   const calcFillerBlock = useDeferredValue(fillerBlock);
+  const calcSuppress2LayerDelayedFillerBlock = useDeferredValue(suppress2LayerDelayedFillerBlock);
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
   );
@@ -299,6 +350,10 @@ const Index = () => {
   const [isDark, setIsDark] = useState(resolveDarkTheme);
   const [convertUnsupported, /* setConvertUnsupported */] = useState(true); // always on; checkbox commented out
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, ALL_COLUMNS));
+  const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, false));
+  const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, false));
+  const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, false));
+  const [showSecretsDialog, setShowSecretsDialog] = useState(false);
   const dragColRef = useRef<ColumnId | null>(null);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -409,6 +464,9 @@ const Index = () => {
       [LS_KEYS.suppress2LayerDelayedFiller, suppress2LayerDelayedFillerBlock],
       [LS_KEYS.cancerPaletteSeed, cancerPaletteSeed],
       [LS_KEYS.columnOrder, columnOrder],
+      [LS_KEYS.showTransparentRow, showTransparentRow],
+      [LS_KEYS.showExcludedBlocks, showExcludedBlocks],
+      [LS_KEYS.forceZ129, forceZ129],
     ];
     entries.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
   }, [
@@ -428,6 +486,9 @@ const Index = () => {
     suppress2LayerDelayedFillerBlock,
     cancerPaletteSeed,
     columnOrder,
+    showTransparentRow,
+    showExcludedBlocks,
+    forceZ129,
   ]);
 
   const hasNonFlatShades = useMemo(
@@ -479,6 +540,7 @@ const Index = () => {
   }, [calcFillerBlock]);
   const fillerDisabled = useMemo(() => isFillerDisabled(fillerBlock), [fillerBlock]);
   const fillerShadingDisabled = useMemo(() => isShadeFillerDisabled(fillerBlock), [fillerBlock]);
+  const calcFillerShadingDisabled = useMemo(() => isShadeFillerDisabled(calcFillerBlock), [calcFillerBlock]);
 
   const missingBlocks = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return [];
@@ -514,13 +576,14 @@ const Index = () => {
       try {
         const signature = computeBuildModeSignature(imageData, {
           blockMapping: preset.blocks,
-          fillerBlock: fillerShadingDisabled ? fillerBlock : CALC_FILLER_SENTINEL,
-          suppress2LayerDelayedFillerBlock: fillerShadingDisabled
-            ? suppress2LayerDelayedFillerBlock
+          fillerBlock: calcFillerShadingDisabled ? calcFillerBlock : CALC_FILLER_SENTINEL,
+          suppress2LayerDelayedFillerBlock: calcFillerShadingDisabled
+            ? calcSuppress2LayerDelayedFillerBlock
             : CALC_DELAYED_FILLER_SENTINEL,
           // Palette-seed toggle only affects Cancer output randomness;
           // mode-list dedupe should stay stable/cheap when toggling it.
           cancerPaletteSeed: false,
+          forceZ129,
           customColors,
           buildMode: opt.value,
           supportMode,
@@ -541,12 +604,13 @@ const Index = () => {
     hasNonFlatShades,
     uniformNonFlatDirection,
     preset.blocks,
-    fillerShadingDisabled,
-    fillerBlock,
-    suppress2LayerDelayedFillerBlock,
+    calcFillerShadingDisabled,
+    calcFillerBlock,
+    calcSuppress2LayerDelayedFillerBlock,
     customColors,
     supportMode,
     layerGap,
+    forceZ129,
   ]);
 
   const lateFillersNeedStats = useMemo(() => {
@@ -670,9 +734,9 @@ const Index = () => {
   const rawMaterialCounts = useMemo(() => {
     if (!imageData || !imageValid) return null;
     const isPairs = effectiveBuildMode === "suppress_pairs_ew";
-    const calcStructuralFiller = fillerShadingDisabled ? fillerBlock : CALC_FILLER_SENTINEL;
-    const calcStructuralDelayed = fillerShadingDisabled
-      ? suppress2LayerDelayedFillerBlock
+    const calcStructuralFiller = calcFillerShadingDisabled ? calcFillerBlock : CALC_FILLER_SENTINEL;
+    const calcStructuralDelayed = calcFillerShadingDisabled
+      ? calcSuppress2LayerDelayedFillerBlock
       : CALC_DELAYED_FILLER_SENTINEL;
     try {
       return computeMaterialCounts(imageData, {
@@ -694,9 +758,9 @@ const Index = () => {
     imageData,
     imageValid,
     preset.blocks,
-    fillerShadingDisabled,
-    fillerBlock,
-    suppress2LayerDelayedFillerBlock,
+    calcFillerShadingDisabled,
+    calcFillerBlock,
+    calcSuppress2LayerDelayedFillerBlock,
     materialStatsCancerSeed,
     customColors,
     effectiveBuildMode,
@@ -709,20 +773,20 @@ const Index = () => {
 
   const materialCounts = useMemo(() => {
     if (!rawMaterialCounts) return null;
-    if (fillerShadingDisabled) return rawMaterialCounts;
+    if (calcFillerShadingDisabled) return rawMaterialCounts;
 
     const remapped: Record<string, number> = {};
     for (const [name, count] of Object.entries(rawMaterialCounts)) {
       const target =
         name === CALC_FILLER_SENTINEL
-          ? fillerBlock
+          ? calcFillerBlock
           : name === CALC_DELAYED_FILLER_SENTINEL
-            ? suppress2LayerDelayedFillerBlock
+            ? calcSuppress2LayerDelayedFillerBlock
             : name;
       remapped[target] = (remapped[target] || 0) + count;
     }
     return remapped;
-  }, [rawMaterialCounts, fillerShadingDisabled, fillerBlock, suppress2LayerDelayedFillerBlock]);
+  }, [rawMaterialCounts, calcFillerShadingDisabled, calcFillerBlock, calcSuppress2LayerDelayedFillerBlock]);
 
   const sortedMaterials = useMemo(
     () =>
@@ -736,9 +800,9 @@ const Index = () => {
 
   const fillerOnlyCount = useMemo(() => {
     if (!rawMaterialCounts) return 0;
-    if (fillerShadingDisabled) return rawMaterialCounts[fillerBlock] || 0;
+    if (calcFillerShadingDisabled) return rawMaterialCounts[calcFillerBlock] || 0;
     return rawMaterialCounts[CALC_FILLER_SENTINEL] || 0;
-  }, [fillerShadingDisabled, rawMaterialCounts, fillerBlock]);
+  }, [calcFillerShadingDisabled, rawMaterialCounts, calcFillerBlock]);
 
   const colorRequiredMap = useMemo(() => {
     if (!materialCounts) return {} as Record<number, number>;
@@ -747,11 +811,11 @@ const Index = () => {
       const block = preset.blocks[i];
       if (!block) continue;
       const total = materialCounts[block] || 0;
-      const colorOnly = block === fillerBlock ? Math.max(0, total - fillerOnlyCount) : total;
+      const colorOnly = block === calcFillerBlock ? Math.max(0, total - fillerOnlyCount) : total;
       if (colorOnly > 0) map[i] = colorOnly;
     }
     return map;
-  }, [materialCounts, preset.blocks, fillerBlock, fillerOnlyCount]);
+  }, [materialCounts, preset.blocks, calcFillerBlock, fillerOnlyCount]);
 
   const blockToBaseIndex = useMemo(() => {
     const map: Record<string, number> = {};
@@ -839,7 +903,7 @@ const Index = () => {
   }, [customColors]);
 
   const sortedIndices = useMemo(() => {
-    const base = [0, ...DEFAULT_SORTED];
+    const base = showTransparentRow ? [0, ...DEFAULT_SORTED] : [...DEFAULT_SORTED];
     if (sortKey === "default") return base;
     const dir = sortDir === "asc" ? 1 : -1;
     const sorters: Record<string, (a: number, b: number) => number> = {
@@ -853,17 +917,17 @@ const Index = () => {
       required: (a, b) => dir * ((colorRequiredMap[a] || 0) - (colorRequiredMap[b] || 0)),
     };
     return sorters[sortKey] ? base.sort(sorters[sortKey]) : base;
-  }, [sortKey, sortDir, materialCounts, colorRequiredMap]);
+  }, [sortKey, sortDir, materialCounts, colorRequiredMap, showTransparentRow]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
     const effectiveUsed = new Set<number>(usedBaseColors);
-    effectiveUsed.add(0); // Keep transparent/void color row visible in the main table.
+    if (showTransparentRow) effectiveUsed.add(0);
     return {
       usedIndices: sortedIndices.filter(i => effectiveUsed.has(i)),
       unusedIndices: sortedIndices.filter(i => !effectiveUsed.has(i)),
     };
-  }, [sortedIndices, imageValid, usedBaseColors]);
+  }, [sortedIndices, imageValid, usedBaseColors, showTransparentRow]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -1077,6 +1141,7 @@ const Index = () => {
         fillerBlock,
         suppress2LayerDelayedFillerBlock,
         cancerPaletteSeed,
+        forceZ129,
         customColors,
         buildMode,
         supportMode,
@@ -1191,8 +1256,7 @@ const Index = () => {
     (fillerNeedStats?.delayedTotal ?? 0) > 0;
   const showNorthRowAlignmentInfo =
     canGenerate &&
-    !fillerShadingDisabled &&
-    (fillerNeedStats?.north ?? 0) > 0;
+    (forceZ129 || (!fillerShadingDisabled && (fillerNeedStats?.north ?? 0) > 0));
   const noFillerWarningDetails = useMemo(() => {
     if (!showNoFillerWarning || !fillerNeedStats) return "";
     const parts: string[] = [];
@@ -1243,14 +1307,16 @@ const Index = () => {
   const longestBlockName = useMemo(() => {
     let longest = "(none)";
     for (let idx = 0; idx < BASE_COLORS.length; ++idx) {
+      const excluded = showExcludedBlocks ? EXCLUDED_COLORS[idx] ?? [] : [];
       const extra = customBlocksByBase[idx] || [];
       for (const b of BASE_COLORS[idx].blocks) if (b.length > longest.length) longest = b;
+      for (const b of excluded) if (b.length > longest.length) longest = b;
       for (const b of extra) if (b.length > longest.length) longest = b;
       const selected = preset.blocks[idx] || "";
       if (selected.length > longest.length) longest = selected;
     }
     return longest;
-  }, [customBlocksByBase, preset.blocks]);
+  }, [customBlocksByBase, preset.blocks, showExcludedBlocks]);
 
   useLayoutEffect(() => {
     const el = blockMeasureSelectRef.current;
@@ -1513,11 +1579,19 @@ const Index = () => {
   });
 
   const getAllBlocks = (idx: number) => {
+    const excluded = showExcludedBlocks ? EXCLUDED_COLORS[idx] ?? [] : [];
     const extra = customBlocksByBase[idx] || [];
-    return [...BASE_COLORS[idx].blocks, ...extra.filter(eb => !BASE_COLORS[idx].blocks.includes(eb))];
+    const selected = preset.blocks[idx] || "";
+    const withExcluded = [
+      ...BASE_COLORS[idx].blocks,
+      ...excluded.filter(eb => !BASE_COLORS[idx].blocks.includes(eb)),
+    ];
+    const withCustom = [...withExcluded, ...extra.filter(eb => !withExcluded.includes(eb))];
+    return selected && !withCustom.includes(selected) ? [...withCustom, selected] : withCustom;
   };
   const getNameBlocks = (blocks: string[]): string[] => [...blocks].sort();
-  const getTextureBlocks = (blocks: string[]): string[] => blocks.filter(b => !isTextureHiddenBlock(b));
+  const getTextureBlocks = (blocks: string[]): string[] =>
+    showExcludedBlocks ? blocks : blocks.filter(b => !isTextureHiddenBlock(b));
 
   const pad2 = (n: number) => String(n).padStart(2, "\u2007");
 
@@ -1552,8 +1626,16 @@ const Index = () => {
     shade === 2 ? "light" : shade === 1 ? "flat" : "dark";
 
   const getBlockIconSrc = useCallback(
-    (block: string): string =>
-      `${import.meta.env.BASE_URL}block-icons/precomputed/${toBlockIconKey(block)}.png`,
+    (block: string): string => {
+      const key = toBlockIconKey(block);
+      if (KNOWN_PRIMARY_ICON_BLOCKS.has(block)) {
+        return `${import.meta.env.BASE_URL}block-icons/precomputed/${key}.png`;
+      }
+      if (KNOWN_EXCLUDED_ICON_BLOCKS.has(block)) {
+        return `${import.meta.env.BASE_URL}block-icons/precomputed/unused/${key}.png`;
+      }
+      return `${import.meta.env.BASE_URL}block-icons/precomputed/${key}.png`;
+    },
     [],
   );
 
@@ -1776,20 +1858,29 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-2 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-primary">MapArt PNG → NBT</h1>
+      <header className="border-b border-border px-4 py-1.5 flex items-center justify-between bg-[hsl(var(--header-bg))]">
+        <h1 className="text-base font-bold text-primary">
+          <button
+            type="button"
+            className="hover:underline decoration-dotted underline-offset-2"
+            onClick={() => setShowSecretsDialog(true)}
+            title="Open secrets settings"
+          >
+            MapArt PNG → NBT
+          </button>
+        </h1>
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
+          className="p-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
           aria-label="Toggle theme"
         >
-          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
         </button>
       </header>
 
       <div
         ref={layoutRootRef}
-        className={`flex gap-3 p-3 max-w-[2000px] mx-auto ${
+        className={`flex gap-2 p-2 max-w-[2000px] mx-auto ${
           isStackedLayout ? "flex-col" : "flex-row flex-wrap items-start"
         }`}
       >
@@ -1804,7 +1895,7 @@ const Index = () => {
         >
           <div className={`${isStackedLayout ? "order-1" : ""} space-y-2`}>
           {/* Preset Manager */}
-          <section ref={presetToolbarSectionRef} className="bg-card border border-border rounded-md p-2">
+          <section ref={presetToolbarSectionRef} className="bg-card border border-border rounded-md p-1.5">
             <div
               className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
             >
@@ -1930,26 +2021,24 @@ const Index = () => {
           {/* Filler Block + Support + Shading Method */}
           <section
             ref={fillerToolbarSectionRef}
-            className={`bg-card border border-border rounded-md p-2 flex items-center gap-2 ${
+            className={`bg-card border border-border rounded-md p-1.5 flex items-center gap-1.5 ${
               isStackedLayout ? "flex-wrap" : "flex-nowrap"
             }`}
           >
             <span className="text-xs font-semibold text-accent whitespace-nowrap">Filler:</span>
-            <input
-              ref={fillerInputRef}
-              type="text"
+            <DeferredTextInput
+              inputRef={fillerInputRef}
               value={fillerBlock}
-              onChange={e => setFillerBlock(e.target.value)}
+              onCommit={setFillerBlock}
               placeholder="resin_block"
               className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
             />
             {showLateFillerInput && (
               <>
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">Late-Filler:</span>
-                <input
-                  type="text"
+                <DeferredTextInput
                   value={suppress2LayerDelayedFillerBlock}
-                  onChange={e => setSuppress2LayerDelayedFillerBlock(e.target.value)}
+                  onCommit={setSuppress2LayerDelayedFillerBlock}
                   placeholder="slime_block"
                   className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                 />
@@ -2533,6 +2622,57 @@ const Index = () => {
           </div>
         </div>
       </div>
+      {showSecretsDialog && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setShowSecretsDialog(false)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-md p-3 shadow-lg"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-accent">Secret Settings</h2>
+              <button
+                type="button"
+                className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
+                onClick={() => setShowSecretsDialog(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-2 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showTransparentRow}
+                  onChange={e => setShowTransparentRow(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Show color_id=0 row</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showExcludedBlocks}
+                  onChange={e => setShowExcludedBlocks(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Show excluded blocks</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={forceZ129}
+                  onChange={e => setForceZ129(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Z-width always 129</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
       {swatchTooltip && (
         <div
           className="fixed z-50 pointer-events-none px-1.5 py-1 rounded border border-border bg-popover text-popover-foreground text-[10px] font-mono whitespace-nowrap"
