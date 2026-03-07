@@ -302,6 +302,8 @@ const Index = () => {
   const dragColRef = useRef<ColumnId | null>(null);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const swatchTooltipRafRef = useRef<number | null>(null);
+  const swatchTooltipPendingRef = useRef<{ text: string; x: number; y: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const fillerInputRef = useRef<HTMLInputElement>(null);
@@ -311,7 +313,6 @@ const Index = () => {
   const [blockMeasureInsetsPx, setBlockMeasureInsetsPx] = useState(10);
   const [blockTextureCollapsedWidthPx, setBlockTextureCollapsedWidthPx] = useState(44);
   const presetToolbarSectionRef = useRef<HTMLElement>(null);
-  const presetToolbarRowRef = useRef<HTMLDivElement>(null);
   const fillerToolbarSectionRef = useRef<HTMLElement>(null);
   const leftColumnRef = useRef<HTMLDivElement>(null);
   const rightColumnRef = useRef<HTMLDivElement>(null);
@@ -337,6 +338,15 @@ const Index = () => {
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, []);
+  useEffect(
+    () => () => {
+      if (swatchTooltipRafRef.current !== null) {
+        cancelAnimationFrame(swatchTooltipRafRef.current);
+        swatchTooltipRafRef.current = null;
+      }
+    },
+    [],
+  );
 
   const preset = presets[activeIdx] || buildPistonClearPreset();
 
@@ -539,10 +549,10 @@ const Index = () => {
     layerGap,
   ]);
 
-  const twoLayerHasLateVoidNeed = useMemo(() => {
-    if (!imageData || !imageValid || !hasNonFlatShades) return false;
+  const lateFillersNeedStats = useMemo(() => {
+    if (!imageData || !imageValid || !hasNonFlatShades) return null;
     try {
-      const stats = analyzeFillerNeeds(imageData, {
+      return analyzeFillerNeeds(imageData, {
         blockMapping: preset.blocks,
         fillerBlock: CALC_FILLER_SENTINEL,
         suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
@@ -553,9 +563,8 @@ const Index = () => {
         baseName: "",
         layerGap,
       });
-      return stats.delayedTotal > 0;
     } catch {
-      return false;
+      return null;
     }
   }, [
     imageData,
@@ -566,6 +575,8 @@ const Index = () => {
     supportMode,
     layerGap,
   ]);
+
+  const twoLayerHasLateVoidNeed = (lateFillersNeedStats?.delayedTotal ?? 0) > 0;
 
   const suppressModeOptions = useMemo((): ModeOption[] => {
     const options: ModeOption[] = [...BASE_SUPPRESS_OPTIONS];
@@ -1138,6 +1149,7 @@ const Index = () => {
 
   const fillerNeedStats = useMemo(() => {
     if (!imageData || !imageValid) return null;
+    if (effectiveBuildMode === "suppress_2layer_late_fillers") return lateFillersNeedStats;
     try {
       return analyzeFillerNeeds(imageData, {
         blockMapping: preset.blocks,
@@ -1160,6 +1172,7 @@ const Index = () => {
     preset.blocks,
     customColors,
     effectiveBuildMode,
+    lateFillersNeedStats,
     supportMode,
     layerGap,
   ]);
@@ -1296,26 +1309,25 @@ const Index = () => {
     [blockDisplayMode, blockColExpanded, blockColMinWidthPx, blockTextureCollapsedWidthPx],
   );
 
-  const measureIntrinsicWidth = (el: HTMLElement): number => {
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.style.position = "absolute";
-    clone.style.left = "-10000px";
-    clone.style.top = "0";
-    clone.style.visibility = "hidden";
-    clone.style.width = "max-content";
-    clone.style.minWidth = "0";
-    clone.style.maxWidth = "none";
-    document.body.appendChild(clone);
-    const width = Math.ceil(clone.getBoundingClientRect().width);
-    clone.remove();
-    return width;
+  const measureNoWrapSectionWidth = (el: HTMLElement): number => {
+    const { width, minWidth, maxWidth, flexWrap } = el.style;
+    el.style.width = "max-content";
+    el.style.minWidth = "max-content";
+    el.style.maxWidth = "none";
+    el.style.flexWrap = "nowrap";
+    const measured = Math.ceil(el.getBoundingClientRect().width);
+    el.style.width = width;
+    el.style.minWidth = minWidth;
+    el.style.maxWidth = maxWidth;
+    el.style.flexWrap = flexWrap;
+    return measured;
   };
 
   const measureToolbarMinWidths = useCallback(() => {
     const presetEl = presetToolbarSectionRef.current;
     const fillerEl = fillerToolbarSectionRef.current;
-    const presetMeasured = presetEl ? measureIntrinsicWidth(presetEl) : 0;
-    const fillerMeasured = fillerEl ? measureIntrinsicWidth(fillerEl) : 0;
+    const presetMeasured = presetEl ? measureNoWrapSectionWidth(presetEl) : 0;
+    const fillerMeasured = fillerEl ? measureNoWrapSectionWidth(fillerEl) : 0;
     setPresetToolbarMinWidthPx(prev => (Math.abs(prev - presetMeasured) > 1 ? presetMeasured : prev));
     setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerMeasured) > 1 ? fillerMeasured : prev));
   }, []);
@@ -1368,50 +1380,15 @@ const Index = () => {
     };
 
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
-    const mo = typeof MutationObserver !== "undefined" ? new MutationObserver(scheduleMeasure) : null;
     if (presetToolbarSectionRef.current) ro?.observe(presetToolbarSectionRef.current);
-    if (presetToolbarRowRef.current) ro?.observe(presetToolbarRowRef.current);
     if (fillerToolbarSectionRef.current) ro?.observe(fillerToolbarSectionRef.current);
-    if (presetToolbarSectionRef.current) {
-      mo?.observe(presetToolbarSectionRef.current, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-        attributes: true,
-      });
-    }
-    if (fillerToolbarSectionRef.current) {
-      mo?.observe(fillerToolbarSectionRef.current, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-        attributes: true,
-      });
-    }
     window.addEventListener("resize", scheduleMeasure);
     return () => {
       window.removeEventListener("resize", scheduleMeasure);
       ro?.disconnect();
-      mo?.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [
-    measureToolbarMinWidths,
-    activeIdx,
-    preset.name,
-    presetDirty,
-    imageData,
-    hasNonFlatShades,
-    buildMode,
-    layerGap,
-    showLateFillerInput,
-    fillerDisabled,
-    imageHasWater,
-    fillerIsNoneColor,
-    supportMode,
-    fillerOnlyCount,
-    showStacks,
-  ]);
+  }, [measureToolbarMinWidths, isStackedLayout]);
 
   useLayoutEffect(() => {
     recalcCreditsFloatGap();
@@ -1421,6 +1398,7 @@ const Index = () => {
       rafId = requestAnimationFrame(recalcCreditsFloatGap);
     };
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    if (layoutRootRef.current) ro?.observe(layoutRootRef.current);
     if (leftColumnRef.current) ro?.observe(leftColumnRef.current);
     if (creditsRef.current) ro?.observe(creditsRef.current);
     window.addEventListener("resize", schedule);
@@ -1585,6 +1563,27 @@ const Index = () => {
     return `${hex} - Click to copy (${getShadeLabel(shade)})`;
   };
 
+  const queueSwatchTooltip = useCallback((next: { text: string; x: number; y: number } | null) => {
+    swatchTooltipPendingRef.current = next;
+    if (swatchTooltipRafRef.current !== null) return;
+    swatchTooltipRafRef.current = requestAnimationFrame(() => {
+      swatchTooltipRafRef.current = null;
+      const pending = swatchTooltipPendingRef.current;
+      setSwatchTooltip(prev => {
+        if (!pending && !prev) return prev;
+        if (!pending || !prev) return pending;
+        if (
+          pending.text === prev.text &&
+          Math.abs(pending.x - prev.x) < 0.5 &&
+          Math.abs(pending.y - prev.y) < 0.5
+        ) {
+          return prev;
+        }
+        return pending;
+      });
+    });
+  }, []);
+
   const getSwatchShadeAtPointer = useCallback((e: React.MouseEvent<HTMLDivElement>, swatchShades: number[]): number => {
     const rect = e.currentTarget.getBoundingClientRect();
     const y = Math.min(rect.height - 0.001, Math.max(0, e.clientY - rect.top));
@@ -1595,12 +1594,12 @@ const Index = () => {
 
   const handleSwatchTooltip = useCallback((e: React.MouseEvent<HTMLDivElement>, idx: number, swatchShades: number[]) => {
     const shade = getSwatchShadeAtPointer(e, swatchShades);
-    setSwatchTooltip({
+    queueSwatchTooltip({
       text: getShadeTooltip(idx, shade),
       x: e.clientX + 12,
       y: e.clientY + 12,
     });
-  }, [getShadeTooltip, getSwatchShadeAtPointer]);
+  }, [getShadeTooltip, getSwatchShadeAtPointer, queueSwatchTooltip]);
 
   const renderColorRow = (idx: number) => {
     const color = BASE_COLORS[idx];
@@ -1620,20 +1619,20 @@ const Index = () => {
             key="clr"
             className="w-5 h-5 rounded border border-border transition-shadow"
             onMouseEnter={e =>
-              setSwatchTooltip({
+              queueSwatchTooltip({
                 text: "Transparent",
                 x: e.clientX + 12,
                 y: e.clientY + 12,
               })
             }
             onMouseMove={e =>
-              setSwatchTooltip({
+              queueSwatchTooltip({
                 text: "Transparent",
                 x: e.clientX + 12,
                 y: e.clientY + 12,
               })
             }
-            onMouseLeave={() => setSwatchTooltip(null)}
+            onMouseLeave={() => queueSwatchTooltip(null)}
           >
             <img
               src={`${import.meta.env.BASE_URL}block-icons/precomputed/world_border.png`}
@@ -1649,7 +1648,7 @@ const Index = () => {
             style={getColorSwatchStyle(idx)}
             onMouseEnter={e => handleSwatchTooltip(e, idx, swatchShades)}
             onMouseMove={e => handleSwatchTooltip(e, idx, swatchShades)}
-            onMouseLeave={() => setSwatchTooltip(null)}
+            onMouseLeave={() => queueSwatchTooltip(null)}
             onClick={e => {
               const shade = getSwatchShadeAtPointer(e, swatchShades);
               const [r, g, b] = getShadedRgb(idx, shade);
@@ -1737,7 +1736,8 @@ const Index = () => {
                       <img
                         src={getBlockIconSrc(b)}
                         alt={b}
-                        loading="lazy"
+                        loading="eager"
+                        decoding="sync"
                         className="block w-full h-full object-cover"
                         style={{ imageRendering: "pixelated" }}
                       />
@@ -1806,7 +1806,6 @@ const Index = () => {
           {/* Preset Manager */}
           <section ref={presetToolbarSectionRef} className="bg-card border border-border rounded-md p-2">
             <div
-              ref={presetToolbarRowRef}
               className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
             >
               <span className="text-xs font-semibold text-accent">Preset:</span>

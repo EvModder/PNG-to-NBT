@@ -41,7 +41,7 @@ export const FRAGILE_BLOCKS = new Set([
 
   // Plants / vegetation with placement conditions
   "pink_petals", "fern", "short_grass", "tall_grass", "dead_bush",
-  "sugar_cane", "cactus", "vines", "lily_pad",
+  "sugar_cane", "cactus", "vine", "lily_pad",
   "crimson_roots", "warped_roots", "nether_sprouts",
   "twisting_vines", "weeping_vines",
   "crimson_fungus", "warped_fungus",

@@ -1,0 +1,5 @@
+<IfModule mod_headers.c>
+  <FilesMatch "\.png$">
+    Header set Cache-Control "public, max-age=604800, stale-while-revalidate=86400"
+  </FilesMatch>
+</IfModule>
