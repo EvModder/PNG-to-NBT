@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
 import { Moon, Sun, Plus, Minus } from "lucide-react";
-import { BASE_COLORS, SHADE_MULTIPLIERS, WATER_BASE_INDEX, getColorLookup, getShadedRgb } from "@/data/mapColors";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { BASE_COLORS, WATER_BASE_INDEX, getColorLookup, getShadedRgb } from "@/data/mapColors";
 import {
   validatePng,
   convertToNbt,
@@ -14,130 +13,23 @@ import {
   type BuildMode,
   type SupportMode,
 } from "@/lib/converter";
-
-// ── Preset types ──
-interface Preset {
-  name: string;
-  blocks: Record<number, string>;
-}
-
-const BUILTIN_PRESET_NAMES = ["PistonClear", "Carpets", "Fullblock"] as const;
-
-function buildPistonClearPreset(): Preset {
-  const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const c = BASE_COLORS[i];
-    // Use fragile blocks only; prefer carpet for COLOR_ names, then pressure_plate, then any fragile
-    const carpet = c.blocks.find(b => b.endsWith("_carpet"));
-    const plate = c.blocks.find(b => b.endsWith("_pressure_plate"));
-    const anyFragile = c.blocks.find(b => isFragileBlock(b));
-    if (c.name.startsWith("COLOR_") && carpet) {
-      blocks[i] = carpet;
-    } else if (plate) {
-      blocks[i] = plate;
-    } else if (anyFragile) {
-      blocks[i] = anyFragile;
-    } else {
-      blocks[i] = ""; // no fragile option → (none)
-    }
-  }
-  // Apply specific overrides from old Default that used fragile blocks
-  const overrides: Record<string, string> = {
-    SNOW: "white_carpet",
-    WOOL: "white_candle",
-    WOOD: "oak_pressure_plate",
-    NETHER: "crimson_roots",
-    PLANT: "pink_petals",
-  };
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const name = BASE_COLORS[i].name;
-    if (overrides[name]) blocks[i] = overrides[name];
-  }
-  return { name: "PistonClear", blocks };
-}
-
-function buildCarpetsPreset(): Preset {
-  const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const carpet = BASE_COLORS[i].blocks.find(b => b.endsWith("_carpet"));
-    blocks[i] = carpet ?? "";
-  }
-  return { name: "Carpets", blocks };
-}
-
-function buildFullblockPreset(): Preset {
-  const specific: Record<number, string> = {
-    1: "grass_block",
-    2: "sandstone",
-    3: "mushroom_stem",
-    4: "tnt",
-    5: "ice",
-    6: "iron_block",
-    7: "oak_leaves",
-    8: "white_concrete",
-    10: "granite",
-    11: "andesite",
-    12: "oak_leaves[waterlogged=true]",
-    13: "oak_planks",
-    14: "diorite",
-    15: "orange_concrete",
-    16: "magenta_concrete",
-    17: "light_blue_concrete",
-    18: "yellow_concrete",
-    19: "lime_concrete",
-    20: "pink_concrete",
-    21: "gray_concrete",
-    22: "light_gray_concrete",
-    23: "cyan_concrete",
-    24: "purple_concrete",
-    25: "blue_concrete",
-    26: "brown_concrete",
-    27: "green_concrete",
-    28: "red_concrete",
-    29: "black_concrete",
-    30: "gold_block",
-    31: "prismarine_bricks",
-    34: "spruce_planks",
-    35: "netherrack",
-    36: "white_terracotta",
-    37: "orange_terracotta",
-    43: "gray_terracotta",
-    44: "light_gray_terracotta",
-    53: "crimson_planks",
-    56: "warped_planks",
-    61: "verdant_froglight",
-  };
-  const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    blocks[i] = specific[i] ?? BASE_COLORS[i].blocks[0] ?? "";
-  }
-  return { name: "Fullblock", blocks };
-}
-
-const BUILTIN_BUILDERS: Record<string, () => Preset> = {
-  PistonClear: buildPistonClearPreset,
-  Carpets: buildCarpetsPreset,
-  Fullblock: buildFullblockPreset,
-};
-
-const getBuiltinPreset = (name: string): Preset | null => BUILTIN_BUILDERS[name]?.() ?? null;
-
-function loadPresets(): Preset[] {
-  const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => BUILTIN_BUILDERS[n]());
-  try {
-    const raw = localStorage.getItem("mapart_presets");
-    if (raw) {
-      const parsed: Preset[] = JSON.parse(raw);
-      return [
-        ...builtins,
-        ...parsed.filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number])),
-      ];
-    }
-  } catch {
-    /* ignore */
-  }
-  return builtins;
-}
+import {
+  buildCustomShadeLookup,
+  computeImageInfo,
+  countVoidShadows,
+  detectUniformNonFlatDirection,
+  imageHasNonFlatShades,
+  scanSuppressedPixels,
+} from "@/lib/imageAnalysis";
+import { toBlockIconKey } from "@/lib/blockIconKey";
+import {
+  BUILTIN_PRESET_NAMES,
+  buildPistonClearPreset,
+  getBuiltinPreset,
+  isAutoCustomPresetName,
+  loadPresets,
+  type Preset,
+} from "@/lib/presets";
 
 function loadCached<T>(key: string, fallback: T): T {
   try {
@@ -151,6 +43,15 @@ function loadCached<T>(key: string, fallback: T): T {
 
 const getDisplayName = (name: string): string =>
   name === "SNOW" ? "WHITE" : name === "WOOL" ? "STEM" : name.startsWith("COLOR_") ? name.slice(6) : name;
+
+const normalizeBlockIconId = (raw: string): string => raw.trim().replace(/^minecraft:/, "").split("[")[0];
+const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set(
+  BASE_COLORS.flatMap(c => c.blocks),
+);
+const isTextureHiddenBlock = (blockName: string): boolean => {
+  const id = normalizeBlockIconId(blockName);
+  return id.endsWith("_door") || id.endsWith("_fence_gate") || id === "bedrock";
+};
 
 // ── Creative menu order for wool/terracotta colors ──
 const WOOL_CREATIVE_ORDER = [8, 22, 21, 29, 26, 28, 15, 18, 19, 27, 23, 17, 25, 24, 16, 20];
@@ -193,6 +94,7 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: "staircase_cancer", label: "Staircase (Cancer)" },
 ];
 const PAGE_CONTENT_PADDING_PX = 12; // from outer wrapper `p-3`
+const LAYOUT_GAP_PX = 12;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: "suppress_rowsplit", label: "Suppress (Row-split)", muted: true },
@@ -217,171 +119,6 @@ const SUPPRESS_2LAYER_BASE_FLOW =
   "6) Repeat for the entire map\n\n" +
   "Layer gap controls vertical spacing between lower and upper suppress layers.";
 const LAYER_GAP_TOOLTIP = "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.";
-
-// ── Shared pixel helpers ──
-interface CustomShadeMatch {
-  block: string;
-  shade: number; // 0=dark, 1=flat, 2=light
-  customIndex: number;
-}
-
-const buildCustomShadeLookup = (customColors: CustomColor[]) => {
-  const lookup = new Map<string, CustomShadeMatch>();
-  for (const [customIndex, cc] of customColors.entries()) {
-    const block = cc.block?.trim();
-    if (!block) continue;
-    for (const shade of [0, 1, 2]) {
-      const r = Math.floor((cc.r * SHADE_MULTIPLIERS[shade]) / 255);
-      const g = Math.floor((cc.g * SHADE_MULTIPLIERS[shade]) / 255);
-      const b = Math.floor((cc.b * SHADE_MULTIPLIERS[shade]) / 255);
-      const key = `${r},${g},${b}`;
-      if (!lookup.has(key)) lookup.set(key, { block, shade, customIndex });
-    }
-  }
-  return lookup;
-};
-
-function imageHasNonFlatShades(imageData: ImageData, customColors: CustomColor[]): boolean {
-  const lookup = getColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
-  const d = imageData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] === 0) continue;
-    const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
-    const customMatch = customLookup.get(key);
-    if (customMatch) {
-      if (customMatch.shade !== 1) return true;
-      continue;
-    }
-    const match = lookup.get(key);
-    if (match?.shade !== undefined && match.shade !== 1) return true;
-  }
-  return false;
-}
-
-/** Scan suppress columns; if countMode=true returns count, else returns 0/1 for detect */
-function scanSuppressedPixels(imageData: ImageData, customColors: CustomColor[], countMode: boolean): number {
-  const lookup = getColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
-  let count = 0;
-  for (let x = 0; x < 128; ++x) {
-    for (let z = 0; z < 128; ++z) {
-      const idx = (z * 128 + x) * 4;
-      if (imageData.data[idx + 3] !== 0) continue;
-      for (let sz = z + 1; sz < 128; ++sz) {
-        const sIdx = (sz * 128 + x) * 4;
-        if (imageData.data[sIdx + 3] === 0) continue;
-        const sKey = `${imageData.data[sIdx]},${imageData.data[sIdx + 1]},${imageData.data[sIdx + 2]}`;
-        const customMatch = customLookup.get(sKey);
-        if (customMatch) {
-          if (customMatch.shade === 0) {
-            if (!countMode) return 1;
-            ++count;
-          }
-          break;
-        }
-        const match = lookup.get(sKey);
-        if (!match || match.shade === 2) break;
-        if (match.shade === 0 || match.shade === 3) {
-          if (!countMode) return 1;
-          ++count;
-        }
-        break;
-      }
-    }
-  }
-  return count;
-}
-
-/** Count pixels whose shade requires a north filler while north is transparent/void inside the 128x128 map area. */
-function countVoidShadows(imageData: ImageData, customColors: CustomColor[], detectOnly = false): number {
-  const lookup = getColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
-  let count = 0;
-
-  for (let z = 0; z < 128; ++z) {
-    for (let x = 0; x < 128; ++x) {
-      const idx = (z * 128 + x) * 4;
-      if (imageData.data[idx + 3] === 0) continue;
-
-      // "Void shadow" excludes the top boundary; north must be an in-map transparent pixel.
-      const northIsTransparent = z > 0 && imageData.data[((z - 1) * 128 + x) * 4 + 3] === 0;
-      if (!northIsTransparent) continue;
-
-      const key = `${imageData.data[idx]},${imageData.data[idx + 1]},${imageData.data[idx + 2]}`;
-      const customMatch = customLookup.get(key);
-      if (customMatch) {
-        if (customMatch.shade === 2) continue;
-        if (detectOnly) return 1;
-        ++count;
-        continue;
-      }
-
-      const match = lookup.get(key);
-      if (!match) continue;
-      if (match.baseIndex === WATER_BASE_INDEX) continue; // water shading does not use north fillers
-      if (match.shade === 2) continue; // light shade does not use north fillers
-
-      if (detectOnly) return 1;
-      ++count;
-    }
-  }
-
-  return count;
-}
-
-function computeImageInfo(imageData: ImageData, customColors: CustomColor[]) {
-  const lookup = getColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
-  const usedBaseColors = new Set<number>();
-  const usedShades = new Set<string>();
-  const d = imageData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] === 0) continue;
-    const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
-    const customMatch = customLookup.get(key);
-    if (customMatch) {
-      usedShades.add(`custom:${customMatch.customIndex}:${customMatch.shade}`);
-      continue;
-    }
-    const match = lookup.get(key);
-    if (match) {
-      usedBaseColors.add(match.baseIndex);
-      usedShades.add(`${match.baseIndex}:${match.shade}`);
-    }
-  }
-  return { uniqueShadeCount: usedShades.size, uniqueBaseColorCount: usedBaseColors.size };
-}
-
-function detectUniformNonFlatDirection(imageData: ImageData, customColors: CustomColor[]): "all_light" | "all_dark" | "mixed" {
-  const lookup = getColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
-  const d = imageData.data;
-  let sawNonTransparent = false;
-  let allLight = true;
-  let allDark = true;
-
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] === 0) continue;
-    sawNonTransparent = true;
-    const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
-    const customMatch = customLookup.get(key);
-    if (customMatch) {
-      if (customMatch.shade !== 2) allLight = false;
-      if (customMatch.shade !== 0) allDark = false;
-      continue;
-    }
-    const match = lookup.get(key);
-    if (!match) continue;
-    if (match.shade !== 2) allLight = false;
-    if (match.shade !== 0) allDark = false;
-  }
-
-  if (!sawNonTransparent) return "mixed";
-  if (allLight) return "all_light";
-  if (allDark) return "all_dark";
-  return "mixed";
-}
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -473,6 +210,11 @@ const LS_KEYS = {
   buildMode: "mapart_buildMode",
   supportMode: "mapart_supportMode",
   showStacks: "mapart_showStacks",
+  showIds: "mapart_showIds",
+  showNames: "mapart_showNames",
+  showOptions: "mapart_showOptions",
+  blockDisplayMode: "mapart_blockDisplayMode",
+  blockColExpanded: "mapart_blockColExpanded",
   activePreset: "mapart_activePreset",
   sortKey: "mapart_sortKey",
   sortDir: "mapart_sortDir",
@@ -543,9 +285,13 @@ const Index = () => {
   const [imageValid, setImageValid] = useState(false);
   const [paletteErrors, setPaletteErrors] = useState<string[]>([]);
   const [converting, setConverting] = useState(false);
-  const [showNames, setShowNames] = useState(false);
-  const [showIds, setShowIds] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
+  const [showNames, setShowNames] = useState(() => loadCached(LS_KEYS.showNames, false));
+  const [showIds, setShowIds] = useState(() => loadCached(LS_KEYS.showIds, false));
+  const [showOptions, setShowOptions] = useState(() => loadCached(LS_KEYS.showOptions, false));
+  const [blockDisplayMode, setBlockDisplayMode] = useState<"names" | "textures">(() =>
+    loadCached(LS_KEYS.blockDisplayMode, "names" as "names" | "textures"),
+  );
+  const [blockColExpanded, setBlockColExpanded] = useState(() => loadCached(LS_KEYS.blockColExpanded, true));
   const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, "default" as SortKey));
   const [sortDir, setSortDir] = useState<SortDir>(() => loadCached(LS_KEYS.sortDir, "asc" as SortDir));
   const [showUnusedColors, setShowUnusedColors] = useState(false);
@@ -560,15 +306,21 @@ const Index = () => {
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const fillerInputRef = useRef<HTMLInputElement>(null);
   const blockMeasureSelectRef = useRef<HTMLSelectElement | null>(null);
+  const blockHeaderCollapseBtnRef = useRef<HTMLButtonElement | null>(null);
   const [blockMeasureFont, setBlockMeasureFont] = useState("11px monospace");
   const [blockMeasureInsetsPx, setBlockMeasureInsetsPx] = useState(10);
+  const [blockTextureCollapsedWidthPx, setBlockTextureCollapsedWidthPx] = useState(44);
   const presetToolbarSectionRef = useRef<HTMLElement>(null);
   const presetToolbarRowRef = useRef<HTMLDivElement>(null);
   const fillerToolbarSectionRef = useRef<HTMLElement>(null);
   const leftColumnRef = useRef<HTMLDivElement>(null);
+  const rightColumnRef = useRef<HTMLDivElement>(null);
+  const layoutRootRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
   const [presetToolbarMinWidthPx, setPresetToolbarMinWidthPx] = useState(0);
   const [fillerToolbarMinWidthPx, setFillerToolbarMinWidthPx] = useState(0);
+  const [rightColumnMinWidthPx, setRightColumnMinWidthPx] = useState(320);
+  const [isStackedLayout, setIsStackedLayout] = useState(false);
   const [creditsFloatGapPx, setCreditsFloatGapPx] = useState(0);
   const creditsFloatGapRef = useRef(0);
 
@@ -621,14 +373,25 @@ const Index = () => {
 
   // Persist settings to localStorage
   useEffect(() => {
-    localStorage.setItem("mapart_presets", JSON.stringify(presets));
-  }, [presets]);
+    const persistedPresets = presets.filter((p, idx) => {
+      if (!isAutoCustomPresetName(p.name)) return true;
+      if (idx !== activeIdx) return true;
+      // Reuse yellow-dot logic: active auto-Custom with unsaved changes is discarded.
+      return !presetDirty;
+    });
+    localStorage.setItem("mapart_presets", JSON.stringify(persistedPresets));
+  }, [presets, activeIdx, presetDirty]);
   useEffect(() => {
     const entries: [string, unknown][] = [
       [LS_KEYS.filler, fillerBlock],
       [LS_KEYS.buildMode, buildMode],
       [LS_KEYS.supportMode, supportMode],
       [LS_KEYS.showStacks, showStacks],
+      [LS_KEYS.showIds, showIds],
+      [LS_KEYS.showNames, showNames],
+      [LS_KEYS.showOptions, showOptions],
+      [LS_KEYS.blockDisplayMode, blockDisplayMode],
+      [LS_KEYS.blockColExpanded, blockColExpanded],
       [LS_KEYS.activePreset, preset.name],
       [LS_KEYS.sortKey, sortKey],
       [LS_KEYS.sortDir, sortDir],
@@ -643,6 +406,11 @@ const Index = () => {
     buildMode,
     supportMode,
     showStacks,
+    showIds,
+    showNames,
+    showOptions,
+    blockDisplayMode,
+    blockColExpanded,
     preset.name,
     sortKey,
     sortDir,
@@ -1059,13 +827,8 @@ const Index = () => {
     return map;
   }, [customColors]);
 
-  const noneHasCustomBlock = useMemo(
-    () => !!customBlocksByBase[0]?.length || !!preset.blocks[0],
-    [customBlocksByBase, preset.blocks],
-  );
-
   const sortedIndices = useMemo(() => {
-    const base = noneHasCustomBlock ? [0, ...DEFAULT_SORTED] : [...DEFAULT_SORTED];
+    const base = [0, ...DEFAULT_SORTED];
     if (sortKey === "default") return base;
     const dir = sortDir === "asc" ? 1 : -1;
     const sorters: Record<string, (a: number, b: number) => number> = {
@@ -1079,13 +842,15 @@ const Index = () => {
       required: (a, b) => dir * ((colorRequiredMap[a] || 0) - (colorRequiredMap[b] || 0)),
     };
     return sorters[sortKey] ? base.sort(sorters[sortKey]) : base;
-  }, [sortKey, sortDir, materialCounts, colorRequiredMap, noneHasCustomBlock]);
+  }, [sortKey, sortDir, materialCounts, colorRequiredMap]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
+    const effectiveUsed = new Set<number>(usedBaseColors);
+    effectiveUsed.add(0); // Keep transparent/void color row visible in the main table.
     return {
-      usedIndices: sortedIndices.filter(i => usedBaseColors.has(i)),
-      unusedIndices: sortedIndices.filter(i => !usedBaseColors.has(i)),
+      usedIndices: sortedIndices.filter(i => effectiveUsed.has(i)),
+      unusedIndices: sortedIndices.filter(i => !effectiveUsed.has(i)),
     };
   }, [sortedIndices, imageValid, usedBaseColors]);
 
@@ -1496,54 +1261,68 @@ const Index = () => {
     return Math.ceil(textWidth + trimmedInsetsPx);
   }, [longestBlockName, blockMeasureFont, blockMeasureInsetsPx]);
 
+  useLayoutEffect(() => {
+    const btn = blockHeaderCollapseBtnRef.current;
+    if (!btn) return;
+    const measure = () => {
+      const w = Math.ceil(btn.getBoundingClientRect().width) + 2;
+      if (Number.isFinite(w) && w > 0) {
+        setBlockTextureCollapsedWidthPx(prev => (Math.abs(prev - w) > 1 ? w : prev));
+      }
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(btn);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
+  }, [isDark, blockColExpanded, blockDisplayMode, showIds, showNames, showOptions, columnOrder]);
+
   const colorTableMinWidthPx = useMemo(() => {
+    const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
+    const blockColWidthPx = textureCollapsed ? blockTextureCollapsedWidthPx : blockColMinWidthPx;
     // 6 columns + 5 grid gaps (`gap-1` = 4px).
     const fixedColsPx = 24 + 24 + 135 + 46 + requiredColWidth;
     const gapsPx = 5 * 4;
     // Section wrapper uses `p-2` (8px each side) and `border` (1px each side).
     const sectionInsetsPx = 8 * 2 + 1 * 2;
-    return fixedColsPx + blockColMinWidthPx + gapsPx + sectionInsetsPx;
-  }, [blockColMinWidthPx, requiredColWidth]);
+    return fixedColsPx + blockColWidthPx + gapsPx + sectionInsetsPx;
+  }, [blockColMinWidthPx, blockTextureCollapsedWidthPx, requiredColWidth, blockDisplayMode, blockColExpanded]);
 
-  const getHorizontalInsets = (el: HTMLElement): number => {
-    const cs = getComputedStyle(el);
-    return (
-      parseFloat(cs.paddingLeft || "0") +
-      parseFloat(cs.paddingRight || "0") +
-      parseFloat(cs.borderLeftWidth || "0") +
-      parseFloat(cs.borderRightWidth || "0")
-    );
-  };
+  const effectiveBlockColWidthPx = useMemo(
+    () => (blockDisplayMode === "textures" && !blockColExpanded ? blockTextureCollapsedWidthPx : blockColMinWidthPx),
+    [blockDisplayMode, blockColExpanded, blockColMinWidthPx, blockTextureCollapsedWidthPx],
+  );
 
-  const measureFlexContentWidth = (el: HTMLElement, extraPx = 0): number => {
-    const cs = getComputedStyle(el);
-    const gap = parseFloat(cs.columnGap || cs.gap || "0");
-    const children = Array.from(el.children) as HTMLElement[];
-    let total = 0;
-    children.forEach((child, i) => {
-      total += child.getBoundingClientRect().width;
-      if (i > 0) total += gap;
-    });
-    return Math.ceil(total + extraPx);
+  const measureIntrinsicWidth = (el: HTMLElement): number => {
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.style.position = "absolute";
+    clone.style.left = "-10000px";
+    clone.style.top = "0";
+    clone.style.visibility = "hidden";
+    clone.style.width = "max-content";
+    clone.style.minWidth = "0";
+    clone.style.maxWidth = "none";
+    document.body.appendChild(clone);
+    const width = Math.ceil(clone.getBoundingClientRect().width);
+    clone.remove();
+    return width;
   };
 
   const measureToolbarMinWidths = useCallback(() => {
     const presetEl = presetToolbarSectionRef.current;
-    const presetRowEl = presetToolbarRowRef.current;
     const fillerEl = fillerToolbarSectionRef.current;
-    const presetMeasured = presetEl && presetRowEl
-      ? measureFlexContentWidth(presetRowEl, getHorizontalInsets(presetEl))
-      : 0;
-    const fillerMeasured = fillerEl
-      ? measureFlexContentWidth(fillerEl, getHorizontalInsets(fillerEl))
-      : 0;
+    const presetMeasured = presetEl ? measureIntrinsicWidth(presetEl) : 0;
+    const fillerMeasured = fillerEl ? measureIntrinsicWidth(fillerEl) : 0;
     setPresetToolbarMinWidthPx(prev => (Math.abs(prev - presetMeasured) > 1 ? presetMeasured : prev));
     setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerMeasured) > 1 ? fillerMeasured : prev));
   }, []);
 
   const recalcCreditsFloatGap = useCallback(() => {
     // Keep simple flow order for stacked/mobile layouts.
-    if (window.innerWidth < 1024) {
+    if (isStackedLayout) {
       if (creditsFloatGapRef.current !== 0) {
         creditsFloatGapRef.current = 0;
         setCreditsFloatGapPx(0);
@@ -1568,7 +1347,17 @@ const Index = () => {
       creditsFloatGapRef.current = nextGap;
       setCreditsFloatGapPx(nextGap);
     }
-  }, []);
+  }, [isStackedLayout]);
+
+  useLayoutEffect(() => {
+    if (isStackedLayout) return;
+    const rightCol = rightColumnRef.current;
+    if (!rightCol) return;
+    const min = parseFloat(getComputedStyle(rightCol).minWidth || "0");
+    if (Number.isFinite(min) && min > 0) {
+      setRightColumnMinWidthPx(prev => (Math.abs(prev - min) > 1 ? min : prev));
+    }
+  }, [isStackedLayout]);
 
   useLayoutEffect(() => {
     measureToolbarMinWidths();
@@ -1579,16 +1368,50 @@ const Index = () => {
     };
 
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
+    const mo = typeof MutationObserver !== "undefined" ? new MutationObserver(scheduleMeasure) : null;
     if (presetToolbarSectionRef.current) ro?.observe(presetToolbarSectionRef.current);
     if (presetToolbarRowRef.current) ro?.observe(presetToolbarRowRef.current);
     if (fillerToolbarSectionRef.current) ro?.observe(fillerToolbarSectionRef.current);
+    if (presetToolbarSectionRef.current) {
+      mo?.observe(presetToolbarSectionRef.current, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+      });
+    }
+    if (fillerToolbarSectionRef.current) {
+      mo?.observe(fillerToolbarSectionRef.current, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+      });
+    }
     window.addEventListener("resize", scheduleMeasure);
     return () => {
       window.removeEventListener("resize", scheduleMeasure);
       ro?.disconnect();
+      mo?.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [measureToolbarMinWidths]);
+  }, [
+    measureToolbarMinWidths,
+    activeIdx,
+    preset.name,
+    presetDirty,
+    imageData,
+    hasNonFlatShades,
+    buildMode,
+    layerGap,
+    showLateFillerInput,
+    fillerDisabled,
+    imageHasWater,
+    fillerIsNoneColor,
+    supportMode,
+    fillerOnlyCount,
+    showStacks,
+  ]);
 
   useLayoutEffect(() => {
     recalcCreditsFloatGap();
@@ -1645,18 +1468,54 @@ const Index = () => {
     [colorTableMinWidthPx, presetToolbarMinWidthPx, fillerToolbarMinWidthPx],
   );
 
+  useLayoutEffect(() => {
+    const measure = () => {
+      const root = layoutRootRef.current;
+      if (!root) return;
+      const rootRect = root.getBoundingClientRect();
+      const rootStyle = getComputedStyle(root);
+      const gap = parseFloat(rootStyle.columnGap || rootStyle.gap || "0") || LAYOUT_GAP_PX;
+      const threshold = Math.round(leftColumnMinWidthPx + rightColumnMinWidthPx + gap);
+      const stackCalc = rootRect.width < threshold;
+      if (stackCalc !== isStackedLayout) setIsStackedLayout(stackCalc);
+    };
+
+    measure();
+    let rafId = 0;
+    const schedule = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    if (layoutRootRef.current) ro?.observe(layoutRootRef.current);
+    if (rightColumnRef.current) ro?.observe(rightColumnRef.current);
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.removeEventListener("resize", schedule);
+      ro?.disconnect();
+      cancelAnimationFrame(rafId);
+    };
+  }, [
+    leftColumnMinWidthPx,
+    rightColumnMinWidthPx,
+    isStackedLayout,
+    colorTableMinWidthPx,
+    presetToolbarMinWidthPx,
+    fillerToolbarMinWidthPx,
+    imageData,
+    buildMode,
+    hasNonFlatShades,
+  ]);
+
   const colWidthMap: Record<ColumnId, string> = {
     clr: "24px", id: "24px", name: "135px",
-    block: `minmax(${blockColMinWidthPx}px,1fr)`, options: "46px",
+    block: blockColExpanded ? `minmax(${effectiveBlockColWidthPx}px,1fr)` : `${effectiveBlockColWidthPx}px`,
+    options: "46px",
     required: `${requiredColWidth}px`
   };
-
-  const gridColsStyle = useMemo(
-    () => ({
-      gridTemplateColumns: visibleColumns.map(c => colWidthMap[c]).join(" "),
-    }),
-    [visibleColumns, requiredColWidth, blockColMinWidthPx],
-  );
+  const gridColsStyle: React.CSSProperties = {
+    gridTemplateColumns: visibleColumns.map(c => colWidthMap[c]).join(" "),
+  };
 
   const colDragProps = (col: ColumnId) => ({
     draggable: true,
@@ -1677,8 +1536,10 @@ const Index = () => {
 
   const getAllBlocks = (idx: number) => {
     const extra = customBlocksByBase[idx] || [];
-    return [...BASE_COLORS[idx].blocks, ...extra.filter(eb => !BASE_COLORS[idx].blocks.includes(eb))].sort();
+    return [...BASE_COLORS[idx].blocks, ...extra.filter(eb => !BASE_COLORS[idx].blocks.includes(eb))];
   };
+  const getNameBlocks = (blocks: string[]): string[] => [...blocks].sort();
+  const getTextureBlocks = (blocks: string[]): string[] => blocks.filter(b => !isTextureHiddenBlock(b));
 
   const pad2 = (n: number) => String(n).padStart(2, "\u2007");
 
@@ -1712,6 +1573,12 @@ const Index = () => {
   const getShadeLabel = (shade: number): string =>
     shade === 2 ? "light" : shade === 1 ? "flat" : "dark";
 
+  const getBlockIconSrc = useCallback(
+    (block: string): string =>
+      `${import.meta.env.BASE_URL}block-icons/precomputed/${toBlockIconKey(block)}.png`,
+    [],
+  );
+
   const getShadeTooltip = (idx: number, shade: number): string => {
     const [r, g, b] = getShadedRgb(idx, shade);
     const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
@@ -1741,22 +1608,55 @@ const Index = () => {
     const isMissing = missingBlocks.includes(idx);
     const isHighlighted = highlightedColorIdx === idx;
     const allBlocks = getAllBlocks(idx);
+    const nameBlocks = getNameBlocks(allBlocks);
+    const textureBlocks = getTextureBlocks(allBlocks);
+    const selectedBlock = preset.blocks[idx] || "";
+    const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
     const reqCount = colorRequiredMap[idx] || 0;
     const cells: Record<ColumnId, React.ReactNode> = {
       clr: (
-        <div
-          key="clr"
-          className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow"
-          style={getColorSwatchStyle(idx)}
-          onMouseEnter={e => handleSwatchTooltip(e, idx, swatchShades)}
-          onMouseMove={e => handleSwatchTooltip(e, idx, swatchShades)}
-          onMouseLeave={() => setSwatchTooltip(null)}
-          onClick={e => {
-            const shade = getSwatchShadeAtPointer(e, swatchShades);
-            const [r, g, b] = getShadedRgb(idx, shade);
-            copyColorToClipboard(r, g, b);
-          }}
-        />
+        idx === 0 ? (
+          <div
+            key="clr"
+            className="w-5 h-5 rounded border border-border transition-shadow"
+            onMouseEnter={e =>
+              setSwatchTooltip({
+                text: "Transparent",
+                x: e.clientX + 12,
+                y: e.clientY + 12,
+              })
+            }
+            onMouseMove={e =>
+              setSwatchTooltip({
+                text: "Transparent",
+                x: e.clientX + 12,
+                y: e.clientY + 12,
+              })
+            }
+            onMouseLeave={() => setSwatchTooltip(null)}
+          >
+            <img
+              src={`${import.meta.env.BASE_URL}block-icons/precomputed/world_border.png`}
+              alt="Transparent"
+              className="w-full h-full object-cover"
+              style={{ imageRendering: "pixelated" }}
+            />
+          </div>
+        ) : (
+          <div
+            key="clr"
+            className="w-5 h-5 rounded border border-border cursor-pointer hover:ring-1 hover:ring-primary/50 transition-shadow"
+            style={getColorSwatchStyle(idx)}
+            onMouseEnter={e => handleSwatchTooltip(e, idx, swatchShades)}
+            onMouseMove={e => handleSwatchTooltip(e, idx, swatchShades)}
+            onMouseLeave={() => setSwatchTooltip(null)}
+            onClick={e => {
+              const shade = getSwatchShadeAtPointer(e, swatchShades);
+              const [r, g, b] = getShadedRgb(idx, shade);
+              copyColorToClipboard(r, g, b);
+            }}
+          />
+        )
       ),
       id: (
         <span key="id" className="text-[10px] font-mono text-muted-foreground text-center tabular-nums -ml-[0.3em]">
@@ -1773,20 +1673,83 @@ const Index = () => {
         </span>
       ),
       block: (
-        <select
-          key="block"
-          ref={idx === usedIndices[0] ? blockMeasureSelectRef : undefined}
-          className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full"
-          value={preset.blocks[idx] || ""}
-          onChange={e => updateBlock(idx, e.target.value)}
-        >
-          <option value="">(none)</option>
-          {allBlocks.map(b => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
-        </select>
+        blockDisplayMode === "names" ? (
+          <select
+            key="block"
+            ref={idx === usedIndices[0] ? blockMeasureSelectRef : undefined}
+            className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full"
+            value={preset.blocks[idx] || ""}
+            onChange={e => updateBlock(idx, e.target.value)}
+          >
+            <option value="">(none)</option>
+            {nameBlocks.map(b => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div key="block" className="min-w-0 h-6">
+            <div
+              className={`flex items-center gap-0.5 h-6 min-w-0 overflow-y-hidden px-0.5 ${
+                textureCollapsed ? "justify-center" : ""
+              } ${
+                textureCollapsed ? "overflow-x-hidden" : "overflow-x-auto"
+              }`}
+            >
+              {(!textureCollapsed || selectedBlock === "") && (
+                <button
+                  type="button"
+                  className={`shrink-0 w-5 h-5 rounded border text-[10px] leading-none ${
+                    textureCollapsed
+                      ? "border-border text-muted-foreground"
+                      : selectedBlock === ""
+                      ? "border-transparent text-foreground shadow-[0_0_0_2px_hsl(var(--primary))]"
+                      : "border-border text-muted-foreground hover:text-foreground hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                  }`}
+                  title="(none)"
+                  onClick={() => updateBlock(idx, "")}
+                >
+                  ∅
+                </button>
+              )}
+              {(textureCollapsed
+                ? (selectedBlock !== "" ? [selectedBlock] : [])
+                : textureBlocks
+              ).map(b => {
+                const selected = selectedBlock === b;
+                const hasIcon = KNOWN_PRECOMPUTED_ICON_BLOCKS.has(b);
+                return (
+                  <button
+                    key={b}
+                    type="button"
+                    className={`shrink-0 w-5 h-5 rounded border overflow-hidden ${
+                      textureCollapsed
+                        ? "border-border"
+                        : selected
+                        ? "border-transparent shadow-[0_0_0_2px_hsl(var(--primary))]"
+                        : "border-border hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                    }`}
+                    title={b}
+                    onClick={() => updateBlock(idx, b)}
+                  >
+                    {hasIcon ? (
+                      <img
+                        src={getBlockIconSrc(b)}
+                        alt={b}
+                        loading="lazy"
+                        className="block w-full h-full object-cover"
+                        style={{ imageRendering: "pixelated" }}
+                      />
+                    ) : (
+                      <span className="text-[9px] text-muted-foreground">?</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )
       ),
       options: (
         <span key="options" className="text-[10px] text-muted-foreground whitespace-nowrap text-center tabular-nums">
@@ -1824,20 +1787,28 @@ const Index = () => {
         </button>
       </header>
 
-      <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-start gap-3 p-3 max-w-[2000px] mx-auto">
+      <div
+        ref={layoutRootRef}
+        className={`flex gap-3 p-3 max-w-[2000px] mx-auto ${
+          isStackedLayout ? "flex-col" : "flex-row flex-wrap items-start"
+        }`}
+      >
         {/* LEFT COLUMN */}
         <div
           ref={leftColumnRef}
-          className="contents lg:block lg:flex-[3_1_0%] min-w-0 lg:min-w-[var(--left-column-min-width)]"
+          className={`${isStackedLayout ? "contents" : "block flex-[3_1_0%] min-w-[var(--left-column-min-width)]"} min-w-0`}
           style={{
             ["--color-table-min-width" as any]: `${colorTableMinWidthPx}px`,
             ["--left-column-min-width" as any]: `${leftColumnMinWidthPx}px`,
           }}
         >
-          <div className="order-1 space-y-2 lg:order-none">
+          <div className={`${isStackedLayout ? "order-1" : ""} space-y-2`}>
           {/* Preset Manager */}
           <section ref={presetToolbarSectionRef} className="bg-card border border-border rounded-md p-2">
-            <div ref={presetToolbarRowRef} className="flex flex-wrap lg:flex-nowrap gap-1.5 items-center">
+            <div
+              ref={presetToolbarRowRef}
+              className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
+            >
               <span className="text-xs font-semibold text-accent">Preset:</span>
               <div className="inline-flex items-center gap-1">
                 <select
@@ -1960,7 +1931,9 @@ const Index = () => {
           {/* Filler Block + Support + Shading Method */}
           <section
             ref={fillerToolbarSectionRef}
-            className="bg-card border border-border rounded-md p-2 flex items-center gap-2 flex-wrap lg:flex-nowrap"
+            className={`bg-card border border-border rounded-md p-2 flex items-center gap-2 ${
+              isStackedLayout ? "flex-wrap" : "flex-nowrap"
+            }`}
           >
             <span className="text-xs font-semibold text-accent whitespace-nowrap">Filler:</span>
             <input
@@ -2030,12 +2003,15 @@ const Index = () => {
           </section>
           </div>
 
-          <div className="order-3 space-y-2 lg:order-none lg:mt-2">
+          <div className={`${isStackedLayout ? "order-3" : "mt-2"} space-y-2`}>
           {/* Color → Block */}
-          <section className="bg-card border border-border rounded-md p-2 w-full lg:min-w-[var(--color-table-min-width)]">
+          <section
+            className={`bg-card border border-border rounded-md p-2 w-full ${isStackedLayout ? "" : "min-w-[var(--color-table-min-width)]"}`}
+          >
             <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <h2 className="text-sm font-semibold text-accent">Color → Block</h2>
+                <span className="h-3 border-l border-border/70" />
                 <button
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setShowIds(v => !v)}
@@ -2043,6 +2019,7 @@ const Index = () => {
                   {showIds ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
                   IDs
                 </button>
+                <span className="h-3 border-l border-border/70" />
                 <button
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setShowNames(v => !v)}
@@ -2050,12 +2027,21 @@ const Index = () => {
                   {showNames ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
                   Names
                 </button>
+                <span className="h-3 border-l border-border/70" />
                 <button
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setShowOptions(v => !v)}
                 >
                   {showOptions ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
                   #Options
+                </button>
+                <span className="h-3 border-l border-border/70" />
+                <button
+                  className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setBlockDisplayMode(v => (v === "names" ? "textures" : "names"))}
+                  title="Toggle block display mode"
+                >
+                  View: {blockDisplayMode}
                 </button>
               </div>
               {imageInfo && imageValid && (
@@ -2124,8 +2110,27 @@ const Index = () => {
                       </span>
                     ),
                     block: (
-                      <span key="block" title="Assigned block used for this color" {...colDragProps("block")}>
-                        Block
+                      <span
+                        key="block"
+                        className="inline-flex items-center gap-1 min-w-0 w-full"
+                        title="Assigned block used for this color"
+                        {...colDragProps("block")}
+                      >
+                        <button
+                          ref={blockHeaderCollapseBtnRef}
+                          type="button"
+                          className="shrink-0 inline-flex items-center gap-0.5 cursor-pointer select-none whitespace-nowrap text-left"
+                          title={blockColExpanded ? "Collapse block column to minimum width" : "Expand block column to fill available width"}
+                          aria-label={blockColExpanded ? "Collapse block column" : "Expand block column"}
+                          onClick={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setBlockColExpanded(v => !v);
+                          }}
+                        >
+                          {blockColExpanded ? <Minus size={10} /> : <Plus size={10} />}
+                          <span>Block</span>
+                        </button>
                       </span>
                     ),
                     options: (
@@ -2258,9 +2263,14 @@ const Index = () => {
 
         {/* RIGHT COLUMN */}
         <div
-          className="contents lg:order-none lg:flex-[1_1_0%] lg:min-w-[320px] lg:max-w-[542px] lg:flex lg:flex-col"
+          ref={rightColumnRef}
+          className={
+            isStackedLayout
+              ? "contents"
+              : "flex-[1_1_0%] min-w-[320px] max-w-[542px] flex flex-col"
+          }
         >
-          <div className="order-2 lg:order-none">
+          <div className={isStackedLayout ? "order-2" : ""}>
             <section className="bg-card border border-border rounded-md p-3">
             <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt PNG</h2>
             {/* Convert unsupported colors checkbox – hidden; conversion is now always on
@@ -2475,7 +2485,7 @@ const Index = () => {
           {/* Credits */}
           <div
             ref={creditsRef}
-            className="order-4 lg:order-none text-[11px] text-muted-foreground text-left space-y-0.5 px-1 pt-4"
+            className={`${isStackedLayout ? "order-4" : ""} text-[11px] text-muted-foreground text-left space-y-0.5 px-1 pt-4`}
             style={creditsFloatGapPx > 0 ? { transform: `translateY(${creditsFloatGapPx}px)` } : undefined}
           >
             <h3 className="text-xs font-semibold text-accent mb-1">Credits</h3>
@@ -2488,7 +2498,7 @@ const Index = () => {
               >
                 EvModder
               </a>{" "}
-              — Primary author
+              — Developer
             </p>
             <p>
               <a
