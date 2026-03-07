@@ -80,17 +80,22 @@ export function scanSuppressedPixels(imageData: ImageData, customColors: CustomC
 }
 
 /** Count pixels whose shade requires a north filler while north is transparent/void inside the 128x128 map area. */
-export function countVoidShadows(imageData: ImageData, customColors: CustomColor[], detectOnly = false): number {
+export interface VoidShadowStats {
+  total: number;
+  dominant: number;
+  recessive: number;
+}
+
+export function analyzeVoidShadows(imageData: ImageData, customColors: CustomColor[]): VoidShadowStats {
   const lookup = getColorLookup();
   const customLookup = buildCustomShadeLookup(customColors);
-  let count = 0;
+  const stats: VoidShadowStats = { total: 0, dominant: 0, recessive: 0 };
 
   for (let z = 0; z < MAP_SIZE; ++z) {
     for (let x = 0; x < MAP_SIZE; ++x) {
       const idx = (z * MAP_SIZE + x) * 4;
       if (imageData.data[idx + 3] === 0) continue;
 
-      // "Void shadow" excludes the top boundary; north must be an in-map transparent pixel.
       const northIsTransparent = z > 0 && imageData.data[((z - 1) * MAP_SIZE + x) * 4 + 3] === 0;
       if (!northIsTransparent) continue;
 
@@ -98,22 +103,23 @@ export function countVoidShadows(imageData: ImageData, customColors: CustomColor
       const customMatch = customLookup.get(key);
       if (customMatch) {
         if (customMatch.shade === 2) continue;
-        if (detectOnly) return 1;
-        ++count;
-        continue;
+      } else {
+        const match = lookup.get(key);
+        if (!match || match.baseIndex === WATER_BASE_INDEX || match.shade === 2) continue;
       }
 
-      const match = lookup.get(key);
-      if (!match) continue;
-      if (match.baseIndex === WATER_BASE_INDEX) continue; // water shading does not use north fillers
-      if (match.shade === 2) continue; // light shade does not use north fillers
-
-      if (detectOnly) return 1;
-      ++count;
+      ++stats.total;
+      if (((x + (z - 1)) & 1) === 0) ++stats.recessive;
+      else ++stats.dominant;
     }
   }
 
-  return count;
+  return stats;
+}
+
+export function countVoidShadows(imageData: ImageData, customColors: CustomColor[], detectOnly = false): number {
+  const total = analyzeVoidShadows(imageData, customColors).total;
+  return detectOnly ? (total > 0 ? 1 : 0) : total;
 }
 
 export function computeImageInfo(imageData: ImageData, customColors: CustomColor[]) {

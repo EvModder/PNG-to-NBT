@@ -32,6 +32,8 @@ export type SupportMode = "none" | "steps" | "all" | "fragile" | "water";
 export interface ConversionOptions {
   blockMapping: Record<number, string>;
   fillerBlock: string;
+  dominateVoidFillerBlock?: string;
+  recessiveVoidFillerBlock?: string;
   suppress2LayerDelayedFillerBlock?: string;
   proPaletteSeed?: boolean;
   forceZ129?: boolean;
@@ -198,6 +200,16 @@ function resolveBlockName(block: string): string {
   return fullName;
 }
 
+function getStaircaseVoidFillerBlock(options: ConversionOptions, x: number, z: number): string {
+  if (z < 0 || z >= 128) return options.fillerBlock;
+  const isRecessive = ((x + z) & 1) === 0;
+  const specific = isRecessive ? options.recessiveVoidFillerBlock : options.dominateVoidFillerBlock;
+  return specific?.trim() || options.fillerBlock;
+}
+function isStaircaseVoidFillerDisabled(options: ConversionOptions, x: number, z: number): boolean {
+  return isShadeFillerDisabled(getStaircaseVoidFillerBlock(options, x, z));
+}
+
 // Strip minecraft: prefix and persistent=true for display
 function toDisplayName(blockName: string): string {
   let s = blockName.replace(/^minecraft:/, "");
@@ -239,6 +251,9 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
   function addBlock(x: number, y: number, z: number, block: string) {
     blocks.push({ x, y, z, blockName: resolveBlockName(block) });
   }
+  function addVoidShadowFiller(x: number, y: number, z: number) {
+    addBlock(x, y, z, getStaircaseVoidFillerBlock(options, x, z));
+  }
 
   for (let z = 0; z < 128; ++z) {
     const currRow: ColState[] = new Array(128);
@@ -267,31 +282,31 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
       const northTransparent = northState.transparent;
       const northY = northState.y;
 
-      if (customMatch) {
-        if (customMatch.shade === 1) {
-          // Flat: same y as north reference; filler needed if north is transparent.
-          if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, northY, z - 1, options.fillerBlock);
-          addBlock(x, northY, z, customMatch.block);
-          currRow[x] = { y: northY, transparent: false };
-        } else if (customMatch.shade === 2) {
-          // Light: 1 higher than north; no filler needed.
-          addBlock(x, northY + 1, z, customMatch.block);
+        if (customMatch) {
+          if (customMatch.shade === 1) {
+            // Flat: same y as north reference; filler needed if north is transparent.
+            if (northTransparent && !isStaircaseVoidFillerDisabled(options, x, z - 1)) addVoidShadowFiller(x, northY, z - 1);
+            addBlock(x, northY, z, customMatch.block);
+            currRow[x] = { y: northY, transparent: false };
+          } else if (customMatch.shade === 2) {
+            // Light: 1 higher than north; no filler needed.
+            addBlock(x, northY + 1, z, customMatch.block);
           currRow[x] = { y: northY + 1, transparent: false };
-        } else {
-          // Dark: 1 lower than north reference (or water-bottom reference for deep water).
-          const isDeepWater = northState.waterBottom !== undefined && northState.waterDepth! > 1;
-          if (isDeepWater) {
-            const darkY = northState.waterBottom!;
-            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkY + 1, z - 1, options.fillerBlock);
-            addBlock(x, darkY, z, customMatch.block);
-            currRow[x] = { y: darkY, transparent: false };
           } else {
-            const darkRef = northState.waterBottom !== undefined ? northState.waterBottom! : northY;
-            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkRef, z - 1, options.fillerBlock);
-            addBlock(x, darkRef - 1, z, customMatch.block);
-            currRow[x] = { y: darkRef - 1, transparent: false };
+            // Dark: 1 lower than north reference (or water-bottom reference for deep water).
+            const isDeepWater = northState.waterBottom !== undefined && northState.waterDepth! > 1;
+            if (isDeepWater) {
+              const darkY = northState.waterBottom!;
+              if (northTransparent && !isStaircaseVoidFillerDisabled(options, x, z - 1)) addVoidShadowFiller(x, darkY + 1, z - 1);
+              addBlock(x, darkY, z, customMatch.block);
+              currRow[x] = { y: darkY, transparent: false };
+            } else {
+              const darkRef = northState.waterBottom !== undefined ? northState.waterBottom! : northY;
+              if (northTransparent && !isStaircaseVoidFillerDisabled(options, x, z - 1)) addVoidShadowFiller(x, darkRef, z - 1);
+              addBlock(x, darkRef - 1, z, customMatch.block);
+              currRow[x] = { y: darkRef - 1, transparent: false };
+            }
           }
-        }
         continue;
       }
 
@@ -336,7 +351,7 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
       } else {
         if (shade === 1) {
           // Normal: same y as north reference; filler needed if north is transparent
-          if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, northY, z - 1, options.fillerBlock);
+          if (northTransparent && !isStaircaseVoidFillerDisabled(options, x, z - 1)) addVoidShadowFiller(x, northY, z - 1);
           addBlock(x, northY, z, block);
           currRow[x] = { y: northY, transparent: false };
         } else if (shade === 2) {
@@ -349,12 +364,12 @@ function buildStaircaseBlocks(imageData: ImageData, options: ConversionOptions):
           const isDeepWater = northState.waterBottom !== undefined && northState.waterDepth! > 1;
           if (isDeepWater) {
             const darkY = northState.waterBottom!;
-            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkY + 1, z - 1, options.fillerBlock);
+            if (northTransparent && !isStaircaseVoidFillerDisabled(options, x, z - 1)) addVoidShadowFiller(x, darkY + 1, z - 1);
             addBlock(x, darkY, z, block);
             currRow[x] = { y: darkY, transparent: false };
           } else {
             const darkRef = northState.waterBottom !== undefined ? northState.waterBottom! : northY;
-            if (northTransparent && !isShadeFillerDisabled(options.fillerBlock)) addBlock(x, darkRef, z - 1, options.fillerBlock);
+            if (northTransparent && !isStaircaseVoidFillerDisabled(options, x, z - 1)) addVoidShadowFiller(x, darkRef, z - 1);
             addBlock(x, darkRef - 1, z, block);
             currRow[x] = { y: darkRef - 1, transparent: false };
           }
@@ -915,6 +930,7 @@ async function buildCheckerSplit(
 function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData, options: ConversionOptions) {
   const lookup = getColorLookup();
   const customLookup = buildCustomColorLookup(options.customColors);
+  const rowKey = (x: number, z: number): string => `${x},${z}`;
 
   type PixelInfo = { shade: number; isWater: boolean };
   const pixelByColumn = new Map<number, Map<number, PixelInfo>>();
@@ -949,12 +965,21 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
   if (!Number.isFinite(valleyMaxY)) return;
 
   interface GroupedSegment {
-    zList: number[]; // non-water primary z rows in this segment
-    minY: number; // lowest y among segment primary rows
+    id: number;
+    x: number;
+    primaryZ: number[];
+    blocks: BlockEntry[];
+    minY: number;
+    maxY: number;
   }
 
-  // Per request: process columns after the first.
-  for (let x = 1; x < 128; ++x) {
+  const primaryTopY = new Map<string, number>();
+  const primaryMinY = new Map<string, number>();
+  const primaryZByColumn = new Map<number, number[]>();
+  const segments: GroupedSegment[] = [];
+  const blockToSegment = new WeakMap<BlockEntry, number>();
+
+  for (let x = 0; x < 128; ++x) {
     const primaryInfo = pixelByColumn.get(x);
     const zToBlocks = columnZBlocks.get(x);
     if (!primaryInfo || !zToBlocks) continue;
@@ -975,6 +1000,11 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
     }
 
     const primaryZ = allPrimaryZ.filter(z => topY.has(z) && minY.has(z));
+    if (primaryZ.length > 0) primaryZByColumn.set(x, primaryZ);
+    for (const z of primaryZ) {
+      primaryTopY.set(rowKey(x, z), topY.get(z)!);
+      primaryMinY.set(rowKey(x, z), minY.get(z)!);
+    }
     if (primaryZ.length === 0) continue;
 
     const waterZ = new Set<number>();
@@ -982,7 +1012,6 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
       if (primaryInfo.get(z)?.isWater) waterZ.add(z);
     }
 
-    const segments: GroupedSegment[] = [];
     const nonWaterPrimary = primaryZ.filter(z => !waterZ.has(z));
 
     let i = 0;
@@ -997,102 +1026,199 @@ function applyGroupedModePostProcess(blocks: BlockEntry[], imageData: ImageData,
       ) {
         ++j;
       }
-      const zList = nonWaterPrimary.slice(i, j);
+      const primaryZList = nonWaterPrimary.slice(i, j);
+      const moveRows = new Set<number>(primaryZList);
+      for (const z of primaryZList) {
+        const fillerZ = z - 1;
+        if (!primaryInfo.has(fillerZ) && zToBlocks.has(fillerZ)) moveRows.add(fillerZ);
+      }
+
+      const segmentBlocks: BlockEntry[] = [];
+      let segMaxY = -Infinity;
+      for (const z of moveRows) {
+        const bs = zToBlocks.get(z);
+        if (!bs) continue;
+        for (const b of bs) {
+          segmentBlocks.push(b);
+          segMaxY = Math.max(segMaxY, b.y);
+        }
+      }
 
       let segMin = Infinity;
-      for (const z of zList) segMin = Math.min(segMin, minY.get(z)!);
-      segments.push({ zList, minY: segMin });
+      for (const z of primaryZList) segMin = Math.min(segMin, minY.get(z)!);
+      const seg: GroupedSegment = {
+        id: segments.length,
+        x,
+        primaryZ: primaryZList,
+        blocks: segmentBlocks,
+        minY: segMin,
+        maxY: segMaxY,
+      };
+      segments.push(seg);
+      for (const b of segmentBlocks) blockToSegment.set(b, seg.id);
       i = j;
     }
+  }
 
-    // Process from highest segment downward (per request: descending min-Y).
-    segments.sort((a, b) => b.minY - a.minY);
+  if (segments.length === 0) return;
 
-    for (const seg of segments) {
-      const primaryRowsToShift = new Set<number>(seg.zList.filter(z => primaryInfo.has(z)));
-      const allRowsToShift = new Set<number>(seg.zList);
+  const getNeighborRows = (x: number, z: number): BlockEntry[][] => {
+    const rows: BlockEntry[][] = [];
+    if (x > 0) rows.push(columnZBlocks.get(x - 1)?.get(z) ?? []);
+    if (x < 127) rows.push(columnZBlocks.get(x + 1)?.get(z) ?? []);
+    return rows;
+  };
 
-      // Shift filler-only row north of each moved primary row by same delta.
-      for (const z of seg.zList) {
-        const fillerZ = z - 1;
-        if (primaryInfo.has(fillerZ)) continue;
-        if (zToBlocks.has(fillerZ)) allRowsToShift.add(fillerZ);
-      }
+  const expandGroup = (seedGroup: Set<number>): { groupIds: Set<number>; touchesFrozen: boolean } => {
+    const groupIds = new Set<number>(seedGroup);
+    const queue = [...groupIds];
+    let touchesFrozen = false;
 
-      let movingMaxY = -Infinity;
-      for (const z of allRowsToShift) {
-        const bs = zToBlocks.get(z);
-        if (!bs) continue;
-        for (const b of bs) movingMaxY = Math.max(movingMaxY, b.y);
-      }
-      if (!Number.isFinite(movingMaxY)) continue;
-
-      const maxLift = valleyMaxY - movingMaxY;
-      if (maxLift <= 0) continue;
-
-      const neighborMinY = new Set<number>();
-      for (const z of seg.zList) {
-        for (const nx of [x - 1, x + 1]) {
-          if (nx < 0 || nx >= 128) continue;
-          const neighborPrimary = pixelByColumn.get(nx);
-          if (!neighborPrimary?.has(z)) continue;
-          const neighborCol = columnZBlocks.get(nx);
-          if (!neighborCol) continue;
-          const bs = neighborCol.get(z);
-          if (!bs) continue;
-          let zMin = Infinity;
-          for (const b of bs) zMin = Math.min(zMin, b.y);
-          if (Number.isFinite(zMin)) neighborMinY.add(zMin);
-        }
-      }
-
-      const deltas = [...neighborMinY]
-        .map(y => y - seg.minY)
-        .filter(d => d > 0 && d <= maxLift)
-        .sort((a, b) => a - b);
-      if (deltas.length === 0) continue;
-
-      const isColumnShadeSafe = (delta: number): boolean => {
-        for (const z of primaryZ) {
-          const info = primaryInfo.get(z);
-          if (!info || info.isWater) continue;
-          const northZ = z - 1;
-          if (!primaryInfo.has(northZ)) continue;
-          const y = topY.get(z)! + (primaryRowsToShift.has(z) ? delta : 0);
-          const northY = topY.get(northZ)! + (primaryRowsToShift.has(northZ) ? delta : 0);
-          if (info.shade === 2) {
-            if (!(y > northY)) return false;
-          } else if (info.shade === 1) {
-            if (y !== northY) return false;
-          } else {
-            if (!(y < northY)) return false;
+    while (queue.length > 0) {
+      const seg = segments[queue.pop()!];
+      for (const b of seg.blocks) {
+        for (const neighborRow of getNeighborRows(b.x, b.z)) {
+          for (const other of neighborRow) {
+            if (other.y !== b.y) continue;
+            const otherSegId = blockToSegment.get(other);
+            if (otherSegId === undefined) {
+              touchesFrozen = true;
+              continue;
+            }
+            if (groupIds.has(otherSegId)) continue;
+            if (unfinished.has(otherSegId)) {
+              groupIds.add(otherSegId);
+              queue.push(otherSegId);
+            } else {
+              touchesFrozen = true;
+            }
           }
         }
-        return true;
-      };
+      }
+    }
 
-      let chosenDelta = 0;
-      for (const d of deltas) {
-        if (isColumnShadeSafe(d)) {
-          chosenDelta = d;
-          break;
+    return { groupIds, touchesFrozen };
+  };
+
+  const collectCandidateDeltas = (groupIds: Set<number>, maxLift: number): number[] => {
+    let groupMinY = Infinity;
+    for (const segId of groupIds) groupMinY = Math.min(groupMinY, segments[segId].minY);
+    const deltas = new Set<number>();
+    for (const segId of groupIds) {
+      const seg = segments[segId];
+      for (const b of seg.blocks) {
+        for (const neighborRow of getNeighborRows(b.x, b.z)) {
+          for (const other of neighborRow) {
+            const otherSegId = blockToSegment.get(other);
+            if (otherSegId !== undefined && groupIds.has(otherSegId)) continue;
+            let targetMinY = other.y;
+            if (otherSegId !== undefined) {
+              targetMinY = segments[otherSegId].minY;
+            } else {
+              for (const rowBlock of neighborRow) targetMinY = Math.min(targetMinY, rowBlock.y);
+            }
+            const delta = targetMinY - groupMinY;
+            if (delta > 0 && delta <= maxLift) deltas.add(delta);
+          }
         }
       }
-      if (chosenDelta <= 0) continue;
-
-      for (const z of allRowsToShift) {
-        const bs = zToBlocks.get(z);
-        if (!bs) continue;
-        for (const b of bs) b.y += chosenDelta;
-      }
-
-      for (const z of primaryRowsToShift) {
-        if (topY.has(z)) topY.set(z, topY.get(z)! + chosenDelta);
-        if (minY.has(z)) minY.set(z, minY.get(z)! + chosenDelta);
-      }
-
-      seg.minY += chosenDelta;
     }
+    return [...deltas].sort((a, b) => a - b);
+  };
+
+  const isGroupShadeSafe = (groupIds: Set<number>, delta: number): boolean => {
+    const movingPrimaryRows = new Set<string>();
+    const affectedColumns = new Set<number>();
+
+    for (const segId of groupIds) {
+      const seg = segments[segId];
+      affectedColumns.add(seg.x);
+      for (const z of seg.primaryZ) movingPrimaryRows.add(rowKey(seg.x, z));
+    }
+
+    for (const x of affectedColumns) {
+      const primaryInfo = pixelByColumn.get(x);
+      const primaryZ = primaryZByColumn.get(x);
+      if (!primaryInfo || !primaryZ) continue;
+
+      for (const z of primaryZ) {
+        const info = primaryInfo.get(z);
+        if (!info || info.isWater) continue;
+        const northZ = z - 1;
+        if (!primaryInfo.has(northZ)) continue;
+
+        const yKey = rowKey(x, z);
+        const northKey = rowKey(x, northZ);
+        const y = primaryTopY.get(yKey)! + (movingPrimaryRows.has(yKey) ? delta : 0);
+        const northY = primaryTopY.get(northKey)! + (movingPrimaryRows.has(northKey) ? delta : 0);
+
+        if (info.shade === 2) {
+          if (!(y > northY)) return false;
+        } else if (info.shade === 1) {
+          if (y !== northY) return false;
+        } else {
+          if (!(y < northY)) return false;
+        }
+      }
+    }
+
+    return true;
+  };
+
+  const moveGroup = (groupIds: Set<number>, delta: number) => {
+    for (const segId of groupIds) {
+      const seg = segments[segId];
+      for (const b of seg.blocks) b.y += delta;
+      seg.minY += delta;
+      seg.maxY += delta;
+      for (const z of seg.primaryZ) {
+        const key = rowKey(seg.x, z);
+        primaryTopY.set(key, primaryTopY.get(key)! + delta);
+        primaryMinY.set(key, primaryMinY.get(key)! + delta);
+      }
+    }
+  };
+
+  const unfinished = new Set<number>(segments.map(seg => seg.id));
+
+  while (unfinished.size > 0) {
+    let seedId = -1;
+    let highestMinY = -Infinity;
+    for (const segId of unfinished) {
+      if (segments[segId].minY > highestMinY) {
+        highestMinY = segments[segId].minY;
+        seedId = segId;
+      }
+    }
+    if (seedId < 0) break;
+
+    let { groupIds, touchesFrozen } = expandGroup(new Set<number>([seedId]));
+
+    while (!touchesFrozen) {
+      let groupMaxY = -Infinity;
+      for (const segId of groupIds) groupMaxY = Math.max(groupMaxY, segments[segId].maxY);
+      const maxLift = valleyMaxY - groupMaxY;
+      if (maxLift <= 0) break;
+
+      const deltas = collectCandidateDeltas(groupIds, maxLift);
+      let chosenDelta = 0;
+      for (const delta of deltas) {
+        if (!isGroupShadeSafe(groupIds, delta)) continue;
+
+        moveGroup(groupIds, delta);
+        const expanded = expandGroup(groupIds);
+        if (expanded.groupIds.size > groupIds.size || expanded.touchesFrozen) {
+          chosenDelta = delta;
+          groupIds = expanded.groupIds;
+          touchesFrozen = expanded.touchesFrozen;
+          break;
+        }
+        moveGroup(groupIds, -delta);
+      }
+      if (chosenDelta <= 0) break;
+    }
+
+    for (const segId of groupIds) unfinished.delete(segId);
   }
 }
 

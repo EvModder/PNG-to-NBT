@@ -15,6 +15,7 @@ import {
   type SupportMode,
 } from "@/lib/converter";
 import {
+  analyzeVoidShadows,
   buildCustomShadeLookup,
   computeImageInfo,
   countVoidShadows,
@@ -112,6 +113,8 @@ const CUSTOM_COLOR_TOOLTIP_LINE2 = "Dark and flat shades are derived automatical
 const CUSTOM_COLOR_TOOLTIP_LINE3 = "Once added, all three new shades will be available to use for input images.";
 const CUSTOM_COLOR_TOOLTIP = `${CUSTOM_COLOR_TOOLTIP_LINE1}\n${CUSTOM_COLOR_TOOLTIP_LINE2}\n${CUSTOM_COLOR_TOOLTIP_LINE3}`;
 const CALC_FILLER_SENTINEL = "__calc_filler__";
+const CALC_DOMINANT_VOID_FILLER_SENTINEL = "__calc_dominant_void_filler__";
+const CALC_RECESSIVE_VOID_FILLER_SENTINEL = "__calc_recessive_void_filler__";
 const CALC_DELAYED_FILLER_SENTINEL = "__calc_delayed_filler__";
 const CALC_BASE_TOKEN_PREFIX = "__calc_base_";
 const CALC_CUSTOM_TOKEN_PREFIX = "__calc_custom_";
@@ -142,6 +145,7 @@ function encodePreset(
   preset: Preset, fillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
   suppress2LayerDelayedFillerBlock: string, proPaletteSeed: boolean,
+  dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
     const block = preset.blocks[i + 1] || "";
@@ -159,6 +163,8 @@ function encodePreset(
     convertUnsupported ? "1" : "0",
     suppress2LayerDelayedFillerBlock,
     proPaletteSeed ? "1" : "0",
+    dominateVoidFillerBlock,
+    recessiveVoidFillerBlock,
   ].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
@@ -167,6 +173,7 @@ function decodePreset(encoded: string): {
   preset: Preset; filler?: string; supportMode?: SupportMode;
   buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
   suppress2LayerDelayedFillerBlock?: string; proPaletteSeed?: boolean;
+  dominateVoidFillerBlock?: string; recessiveVoidFillerBlock?: string;
 } | null {
   try {
     let s = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -200,11 +207,14 @@ function decodePreset(encoded: string): {
     const convertUnsupported = sections[6] === "1" ? true : sections[6] === "0" ? false : undefined;
     const suppress2LayerDelayedFillerBlock = sections[7] || undefined;
     const proPaletteSeed = sections[8] === "1" ? true : sections[8] === "0" ? false : undefined;
+    const dominateVoidFillerBlock = sections[9] || undefined;
+    const recessiveVoidFillerBlock = sections[10] || undefined;
 
     return {
       preset: { name: sections[0], blocks }, filler: sections[2] || undefined,
       supportMode, buildMode: (sections[4] || undefined) as BuildMode | undefined,
       customColors, convertUnsupported, suppress2LayerDelayedFillerBlock, proPaletteSeed,
+      dominateVoidFillerBlock, recessiveVoidFillerBlock,
     };
   } catch {
     return null;
@@ -228,10 +238,14 @@ const LS_KEYS = {
   layerGap: "mapart_layerGap",
   suppress2LayerDelayedFiller: "mapart_suppress2layer_delayed_filler",
   proPaletteSeed: "mapart_pro_palette_seed",
+  dominateVoidFiller: "mapart_dominate_void_filler",
+  recessiveVoidFiller: "mapart_recessive_void_filler",
   columnOrder: "mapart_columnOrder",
   showTransparentRow: "mapart_secret_showTransparentRow",
   showExcludedBlocks: "mapart_secret_showExcludedBlocks",
   forceZ129: "mapart_secret_forceZ129",
+  showVsFillerWarnings: "mapart_secret_showVsFillerWarnings",
+  showAlignmentReminder: "mapart_secret_showAlignmentReminder",
 } as const;
 
 const getStoredTheme = (): "light" | "dark" | null => {
@@ -269,6 +283,12 @@ const Index = () => {
   const [fillerBlock, setFillerBlock] = useState(() => loadCached(LS_KEYS.filler, "resin_block"));
   const [suppress2LayerDelayedFillerBlock, setSuppress2LayerDelayedFillerBlock] = useState(() =>
     loadCached(LS_KEYS.suppress2LayerDelayedFiller, "slime_block"),
+  );
+  const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.dominateVoidFiller, "slime_block"),
+  );
+  const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.recessiveVoidFiller, "honey_block"),
   );
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
@@ -312,6 +332,8 @@ const Index = () => {
   const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, false));
   const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, false));
   const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, false));
+  const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, true));
+  const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, true));
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
   const dragColRef = useRef<ColumnId | null>(null);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
@@ -422,10 +444,14 @@ const Index = () => {
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.suppress2LayerDelayedFiller]: suppress2LayerDelayedFillerBlock,
       [LS_KEYS.proPaletteSeed]: proPaletteSeed,
+      [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
+      [LS_KEYS.recessiveVoidFiller]: recessiveVoidFillerBlock,
       [LS_KEYS.columnOrder]: columnOrder,
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
       [LS_KEYS.forceZ129]: forceZ129,
+      [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
+      [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
     }),
     [
       fillerBlock,
@@ -443,10 +469,14 @@ const Index = () => {
       layerGap,
       suppress2LayerDelayedFillerBlock,
       proPaletteSeed,
+      dominateVoidFillerBlock,
+      recessiveVoidFillerBlock,
       columnOrder,
       showTransparentRow,
       showExcludedBlocks,
       forceZ129,
+      showVsFillerWarnings,
+      showAlignmentReminder,
     ],
   );
   const persistedSettingsRef = useRef<Record<string, unknown>>({});
@@ -468,6 +498,10 @@ const Index = () => {
   );
   const voidShadowCount = useMemo(
     () => imageData ? countVoidShadows(imageData, customColors) : 0,
+    [imageData, customColors],
+  );
+  const voidShadowStats = useMemo(
+    () => imageData ? analyzeVoidShadows(imageData, customColors) : { total: 0, dominant: 0, recessive: 0 },
     [imageData, customColors],
   );
 
@@ -509,6 +543,14 @@ const Index = () => {
   const fillerIsFragile = useMemo(() => fillerBlockId.length > 0 && isFragileBlock(fillerBlockId), [fillerBlockId]);
   const fillerDisabled = useMemo(() => isFillerDisabled(fillerBlock), [fillerBlock]);
   const fillerShadingDisabled = useMemo(() => isShadeFillerDisabled(fillerBlock), [fillerBlock]);
+  const dominateVoidFillerShadingDisabled = useMemo(
+    () => isShadeFillerDisabled(dominateVoidFillerBlock || fillerBlock),
+    [dominateVoidFillerBlock, fillerBlock],
+  );
+  const recessiveVoidFillerShadingDisabled = useMemo(
+    () => isShadeFillerDisabled(recessiveVoidFillerBlock || fillerBlock),
+    [recessiveVoidFillerBlock, fillerBlock],
+  );
   const disabledFillerPlaceholder = useMemo(() => {
     const used = new Set<string>();
     for (const b of Object.values(preset.blocks)) if (b) used.add(b);
@@ -565,11 +607,11 @@ const Index = () => {
       return { enabled: DEFAULT_STAIRCASE_OPTIONS, disabled: DEFAULT_STAIRCASE_OPTIONS };
     }
 
-    if (uniformNonFlatDirection === "all_light") {
+    if (!imageHasTransparency && uniformNonFlatDirection === "all_light") {
       const single = [{ value: "staircase_northline", label: "Incline (Down)" }];
       return { enabled: single, disabled: single };
     }
-    if (uniformNonFlatDirection === "all_dark") {
+    if (!imageHasTransparency && uniformNonFlatDirection === "all_dark") {
       const single = [{ value: "staircase_northline", label: "Incline (Up)" }];
       return { enabled: single, disabled: single };
     }
@@ -612,6 +654,7 @@ const Index = () => {
     imageData,
     imageValid,
     hasNonFlatShades,
+    imageHasTransparency,
     uniformNonFlatDirection,
     signatureBlockMapping,
     signatureCustomColors,
@@ -761,6 +804,8 @@ const Index = () => {
     const baseOptions = {
       blockMapping: materialBlockMapping,
       suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
+      dominateVoidFillerBlock: CALC_DOMINANT_VOID_FILLER_SENTINEL,
+      recessiveVoidFillerBlock: CALC_RECESSIVE_VOID_FILLER_SENTINEL,
       proPaletteSeed: materialStatsProSeed,
       customColors: materialCustomColors,
       buildMode: effectiveBuildMode,
@@ -805,13 +850,18 @@ const Index = () => {
     [rawMaterialCountsByFillerMode, fillerShadingDisabled],
   );
 
-  const materialCounts = useMemo(() => {
+  const remappedMaterialStats = useMemo(() => {
     if (!rawMaterialCounts) return null;
     const remapped: Record<string, number> = {};
+    const fillerOnlyByName: Record<string, number> = {};
     for (const [name, count] of Object.entries(rawMaterialCounts)) {
       const targetBase =
         name === CALC_FILLER_SENTINEL
           ? fillerBlock
+          : name === CALC_DOMINANT_VOID_FILLER_SENTINEL
+            ? dominateVoidFillerBlock
+            : name === CALC_RECESSIVE_VOID_FILLER_SENTINEL
+              ? recessiveVoidFillerBlock
           : name === CALC_DELAYED_FILLER_SENTINEL
             ? suppress2LayerDelayedFillerBlock
             : fillerShadingDisabled && name === disabledFillerPlaceholder
@@ -830,17 +880,32 @@ const Index = () => {
         }
       }
       remapped[target] = (remapped[target] || 0) + count;
+      if (
+        name === CALC_FILLER_SENTINEL ||
+        name === CALC_DOMINANT_VOID_FILLER_SENTINEL ||
+        name === CALC_RECESSIVE_VOID_FILLER_SENTINEL ||
+        (fillerShadingDisabled && name === disabledFillerPlaceholder)
+      ) {
+        fillerOnlyByName[target] = (fillerOnlyByName[target] || 0) + count;
+      }
     }
-    return remapped;
+    return { materialCounts: remapped, fillerOnlyByName };
   }, [
     rawMaterialCounts,
     fillerShadingDisabled,
     fillerBlock,
+    dominateVoidFillerBlock,
+    recessiveVoidFillerBlock,
     suppress2LayerDelayedFillerBlock,
     disabledFillerPlaceholder,
     preset.blocks,
     customColors,
   ]);
+  const materialCounts = useMemo(() => remappedMaterialStats?.materialCounts ?? null, [remappedMaterialStats]);
+  const fillerOnlyCountsByName = useMemo(
+    () => remappedMaterialStats?.fillerOnlyByName ?? ({} as Record<string, number>),
+    [remappedMaterialStats],
+  );
 
   const sortedMaterials = useMemo(
     () =>
@@ -853,10 +918,8 @@ const Index = () => {
   );
 
   const fillerOnlyCount = useMemo(() => {
-    if (!rawMaterialCounts) return 0;
-    if (fillerShadingDisabled) return rawMaterialCounts[disabledFillerPlaceholder] || 0;
-    return rawMaterialCounts[CALC_FILLER_SENTINEL] || 0;
-  }, [fillerShadingDisabled, rawMaterialCounts, disabledFillerPlaceholder]);
+    return fillerOnlyCountsByName[fillerBlock] || 0;
+  }, [fillerOnlyCountsByName, fillerBlock]);
 
   const colorRequiredMap = useMemo(() => {
     if (!materialCounts) return {} as Record<number, number>;
@@ -865,11 +928,11 @@ const Index = () => {
       const block = preset.blocks[i];
       if (!block) continue;
       const total = materialCounts[block] || 0;
-      const colorOnly = block === fillerBlock ? Math.max(0, total - fillerOnlyCount) : total;
+      const colorOnly = Math.max(0, total - (fillerOnlyCountsByName[block] || 0));
       if (colorOnly > 0) map[i] = colorOnly;
     }
     return map;
-  }, [materialCounts, preset.blocks, fillerBlock, fillerOnlyCount]);
+  }, [materialCounts, preset.blocks, fillerOnlyCountsByName]);
 
   const blockToBaseIndex = useMemo(() => {
     const map: Record<string, number> = {};
@@ -916,6 +979,8 @@ const Index = () => {
       setSuppress2LayerDelayedFillerBlock(decoded.suppress2LayerDelayedFillerBlock);
     }
     if (decoded.proPaletteSeed !== undefined) setProPaletteSeed(decoded.proPaletteSeed);
+    if (decoded.dominateVoidFillerBlock) setDominateVoidFillerBlock(decoded.dominateVoidFillerBlock);
+    if (decoded.recessiveVoidFillerBlock) setRecessiveVoidFillerBlock(decoded.recessiveVoidFillerBlock);
     // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
   }, []);
 
@@ -1076,6 +1141,8 @@ const Index = () => {
       convertUnsupported,
       suppress2LayerDelayedFillerBlock,
       proPaletteSeed,
+      dominateVoidFillerBlock,
+      recessiveVoidFillerBlock,
     )}`;
     navigator.clipboard.writeText(url);
     alert("Preset URL copied to clipboard!");
@@ -1205,6 +1272,8 @@ const Index = () => {
       const result = await convertToNbt(imageData, {
         blockMapping: preset.blocks,
         fillerBlock,
+        dominateVoidFillerBlock,
+        recessiveVoidFillerBlock,
         suppress2LayerDelayedFillerBlock,
         proPaletteSeed,
         forceZ129,
@@ -1311,33 +1380,120 @@ const Index = () => {
   const canGenerate = imageValid && missingBlocks.length === 0;
   const hasRequiredCol = materialCounts !== null;
   const hasInGridFillerNeed = (fillerNeedStats?.inGrid ?? 0) > 0;
-  const inGridFillerCountsAsWarning = hasInGridFillerNeed && (effectiveBuildMode.startsWith("suppress") || imageHasTransparency);
+  const inGridFillerCountsAsWarning = hasInGridFillerNeed && effectiveBuildMode.startsWith("suppress");
   const hasComplexNorthNeed = (fillerNeedStats?.north ?? 0) > 0 && !(fillerNeedStats?.northIsSingleLine ?? true);
   const showNoFillerWarning =
-    imageValid && hasNonFlatShades && fillerShadingDisabled && (inGridFillerCountsAsWarning || hasComplexNorthNeed);
+    imageValid &&
+    hasNonFlatShades &&
+    ((inGridFillerCountsAsWarning && fillerShadingDisabled) || (hasComplexNorthNeed && fillerShadingDisabled));
   const showLateFillerInput =
     imageData &&
     buildMode === "suppress_2layer_late_fillers" &&
     !fillerShadingDisabled &&
     (fillerNeedStats?.delayedTotal ?? 0) > 0;
+  const showDominateVoidFillerInput =
+    imageData &&
+    effectiveBuildMode.startsWith("staircase_") &&
+    effectiveBuildMode !== "flat" &&
+    voidShadowStats.dominant > 0;
+  const showRecessiveVoidFillerInput =
+    imageData &&
+    effectiveBuildMode.startsWith("staircase_") &&
+    effectiveBuildMode !== "flat" &&
+    voidShadowStats.recessive > 0;
   const showNorthRowAlignmentInfo =
+    showAlignmentReminder &&
     canGenerate &&
     (forceZ129 || (!fillerShadingDisabled && (fillerNeedStats?.north ?? 0) > 0));
+  const noFillerWarningFields = useMemo(() => {
+    if (!showNoFillerWarning) return [];
+    return [{ label: "Filler", value: fillerBlock.trim() || "none" }];
+  }, [fillerBlock, showNoFillerWarning]);
+  const noFillerWarningFieldSummary = useMemo(
+    () => noFillerWarningFields.map(field => `${field.label} (${field.value})`).join(", "),
+    [noFillerWarningFields],
+  );
+  const vsFillerWarnings = useMemo(() => {
+    type VsWarningEntry = {
+      label: "VS-Filler-1" | "VS-Filler-2";
+      value: string;
+      invalid: boolean;
+      noobPixels: number;
+    };
+    const buildEntry = (show: boolean, label: VsWarningEntry["label"], rawValue: string, noobPixels: number): VsWarningEntry | null => {
+      if (!show) return null;
+      const value = rawValue.trim() || fillerBlock.trim() || "none";
+      return { label, value, invalid: isFillerDisabled(value), noobPixels };
+    };
+    const formatInvalid = (entry: VsWarningEntry) =>
+      `${entry.label} is invalid (${entry.value}). There will be ${entry.noobPixels} noob pixel${entry.noobPixels === 1 ? "" : "s"} (south-of-transparent with incorrect shaded).`;
+    const formatRequired = (entry: VsWarningEntry) =>
+      `${entry.label} is required for this image.\n${entry.noobPixels} pixel${entry.noobPixels === 1 ? "" : "s"} will require manual color-suppression.`;
+    const first = buildEntry(showDominateVoidFillerInput, "VS-Filler-1", dominateVoidFillerBlock, voidShadowStats.dominant);
+    const second = buildEntry(showRecessiveVoidFillerInput, "VS-Filler-2", recessiveVoidFillerBlock, voidShadowStats.recessive);
+
+    if (!first && !second) return [];
+    if (!first) {
+      if (second!.invalid) return [formatInvalid(second!)];
+      return showVsFillerWarnings ? [formatRequired(second!)] : [];
+    }
+    if (!second) {
+      if (first.invalid) return [formatInvalid(first)];
+      return showVsFillerWarnings ? [formatRequired(first)] : [];
+    }
+
+    if (first.invalid && second.invalid) {
+      return [
+        `VS-Fillers are invalid (${first.value}, ${second.value}). There will be ${first.noobPixels + second.noobPixels} noob pixel${first.noobPixels + second.noobPixels === 1 ? "" : "s"} (south-of-transparent with incorrect shading).`,
+      ];
+    }
+    if (!first.invalid && !second.invalid) {
+      if (!showVsFillerWarnings) return [];
+      return [
+        `VS-Fillers are required for this image.\n${first.noobPixels + second.noobPixels} pixel${first.noobPixels + second.noobPixels === 1 ? "" : "s"} will require manual color-suppression.`,
+      ];
+    }
+    return [formatInvalid(first.invalid ? first : second)];
+  }, [
+    dominateVoidFillerBlock,
+    fillerBlock,
+    recessiveVoidFillerBlock,
+    showDominateVoidFillerInput,
+    showRecessiveVoidFillerInput,
+    showVsFillerWarnings,
+    voidShadowStats.dominant,
+    voidShadowStats.recessive,
+  ]);
+  const hasInvalidVsFillerWarning = useMemo(() => {
+    if (showDominateVoidFillerInput && isFillerDisabled(dominateVoidFillerBlock.trim() || fillerBlock.trim() || "none")) {
+      return true;
+    }
+    if (showRecessiveVoidFillerInput && isFillerDisabled(recessiveVoidFillerBlock.trim() || fillerBlock.trim() || "none")) {
+      return true;
+    }
+    return false;
+  }, [
+    dominateVoidFillerBlock,
+    fillerBlock,
+    recessiveVoidFillerBlock,
+    showDominateVoidFillerInput,
+    showRecessiveVoidFillerInput,
+  ]);
   const noFillerWarningDetails = useMemo(() => {
     if (!showNoFillerWarning || !fillerNeedStats) return "";
     const parts: string[] = [];
+    if (hasComplexNorthNeed) {
+      parts.push("North-row shading requires filler placements.");
+    }
     if (inGridFillerCountsAsWarning) {
       const suppressLike = effectiveBuildMode.startsWith("suppress") || (fillerNeedStats.delayedInGrid ?? 0) > 0;
       if (suppressLike) {
-        parts.push("Some shading-critical suppress fillers are required inside the 128x128 grid.");
+        parts.push("Suppress-shading requires filler placements.");
       } else {
         parts.push("Some shading-critical fillers are required inside the 128x128 grid.");
       }
     }
-    if (hasComplexNorthNeed) {
-      parts.push("North-row shading requires filler placements.");
-    }
-    return parts.join(" ");
+    return parts.join("\n");
   }, [
     showNoFillerWarning,
     fillerNeedStats,
@@ -2098,20 +2254,8 @@ const Index = () => {
               value={fillerBlock}
               onChange={e => setFillerBlock(e.target.value)}
               placeholder="resin_block"
-              className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+              className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
             />
-            {showLateFillerInput && (
-              <>
-                <span className="text-xs font-semibold text-accent whitespace-nowrap">Late-Filler:</span>
-                <input
-                  type="text"
-                  value={suppress2LayerDelayedFillerBlock}
-                  onChange={e => setSuppress2LayerDelayedFillerBlock(e.target.value)}
-                  placeholder="slime_block"
-                  className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                />
-              </>
-            )}
             {imageData && !fillerDisabled && (
               <div className="flex items-center gap-1">
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">
@@ -2157,6 +2301,54 @@ const Index = () => {
                   </>
                 )}
               </span>
+            )}
+            {showDominateVoidFillerInput && (
+              <>
+                <span
+                  className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                  title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                >
+                  VS-Filler-1:
+                </span>
+                <input
+                  type="text"
+                  value={dominateVoidFillerBlock}
+                  onChange={e => setDominateVoidFillerBlock(e.target.value)}
+                  placeholder="slime_block"
+                  title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                  className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                />
+              </>
+            )}
+            {showRecessiveVoidFillerInput && (
+              <>
+                <span
+                  className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                  title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                >
+                  VS-Filler-2:
+                </span>
+                <input
+                  type="text"
+                  value={recessiveVoidFillerBlock}
+                  onChange={e => setRecessiveVoidFillerBlock(e.target.value)}
+                  placeholder="honey_block"
+                  title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                  className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                />
+              </>
+            )}
+            {showLateFillerInput && (
+              <>
+                <span className="text-xs font-semibold text-accent whitespace-nowrap">Late-Filler:</span>
+                <input
+                  type="text"
+                  value={suppress2LayerDelayedFillerBlock}
+                  onChange={e => setSuppress2LayerDelayedFillerBlock(e.target.value)}
+                  placeholder="slime_block"
+                  className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                />
+              </>
             )}
           </section>
           </div>
@@ -2522,17 +2714,29 @@ const Index = () => {
 
             {showNoFillerWarning && (
               <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                <p className="text-xs text-warning font-medium">
-                  Filler is disabled ({fillerBlock.trim() || "none"}). {noFillerWarningDetails} This shading will need to
-                  be handled manually in-game.
+                <p className="text-xs text-warning font-medium whitespace-pre-line">
+                  {noFillerWarningFieldSummary
+                    ? `Filler is disabled (${noFillerWarningFields[0]?.value ?? "none"}).`
+                    : "Shading filler is disabled."}
+                  {noFillerWarningDetails ? `\n${noFillerWarningDetails}` : ""}
                 </p>
+              </div>
+            )}
+
+            {vsFillerWarnings.length > 0 && (
+              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
+                {vsFillerWarnings.map((warning, idx) => (
+                  <p key={idx} className={`text-xs whitespace-pre-line ${hasInvalidVsFillerWarning ? "text-destructive font-bold" : "text-warning font-medium"}`}>
+                    {warning}
+                  </p>
+                ))}
               </div>
             )}
 
             {showNorthRowAlignmentInfo && (
               <div className="mt-2 bg-muted/30 border border-border rounded p-2">
                 <p className="text-xs text-muted-foreground font-medium">
-                  Note: Align the `128x128` color area to the map grid, with the extra row one block north.
+                  Note: Align 128x128 color area to the map grid, with the extra row one block north (Schematic is 128x129).
                 </p>
               </div>
             )}
@@ -2741,6 +2945,24 @@ const Index = () => {
                   className="h-3.5 w-3.5"
                 />
                 <span>Z-width always 129</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showAlignmentReminder}
+                  onChange={e => setShowAlignmentReminder(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Show alignment reminder</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showVsFillerWarnings}
+                  onChange={e => setShowVsFillerWarnings(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Show warnings when VS-Fillers are required in Staircase maps</span>
               </label>
             </div>
           </div>
