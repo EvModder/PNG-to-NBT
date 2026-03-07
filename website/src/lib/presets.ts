@@ -6,7 +6,7 @@ export interface Preset {
   blocks: Record<number, string>;
 }
 
-export const BUILTIN_PRESET_NAMES = ["PistonClear", "Carpets", "Fullblock"] as const;
+export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear"] as const;
 
 export function buildPistonClearPreset(): Preset {
   const blocks: Record<number, string> = {};

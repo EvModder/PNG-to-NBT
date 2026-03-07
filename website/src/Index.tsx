@@ -95,7 +95,7 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: "staircase_grouped", label: "Staircase (Grouped)" },
   { value: "staircase_northline", label: "Staircase (Northline)" },
   { value: "staircase_southline", label: "Staircase (Southline)" },
-  { value: "staircase_cancer", label: "Staircase (Cancer)" },
+  { value: "staircase_pro", label: "Staircase (Pro Version)" },
 ];
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
@@ -141,7 +141,7 @@ function formatStacks(count: number): string {
 function encodePreset(
   preset: Preset, fillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
-  suppress2LayerDelayedFillerBlock: string, cancerPaletteSeed: boolean,
+  suppress2LayerDelayedFillerBlock: string, proPaletteSeed: boolean,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
     const block = preset.blocks[i + 1] || "";
@@ -158,7 +158,7 @@ function encodePreset(
     ccStr,
     convertUnsupported ? "1" : "0",
     suppress2LayerDelayedFillerBlock,
-    cancerPaletteSeed ? "1" : "0",
+    proPaletteSeed ? "1" : "0",
   ].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
@@ -166,7 +166,7 @@ function encodePreset(
 function decodePreset(encoded: string): {
   preset: Preset; filler?: string; supportMode?: SupportMode;
   buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
-  suppress2LayerDelayedFillerBlock?: string; cancerPaletteSeed?: boolean;
+  suppress2LayerDelayedFillerBlock?: string; proPaletteSeed?: boolean;
 } | null {
   try {
     let s = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -199,12 +199,12 @@ function decodePreset(encoded: string): {
 
     const convertUnsupported = sections[6] === "1" ? true : sections[6] === "0" ? false : undefined;
     const suppress2LayerDelayedFillerBlock = sections[7] || undefined;
-    const cancerPaletteSeed = sections[8] === "1" ? true : sections[8] === "0" ? false : undefined;
+    const proPaletteSeed = sections[8] === "1" ? true : sections[8] === "0" ? false : undefined;
 
     return {
       preset: { name: sections[0], blocks }, filler: sections[2] || undefined,
       supportMode, buildMode: (sections[4] || undefined) as BuildMode | undefined,
-      customColors, convertUnsupported, suppress2LayerDelayedFillerBlock, cancerPaletteSeed,
+      customColors, convertUnsupported, suppress2LayerDelayedFillerBlock, proPaletteSeed,
     };
   } catch {
     return null;
@@ -227,7 +227,7 @@ const LS_KEYS = {
   sortDir: "mapart_sortDir",
   layerGap: "mapart_layerGap",
   suppress2LayerDelayedFiller: "mapart_suppress2layer_delayed_filler",
-  cancerPaletteSeed: "mapart_cancer_palette_seed",
+  proPaletteSeed: "mapart_pro_palette_seed",
   columnOrder: "mapart_columnOrder",
   showTransparentRow: "mapart_secret_showTransparentRow",
   showExcludedBlocks: "mapart_secret_showExcludedBlocks",
@@ -273,8 +273,8 @@ const Index = () => {
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
   );
-  const [cancerPaletteSeed, setCancerPaletteSeed] = useState(() => loadCached(LS_KEYS.cancerPaletteSeed, false));
-  const calcCancerPaletteSeed = useDeferredValue(cancerPaletteSeed);
+  const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.proPaletteSeed, false));
+  const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
   const calcLayerGap = useDeferredValue(layerGap);
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
@@ -299,7 +299,7 @@ const Index = () => {
   const [showIds, setShowIds] = useState(() => loadCached(LS_KEYS.showIds, false));
   const [showOptions, setShowOptions] = useState(() => loadCached(LS_KEYS.showOptions, false));
   const [blockDisplayMode, setBlockDisplayMode] = useState<"names" | "textures">(() =>
-    loadCached(LS_KEYS.blockDisplayMode, "names" as "names" | "textures"),
+    loadCached(LS_KEYS.blockDisplayMode, "textures" as "names" | "textures"),
   );
   const [blockColExpanded, setBlockColExpanded] = useState(() => loadCached(LS_KEYS.blockColExpanded, true));
   const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, "default" as SortKey));
@@ -421,7 +421,7 @@ const Index = () => {
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.suppress2LayerDelayedFiller]: suppress2LayerDelayedFillerBlock,
-      [LS_KEYS.cancerPaletteSeed]: cancerPaletteSeed,
+      [LS_KEYS.proPaletteSeed]: proPaletteSeed,
       [LS_KEYS.columnOrder]: columnOrder,
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
@@ -442,7 +442,7 @@ const Index = () => {
       sortDir,
       layerGap,
       suppress2LayerDelayedFillerBlock,
-      cancerPaletteSeed,
+      proPaletteSeed,
       columnOrder,
       showTransparentRow,
       showExcludedBlocks,
@@ -535,7 +535,7 @@ const Index = () => {
   }, [effectiveBuildMode]);
   const minLayerGap = supportMode === "fragile" || supportMode === "all" ? 3 : 2;
   const calcLayerGapForBuild = effectiveBuildMode.startsWith("suppress_2layer") ? calcLayerGap : minLayerGap;
-  const structuralCancerSeed = effectiveBuildMode === "staircase_cancer" ? calcCancerPaletteSeed : false;
+  const structuralProSeed = effectiveBuildMode === "staircase_pro" ? calcProPaletteSeed : false;
   const supportNeedsRealBlockTypes = supportMode === "fragile" || supportMode === "water";
   const structuralBlockMapping = useMemo(() => {
     const mapping: Record<number, string> = {};
@@ -584,9 +584,9 @@ const Index = () => {
             blockMapping: signatureBlockMapping,
             fillerBlock: signatureFillerBlock,
             suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-            // Palette-seed toggle only affects Cancer output randomness;
+            // Palette-seed toggle only affects Pro Version output randomness;
             // mode-list dedupe should stay stable/cheap when toggling it.
-            cancerPaletteSeed: false,
+            proPaletteSeed: false,
             forceZ129,
             customColors: signatureCustomColors,
             buildMode: opt.value,
@@ -632,7 +632,7 @@ const Index = () => {
         blockMapping: structuralBlockMapping,
         fillerBlock: CALC_FILLER_SENTINEL,
         suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-        cancerPaletteSeed: false,
+        proPaletteSeed: false,
         customColors: structuralCustomColors,
         buildMode: "suppress_2layer_late_fillers",
         supportMode: "none",
@@ -677,7 +677,7 @@ const Index = () => {
           return "Aligns each column N→S from a reference (noob)line of blocks";
         case "staircase_southline":
           return "Aligns each column S→N from a reference line of blocks (the bottom row)";
-        case "staircase_cancer":
+        case "staircase_pro":
           return "Same MapArt, but makes the build process more fun and exciting!";
         case "suppress_rowsplit":
           return "Split-row; available for compatibility, but generally not useful";
@@ -735,17 +735,17 @@ const Index = () => {
   }, []);
   const supportModeTooltip = useMemo(() => getSupportModeTooltip(supportMode), [getSupportModeTooltip, supportMode]);
 
-  const materialStatsCancerSeed = useMemo(
+  const materialStatsProSeed = useMemo(
     () => (
-      effectiveBuildMode === "staircase_cancer" && supportMode === "none"
+      effectiveBuildMode === "staircase_pro" && supportMode === "none"
         ? false
-        : structuralCancerSeed
+        : structuralProSeed
     ),
-    [effectiveBuildMode, supportMode, structuralCancerSeed],
+    [effectiveBuildMode, supportMode, structuralProSeed],
   );
   const materialNeedsRealBlocks = useMemo(
-    () => supportNeedsRealBlockTypes || (effectiveBuildMode === "staircase_cancer" && materialStatsCancerSeed),
-    [supportNeedsRealBlockTypes, effectiveBuildMode, materialStatsCancerSeed],
+    () => supportNeedsRealBlockTypes || (effectiveBuildMode === "staircase_pro" && materialStatsProSeed),
+    [supportNeedsRealBlockTypes, effectiveBuildMode, materialStatsProSeed],
   );
   const materialBlockMapping = useMemo(
     () => (materialNeedsRealBlocks ? preset.blocks : structuralBlockMapping),
@@ -761,7 +761,7 @@ const Index = () => {
     const baseOptions = {
       blockMapping: materialBlockMapping,
       suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-      cancerPaletteSeed: materialStatsCancerSeed,
+      proPaletteSeed: materialStatsProSeed,
       customColors: materialCustomColors,
       buildMode: effectiveBuildMode,
       supportMode,
@@ -786,7 +786,7 @@ const Index = () => {
     imageData,
     imageValid,
     materialBlockMapping,
-    materialStatsCancerSeed,
+    materialStatsProSeed,
     materialCustomColors,
     effectiveBuildMode,
     supportMode,
@@ -915,7 +915,7 @@ const Index = () => {
     if (decoded.suppress2LayerDelayedFillerBlock) {
       setSuppress2LayerDelayedFillerBlock(decoded.suppress2LayerDelayedFillerBlock);
     }
-    if (decoded.cancerPaletteSeed !== undefined) setCancerPaletteSeed(decoded.cancerPaletteSeed);
+    if (decoded.proPaletteSeed !== undefined) setProPaletteSeed(decoded.proPaletteSeed);
     // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
   }, []);
 
@@ -1075,7 +1075,7 @@ const Index = () => {
       customColors,
       convertUnsupported,
       suppress2LayerDelayedFillerBlock,
-      cancerPaletteSeed,
+      proPaletteSeed,
     )}`;
     navigator.clipboard.writeText(url);
     alert("Preset URL copied to clipboard!");
@@ -1206,7 +1206,7 @@ const Index = () => {
         blockMapping: preset.blocks,
         fillerBlock,
         suppress2LayerDelayedFillerBlock,
-        cancerPaletteSeed,
+        proPaletteSeed,
         forceZ129,
         customColors,
         buildMode,
@@ -1221,7 +1221,7 @@ const Index = () => {
         staircase_classic: "-staircase_classic",
         staircase_grouped: "-staircase_grouped",
         staircase_valley: "-staircase_valley",
-        staircase_cancer: "-staircase_cancer",
+        staircase_pro: "-staircase_pro",
         suppress_rowsplit: "-suppress_rowsplit",
         suppress_checker: "-suppress_checker",
         suppress_checker_ew: "-suppress_checker_EW",
@@ -1287,8 +1287,8 @@ const Index = () => {
         blockMapping: structuralBlockMapping,
         fillerBlock: CALC_FILLER_SENTINEL,
         suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-        // Filler-need analysis is topology/shade driven and does not depend on Cancer RNG seed.
-        cancerPaletteSeed: false,
+        // Filler-need analysis is topology/shade driven and does not depend on Pro Version RNG seed.
+        proPaletteSeed: false,
         customColors: structuralCustomColors,
         buildMode: effectiveBuildMode,
         supportMode: "none",
@@ -2035,13 +2035,13 @@ const Index = () => {
                       />
                     </>
                   )}
-                  {buildMode === "staircase_cancer" && (
+                  {buildMode === "staircase_pro" && (
                     <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
                       <span>Palette Seed:</span>
                       <input
                         type="checkbox"
-                        checked={cancerPaletteSeed}
-                        onChange={e => setCancerPaletteSeed(e.target.checked)}
+                        checked={proPaletteSeed}
+                        onChange={e => setProPaletteSeed(e.target.checked)}
                         className="h-3.5 w-3.5 accent-primary"
                       />
                     </label>

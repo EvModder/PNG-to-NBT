@@ -19,7 +19,7 @@ export type BuildMode =
   | "staircase_classic"
   | "staircase_grouped"
   | "staircase_valley"
-  | "staircase_cancer"
+  | "staircase_pro"
   | "suppress_rowsplit"
   | "suppress_checker"
   | "suppress_checker_ew"
@@ -33,7 +33,7 @@ export interface ConversionOptions {
   blockMapping: Record<number, string>;
   fillerBlock: string;
   suppress2LayerDelayedFillerBlock?: string;
-  cancerPaletteSeed?: boolean;
+  proPaletteSeed?: boolean;
   forceZ129?: boolean;
   customColors: CustomColor[];
   buildMode: BuildMode;
@@ -148,7 +148,7 @@ function hashString32(input: string): number {
   return h >>> 0;
 }
 
-function getPaletteSeedOffset(blockMapping: Record<number, string>): number {
+function getProPaletteSeedOffset(blockMapping: Record<number, string>): number {
   const serialized = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
     const idx = i + 1;
     return `${idx}:${blockMapping[idx] ?? ""}`;
@@ -1104,8 +1104,8 @@ function applyStaircaseVariant(
 ) {
   if (mode === "staircase_northline" || mode === "flat" || mode.startsWith("suppress")) return;
 
-  if (mode === "staircase_cancer" && imageData && options) {
-    applyCancerMode(blocks, imageData, options);
+  if (mode === "staircase_pro" && imageData && options) {
+    applyProMode(blocks, imageData, options);
     return;
   }
 
@@ -1358,11 +1358,11 @@ function applyStaircaseVariant(
   }
 }
 
-// Staircase (Cancer): randomize Y positions while preserving shade constraints
-function applyCancerMode(blocks: BlockEntry[], imageData: ImageData, options: ConversionOptions) {
+// Staircase (Pro Version): randomize Y positions while preserving shade constraints
+function applyProMode(blocks: BlockEntry[], imageData: ImageData, options: ConversionOptions) {
   const lookup = getColorLookup();
   const customLookup = buildCustomColorLookup(options.customColors);
-  const seedBase = options.cancerPaletteSeed ? (42 ^ getPaletteSeedOffset(options.blockMapping)) >>> 0 : 42;
+  const seedBase = options.proPaletteSeed ? (42 ^ getProPaletteSeedOffset(options.blockMapping)) >>> 0 : 42;
 
   // Simple seeded RNG for reproducibility per column
   function mulberry32(seed: number) {
