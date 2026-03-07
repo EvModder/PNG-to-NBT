@@ -22,6 +22,7 @@ export type BuildMode =
   | "staircase_cancer"
   | "suppress_rowsplit"
   | "suppress_checker"
+  | "suppress_checker_ew"
   | "suppress_pairs_ew"
   | "suppress_2layer_late_fillers"
   | "suppress_2layer_late_pairs";
@@ -690,8 +691,11 @@ export async function convertToNbt(
     return buildCheckerSplit(imageData, options);
   }
 
-  if (options.buildMode === "suppress_pairs_ew") {
-    const blocks = buildSuppressPairsEWBlocks(imageData, options);
+  if (options.buildMode === "suppress_pairs_ew" || options.buildMode === "suppress_checker_ew") {
+    const blocks =
+      options.buildMode === "suppress_checker_ew"
+        ? buildSuppressCheckerEWBlocks(imageData, options)
+        : buildSuppressPairsEWBlocks(imageData, options);
     applySupport(blocks, options);
     const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
     const nbtData = writeStructureNbt(blocks, sizeX, sizeY, sizeZ);
@@ -1769,11 +1773,11 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
 
   const steps: BlockEntry[][] = [];
 
-  let anchor = 127, step = 0, baseY = 0;
+  let anchor = 127;
+  let step = 0;
+  let baseY = 0;
 
-  while (anchor >= 0) {
-    const cols = step === 0 ? [127] : [anchor + 1, anchor];
-    const useEvenRows = step % 2 === 0;
+  const emitStep = (cols: number[], useEvenRows: boolean) => {
     let maxYUsed = baseY;
     const stepBlocks: BlockEntry[] = [];
 
@@ -1847,10 +1851,112 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
     }
 
     steps.push(stepBlocks);
-    anchor--;
     baseY = maxYUsed + 1;
+  };
+
+  while (anchor >= 0) {
+    const cols = step === 0 ? [127] : [anchor + 1, anchor];
+    const useEvenRows = step % 2 === 0;
+    emitStep(cols, useEvenRows);
+    --anchor;
     ++step;
   }
+
+  // West-edge cap step: fill the opposite checker parity for x=0 that is missed by the final 2-col pass.
+  emitStep([0], step % 2 === 0);
+
+  return steps;
+}
+
+// Build suppress checker E→W: overlapping 4-column steps.
+// In each 4-column step:
+// - Eastern 2 columns place dominant cells only ((x+z)%2===1)
+// - Western 2 columns place recessive cells only ((x+z)%2===0)
+// Consecutive steps shift 2 columns west, so overlap columns are completed in the next step.
+function buildSuppressCheckerEWBlocksByStep(imageData: ImageData, options: ConversionOptions): BlockEntry[][] {
+  const lookup = getColorLookup();
+  const customLookup = buildCustomColorLookup(options.customColors);
+
+  const steps: BlockEntry[][] = [];
+  let baseY = 0;
+
+  const emitStep = (cols: number[], dominantCols: Set<number>, recessiveCols: Set<number>) => {
+    let maxYUsed = baseY;
+    const stepBlocks: BlockEntry[] = [];
+    function addBlock(x: number, y: number, z: number, block: string) {
+      stepBlocks.push({ x, y, z, blockName: resolveBlockName(block) });
+    }
+
+    for (const x of cols) {
+      if (x < 0 || x >= 128) continue;
+      for (let z = 0; z < 128; ++z) {
+        const isDominant = ((x + z) & 1) === 1;
+        if (isDominant) {
+          if (!dominantCols.has(x)) continue;
+        } else if (!recessiveCols.has(x)) {
+          continue;
+        }
+
+        const idx = (z * 128 + x) * 4;
+        const a = imageData.data[idx + 3];
+        if (a === 0) continue;
+
+        const r = imageData.data[idx], g = imageData.data[idx + 1], b = imageData.data[idx + 2];
+        const key = `${r},${g},${b}`;
+        const match = lookup.get(key);
+        const customMatch = customLookup.get(key);
+        if (!match && !customMatch) continue;
+
+        const block = customMatch
+          ? customMatch.block
+          : options.blockMapping[(match as ColorMatch).baseIndex] ||
+            BASE_COLORS[(match as ColorMatch).baseIndex].blocks[0];
+        if (!block) continue;
+
+        if (!customMatch && (match as ColorMatch).baseIndex === WATER_BASE_INDEX) {
+          const depth = getWaterDepth((match as ColorMatch).shade, x, z);
+          for (let d = 0; d < depth; ++d) addBlock(x, baseY + d, z, block);
+          if (baseY + depth - 1 > maxYUsed) maxYUsed = baseY + depth - 1;
+          continue;
+        }
+
+        addBlock(x, baseY, z, block);
+
+        const needsSupport =
+          !isFillerDisabled(options.fillerBlock) &&
+          (options.supportMode === "all" ||
+            (options.supportMode === "fragile" && isFragileBlock(block)) ||
+            options.supportMode === "steps");
+        if (needsSupport && baseY > 0) addBlock(x, baseY - 1, z, options.fillerBlock);
+        if (needsSupport && baseY > maxYUsed) maxYUsed = Math.max(maxYUsed, baseY);
+
+        if (!isShadeFillerDisabled(options.fillerBlock)) {
+          const shade = customMatch ? customMatch.shade : (match as ColorMatch).shade;
+          if (shade === 1) {
+            addBlock(x, baseY, z - 1, options.fillerBlock);
+          } else if (shade !== 2) {
+            addBlock(x, baseY + 1, z - 1, options.fillerBlock);
+            if (baseY + 1 > maxYUsed) maxYUsed = baseY + 1;
+            if (options.supportMode === "steps" || options.supportMode === "all") {
+              addBlock(x, baseY, z - 1, options.fillerBlock);
+            }
+          }
+        }
+      }
+    }
+
+    steps.push(stepBlocks);
+    baseY = maxYUsed + 1;
+  };
+
+  // Edge bootstrap to cover easternmost recessive cells, then overlap by 2 columns per step.
+  emitStep([127, 126], new Set<number>(), new Set<number>([127, 126]));
+  for (let start = 124; start >= 0; start -= 2) {
+    const cols = [start + 3, start + 2, start + 1, start];
+    emitStep(cols, new Set<number>([start + 3, start + 2]), new Set<number>([start + 1, start]));
+  }
+  // Edge cap to cover westernmost dominant cells.
+  emitStep([1, 0], new Set<number>([1, 0]), new Set<number>());
 
   return steps;
 }
@@ -1858,6 +1964,9 @@ function buildSuppressPairsEWBlocksByStep(imageData: ImageData, options: Convers
 // Flatten all steps into a single block list
 function buildSuppressPairsEWBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
   return buildSuppressPairsEWBlocksByStep(imageData, options).flat();
+}
+function buildSuppressCheckerEWBlocks(imageData: ImageData, options: ConversionOptions): BlockEntry[] {
+  return buildSuppressCheckerEWBlocksByStep(imageData, options).flat();
 }
 // Build suppress dual-layer blocks using dominant/recessive checkerboard mechanics.
 // Recessive cells are (x+z)%2==0 (same parity as the top-left pixel), dominant are the other half.
@@ -2105,9 +2214,12 @@ export function computeMaterialCounts(imageData: ImageData, options: ConversionO
     const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, options);
     countBlocks(dominant);
     countBlocks(recessive);
-  } else if (options.buildMode === "suppress_pairs_ew") {
+  } else if (options.buildMode === "suppress_pairs_ew" || options.buildMode === "suppress_checker_ew") {
     // Material count = max occurrence of each block across any single step/segment
-    const steps = buildSuppressPairsEWBlocksByStep(imageData, options);
+    const steps =
+      options.buildMode === "suppress_checker_ew"
+        ? buildSuppressCheckerEWBlocksByStep(imageData, options)
+        : buildSuppressPairsEWBlocksByStep(imageData, options);
     const [sStart, sEnd] = options.stepRange ?? [0, steps.length - 1];
     for (let i = sStart; i <= sEnd && i < steps.length; ++i) {
       const stepBlocks = steps[i];
@@ -2156,8 +2268,11 @@ export function computeBuildModeSignature(imageData: ImageData, options: Convers
     return `${canonicalBlockSignature(dominant, options.forceZ129 === true)}||${canonicalBlockSignature(recessive, options.forceZ129 === true)}`;
   }
 
-  if (options.buildMode === "suppress_pairs_ew") {
-    const blocks = buildSuppressPairsEWBlocks(imageData, options);
+  if (options.buildMode === "suppress_pairs_ew" || options.buildMode === "suppress_checker_ew") {
+    const blocks =
+      options.buildMode === "suppress_checker_ew"
+        ? buildSuppressCheckerEWBlocks(imageData, options)
+        : buildSuppressPairsEWBlocks(imageData, options);
     applySupport(blocks, options);
     return canonicalBlockSignature(blocks, options.forceZ129 === true);
   }
@@ -2206,8 +2321,12 @@ export function analyzeFillerNeeds(imageData: ImageData, options: ConversionOpti
   } else if (analysisOptions.buildMode === "suppress_checker") {
     const [dominant, recessive] = buildSuppressCheckerBlocks(imageData, analysisOptions);
     allBlocks.push(...dominant, ...recessive);
-  } else if (analysisOptions.buildMode === "suppress_pairs_ew") {
-    allBlocks.push(...buildSuppressPairsEWBlocks(imageData, analysisOptions));
+  } else if (analysisOptions.buildMode === "suppress_pairs_ew" || analysisOptions.buildMode === "suppress_checker_ew") {
+    allBlocks.push(
+      ...(analysisOptions.buildMode === "suppress_checker_ew"
+        ? buildSuppressCheckerEWBlocks(imageData, analysisOptions)
+        : buildSuppressPairsEWBlocks(imageData, analysisOptions)),
+    );
   } else if (analysisOptions.buildMode === "suppress_2layer_late_fillers" || analysisOptions.buildMode === "suppress_2layer_late_pairs") {
     const variant = analysisOptions.buildMode === "suppress_2layer_late_pairs" ? "late_flat_vs" : "classic";
     allBlocks.push(...buildSuppressDualLayerBlocks(imageData, analysisOptions, variant));

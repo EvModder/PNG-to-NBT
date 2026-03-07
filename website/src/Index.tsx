@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect, type RefObject } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
 import { Moon, Sun, Plus, Minus } from "lucide-react";
 import { BASE_COLORS, WATER_BASE_INDEX, getColorLookup, getShadedRgb } from "@/data/mapColors";
 import { EXCLUDED_COLORS } from "@/data/excludedColors";
@@ -23,6 +23,7 @@ import {
   scanSuppressedPixels,
 } from "@/lib/imageAnalysis";
 import { toBlockIconKey } from "@/lib/blockIconKey";
+import { isFragileBlock } from "@/data/fragileBlocks";
 import {
   BUILTIN_PRESET_NAMES,
   buildPistonClearPreset,
@@ -101,7 +102,8 @@ const LAYOUT_GAP_PX = 8;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: "suppress_rowsplit", label: "Suppress (Row-split)", muted: true },
-  { value: "suppress_checker", label: "Suppress (Checker)" },
+  { value: "suppress_checker", label: "Suppress (Checker-split)" },
+  { value: "suppress_checker_ew", label: "Suppress (Checker, E→W)" },
   { value: "suppress_pairs_ew", label: "Suppress (Pairs, E→W)" },
 ];
 
@@ -111,6 +113,8 @@ const CUSTOM_COLOR_TOOLTIP_LINE3 = "Once added, all three new shades will be ava
 const CUSTOM_COLOR_TOOLTIP = `${CUSTOM_COLOR_TOOLTIP_LINE1}\n${CUSTOM_COLOR_TOOLTIP_LINE2}\n${CUSTOM_COLOR_TOOLTIP_LINE3}`;
 const CALC_FILLER_SENTINEL = "__calc_filler__";
 const CALC_DELAYED_FILLER_SENTINEL = "__calc_delayed_filler__";
+const CALC_BASE_TOKEN_PREFIX = "__calc_base_";
+const CALC_CUSTOM_TOKEN_PREFIX = "__calc_custom_";
 
 const SUPPRESS_2LAYER_BASE_FLOW =
   "Steps:\n" +
@@ -132,50 +136,6 @@ function formatStacks(count: number): string {
   const st = Math.floor(rem / 64);
   const items = rem % 64;
   return [sb && `${sb}sb`, st && `${st}st`, items && String(items)].filter(Boolean).join(" ") || "0";
-}
-
-type DeferredTextInputProps = {
-  value: string;
-  onCommit: (next: string) => void;
-  className: string;
-  placeholder?: string;
-  inputRef?: RefObject<HTMLInputElement>;
-  delayMs?: number;
-};
-
-function DeferredTextInput({
-  value,
-  onCommit,
-  className,
-  placeholder,
-  inputRef,
-  delayMs = 180,
-}: DeferredTextInputProps) {
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
-  useEffect(() => {
-    if (draft === value) return;
-    const id = window.setTimeout(() => onCommit(draft), delayMs);
-    return () => window.clearTimeout(id);
-  }, [draft, value, onCommit, delayMs]);
-
-  return (
-    <input
-      ref={inputRef}
-      type="text"
-      value={draft}
-      onChange={e => setDraft(e.target.value)}
-      onBlur={() => {
-        if (draft !== value) onCommit(draft);
-      }}
-      placeholder={placeholder}
-      className={className}
-    />
-  );
 }
 
 function encodePreset(
@@ -310,14 +270,13 @@ const Index = () => {
   const [suppress2LayerDelayedFillerBlock, setSuppress2LayerDelayedFillerBlock] = useState(() =>
     loadCached(LS_KEYS.suppress2LayerDelayedFiller, "slime_block"),
   );
-  const calcFillerBlock = useDeferredValue(fillerBlock);
-  const calcSuppress2LayerDelayedFillerBlock = useDeferredValue(suppress2LayerDelayedFillerBlock);
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
   );
   const [cancerPaletteSeed, setCancerPaletteSeed] = useState(() => loadCached(LS_KEYS.cancerPaletteSeed, false));
   const calcCancerPaletteSeed = useDeferredValue(cancerPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
+  const calcLayerGap = useDeferredValue(layerGap);
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
   const [colStart, setColStart] = useState(0);
   const [colEnd, setColEnd] = useState(127);
@@ -446,50 +405,58 @@ const Index = () => {
     });
     localStorage.setItem("mapart_presets", JSON.stringify(persistedPresets));
   }, [presets, activeIdx, presetDirty]);
+  const persistedSettings = useMemo(
+    () => ({
+      [LS_KEYS.filler]: fillerBlock,
+      [LS_KEYS.buildMode]: buildMode,
+      [LS_KEYS.supportMode]: supportMode,
+      [LS_KEYS.showStacks]: showStacks,
+      [LS_KEYS.showIds]: showIds,
+      [LS_KEYS.showNames]: showNames,
+      [LS_KEYS.showOptions]: showOptions,
+      [LS_KEYS.blockDisplayMode]: blockDisplayMode,
+      [LS_KEYS.blockColExpanded]: blockColExpanded,
+      [LS_KEYS.activePreset]: preset.name,
+      [LS_KEYS.sortKey]: sortKey,
+      [LS_KEYS.sortDir]: sortDir,
+      [LS_KEYS.layerGap]: layerGap,
+      [LS_KEYS.suppress2LayerDelayedFiller]: suppress2LayerDelayedFillerBlock,
+      [LS_KEYS.cancerPaletteSeed]: cancerPaletteSeed,
+      [LS_KEYS.columnOrder]: columnOrder,
+      [LS_KEYS.showTransparentRow]: showTransparentRow,
+      [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
+      [LS_KEYS.forceZ129]: forceZ129,
+    }),
+    [
+      fillerBlock,
+      buildMode,
+      supportMode,
+      showStacks,
+      showIds,
+      showNames,
+      showOptions,
+      blockDisplayMode,
+      blockColExpanded,
+      preset.name,
+      sortKey,
+      sortDir,
+      layerGap,
+      suppress2LayerDelayedFillerBlock,
+      cancerPaletteSeed,
+      columnOrder,
+      showTransparentRow,
+      showExcludedBlocks,
+      forceZ129,
+    ],
+  );
+  const persistedSettingsRef = useRef<Record<string, unknown>>({});
   useEffect(() => {
-    const entries: [string, unknown][] = [
-      [LS_KEYS.filler, fillerBlock],
-      [LS_KEYS.buildMode, buildMode],
-      [LS_KEYS.supportMode, supportMode],
-      [LS_KEYS.showStacks, showStacks],
-      [LS_KEYS.showIds, showIds],
-      [LS_KEYS.showNames, showNames],
-      [LS_KEYS.showOptions, showOptions],
-      [LS_KEYS.blockDisplayMode, blockDisplayMode],
-      [LS_KEYS.blockColExpanded, blockColExpanded],
-      [LS_KEYS.activePreset, preset.name],
-      [LS_KEYS.sortKey, sortKey],
-      [LS_KEYS.sortDir, sortDir],
-      [LS_KEYS.layerGap, layerGap],
-      [LS_KEYS.suppress2LayerDelayedFiller, suppress2LayerDelayedFillerBlock],
-      [LS_KEYS.cancerPaletteSeed, cancerPaletteSeed],
-      [LS_KEYS.columnOrder, columnOrder],
-      [LS_KEYS.showTransparentRow, showTransparentRow],
-      [LS_KEYS.showExcludedBlocks, showExcludedBlocks],
-      [LS_KEYS.forceZ129, forceZ129],
-    ];
-    entries.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
-  }, [
-    fillerBlock,
-    buildMode,
-    supportMode,
-    showStacks,
-    showIds,
-    showNames,
-    showOptions,
-    blockDisplayMode,
-    blockColExpanded,
-    preset.name,
-    sortKey,
-    sortDir,
-    layerGap,
-    suppress2LayerDelayedFillerBlock,
-    cancerPaletteSeed,
-    columnOrder,
-    showTransparentRow,
-    showExcludedBlocks,
-    forceZ129,
-  ]);
+    for (const [k, v] of Object.entries(persistedSettings)) {
+      if (persistedSettingsRef.current[k] === v) continue;
+      localStorage.setItem(k, JSON.stringify(v));
+      persistedSettingsRef.current[k] = v;
+    }
+  }, [persistedSettings]);
 
   const hasNonFlatShades = useMemo(
     () => imageData ? imageHasNonFlatShades(imageData, customColors) : false,
@@ -535,12 +502,19 @@ const Index = () => {
   }, [imageData]);
 
   const fillerIsNoneColor = useMemo(() => {
-    const stripped = calcFillerBlock.split("[")[0];
+    const stripped = fillerBlock.split("[")[0];
     return !BASE_COLORS.slice(1).some(bc => bc.blocks.some(b => b.split("[")[0] === stripped));
-  }, [calcFillerBlock]);
+  }, [fillerBlock]);
+  const fillerBlockId = useMemo(() => fillerBlock.trim().toLowerCase().replace(/^minecraft:/, "").split("[")[0], [fillerBlock]);
+  const fillerIsFragile = useMemo(() => fillerBlockId.length > 0 && isFragileBlock(fillerBlockId), [fillerBlockId]);
   const fillerDisabled = useMemo(() => isFillerDisabled(fillerBlock), [fillerBlock]);
   const fillerShadingDisabled = useMemo(() => isShadeFillerDisabled(fillerBlock), [fillerBlock]);
-  const calcFillerShadingDisabled = useMemo(() => isShadeFillerDisabled(calcFillerBlock), [calcFillerBlock]);
+  const disabledFillerPlaceholder = useMemo(() => {
+    const used = new Set<string>();
+    for (const b of Object.values(preset.blocks)) if (b) used.add(b);
+    for (const cc of customColors) if (cc.block?.trim()) used.add(cc.block.trim());
+    return BASE_COLORS[0].blocks.find(b => !used.has(b)) ?? BASE_COLORS[0].blocks[0];
+  }, [preset.blocks, customColors]);
 
   const missingBlocks = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return [];
@@ -553,79 +527,117 @@ const Index = () => {
   );
 
   const effectiveBuildMode = hasNonFlatShades ? buildMode : "flat";
+  const isStepRangeMode = effectiveBuildMode === "suppress_pairs_ew" || effectiveBuildMode === "suppress_checker_ew";
+  const maxRangeIndex = useMemo(() => {
+    if (effectiveBuildMode === "suppress_checker_ew") return 64; // 65 steps
+    if (effectiveBuildMode === "suppress_pairs_ew") return 128; // 129 steps
+    return 127; // column range mode
+  }, [effectiveBuildMode]);
+  const minLayerGap = supportMode === "fragile" || supportMode === "all" ? 3 : 2;
+  const calcLayerGapForBuild = effectiveBuildMode.startsWith("suppress_2layer") ? calcLayerGap : minLayerGap;
   const structuralCancerSeed = effectiveBuildMode === "staircase_cancer" ? calcCancerPaletteSeed : false;
+  const supportNeedsRealBlockTypes = supportMode === "fragile" || supportMode === "water";
+  const structuralBlockMapping = useMemo(() => {
+    const mapping: Record<number, string> = {};
+    for (let i = 1; i < BASE_COLORS.length; ++i) mapping[i] = `${CALC_BASE_TOKEN_PREFIX}${i}`;
+    return mapping;
+  }, []);
+  const structuralCustomColors = useMemo(
+    () => customColors.map((cc, idx) => ({ ...cc, block: `${CALC_CUSTOM_TOKEN_PREFIX}${idx}` })),
+    [customColors],
+  );
+  const signatureBlockMapping = useMemo(
+    () => (supportNeedsRealBlockTypes ? preset.blocks : structuralBlockMapping),
+    [supportNeedsRealBlockTypes, preset.blocks, structuralBlockMapping],
+  );
+  const signatureCustomColors = useMemo(
+    () => (supportNeedsRealBlockTypes ? customColors : structuralCustomColors),
+    [supportNeedsRealBlockTypes, customColors, structuralCustomColors],
+  );
 
   const uniformNonFlatDirection = useMemo(
     () => imageData && imageValid ? detectUniformNonFlatDirection(imageData, customColors) : "mixed",
     [imageData, imageValid, customColors],
   );
 
-  const staircaseModeOptions = useMemo((): ModeOption[] => {
-    if (!imageData || !imageValid || !hasNonFlatShades) return DEFAULT_STAIRCASE_OPTIONS;
+  const staircaseModeOptionsByFillerMode = useMemo((): { enabled: ModeOption[]; disabled: ModeOption[] } => {
+    if (!imageData || !imageValid || !hasNonFlatShades) {
+      return { enabled: DEFAULT_STAIRCASE_OPTIONS, disabled: DEFAULT_STAIRCASE_OPTIONS };
+    }
 
     if (uniformNonFlatDirection === "all_light") {
-      return [{ value: "staircase_northline", label: "Incline (Down)" }];
+      const single = [{ value: "staircase_northline", label: "Incline (Down)" }];
+      return { enabled: single, disabled: single };
     }
     if (uniformNonFlatDirection === "all_dark") {
-      return [{ value: "staircase_northline", label: "Incline (Up)" }];
+      const single = [{ value: "staircase_northline", label: "Incline (Up)" }];
+      return { enabled: single, disabled: single };
     }
 
-    const seen = new Set<string>();
-    const unique: ModeOption[] = [];
-    for (const opt of DEFAULT_STAIRCASE_OPTIONS) {
-      try {
-        const signature = computeBuildModeSignature(imageData, {
-          blockMapping: preset.blocks,
-          fillerBlock: calcFillerShadingDisabled ? calcFillerBlock : CALC_FILLER_SENTINEL,
-          suppress2LayerDelayedFillerBlock: calcFillerShadingDisabled
-            ? calcSuppress2LayerDelayedFillerBlock
-            : CALC_DELAYED_FILLER_SENTINEL,
-          // Palette-seed toggle only affects Cancer output randomness;
-          // mode-list dedupe should stay stable/cheap when toggling it.
-          cancerPaletteSeed: false,
-          forceZ129,
-          customColors,
-          buildMode: opt.value,
-          supportMode,
-          baseName: "",
-          layerGap,
-        });
-        if (seen.has(signature)) continue;
-        seen.add(signature);
-      } catch {
-        // If signature generation fails for any mode, keep option visible.
+    const build = (shadeDisabled: boolean): ModeOption[] => {
+      const seen = new Set<string>();
+      const unique: ModeOption[] = [];
+      const signatureFillerBlock = shadeDisabled ? disabledFillerPlaceholder : CALC_FILLER_SENTINEL;
+      for (const opt of DEFAULT_STAIRCASE_OPTIONS) {
+        try {
+          const signature = computeBuildModeSignature(imageData, {
+            blockMapping: signatureBlockMapping,
+            fillerBlock: signatureFillerBlock,
+            suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
+            // Palette-seed toggle only affects Cancer output randomness;
+            // mode-list dedupe should stay stable/cheap when toggling it.
+            cancerPaletteSeed: false,
+            forceZ129,
+            customColors: signatureCustomColors,
+            buildMode: opt.value,
+            supportMode,
+            baseName: "",
+            layerGap: minLayerGap,
+          });
+          if (seen.has(signature)) continue;
+          seen.add(signature);
+        } catch {
+          // If signature generation fails for any mode, keep option visible.
+        }
+        unique.push(opt);
       }
-      unique.push(opt);
-    }
-    return unique.length > 0 ? unique : DEFAULT_STAIRCASE_OPTIONS;
+      return unique.length > 0 ? unique : DEFAULT_STAIRCASE_OPTIONS;
+    };
+
+    return {
+      enabled: build(false),
+      disabled: build(true),
+    };
   }, [
     imageData,
     imageValid,
     hasNonFlatShades,
     uniformNonFlatDirection,
-    preset.blocks,
-    calcFillerShadingDisabled,
-    calcFillerBlock,
-    calcSuppress2LayerDelayedFillerBlock,
-    customColors,
+    signatureBlockMapping,
+    signatureCustomColors,
     supportMode,
-    layerGap,
+    minLayerGap,
     forceZ129,
+    disabledFillerPlaceholder,
   ]);
+  const staircaseModeOptions = useMemo(
+    () => (fillerShadingDisabled ? staircaseModeOptionsByFillerMode.disabled : staircaseModeOptionsByFillerMode.enabled),
+    [fillerShadingDisabled, staircaseModeOptionsByFillerMode],
+  );
 
   const lateFillersNeedStats = useMemo(() => {
     if (!imageData || !imageValid || !hasNonFlatShades) return null;
     try {
       return analyzeFillerNeeds(imageData, {
-        blockMapping: preset.blocks,
+        blockMapping: structuralBlockMapping,
         fillerBlock: CALC_FILLER_SENTINEL,
         suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
         cancerPaletteSeed: false,
-        customColors,
+        customColors: structuralCustomColors,
         buildMode: "suppress_2layer_late_fillers",
-        supportMode,
+        supportMode: "none",
         baseName: "",
-        layerGap,
+        layerGap: calcLayerGap,
       });
     } catch {
       return null;
@@ -634,10 +646,9 @@ const Index = () => {
     imageData,
     imageValid,
     hasNonFlatShades,
-    preset.blocks,
-    customColors,
-    supportMode,
-    layerGap,
+    structuralBlockMapping,
+    structuralCustomColors,
+    calcLayerGap,
   ]);
 
   const twoLayerHasLateVoidNeed = (lateFillersNeedStats?.delayedTotal ?? 0) > 0;
@@ -672,6 +683,8 @@ const Index = () => {
           return "Split-row; available for compatibility, but generally not useful";
         case "suppress_checker":
           return "Split NBT generations for dominant/recessive placements";
+        case "suppress_checker_ew":
+          return "Stepwise E→W checker handling: 4 columns per step (2 dominant east, 2 recessive west), overlapping by 2 columns";
         case "suppress_pairs_ew":
           return "Split into East-West pairs in a interlacing 'brick' pattern; currently only supports updating from E→W";
         case "suppress_2layer_late_pairs":
@@ -730,63 +743,104 @@ const Index = () => {
     ),
     [effectiveBuildMode, supportMode, structuralCancerSeed],
   );
+  const materialNeedsRealBlocks = useMemo(
+    () => supportNeedsRealBlockTypes || (effectiveBuildMode === "staircase_cancer" && materialStatsCancerSeed),
+    [supportNeedsRealBlockTypes, effectiveBuildMode, materialStatsCancerSeed],
+  );
+  const materialBlockMapping = useMemo(
+    () => (materialNeedsRealBlocks ? preset.blocks : structuralBlockMapping),
+    [materialNeedsRealBlocks, preset.blocks, structuralBlockMapping],
+  );
+  const materialCustomColors = useMemo(
+    () => (materialNeedsRealBlocks ? customColors : structuralCustomColors),
+    [materialNeedsRealBlocks, customColors, structuralCustomColors],
+  );
 
-  const rawMaterialCounts = useMemo(() => {
+  const rawMaterialCountsByFillerMode = useMemo(() => {
     if (!imageData || !imageValid) return null;
-    const isPairs = effectiveBuildMode === "suppress_pairs_ew";
-    const calcStructuralFiller = calcFillerShadingDisabled ? calcFillerBlock : CALC_FILLER_SENTINEL;
-    const calcStructuralDelayed = calcFillerShadingDisabled
-      ? calcSuppress2LayerDelayedFillerBlock
-      : CALC_DELAYED_FILLER_SENTINEL;
+    const baseOptions = {
+      blockMapping: materialBlockMapping,
+      suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
+      cancerPaletteSeed: materialStatsCancerSeed,
+      customColors: materialCustomColors,
+      buildMode: effectiveBuildMode,
+      supportMode,
+      baseName: "",
+      layerGap: calcLayerGapForBuild,
+      ...(colRangeEnabled ? (isStepRangeMode ? { stepRange: [colStart, colEnd] } : { columnRange: [colStart, colEnd] }) : {}),
+    };
     try {
-      return computeMaterialCounts(imageData, {
-        blockMapping: preset.blocks,
-        fillerBlock: calcStructuralFiller,
-        suppress2LayerDelayedFillerBlock: calcStructuralDelayed,
-        cancerPaletteSeed: materialStatsCancerSeed,
-        customColors,
-        buildMode: effectiveBuildMode,
-        supportMode,
-        baseName: "",
-        layerGap,
-        ...(colRangeEnabled ? (isPairs ? { stepRange: [colStart, colEnd] } : { columnRange: [colStart, colEnd] }) : {}),
+      const enabled = computeMaterialCounts(imageData, {
+        ...baseOptions,
+        fillerBlock: CALC_FILLER_SENTINEL,
       });
+      const disabled = computeMaterialCounts(imageData, {
+        ...baseOptions,
+        fillerBlock: disabledFillerPlaceholder,
+      });
+      return { enabled, disabled };
     } catch {
       return null;
     }
   }, [
     imageData,
     imageValid,
-    preset.blocks,
-    calcFillerShadingDisabled,
-    calcFillerBlock,
-    calcSuppress2LayerDelayedFillerBlock,
+    materialBlockMapping,
     materialStatsCancerSeed,
-    customColors,
+    materialCustomColors,
     effectiveBuildMode,
     supportMode,
-    layerGap,
+    calcLayerGapForBuild,
+    isStepRangeMode,
     colRangeEnabled,
     colStart,
     colEnd,
+    disabledFillerPlaceholder,
   ]);
+  const rawMaterialCounts = useMemo(
+    () =>
+      rawMaterialCountsByFillerMode
+        ? (fillerShadingDisabled ? rawMaterialCountsByFillerMode.disabled : rawMaterialCountsByFillerMode.enabled)
+        : null,
+    [rawMaterialCountsByFillerMode, fillerShadingDisabled],
+  );
 
   const materialCounts = useMemo(() => {
     if (!rawMaterialCounts) return null;
-    if (calcFillerShadingDisabled) return rawMaterialCounts;
-
     const remapped: Record<string, number> = {};
     for (const [name, count] of Object.entries(rawMaterialCounts)) {
-      const target =
+      const targetBase =
         name === CALC_FILLER_SENTINEL
-          ? calcFillerBlock
+          ? fillerBlock
           : name === CALC_DELAYED_FILLER_SENTINEL
-            ? calcSuppress2LayerDelayedFillerBlock
-            : name;
+            ? suppress2LayerDelayedFillerBlock
+            : fillerShadingDisabled && name === disabledFillerPlaceholder
+              ? fillerBlock
+              : name;
+      let target = targetBase;
+      if (target.startsWith(CALC_BASE_TOKEN_PREFIX)) {
+        const idx = parseInt(target.slice(CALC_BASE_TOKEN_PREFIX.length), 10);
+        if (Number.isFinite(idx) && idx > 0 && idx < BASE_COLORS.length) {
+          target = preset.blocks[idx] || BASE_COLORS[idx].blocks[0] || target;
+        }
+      } else if (target.startsWith(CALC_CUSTOM_TOKEN_PREFIX)) {
+        const idx = parseInt(target.slice(CALC_CUSTOM_TOKEN_PREFIX.length), 10);
+        if (Number.isFinite(idx) && idx >= 0 && idx < customColors.length) {
+          target = customColors[idx].block.trim() || target;
+        }
+      }
       remapped[target] = (remapped[target] || 0) + count;
     }
     return remapped;
-  }, [rawMaterialCounts, calcFillerShadingDisabled, calcFillerBlock, calcSuppress2LayerDelayedFillerBlock]);
+  }, [
+    rawMaterialCounts,
+    fillerShadingDisabled,
+    fillerBlock,
+    suppress2LayerDelayedFillerBlock,
+    disabledFillerPlaceholder,
+    preset.blocks,
+    customColors,
+  ]);
 
   const sortedMaterials = useMemo(
     () =>
@@ -800,9 +854,9 @@ const Index = () => {
 
   const fillerOnlyCount = useMemo(() => {
     if (!rawMaterialCounts) return 0;
-    if (calcFillerShadingDisabled) return rawMaterialCounts[calcFillerBlock] || 0;
+    if (fillerShadingDisabled) return rawMaterialCounts[disabledFillerPlaceholder] || 0;
     return rawMaterialCounts[CALC_FILLER_SENTINEL] || 0;
-  }, [calcFillerShadingDisabled, rawMaterialCounts, calcFillerBlock]);
+  }, [fillerShadingDisabled, rawMaterialCounts, disabledFillerPlaceholder]);
 
   const colorRequiredMap = useMemo(() => {
     if (!materialCounts) return {} as Record<number, number>;
@@ -811,11 +865,11 @@ const Index = () => {
       const block = preset.blocks[i];
       if (!block) continue;
       const total = materialCounts[block] || 0;
-      const colorOnly = block === calcFillerBlock ? Math.max(0, total - fillerOnlyCount) : total;
+      const colorOnly = block === fillerBlock ? Math.max(0, total - fillerOnlyCount) : total;
       if (colorOnly > 0) map[i] = colorOnly;
     }
     return map;
-  }, [materialCounts, preset.blocks, calcFillerBlock, fillerOnlyCount]);
+  }, [materialCounts, preset.blocks, fillerBlock, fillerOnlyCount]);
 
   const blockToBaseIndex = useMemo(() => {
     const map: Record<string, number> = {};
@@ -830,6 +884,13 @@ const Index = () => {
     const builtin = getBuiltinPreset(preset.name);
     return builtin ? JSON.stringify(builtin.blocks) === JSON.stringify(preset.blocks) : false;
   }, [preset]);
+
+  useEffect(() => {
+    const clampedStart = Math.max(0, Math.min(colStart, maxRangeIndex));
+    const clampedEnd = Math.max(clampedStart, Math.min(colEnd, maxRangeIndex));
+    if (clampedStart !== colStart) setColStart(clampedStart);
+    if (clampedEnd !== colEnd) setColEnd(clampedEnd);
+  }, [colStart, colEnd, maxRangeIndex]);
 
   useEffect(() => {
     const encoded = new URLSearchParams(window.location.search).get("preset");
@@ -885,9 +946,14 @@ const Index = () => {
   useEffect(() => {
     if (!imageData) return;
     if (fillerDisabled) { setSupportMode("none"); return; }
+    if (supportMode === "fragile" && fillerIsFragile) { setSupportMode("none"); return; }
     if (supportMode === "steps" && !hasNonFlatShades) setSupportMode("none");
     if (supportMode === "water" && (!imageHasWater || !fillerIsNoneColor)) setSupportMode("none");
-  }, [imageData, hasNonFlatShades, imageHasWater, fillerIsNoneColor, supportMode, fillerDisabled]);
+  }, [imageData, hasNonFlatShades, imageHasWater, fillerIsNoneColor, supportMode, fillerDisabled, fillerIsFragile]);
+
+  useEffect(() => {
+    if ((supportMode === "fragile" || supportMode === "all") && layerGap < 3) setLayerGap(3);
+  }, [supportMode, layerGap]);
 
   const customBlocksByBase = useMemo(() => {
     const map: Record<number, string[]> = {};
@@ -1158,6 +1224,7 @@ const Index = () => {
         staircase_cancer: "-staircase_cancer",
         suppress_rowsplit: "-suppress_rowsplit",
         suppress_checker: "-suppress_checker",
+        suppress_checker_ew: "-suppress_checker_EW",
         suppress_pairs_ew: "-suppress_pairs_EW",
         suppress_2layer_late_fillers: "-suppress_2layer",
         suppress_2layer_late_pairs: "-suppress_2layer_late_pairs",
@@ -1217,16 +1284,16 @@ const Index = () => {
     if (effectiveBuildMode === "suppress_2layer_late_fillers") return lateFillersNeedStats;
     try {
       return analyzeFillerNeeds(imageData, {
-        blockMapping: preset.blocks,
+        blockMapping: structuralBlockMapping,
         fillerBlock: CALC_FILLER_SENTINEL,
         suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
         // Filler-need analysis is topology/shade driven and does not depend on Cancer RNG seed.
         cancerPaletteSeed: false,
-        customColors,
+        customColors: structuralCustomColors,
         buildMode: effectiveBuildMode,
-        supportMode,
+        supportMode: "none",
         baseName: "",
-        layerGap,
+        layerGap: calcLayerGapForBuild,
       });
     } catch {
       return null;
@@ -1234,12 +1301,11 @@ const Index = () => {
   }, [
     imageData,
     imageValid,
-    preset.blocks,
-    customColors,
+    structuralBlockMapping,
+    structuralCustomColors,
     effectiveBuildMode,
     lateFillersNeedStats,
-    supportMode,
-    layerGap,
+    calcLayerGapForBuild,
   ]);
 
   const canGenerate = imageValid && missingBlocks.length === 0;
@@ -1960,10 +2026,10 @@ const Index = () => {
                       </span>
                       <input
                         type="number"
-                        min={2}
+                        min={minLayerGap}
                         max={20}
                         value={layerGap}
-                        onChange={e => setLayerGap(Math.max(2, Math.min(20, parseInt(e.target.value) || 5)))}
+                        onChange={e => setLayerGap(Math.max(minLayerGap, Math.min(20, parseInt(e.target.value) || 5)))}
                         title={LAYER_GAP_TOOLTIP}
                         className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
                       />
@@ -2026,19 +2092,21 @@ const Index = () => {
             }`}
           >
             <span className="text-xs font-semibold text-accent whitespace-nowrap">Filler:</span>
-            <DeferredTextInput
-              inputRef={fillerInputRef}
+            <input
+              ref={fillerInputRef}
+              type="text"
               value={fillerBlock}
-              onCommit={setFillerBlock}
+              onChange={e => setFillerBlock(e.target.value)}
               placeholder="resin_block"
               className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
             />
             {showLateFillerInput && (
               <>
                 <span className="text-xs font-semibold text-accent whitespace-nowrap">Late-Filler:</span>
-                <DeferredTextInput
+                <input
+                  type="text"
                   value={suppress2LayerDelayedFillerBlock}
-                  onCommit={setSuppress2LayerDelayedFillerBlock}
+                  onChange={e => setSuppress2LayerDelayedFillerBlock(e.target.value)}
                   placeholder="slime_block"
                   className="max-w-[180px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                 />
@@ -2060,7 +2128,9 @@ const Index = () => {
                     Steps
                   </option>
                   <option value="all" title={getSupportModeTooltip("all")}>All</option>
-                  <option value="fragile" title={getSupportModeTooltip("fragile")}>Fragile</option>
+                  {!fillerIsFragile && (
+                    <option value="fragile" title={getSupportModeTooltip("fragile")}>Fragile</option>
+                  )}
                   <option value="water" disabled={!imageHasWater || !fillerIsNoneColor} title={getSupportModeTooltip("water")}>
                     Water
                   </option>
@@ -2513,7 +2583,7 @@ const Index = () => {
                     className={`text-[10px] px-1.5 py-0.5 rounded border ${colRangeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
                     onClick={() => setColRangeEnabled(v => !v)}
                   >
-                    {effectiveBuildMode === "suppress_pairs_ew" ? "Step range" : "Column range"}
+                    {isStepRangeMode ? "Step range" : "Column range"}
                   </button>
                 </div>
                 {colRangeEnabled && (
@@ -2528,7 +2598,7 @@ const Index = () => {
                           const rect = el.getBoundingClientRect();
                           const valFromEvent = (ev: PointerEvent) => {
                             const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-                            return Math.round(pct * 127);
+                            return Math.round(pct * maxRangeIndex);
                           };
                           const val = valFromEvent(e.nativeEvent);
                           // Lock which thumb we're dragging based on initial proximity
@@ -2550,15 +2620,18 @@ const Index = () => {
                         <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1 rounded bg-border" />
                         <div
                           className="absolute top-1/2 -translate-y-1/2 h-1 rounded bg-primary"
-                          style={{ left: `${(colStart / 127) * 100}%`, right: `${100 - (colEnd / 127) * 100}%` }}
+                          style={{
+                            left: `${maxRangeIndex > 0 ? (colStart / maxRangeIndex) * 100 : 0}%`,
+                            right: `${100 - (maxRangeIndex > 0 ? (colEnd / maxRangeIndex) * 100 : 0)}%`,
+                          }}
                         />
                         <div
                           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground -ml-1.5"
-                          style={{ left: `${(colStart / 127) * 100}%` }}
+                          style={{ left: `${maxRangeIndex > 0 ? (colStart / maxRangeIndex) * 100 : 0}%` }}
                         />
                         <div
                           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground -ml-1.5"
-                          style={{ left: `${(colEnd / 127) * 100}%` }}
+                          style={{ left: `${maxRangeIndex > 0 ? (colEnd / maxRangeIndex) * 100 : 0}%` }}
                         />
                       </div>
                       <span className="text-[10px] font-mono text-foreground w-6">{colEnd}</span>
