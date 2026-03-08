@@ -1,5 +1,0 @@
-Minecraft version: 1.21.11
-MapColors unique block ids: 635
-Blockstates total: 1168
-Missing from mapColors: 533
-Unresolved texture triplets: 0
