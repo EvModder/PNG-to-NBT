@@ -1,0 +1,40 @@
+# High-confidence mapColors additions (Minecraft 1.21.11)
+# Source basis: Mojang client mappings + javap on local 1.21.11 client jar
+# Mapping resolution: flf.* (MapColor) constants -> named map colors -> this project's color IDs.
+
+# bamboo family
+bamboo_mosaic -> 18 (COLOR_YELLOW)
+bamboo_block -> 7 (PLANT)
+bamboo_block[axis=x] -> 18 (COLOR_YELLOW)
+stripped_bamboo_block -> 18 (COLOR_YELLOW)
+
+# cherry stripped variants
+stripped_cherry_log -> 42 (TERRACOTTA_PINK)
+stripped_cherry_log[axis=x] -> 36 (TERRACOTTA_WHITE)
+stripped_cherry_wood -> 42 (TERRACOTTA_PINK)
+
+# stone/quartz/blackstone/resin
+suspicious_gravel -> 11 (STONE)
+quartz_bricks -> 14 (QUARTZ)
+gilded_blackstone -> 29 (COLOR_BLACK)
+chiseled_resin_bricks -> 37 (TERRACOTTA_ORANGE)
+
+# chiseled copper family
+chiseled_copper -> 15 (COLOR_ORANGE)
+waxed_chiseled_copper -> 15 (COLOR_ORANGE)
+exposed_chiseled_copper -> 44 (TERRACOTTA_LIGHT_GRAY)
+waxed_exposed_chiseled_copper -> 44 (TERRACOTTA_LIGHT_GRAY)
+weathered_chiseled_copper -> 56 (WARPED_STEM)
+waxed_weathered_chiseled_copper -> 56 (WARPED_STEM)
+oxidized_chiseled_copper -> 55 (WARPED_NYLIUM)
+waxed_oxidized_chiseled_copper -> 55 (WARPED_NYLIUM)
+
+# copper bulb family
+copper_bulb -> 15 (COLOR_ORANGE)
+waxed_copper_bulb -> 15 (COLOR_ORANGE)
+exposed_copper_bulb -> 44 (TERRACOTTA_LIGHT_GRAY)
+waxed_exposed_copper_bulb -> 44 (TERRACOTTA_LIGHT_GRAY)
+weathered_copper_bulb -> 56 (WARPED_STEM)
+waxed_weathered_copper_bulb -> 56 (WARPED_STEM)
+oxidized_copper_bulb -> 55 (WARPED_NYLIUM)
+waxed_oxidized_copper_bulb -> 55 (WARPED_NYLIUM)
