@@ -1,39 +1,61 @@
-// Minecraft map color data
-// Base RGB values are the "light" shade (multiplier 255/255 = full brightness)
-// Other shades: dark=180/255, flat=220/255, darkest=135/255
-//
-// Intentional omission policy (enforced/audited by `npm run audit:mapcolors`):
-// - Explicitly excluded block IDs (unobtainable):
-//   - `command_block`, `chain_command_block`, `repeating_command_block`
-//   - `jigsaw`, `structure_block`
-//   - `end_portal`, `reinforced_deepslate`,
-//   - `spawner`, `trial_spawner`, `vault`
-//   - `barrier`, `structure_void`, `light`
-//   - `budding_amethyst`
-//   - `infested_*`
-// - Explicitly excluded block IDs (obtainable but intentionally omitted):
-//   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`
-//   - `grindstone`, `brewing_stand`, `heavy_core`
-//   - `.*_head` and `.*_skull`
-//   - `.*_stairs`
-//   - `.*_shulker_box`
-//   - `.*_button`
-//   - `.*_wall`
-//   - `.*_fence`
-//   - `.*_fence_gate`
-//   - `.*_trapdoor`
-//   - `.*_door`
-//   - `.*_sign`
-//   - `.*_stained_glass_pane`
-//   - `.*lightning_rod`
-// - State-specific entries are used where one block ID can map to multiple map colors
-//   depending on state (for example, `*_log[axis=x]` vs `*_log`).
+/**
+ * Public API:
+ * - SHADE_MULTIPLIERS
+ * - WATER_BASE_INDEX
+ * - BASE_COLORS
+ * - ColorShade
+ * - packRgb
+ * - getShadedRgb()
+ *
+ * Used by:
+ * - src/Index.tsx
+ * - src/data/colorSortOrder.ts
+ * - src/data/excludedColors.ts
+ * - src/lib/colorGridTypes.ts
+ * - src/lib/fillerRules.ts
+ * - src/lib/colorGridFromImage.ts
+  * - src/lib/materialRules.ts
+ * - src/data/presets.ts
+ *
+ * Notes:
+ * - Base RGB values are the "light" shade (multiplier 255/255 = full brightness)
+ * - Other shades: dark=180/255, flat=220/255, darkest=135/255.
+ */
+
+/* Intentional omission policy (enforced/audited by `npm run audit:mapcolors`):
+ * - Explicitly excluded block IDs (unobtainable):
+ *   - `command_block`, `chain_command_block`, `repeating_command_block`
+ *   - `jigsaw`, `structure_block`
+ *   - `end_portal`, `reinforced_deepslate`,
+ *   - `spawner`, `trial_spawner`, `vault`
+ *   - `barrier`, `structure_void`, `light`
+ *   - `budding_amethyst`
+ *   - `infested_*`
+ * - Explicitly excluded block IDs (obtainable but intentionally omitted):
+ *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`
+ *   - `grindstone`, `brewing_stand`, `heavy_core`
+ *   - `.*_head` and `.*_skull`
+ *   - `.*_stairs`
+ *   - `.*_shulker_box`
+ *   - `.*_button`
+ *   - `.*_wall`
+ *   - `.*_fence`
+ *   - `.*_fence_gate`
+ *   - `.*_trapdoor`
+ *   - `.*_door`
+ *   - `.*_sign`
+ *   - `.*_stained_glass_pane`
+ *   - `.*lightning_rod`
+ * - State-specific entries are used where one block ID can map to multiple map colors
+ * depending on state (for example, `*_log[axis=x]` vs `*_log`).
+ */
+
 
 export const SHADE_MULTIPLIERS = [180, 220, 255, 135] as const;
 // Index 0=dark, 1=flat, 2=light, 3=darkest (table-only; not obtainable)
 const OBTAINABLE_SHADE_INDICES = [0, 1, 2] as const;
 
-export interface BaseColor {
+interface BaseColor {
   name: string;
   r: number;
   g: number;
@@ -58,7 +80,7 @@ export const BASE_COLORS: BaseColor[] = [
   { name: "CLAY", r: 164, g: 168, b: 184, blocks: ["clay"] },
   { name: "DIRT", r: 151, g: 109, b: 77, blocks: ["dirt", "coarse_dirt", "granite", "granite_slab", "polished_granite", "polished_granite_slab", "packed_mud", "jungle_log", "oak_log", "stripped_jungle_log", "jungle_wood", "stripped_jungle_wood", "jungle_planks", "jungle_slab", "jungle_pressure_plate", "jukebox", "brown_mushroom_block", "rooted_dirt", "hanging_roots"] },
   { name: "STONE", r: 112, g: 112, b: 112, blocks: ["cobblestone", "cobblestone_slab", "mossy_cobblestone", "mossy_cobblestone_slab", "stone", "stone_slab", "stone_pressure_plate", "smooth_stone", "smooth_stone_slab", "stone_bricks", "stone_brick_slab", "mossy_stone_bricks", "mossy_stone_brick_slab", "cracked_stone_bricks", "chiseled_stone_bricks", "andesite", "andesite_slab", "polished_andesite", "polished_andesite_slab", "gravel", "furnace", "smoker", "blast_furnace", "dispenser", "dropper", "observer", "stonecutter", "ender_chest", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "redstone_ore", "lapis_ore", "emerald_ore", "diamond_ore", "crafter", "pale_oak_log", "pale_oak_wood", "bedrock"] },
-  { name: "WATER", r: 64, g: 64, b: 255, blocks: ["water", "oak_leaves[waterlogged=true]", "spruce_leaves[waterlogged=true]", "birch_leaves[waterlogged=true]", "jungle_leaves[waterlogged=true]", "acacia_leaves[waterlogged=true]", "dark_oak_leaves[waterlogged=true]", "cherry_leaves[waterlogged=true]", "pale_oak_leaves[waterlogged=true]", "mangrove_leaves[waterlogged=true]", "azalea_leaves[waterlogged=true]", "flowering_azalea_leaves[waterlogged=true]"] },
+  { name: "WATER", r: 64, g: 64, b: 255, blocks: ["water", "oak_leaves[waterlogged=true]", "spruce_leaves[waterlogged=true]", "birch_leaves[waterlogged=true]", "jungle_leaves[waterlogged=true]", "acacia_leaves[waterlogged=true]", "dark_oak_leaves[waterlogged=true]", "cherry_leaves[waterlogged=true]", "pale_oak_leaves[waterlogged=true]", "mangrove_leaves[waterlogged=true]", "azalea_leaves[waterlogged=true]", "flowering_azalea_leaves[waterlogged=true]", "ice"] },
   { name: "WOOD", r: 143, g: 119, b: 72, blocks: ["oak_wood", "stripped_oak_wood", "stripped_oak_log", "oak_planks", "oak_slab", "oak_pressure_plate", "crafting_table", "bookshelf", "note_block", "chest", "trapped_chest", "daylight_detector", "loom", "composter", "lectern", "smithing_table", "fletching_table", "beehive", "barrel", "cartography_table", "chiseled_bookshelf", "petrified_oak_slab", "bamboo_sapling", "dead_bush"] },
   { name: "QUARTZ", r: 255, g: 252, b: 245, blocks: ["quartz_block", "smooth_quartz", "smooth_quartz_slab", "chiseled_quartz_block", "quartz_pillar", "quartz_slab", "diorite", "diorite_slab", "polished_diorite", "polished_diorite_slab", "sea_lantern", "target", "pale_oak_planks", "pale_oak_slab", "pale_oak_pressure_plate", "stripped_pale_oak_log", "stripped_pale_oak_wood"] },
   { name: "COLOR_ORANGE", r: 216, g: 127, b: 51, blocks: ["orange_wool", "orange_carpet", "orange_concrete", "orange_concrete_powder", "orange_glazed_terracotta", "orange_stained_glass", "orange_candle", "acacia_log", "stripped_acacia_log", "stripped_acacia_wood", "acacia_planks", "acacia_slab", "acacia_pressure_plate", "pumpkin", "carved_pumpkin", "jack_o_lantern", "terracotta", "red_sand", "red_sandstone", "red_sandstone_slab", "cut_red_sandstone", "cut_red_sandstone_slab", "smooth_red_sandstone", "smooth_red_sandstone_slab", "chiseled_red_sandstone", "honey_block", "honeycomb_block", "waxed_copper_block", "waxed_cut_copper", "waxed_cut_copper_slab", "copper_block", "cut_copper", "cut_copper_slab", "raw_copper_block", "creaking_heart", "open_eyeblossom"] },
@@ -110,32 +132,19 @@ export const BASE_COLORS: BaseColor[] = [
   { name: "GLOW_LICHEN", r: 127, g: 167, b: 150, blocks: ["verdant_froglight", "glow_lichen[down=true]"] },
 ];
 
-// Build lookup: "r,g,b" → { baseIndex, shade }
-export interface ColorMatch {
+// Packed RGB lookup value → { baseIndex, shade }.
+export interface ColorShade {
   baseIndex: number;
   shade: number; // 0=dark, 1=flat, 2=light
 }
 
-let _colorLookup: Map<string, ColorMatch> | null = null;
-
-export function getColorLookup(): Map<string, ColorMatch> {
-  if (_colorLookup) return _colorLookup;
-  _colorLookup = new Map();
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const { r, g, b } = BASE_COLORS[i];
-    for (const s of OBTAINABLE_SHADE_INDICES) {
-      const mr = Math.floor(r * SHADE_MULTIPLIERS[s] / 255);
-      const mg = Math.floor(g * SHADE_MULTIPLIERS[s] / 255);
-      const mb = Math.floor(b * SHADE_MULTIPLIERS[s] / 255);
-      _colorLookup.set(`${mr},${mg},${mb}`, { baseIndex: i, shade: s });
-    }
-  }
-  return _colorLookup;
+export function packRgb(r: number, g: number, b: number): number {
+  return (r << 16) | (g << 8) | b;
 }
 
 // Get the shaded RGB for display
-export function getShadedRgb(baseIndex: number, shade: number): [number, number, number] {
-  const { r, g, b } = BASE_COLORS[baseIndex];
-  const m = SHADE_MULTIPLIERS[shade];
+export function getShadedRgb(color: ColorShade): [number, number, number] {
+  const { r, g, b } = BASE_COLORS[color.baseIndex];
+  const m = SHADE_MULTIPLIERS[color.shade];
   return [Math.floor((r * m) / 255), Math.floor((g * m) / 255), Math.floor((b * m) / 255)];
 }

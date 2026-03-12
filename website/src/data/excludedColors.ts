@@ -1,3 +1,10 @@
+/**
+ * Public API:
+ * - EXCLUDED_BLOCKS
+ *
+ * Used by:
+ * - src/Index.tsx
+ */
 import { BASE_COLORS } from "./mapColors";
 
 // Excluded block options grouped by map color ID.
@@ -182,4 +189,4 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   ],
 };
 
-export const EXCLUDED_COLORS: string[][] = BASE_COLORS.map((_, idx) => EXCLUDED_BY_ID[idx] ?? []);
+export const EXCLUDED_BLOCKS: string[][] = BASE_COLORS.map((_, idx) => EXCLUDED_BY_ID[idx] ?? []);

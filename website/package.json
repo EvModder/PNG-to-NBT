@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "npm@11.11.0",
+  "engines": {
+    "node": "25.8.0",
+    "npm": "11.11.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,22 +18,22 @@
     "build:block-icons": "python3 scripts/generate-stateful-icon-overrides.py && node scripts/build-precomputed-block-icons.mjs && python3 scripts/postprocess-precomputed-block-icons.py"
   },
   "dependencies": {
-    "baseline-browser-mapping": "^2.10.0",
-    "caniuse-lite": "^1.0.30001777",
-    "lucide-react": "^0.575.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@types/utif": "^3.0.6",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "utif": "^3.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.16.5",
-    "@types/react": "^18.3.23",
-    "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react-swc": "^3.11.0",
-    "autoprefixer": "^10.4.21",
-    "playwright": "^1.58.2",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5.8.3",
-    "vite": "^5.4.19"
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/node": "^25.3.5",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react-swc": "^4.2.3",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   }
 }

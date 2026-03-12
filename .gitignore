@@ -1,5 +1,7 @@
 # My crap
 sample_imgs/
+website/reports/
+upstream-compare-*/
 
 # Log crap
 logs
@@ -16,6 +18,7 @@ node_modules
 dist
 dist-ssr
 bun.lock
+package-lock.json
 
 # Apple crap
 .DS_Store
