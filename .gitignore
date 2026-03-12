@@ -19,6 +19,7 @@ dist
 dist-ssr
 bun.lock
 package-lock.json
+website/.bun-version
 
 # Apple crap
 .DS_Store

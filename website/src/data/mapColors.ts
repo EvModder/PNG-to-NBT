@@ -22,7 +22,7 @@
  * - Other shades: dark=180/255, flat=220/255, darkest=135/255.
  */
 
-/* Intentional omission policy (enforced/audited by `npm run audit:mapcolors`):
+/* Intentional omission policy (enforced/audited by `bun run audit:mapcolors`):
  * - Explicitly excluded block IDs (unobtainable):
  *   - `command_block`, `chain_command_block`, `repeating_command_block`
  *   - `jigsaw`, `structure_block`
