@@ -2,7 +2,7 @@
  * Public API:
  * - convertToNbt()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  */
 import type { ExportOptions } from "./conversionTypes";
@@ -29,6 +29,8 @@ async function buildSplitZip(
   return { data: createZip(zipEntries), isZip: true };
 }
 
+// Callers:
+// - src/Index.tsx
 export async function convertToNbt(
   shape: GeneratedShape,
   options: ExportOptions,

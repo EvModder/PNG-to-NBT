@@ -2,13 +2,9 @@
  * Public API:
  * - createZip()
  *
- * Used by:
+ * Callers:
  * - src/lib/nbtExport.ts
- *
- * Notes:
- * - Minimal ZIP file generator (store only, no compression).
  */
-
 function crc32(data: Uint8Array): number {
   let crc = 0xFFFFFFFF;
   for (let i = 0; i < data.length; ++i) {
@@ -33,6 +29,8 @@ interface ZipEntry {
   data: Uint8Array;
 }
 
+// Callers:
+// - src/lib/nbtExport.ts
 export function createZip(entries: ZipEntry[]): Uint8Array {
   const out: number[] = [];
   const centralDir: { offset: number; name: Uint8Array; crc: number; size: number }[] = [];

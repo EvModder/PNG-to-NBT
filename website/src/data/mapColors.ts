@@ -4,24 +4,19 @@
  * - WATER_BASE_INDEX
  * - BASE_COLORS
  * - ColorShade
- * - packRgb
+ * - packRgb()
  * - getShadedRgb()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  * - src/data/colorSortOrder.ts
  * - src/data/excludedColors.ts
+ * - src/data/presets.ts
+ * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridTypes.ts
  * - src/lib/fillerRules.ts
- * - src/lib/colorGridFromImage.ts
-  * - src/lib/materialRules.ts
- * - src/data/presets.ts
- *
- * Notes:
- * - Base RGB values are the "light" shade (multiplier 255/255 = full brightness)
- * - Other shades: dark=180/255, flat=220/255, darkest=135/255.
+ * - src/lib/materialRules.ts
  */
-
 /* Intentional omission policy (enforced/audited by `bun run audit:mapcolors`):
  * - Explicitly excluded block IDs (unobtainable):
  *   - `command_block`, `chain_command_block`, `repeating_command_block`
@@ -51,6 +46,8 @@
  */
 
 
+// Callers:
+// - src/lib/colorGridParsing.ts
 export const SHADE_MULTIPLIERS = [180, 220, 255, 135] as const;
 // Index 0=dark, 1=flat, 2=light, 3=darkest (table-only; not obtainable)
 const OBTAINABLE_SHADE_INDICES = [0, 1, 2] as const;
@@ -64,9 +61,20 @@ interface BaseColor {
 }
 
 // WATER is the only base color with special logic; current hardcoding has it stored at index 12
+// Callers:
+// - src/Index.tsx
+// - src/lib/colorGridTypes.ts
 export const WATER_BASE_INDEX = 12;
 
 // 62 base colors (index 0 = transparent/NONE)
+// Callers:
+// - src/Index.tsx
+// - src/data/colorSortOrder.ts
+// - src/data/excludedColors.ts
+// - src/data/presets.ts
+// - src/lib/colorGridParsing.ts
+// - src/lib/fillerRules.ts
+// - src/lib/materialRules.ts
 export const BASE_COLORS: BaseColor[] = [
   { name: "NONE", r: 0, g: 0, b: 0, blocks: ["glass", "glass_pane", "iron_chain", "end_rod", "ladder", "rail", "powered_rail", "detector_rail", "activator_rail", "lever", "torch", "wall_torch", "soul_torch", "soul_wall_torch", "redstone_wire", "repeater", "comparator", "tripwire_hook", "tripwire", "flower_pot", "cake"] },
   { name: "GRASS", r: 127, g: 178, b: 56, blocks: ["grass_block", "slime_block"] },
@@ -133,16 +141,22 @@ export const BASE_COLORS: BaseColor[] = [
 ];
 
 // Packed RGB lookup value → { baseIndex, shade }.
+// Callers:
+// - src/lib/colorGridParsing.ts
 export interface ColorShade {
   baseIndex: number;
   shade: number; // 0=dark, 1=flat, 2=light
 }
 
+// Callers:
+// - src/lib/colorGridParsing.ts
 export function packRgb(r: number, g: number, b: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
 // Get the shaded RGB for display
+// Callers:
+// - src/Index.tsx
 export function getShadedRgb(color: ColorShade): [number, number, number] {
   const { r, g, b } = BASE_COLORS[color.baseIndex];
   const m = SHADE_MULTIPLIERS[color.shade];

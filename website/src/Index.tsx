@@ -5,8 +5,8 @@ import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
-import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridFromImage";
-import { computeColorGridStats } from "@/lib/colorGridAnalyzer";
+import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";
+import { computeColorGridStats } from "@/lib/colorGridAnalysis";
 import {
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
@@ -507,6 +507,10 @@ const Index = () => {
     }
     return false;
   }, [preset.blocks, savedBlocks]);
+  const currentPresetIsUnsavedAuto = useMemo(
+    () => activeIdx >= BUILTIN_PRESET_NAMES.length && isAutoCustomPresetName(preset.name) && presetDirty,
+    [activeIdx, preset.name, presetDirty],
+  );
 
   const markSavedDeferred = useCallback(() => {
     setSavedBlocks(null);
@@ -757,7 +761,6 @@ const Index = () => {
       }),
     );
   }, [imageData, supportShape, preset.blocks, customColors, candidateVisibleInPart]);
-  const enableWaterSupportOption = !imageData || imageHasWater;
   const staircaseModeOptions = useMemo((): ModeOption[] => {
     if (!shapeMap || !imageValid || isFlatShape) {
       return DEFAULT_STAIRCASE_OPTIONS;
@@ -888,6 +891,72 @@ const Index = () => {
     colStart,
     colEnd,
   ]);
+  const supportModeRoleCounts = useMemo(() => {
+    if (!effectiveShape || !imageValid) return null;
+
+    const analyzeMode = (mode: SupportMode) => {
+      if (mode === supportMode && materialNeedStats) return materialNeedStats.fillerRoleCounts;
+      return analyzeMaterialNeeds(imageColorGrid, effectiveShape, {
+        blockMapping: preset.blocks,
+        fillerAssignments: createFillerAssignments(
+          supportFillerBlock,
+          shadeFillerBlock,
+          dominateVoidFillerBlock,
+          recessiveVoidFillerBlock,
+          suppress2LayerLateFillerBlock,
+          mode,
+          usesWaterForWater,
+          usesIceForWater,
+        ),
+        assumeFloor,
+        customColors,
+      }).fillerRoleCounts;
+    };
+
+    return {
+      [SupportMode.All]: analyzeMode(SupportMode.All),
+      [SupportMode.Water]: analyzeMode(SupportMode.Water),
+    };
+  }, [
+    effectiveShape,
+    imageValid,
+    imageColorGrid,
+    supportMode,
+    materialNeedStats,
+    preset.blocks,
+    supportFillerBlock,
+    shadeFillerBlock,
+    dominateVoidFillerBlock,
+    recessiveVoidFillerBlock,
+    suppress2LayerLateFillerBlock,
+    usesWaterForWater,
+    usesIceForWater,
+    assumeFloor,
+    customColors,
+  ]);
+  const getSupportModeRoleCount = useCallback(
+    (mode: SupportMode, ...roles: FillerRole[]) =>
+      roles.reduce((sum, role) => sum + (supportModeRoleCounts?.[mode]?.get(role) ?? 0), 0),
+    [supportModeRoleCounts],
+  );
+  const enableAllSupportOption = !imageData || getSupportModeRoleCount(
+    SupportMode.All,
+    FillerRole.SupportAll,
+    FillerRole.WaterPath,
+    ...(usesIceForWater ? [FillerRole.SupportWaterBase] : []),
+  ) > 0;
+  const enableWaterSupportOption = !imageData || getSupportModeRoleCount(
+    SupportMode.Water,
+    ...(usesWaterForWater
+      ? [FillerRole.SupportWaterSides, FillerRole.WaterPath]
+      : [FillerRole.SupportWaterBase, FillerRole.WaterPath]),
+  ) > 0;
+  const showSupportModeSelector = !imageData || (
+    enableAllSupportOption ||
+    enableStepsSupportOption ||
+    enableWaterSupportOption ||
+    (!supportFillerIsFragile && enableFragileSupportOption)
+  );
   const materialCounts = useMemo(() => materialNeedStats?.blockCounts ?? null, [materialNeedStats]);
 
   const sortedMaterials = useMemo(
@@ -1001,10 +1070,11 @@ const Index = () => {
 
   useEffect(() => {
     if (!imageData) return;
+    if (supportMode === SupportMode.All && !enableAllSupportOption) { setSupportMode(SupportMode.None); return; }
     if (supportMode === SupportMode.Fragile && (supportFillerIsFragile || !enableFragileSupportOption)) { setSupportMode(SupportMode.None); return; }
     if (supportMode === SupportMode.Steps && !enableStepsSupportOption) setSupportMode(SupportMode.None);
     if (supportMode === SupportMode.Water && !enableWaterSupportOption) setSupportMode(SupportMode.None);
-  }, [imageData, enableStepsSupportOption, enableFragileSupportOption, enableWaterSupportOption, supportMode, supportFillerIsFragile]);
+  }, [imageData, enableAllSupportOption, enableStepsSupportOption, enableFragileSupportOption, enableWaterSupportOption, supportMode, supportFillerIsFragile]);
 
   useEffect(() => {
     if ((supportMode === SupportMode.Fragile || supportMode === SupportMode.All) && layerGap < 3) setLayerGap(3);
@@ -1089,13 +1159,16 @@ const Index = () => {
 
   const selectPreset = (idx: number) => {
     const builtin = getBuiltinPreset(presets[idx].name);
-    if (builtin)
-      setPresets(prev => {
-        const n = [...prev];
-        n[idx] = builtin;
-        return n;
-      });
-    setActiveIdx(idx);
+    const nextIdx = currentPresetIsUnsavedAuto && idx > activeIdx ? idx - 1 : idx;
+    setPresets(prev => {
+      let next = [...prev];
+      if (builtin) next[idx] = builtin;
+      if (currentPresetIsUnsavedAuto && idx !== activeIdx) {
+        next = next.filter((_, i) => i !== activeIdx);
+      }
+      return next;
+    });
+    setActiveIdx(nextIdx);
     markSavedDeferred();
   };
 
@@ -1108,8 +1181,17 @@ const Index = () => {
       selectPreset(existingIdx);
       return;
     }
-    setPresets(prev => [...prev, { name, blocks: { ...preset.blocks } }]);
-    setActiveIdx(presets.length);
+    if (currentPresetIsUnsavedAuto) {
+      setPresets(prev => {
+        const next = [...prev];
+        next[activeIdx] = { name, blocks: { ...preset.blocks } };
+        return next;
+      });
+      setActiveIdx(activeIdx);
+    } else {
+      setPresets(prev => [...prev, { name, blocks: { ...preset.blocks } }]);
+      setActiveIdx(presets.length);
+    }
     markSavedDeferred();
   };
 
@@ -1311,38 +1393,38 @@ const Index = () => {
   const northRowFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeNorthRow) ?? 0;
   const suppressFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeSuppress) ?? 0;
   const lateSuppressFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeSuppressLate) ?? 0;
-  const getStructuralFillerRoleCount = useCallback(
-    (...roles: FillerRole[]) => roles.reduce((sum, role) => sum + (fillerNeedStats?.roleCounts.get(role) ?? 0), 0),
-    [fillerNeedStats],
+  const getRequiredFillerRoleCount = useCallback(
+    (...roles: FillerRole[]) => roles.reduce((sum, role) => sum + (materialNeedStats?.fillerRoleCounts.get(role) ?? 0), 0),
+    [materialNeedStats],
   );
-  const shadeFillerRequiredCount = getStructuralFillerRoleCount(
+  const shadeFillerRequiredCount = getRequiredFillerRoleCount(
     FillerRole.ShadeNorthRow,
     FillerRole.ShadeSuppress,
   );
-  const lateFillerRequiredCount = getStructuralFillerRoleCount(FillerRole.ShadeSuppressLate);
-  const dominateVoidFillerRequiredCount = getStructuralFillerRoleCount(FillerRole.ShadeVoidDominant);
-  const recessiveVoidFillerRequiredCount = getStructuralFillerRoleCount(FillerRole.ShadeVoidRecessive);
+  const lateFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
+  const dominateVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
+  const recessiveVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidRecessive);
   const supportFillerRequiredCount = useMemo(() => {
     switch (supportMode) {
       case SupportMode.Steps:
-        return getStructuralFillerRoleCount(
+        return getRequiredFillerRoleCount(
           FillerRole.StairStep,
           FillerRole.WaterPath,
           FillerRole.SupportWaterBase,
         );
       case SupportMode.All:
-        return getStructuralFillerRoleCount(
+        return getRequiredFillerRoleCount(
           FillerRole.SupportAll,
           FillerRole.WaterPath,
           FillerRole.SupportWaterBase,
         );
       case SupportMode.Fragile:
-        return getStructuralFillerRoleCount(
+        return getRequiredFillerRoleCount(
           FillerRole.SupportFragile,
           FillerRole.SupportWaterBase,
         );
       case SupportMode.Water:
-        return getStructuralFillerRoleCount(
+        return getRequiredFillerRoleCount(
           FillerRole.SupportWaterSides,
           FillerRole.SupportWaterBase,
           FillerRole.WaterPath,
@@ -1351,7 +1433,7 @@ const Index = () => {
       default:
         return 0;
     }
-  }, [getStructuralFillerRoleCount, supportMode]);
+  }, [getRequiredFillerRoleCount, supportMode]);
   const hasInGridFillerNeed = suppressFillerCount + lateSuppressFillerCount > 0;
   const inGridShadingCountsAsWarning = hasInGridFillerNeed && isSuppressBuildMode(effectiveBuildMode);
   const hasComplexNorthNeed = northRowFillerCount > 0 && (showNooblineWarnings || !northRowSingleLine);
@@ -1366,6 +1448,14 @@ const Index = () => {
     supportMode !== SupportMode.None &&
     (!imageData || supportFillerRequiredCount > 0);
   const showShadeFillerInput = !!imageData && shadeFillerRequiredCount > 0;
+  const shadeFillerIsNorthRowOnly = northRowFillerCount > 0 && suppressFillerCount === 0;
+  const shadeFillerLabel = shadeFillerIsNorthRowOnly ? "Noobline:" : "Shade:";
+  const shadeFillerTooltip = shadeFillerIsNorthRowOnly
+    ? "Used for north-row shading filler placements."
+    : "Used for north-row and suppress shading filler placements.";
+  const shadeFillerRequiredTooltip = shadeFillerIsNorthRowOnly
+    ? "Required north-row shading filler placements for the current output range."
+    : "Required north-row and suppress-shading filler placements for the current output range.";
   const showDominateVoidFillerInput =
     !!imageData &&
     isStaircaseBuildMode(effectiveBuildMode) &&
@@ -2139,25 +2229,27 @@ const Index = () => {
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
                 )}
               </div>
-              <div className="inline-flex items-center gap-1">
-                <span className="text-xs font-semibold text-accent whitespace-nowrap">Support:</span>
-                <select
-                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
-                  value={supportMode}
-                  onChange={e => setSupportMode(e.target.value as SupportMode)}
-                  title={supportModeTooltip}
-                >
-                  <option value={SupportMode.All} title={getSupportModeTooltip(SupportMode.All)}>All</option>
-                  <option value={SupportMode.None} title={getSupportModeTooltip(SupportMode.None)}>None</option>
-                  <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={getSupportModeTooltip(SupportMode.Steps)}>
-                    Steps
-                  </option>
-                  <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={getSupportModeTooltip(SupportMode.Water)}>
-                    Water
-                  </option>
-                  <option value={SupportMode.Fragile} disabled={supportFillerIsFragile || !enableFragileSupportOption} title={getSupportModeTooltip(SupportMode.Fragile)}>Fragile</option>
-                </select>
-              </div>
+              {showSupportModeSelector && (
+                <div className="inline-flex items-center gap-1">
+                  <span className="text-xs font-semibold text-accent whitespace-nowrap">Support:</span>
+                  <select
+                    className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
+                    value={supportMode}
+                    onChange={e => setSupportMode(e.target.value as SupportMode)}
+                    title={supportModeTooltip}
+                  >
+                    <option value={SupportMode.All} disabled={!enableAllSupportOption} title={getSupportModeTooltip(SupportMode.All)}>All</option>
+                    <option value={SupportMode.None} title={getSupportModeTooltip(SupportMode.None)}>None</option>
+                    <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={getSupportModeTooltip(SupportMode.Steps)}>
+                      Steps
+                    </option>
+                    <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={getSupportModeTooltip(SupportMode.Water)}>
+                      Water
+                    </option>
+                    <option value={SupportMode.Fragile} disabled={supportFillerIsFragile || !enableFragileSupportOption} title={getSupportModeTooltip(SupportMode.Fragile)}>Fragile</option>
+                  </select>
+                </div>
+              )}
               {!isBuiltinUnedited && (
                 <button
                   className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
@@ -2308,9 +2400,9 @@ const Index = () => {
                 <div className="inline-flex items-center gap-1 shrink-0">
                   <span
                     className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title="Used for north-row and suppress shading filler placements."
+                    title={shadeFillerTooltip}
                   >
-                    Shade:
+                    {shadeFillerLabel}
                   </span>
                   <div className="inline-flex items-center gap-0 shrink-0">
                     <input
@@ -2318,7 +2410,7 @@ const Index = () => {
                       value={shadeFillerBlock}
                       onChange={e => setShadeFillerBlock(e.target.value)}
                       placeholder="resin_block"
-                      title="Used for north-row and suppress shading filler placements."
+                      title={shadeFillerTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
                     {!!imageData && !shadeFillerShadingDisabled && shadeFillerRequiredCount > 0 && (
@@ -2326,7 +2418,7 @@ const Index = () => {
                         <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
                         <span
                           className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title="Required north-row and suppress-shading filler placements for the current output range."
+                          title={shadeFillerRequiredTooltip}
                         >
                           <span className="font-semibold">R:</span>
                           <span className="text-foreground">{formatRequiredCount(shadeFillerRequiredCount)}</span>

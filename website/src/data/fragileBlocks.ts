@@ -2,14 +2,9 @@
  * Public API:
  * - isFragileBlock()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
- * - src/data/presets.ts
- * - src/lib/shapeSubstitution.ts
- *
- * Notes:
- * - Blocks with placement conditions from MCPropertyEncyclopedia.
- * - These blocks require a supporting block below them to stay placed.
+ * - src/lib/shapeCellRules.ts
  */
 const FRAGILE_BLOCKS = new Set([
   // Carpets
@@ -70,6 +65,9 @@ const FRAGILE_BLOCKS = new Set([
  * Check if a block name (possibly with properties like "[south=true]") is fragile.
  * Strips the property suffix before checking.
  */
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeCellRules.ts
 export function isFragileBlock(blockId: string): boolean {
   const name = blockId.includes("[") ? blockId.slice(0, blockId.indexOf("[")) : blockId;
   return FRAGILE_BLOCKS.has(name);

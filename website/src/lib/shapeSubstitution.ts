@@ -1,9 +1,9 @@
 /**
  * Public API:
- * - materializeShapeParts()
  * - normalizeAndMeasure()
+ * - materializeShapeParts()
  *
- * Used by:
+ * Callers:
  * - src/lib/nbtExport.ts
  */
 import { MAP_SIZE } from "./colorGridTypes";
@@ -48,6 +48,8 @@ function materializePart(part: ShapePart, options: SubstitutionOptions): BlockEn
   return resolved;
 }
 
+// Callers:
+// - src/lib/nbtExport.ts
 export function normalizeAndMeasure(blocks: BlockEntry[], forceZ129 = false): { sizeX: number; sizeY: number; sizeZ: number } {
   if (blocks.length === 0) return { sizeX: MAP_SIZE, sizeY: 1, sizeZ: forceZ129 ? MAP_SIZE + 1 : MAP_SIZE };
 
@@ -76,6 +78,8 @@ export function normalizeAndMeasure(blocks: BlockEntry[], forceZ129 = false): { 
   };
 }
 
+// Callers:
+// - src/lib/nbtExport.ts
 export function materializeShapeParts(shape: GeneratedShape, options: SubstitutionOptions): BlockEntry[][] {
   return shape.parts.map(part => materializePart(part, options));
 }

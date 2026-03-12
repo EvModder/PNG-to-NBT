@@ -3,9 +3,10 @@
  * - GeneratedShape
  * - generateShapeMap()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  * - src/lib/nbtExport.ts
+ * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeSubstitution.ts
  */
 import {
@@ -18,9 +19,13 @@ import {
 } from "./conversionTypes";
 import { FillerRole } from "./conversionTypes";
 import { MAP_SIZE, TRANSPARENT_COLOR, type ColorData, type ColorGrid, getColorCell, isTransparentColor, isWaterColor } from "./colorGridTypes";
-import { PixelParity, UniformNonFlatDirection, getPixelParity } from "./colorGridAnalyzer";
+import { PixelParity, UniformNonFlatDirection, getPixelParity } from "./colorGridAnalysis";
 import { ShapePartType, type ShapeCell, type ShapeColor, type ShapeCoordKey, type ShapePart, parseShapeCoordKey, toShapeCoordKey } from "./shapeTypes";
 
+// Callers:
+// - src/lib/nbtExport.ts
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeSubstitution.ts
 export interface GeneratedShape {
   parts: ShapePart[];
   partType: ShapePartType;
@@ -1802,6 +1807,8 @@ function getGeneratedShape(
   return shape;
 }
 
+// Callers:
+// - src/Index.tsx
 export function generateShapeMap(
   colorGrid: ColorGrid,
   options: { layerGap: number; paletteSeed?: number; waterFillerOffset?: boolean },

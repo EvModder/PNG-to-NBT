@@ -2,7 +2,7 @@
  * Public API:
  * - EXCLUDED_BLOCKS
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  */
 import { BASE_COLORS } from "./mapColors";
@@ -189,4 +189,6 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   ],
 };
 
+// Callers:
+// - src/Index.tsx
 export const EXCLUDED_BLOCKS: string[][] = BASE_COLORS.map((_, idx) => EXCLUDED_BY_ID[idx] ?? []);

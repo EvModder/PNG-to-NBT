@@ -4,7 +4,7 @@
  * - isWithinShapeBounds()
  * - shouldIncludeFragileSupportCell()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeSubstitution.ts
@@ -15,12 +15,18 @@ import { FillerRole, type CustomColor } from "./conversionTypes";
 import { getMappedShapeColorBlockId } from "./materialRules";
 import { isShapeColorCell, parseShapeCoordKey, toShapeCoordKey, type ShapeColor, type ShapePart } from "./shapeTypes";
 
+// Callers:
+// - src/Index.tsx
 export function getSupportedColorAbove(part: ShapePart, coord: number): ShapeColor | null {
   const [x, y, z] = parseShapeCoordKey(coord);
   const above = part.cells.get(toShapeCoordKey(x, y + 1, z));
   return above && isShapeColorCell(above) ? above : null;
 }
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeSubstitution.ts
 export function isWithinShapeBounds(
   candidate: { x: number; y: number; z: number },
   bounds: ShapePart["bounds"],
@@ -32,6 +38,9 @@ export function isWithinShapeBounds(
   return true;
 }
 
+// Callers:
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeSubstitution.ts
 export function shouldIncludeFragileSupportCell(
   part: ShapePart,
   coord: number,

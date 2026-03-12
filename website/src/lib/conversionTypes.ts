@@ -3,23 +3,32 @@
  * - CustomColor
  * - BuildMode
  * - FillerRole
- * - FillerAssignment
  * - getCanonicalBuildMode()
  * - isStaircaseBuildMode()
  * - isSuppressBuildMode()
  * - buildModeUsesLayerGap()
  * - buildModeUsesPaletteSeed()
  * - getBuildModeRangeMax()
+ * - FillerAssignment
  * - SubstitutionOptions
  * - ExportOptions
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
+ * - src/lib/fillerRules.ts
+ * - src/lib/materialRules.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeCellRules.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeSubstitution.ts
  * - src/lib/shapeTypes.ts
  */
+// Callers:
+// - src/Index.tsx
+// - src/lib/materialRules.ts
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeCellRules.ts
 export interface CustomColor {
   r: number;
   g: number;
@@ -27,6 +36,9 @@ export interface CustomColor {
   block: string;
 }
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeGeneration.ts
 export enum BuildMode {
   Flat = "flat",
   InclineUp = "incline_up",
@@ -46,6 +58,13 @@ export enum BuildMode {
   Suppress2LayerLatePairs = "suppress_2layer_late_pairs",
 }
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/fillerRules.ts
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeCellRules.ts
+// - src/lib/shapeGeneration.ts
+// - src/lib/shapeTypes.ts
 export enum FillerRole {
   ShadeNorthRow = "shade_north_row",
   ShadeSuppress = "shade_suppress",
@@ -67,6 +86,8 @@ type CanonicalBuildMode = Exclude<
   BuildMode.Flat | BuildMode.InclineUp | BuildMode.InclineDown | BuildMode.Suppress2Layer
 >;
 
+// Callers:
+// - src/lib/shapeGeneration.ts
 export function getCanonicalBuildMode(buildMode: BuildMode): CanonicalBuildMode {
   switch (buildMode) {
     case BuildMode.Flat:
@@ -80,6 +101,9 @@ export function getCanonicalBuildMode(buildMode: BuildMode): CanonicalBuildMode 
   }
 }
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeGeneration.ts
 export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Flat:
@@ -97,10 +121,16 @@ export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
   }
 }
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeGeneration.ts
 export function isSuppressBuildMode(buildMode: BuildMode): boolean {
   return !isStaircaseBuildMode(buildMode);
 }
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeGeneration.ts
 export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Suppress2Layer:
@@ -112,10 +142,14 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   }
 }
 
+// Callers:
+// - src/lib/shapeGeneration.ts
 export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
   return buildMode === BuildMode.StaircaseParty;
 }
 
+// Callers:
+// - src/Index.tsx
 export function getBuildModeRangeMax(buildMode: BuildMode): number {
   switch (buildMode) {
     case BuildMode.SuppressCheckerEW:
@@ -127,11 +161,17 @@ export function getBuildModeRangeMax(buildMode: BuildMode): number {
   }
 }
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/fillerRules.ts
+// - src/lib/shapeAnalysis.ts
 export interface FillerAssignment {
   role: FillerRole;
   block: string;
 }
 
+// Callers:
+// - src/lib/shapeSubstitution.ts
 export interface SubstitutionOptions {
   blockMapping: Record<number, string>;
   fillerAssignments: FillerAssignment[];
@@ -142,6 +182,8 @@ export interface SubstitutionOptions {
   stepRange?: [number, number];
 }
 
+// Callers:
+// - src/lib/nbtExport.ts
 export interface ExportOptions extends SubstitutionOptions {
   baseName: string;
 }

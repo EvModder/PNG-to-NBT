@@ -1,20 +1,25 @@
 /**
  * Public API:
  * - PixelParity
- * - getPixelParity()
  * - UniformNonFlatDirection
+ * - getPixelParity()
  * - computeColorGridStats()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
+ * - src/lib/shapeGeneration.ts
  */
 import { MAP_SIZE, type ColorGrid, getColorCell, isTransparentColor, isWaterColor } from "./colorGridTypes";
 
+// Callers:
+// - src/lib/shapeGeneration.ts
 export enum PixelParity {
   Recessive = "recessive",
   Dominant = "dominant",
 }
 
+// Callers:
+// - src/lib/shapeGeneration.ts
 export enum UniformNonFlatDirection {
   AllLight = "all_light",
   AllDark = "all_dark",
@@ -37,6 +42,8 @@ interface ColorGridStats {
   usedShadesByBase: Map<number, Set<number>>;
 }
 
+// Callers:
+// - src/lib/shapeGeneration.ts
 export function getPixelParity(x: number, z: number): PixelParity {
   return ((x + z) & 1) === 0 ? PixelParity.Recessive : PixelParity.Dominant;
 }
@@ -183,6 +190,8 @@ function colorGridHasNonLightWater(colorGrid: ColorGrid): boolean {
   return false;
 }
 
+// Callers:
+// - src/Index.tsx
 export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
   const voidShadowStats = analyzeVoidShadows(colorGrid);
   return {
