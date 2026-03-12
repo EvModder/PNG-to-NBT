@@ -2,6 +2,8 @@
  * Public API:
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
+ * - isTransparentMapColorBlock()
+ * - isWaterSideSupportFillerValid()
  * - buildFillerAssignmentMap()
  * - resolveAssignedFillerName()
  * - resolveCellAssignedRole()
@@ -54,6 +56,20 @@ export function isShadeFillerDisabled(fillerBlock: string): boolean {
 }
 
 // Callers:
+// - src/Index.tsx
+export function isTransparentMapColorBlock(fillerBlock: string): boolean {
+  const normalized = normalizeBlockId(fillerBlock);
+  return normalized ? TRANSPARENT_FILLER_BLOCKS.has(normalized) : false;
+}
+
+// Callers:
+// - src/Index.tsx
+// - src/lib/fillerRules.ts
+export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
+  return !isFillerDisabled(fillerBlock) && isTransparentMapColorBlock(fillerBlock);
+}
+
+// Callers:
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeSubstitution.ts
 export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[]): Map<FillerRole, string> {
@@ -69,6 +85,7 @@ export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[
 export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, role: FillerRole): string | null {
   const block = assignments.get(role) ?? "";
   if (!block) return null;
+  if (role === FillerRole.SupportWaterSides && !isWaterSideSupportFillerValid(block)) return null;
   if (isShadeCriticalFillerRole(role) ? isShadeFillerDisabled(block) : isFillerDisabled(block)) return null;
   return resolveBlockName(block);
 }

@@ -11,7 +11,7 @@
  */
 import { type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
 import { FillerRole, type CustomColor, type FillerAssignment } from "./conversionTypes";
-import { buildFillerAssignmentMap, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
+import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, ShapePartType } from "./shapeTypes";
@@ -114,10 +114,18 @@ function analyzePartMaterialNeeds(
       continue;
     }
 
-    if (!shouldIncludeFragileSupportCell(part, coord, cell, options)) continue;
-    if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor)) continue;
     const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
-    if (assignedRole) addRoleCount(fillerRoleCounts, assignedRole);
+    if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options)) continue;
+    if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor)) continue;
+    if (
+      assignedRole &&
+      (
+        (assignedRole !== FillerRole.SupportWaterSides && assignedRole !== FillerRole.SupportWaterSidesCovered) ||
+        !!resolveAssignedFillerName(fillerAssignments, assignedRole)
+      )
+    ) {
+      addRoleCount(fillerRoleCounts, assignedRole);
+    }
     const fillerName = resolveCellFillerName(cell, options.fillerAssignments, fillerAssignments);
     if (!fillerName) continue;
     const displayName = toDisplayName(fillerName);

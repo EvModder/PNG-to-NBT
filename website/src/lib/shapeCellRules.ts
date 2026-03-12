@@ -45,9 +45,10 @@ export function shouldIncludeFragileSupportCell(
   part: ShapePart,
   coord: number,
   roles: readonly FillerRole[],
+  activeRole: FillerRole | null,
   options: { blockMapping: Record<number, string>; customColors: CustomColor[] },
 ): boolean {
-  if (!roles.includes(FillerRole.SupportFragile)) return true;
+  if (activeRole !== FillerRole.SupportFragile || !roles.includes(FillerRole.SupportFragile)) return true;
   const fragileColor = getSupportedColorAbove(part, coord);
   if (!fragileColor) return false;
   const blockId = getMappedShapeColorBlockId(fragileColor, options);

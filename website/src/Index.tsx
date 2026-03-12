@@ -14,7 +14,7 @@ import {
   hasColorHeightVariance as generatedShapeHasColorHeightVariance,
   northRowIsSingleLine as generatedShapeNorthRowIsSingleLine,
 } from "@/lib/shapeAnalysis";
-import { isFillerDisabled, isShadeFillerDisabled } from "@/lib/fillerRules";
+import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { getSupportedColorAbove, isWithinShapeBounds } from "@/lib/shapeCellRules";
 import {
@@ -131,16 +131,23 @@ function createFillerAssignments(
       break;
     case SupportMode.All:
       assignments.push({ role: FillerRole.SupportAll, block: supportFillerBlock });
+      if (usesDirectWaterBlock) {
+        assignments.push({ role: FillerRole.SupportWaterSides, block: supportFillerBlock });
+        assignments.push({ role: FillerRole.SupportWaterSidesCovered, block: supportFillerBlock });
+      }
       assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
       break;
     case SupportMode.Fragile:
       assignments.push({ role: FillerRole.SupportFragile, block: supportFillerBlock });
       break;
     case SupportMode.Water:
-      assignments.push({
-        role: usesDirectWaterBlock ? FillerRole.SupportWaterSides : FillerRole.SupportWaterBase,
-        block: supportFillerBlock,
-      });
+      if (usesDirectWaterBlock) {
+        assignments.push({ role: FillerRole.SupportWaterSides, block: supportFillerBlock });
+        assignments.push({ role: FillerRole.SupportWaterSidesCovered, block: supportFillerBlock });
+      } else {
+        // Already handled by SupportWaterSidesCovered, so can be safely else-gated
+        assignments.push({ role: FillerRole.SupportWaterBase, block: supportFillerBlock });
+      }
       assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
       break;
     case SupportMode.None:
@@ -666,6 +673,10 @@ const Index = () => {
     [supportFillerBlockId],
   );
   const supportFillerDisabled = useMemo(() => isFillerDisabled(supportFillerBlock), [supportFillerBlock]);
+  const supportWaterSidesFillerValid = useMemo(
+    () => isWaterSideSupportFillerValid(supportFillerBlock),
+    [supportFillerBlock],
+  );
   const commitSupportFillerBlock = useCallback((value: string) => {
     if (isFillerDisabled(value)) setSupportMode(SupportMode.None);
   }, []);
@@ -895,11 +906,22 @@ const Index = () => {
     if (!effectiveShape || !imageValid) return null;
 
     const analyzeMode = (mode: SupportMode) => {
-      if (mode === supportMode && materialNeedStats) return materialNeedStats.fillerRoleCounts;
+      const modeUsesDirectWaterSides =
+        usesWaterForWater &&
+        (mode === SupportMode.All || mode === SupportMode.Water);
+      const waterAvailabilitySupportFiller =
+        modeUsesDirectWaterSides && !supportWaterSidesFillerValid
+          ? (BASE_COLORS[0].blocks[0] || supportFillerBlock)
+          : supportFillerBlock;
+      const shouldReuseCurrentStats =
+        mode === supportMode &&
+        materialNeedStats &&
+        !(modeUsesDirectWaterSides && !supportWaterSidesFillerValid);
+      if (shouldReuseCurrentStats) return materialNeedStats.fillerRoleCounts;
       return analyzeMaterialNeeds(imageColorGrid, effectiveShape, {
         blockMapping: preset.blocks,
         fillerAssignments: createFillerAssignments(
-          supportFillerBlock,
+          waterAvailabilitySupportFiller,
           shadeFillerBlock,
           dominateVoidFillerBlock,
           recessiveVoidFillerBlock,
@@ -910,6 +932,7 @@ const Index = () => {
         ),
         assumeFloor,
         customColors,
+        ...(colRangeEnabled ? (isStepRangeMode ? { stepRange: [colStart, colEnd] } : { columnRange: [colStart, colEnd] }) : {}),
       }).fillerRoleCounts;
     };
 
@@ -931,8 +954,13 @@ const Index = () => {
     suppress2LayerLateFillerBlock,
     usesWaterForWater,
     usesIceForWater,
+    supportWaterSidesFillerValid,
     assumeFloor,
     customColors,
+    colRangeEnabled,
+    isStepRangeMode,
+    colStart,
+    colEnd,
   ]);
   const getSupportModeRoleCount = useCallback(
     (mode: SupportMode, ...roles: FillerRole[]) =>
@@ -942,13 +970,14 @@ const Index = () => {
   const enableAllSupportOption = !imageData || getSupportModeRoleCount(
     SupportMode.All,
     FillerRole.SupportAll,
+    ...(usesWaterForWater ? [FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered] : []),
     FillerRole.WaterPath,
     ...(usesIceForWater ? [FillerRole.SupportWaterBase] : []),
   ) > 0;
   const enableWaterSupportOption = !imageData || getSupportModeRoleCount(
     SupportMode.Water,
     ...(usesWaterForWater
-      ? [FillerRole.SupportWaterSides, FillerRole.WaterPath]
+      ? [FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered, FillerRole.WaterPath]
       : [FillerRole.SupportWaterBase, FillerRole.WaterPath]),
   ) > 0;
   const showSupportModeSelector = !imageData || (
@@ -1404,6 +1433,12 @@ const Index = () => {
   const lateFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
   const dominateVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
   const recessiveVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidRecessive);
+  const showWaterSideSupportWarning =
+    imageValid &&
+    (supportMode === SupportMode.All || supportMode === SupportMode.Water) &&
+    usesWaterForWater &&
+    getSupportModeRoleCount(supportMode, FillerRole.SupportWaterSides) > 0 &&
+    !supportWaterSidesFillerValid;
   const supportFillerRequiredCount = useMemo(() => {
     switch (supportMode) {
       case SupportMode.Steps:
@@ -1415,6 +1450,8 @@ const Index = () => {
       case SupportMode.All:
         return getRequiredFillerRoleCount(
           FillerRole.SupportAll,
+          FillerRole.SupportWaterSides,
+          FillerRole.SupportWaterSidesCovered,
           FillerRole.WaterPath,
           FillerRole.SupportWaterBase,
         );
@@ -1426,6 +1463,7 @@ const Index = () => {
       case SupportMode.Water:
         return getRequiredFillerRoleCount(
           FillerRole.SupportWaterSides,
+          FillerRole.SupportWaterSidesCovered,
           FillerRole.SupportWaterBase,
           FillerRole.WaterPath,
         );
@@ -1446,7 +1484,7 @@ const Index = () => {
     lateFillerRequiredCount > 0;
   const showSupportFillerInput =
     supportMode !== SupportMode.None &&
-    (!imageData || supportFillerRequiredCount > 0);
+    (!imageData || supportFillerRequiredCount > 0 || showWaterSideSupportWarning);
   const showShadeFillerInput = !!imageData && shadeFillerRequiredCount > 0;
   const shadeFillerIsNorthRowOnly = northRowFillerCount > 0 && suppressFillerCount === 0;
   const shadeFillerLabel = shadeFillerIsNorthRowOnly ? "Noobline:" : "Shade:";
@@ -1503,6 +1541,16 @@ const Index = () => {
     showNoFillerWarning,
     showNooblineWarnings,
   ]);
+  const waterSideSupportWarning = useMemo<ShapeWarning | null>(() => {
+    if (!showWaterSideSupportWarning) return null;
+    const value = supportFillerBlock.trim() || "none";
+    return {
+      text: supportFillerDisabled
+        ? `Support filler is invalid (${value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.`
+        : `Support filler is not color_id=0 (${value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.`,
+      invalid: true,
+    };
+  }, [showWaterSideSupportWarning, supportFillerBlock, supportFillerDisabled]);
   const vsFillerWarning = useMemo<ShapeWarning | null>(() => {
     type VsEntry = {
       label: "VS-Filler-1" | "VS-Filler-2";
@@ -2306,7 +2354,7 @@ const Index = () => {
                     </label>
                   )}
                   <span className="text-xs font-semibold text-accent whitespace-nowrap">
-                    Shading Method:
+                    Shading:
                   </span>
                   <select
                     className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
@@ -2906,6 +2954,14 @@ const Index = () => {
               <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
                 <p className="text-xs text-warning font-medium whitespace-pre-line">
                   {noFillerWarning}
+                </p>
+              </div>
+            )}
+
+            {waterSideSupportWarning && (
+              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
+                <p className={`text-xs whitespace-pre-line ${waterSideSupportWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
+                  {waterSideSupportWarning.text}
                 </p>
               </div>
             )}

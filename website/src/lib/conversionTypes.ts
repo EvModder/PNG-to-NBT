@@ -79,6 +79,7 @@ export enum FillerRole {
   SupportFragile = "support_fragile",
   SupportWaterBase = "support_water_base",
   SupportWaterSides = "support_water_sides",
+  SupportWaterSidesCovered = "support_water_sides_covered",
 }
 
 type CanonicalBuildMode = Exclude<

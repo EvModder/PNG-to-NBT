@@ -266,11 +266,16 @@ function buildFillerCandidates(blocks: ShapeBlock[]): FillerCandidate[] {
   };
 
   const topY = new Map<ColumnCoordKey, number>();
+  const maxColorY = new Map<ColumnCoordKey, number>();
   const waterRange = new Map<ColumnCoordKey, { minY: number; maxY: number }>();
   for (const block of blocks) {
     const coord = toColumnCoordKey(block.x, block.z);
     const current = topY.get(coord);
     if (current === undefined || block.y > current) topY.set(coord, block.y);
+    if (block.ref.kind === "color") {
+      const colorCurrent = maxColorY.get(coord);
+      if (colorCurrent === undefined || block.y > colorCurrent) maxColorY.set(coord, block.y);
+    }
     addCandidate(block.x, block.y - 1, block.z, FillerRole.SupportAll);
     if (isWaterBlock(block)) {
       const range = waterRange.get(coord);
@@ -306,11 +311,17 @@ function buildFillerCandidates(blocks: ShapeBlock[]): FillerCandidate[] {
       }
     }
     if (!isWaterBlock(block)) continue;
-    addCandidate(block.x, block.y, block.z - 1, FillerRole.SupportWaterSides);
-    addCandidate(block.x, block.y, block.z + 1, FillerRole.SupportWaterSides);
-    addCandidate(block.x - 1, block.y, block.z, FillerRole.SupportWaterSides);
-    addCandidate(block.x + 1, block.y, block.z, FillerRole.SupportWaterSides);
-    addCandidate(block.x, block.y - 1, block.z, FillerRole.SupportWaterSides);
+    const addWaterSideCandidate = (x: number, y: number, z: number) => {
+      const role = (maxColorY.get(toColumnCoordKey(x, z)) ?? -Infinity) > y
+        ? FillerRole.SupportWaterSidesCovered
+        : FillerRole.SupportWaterSides;
+      addCandidate(x, y, z, role);
+    };
+    addWaterSideCandidate(block.x, block.y, block.z - 1);
+    addWaterSideCandidate(block.x, block.y, block.z + 1);
+    addWaterSideCandidate(block.x - 1, block.y, block.z);
+    addWaterSideCandidate(block.x + 1, block.y, block.z);
+    addWaterSideCandidate(block.x, block.y - 1, block.z);
   }
 
   return [...byCoord.values()];
@@ -1651,7 +1662,16 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
     );
   }
   for (const candidate of part.fillerCandidates) {
-    cells.set(toShapeCoordKey(candidate.x, candidate.y, candidate.z), candidate.roles);
+    const key = toShapeCoordKey(candidate.x, candidate.y, candidate.z);
+    const existing = cells.get(key);
+    if (!existing) {
+      cells.set(key, [...candidate.roles]);
+      continue;
+    }
+    if (!Array.isArray(existing)) continue;
+    for (const role of candidate.roles) {
+      if (!existing.includes(role)) existing.push(role);
+    }
   }
   return {
     cells,

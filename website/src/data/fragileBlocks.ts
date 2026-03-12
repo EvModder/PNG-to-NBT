@@ -5,6 +5,10 @@
  * Callers:
  * - src/Index.tsx
  * - src/lib/shapeCellRules.ts
+ *
+ * Notes:
+ * - Blocks with placement conditions from MCPropertyEncyclopedia.
+ * - These blocks require a supporting block below them to stay placed.
  */
 const FRAGILE_BLOCKS = new Set([
   // Carpets
