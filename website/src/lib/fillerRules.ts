@@ -3,11 +3,11 @@
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
  * - buildFillerAssignmentMap()
- * - resolveCellAssignedRole()
  * - resolveAssignedFillerName()
+ * - resolveCellAssignedRole()
  * - resolveCellFillerName()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeSubstitution.ts
@@ -38,17 +38,24 @@ function isShadeCriticalFillerRole(role: FillerRole): boolean {
   }
 }
 
+// Callers:
+// - src/Index.tsx
 export function isFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   return normalized ? DISABLED_FILLER_ALIASES.has(normalized) : false;
 }
 
+// Callers:
+// - src/Index.tsx
 export function isShadeFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   if (!normalized) return false;
   return DISABLED_FILLER_ALIASES.has(normalized) || TRANSPARENT_FILLER_BLOCKS.has(normalized);
 }
 
+// Callers:
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeSubstitution.ts
 export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[]): Map<FillerRole, string> {
   const byRole = new Map<FillerRole, string>();
   for (const assignment of assignments) {
@@ -57,6 +64,8 @@ export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[
   return byRole;
 }
 
+// Callers:
+// - src/lib/shapeSubstitution.ts
 export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, role: FillerRole): string | null {
   const block = assignments.get(role) ?? "";
   if (!block) return null;
@@ -64,6 +73,8 @@ export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, 
   return resolveBlockName(block);
 }
 
+// Callers:
+// - src/lib/shapeAnalysis.ts
 export function resolveCellAssignedRole(
   cellRoles: readonly FillerRole[],
   assignments: readonly FillerAssignment[],
@@ -74,6 +85,8 @@ export function resolveCellAssignedRole(
   return null;
 }
 
+// Callers:
+// - src/lib/shapeAnalysis.ts
 export function resolveCellFillerName(
   cellRoles: readonly FillerRole[],
   assignments: readonly FillerAssignment[],

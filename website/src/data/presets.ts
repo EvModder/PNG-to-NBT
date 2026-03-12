@@ -1,21 +1,25 @@
 /**
  * Public API:
  * - Preset
-  * - BUILTIN_PRESET_NAMES
- * - getBuiltinPreset()
- * - isAutoCustomPresetName()
+ * - BUILTIN_PRESET_NAMES
+ * - getBuiltinPreset
+ * - isAutoCustomPresetName
  * - loadPresets()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  */
 import { BASE_COLORS } from "@/data/mapColors";
 
+// Callers:
+// - src/Index.tsx
 export interface Preset {
   name: string;
   blocks: Record<number, string>;
 }
 
+// Callers:
+// - src/Index.tsx
 export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear"] as const;
 
 function buildPistonClearPreset(): Preset {
@@ -33,7 +37,7 @@ function buildPistonClearPreset(): Preset {
       9: "",
       10: "jungle_pressure_plate",
       11: "stone_pressure_plate",
-      12: "",
+      12: "oak_leaves[waterlogged=true]",
       13: "oak_pressure_plate",
       14: "pale_oak_pressure_plate",
       15: "orange_carpet",
@@ -172,9 +176,15 @@ const BUILTIN_BUILDERS: Record<string, () => Preset> = {
   Fullblock: buildFullblockPreset,
 };
 
+// Callers:
+// - src/Index.tsx
 export const getBuiltinPreset = (name: string): Preset | null => BUILTIN_BUILDERS[name]?.() ?? null;
+// Callers:
+// - src/Index.tsx
 export const isAutoCustomPresetName = (name: string): boolean => /^Custom(?: \d+)?$/.test(name);
 
+// Callers:
+// - src/Index.tsx
 export function loadPresets(): Preset[] {
   const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => BUILTIN_BUILDERS[n]());
   try {

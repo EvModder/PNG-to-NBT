@@ -4,15 +4,10 @@
  * - writeStructureNbt()
  * - gzipCompress()
  *
- * Used by:
+ * Callers:
  * - src/lib/nbtExport.ts
  * - src/lib/shapeSubstitution.ts
- *
- * Notes:
- * - Binary NBT writer for Minecraft structure format.
- * - All values are big-endian.
  */
-
 class NbtWriter {
   private data: number[] = [];
 
@@ -65,6 +60,9 @@ const TAG = {
   ByteArray: 7, String: 8, List: 9, Compound: 10, IntArray: 11, LongArray: 12,
 } as const;
 
+// Callers:
+// - src/lib/nbtExport.ts
+// - src/lib/shapeSubstitution.ts
 export interface BlockEntry {
   x: number;
   y: number;
@@ -86,6 +84,8 @@ function parseBlockId(id: string): { name: string; props: Record<string, string>
   return { name, props };
 }
 
+// Callers:
+// - src/lib/nbtExport.ts
 export function writeStructureNbt(
   blocks: BlockEntry[],
   sizeX: number,
@@ -143,6 +143,8 @@ export function writeStructureNbt(
   return w.toUint8Array();
 }
 
+// Callers:
+// - src/lib/nbtExport.ts
 export async function gzipCompress(data: Uint8Array): Promise<Uint8Array> {
   const blob = new Blob([data.buffer as ArrayBuffer]);
   const stream = blob.stream();

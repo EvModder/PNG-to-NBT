@@ -1,14 +1,12 @@
 /**
  * Public API:
- * - FillerNeedStats
- * - MaterialNeedStats
  * - analyzeFillerNeeds()
  * - northRowIsSingleLine()
  * - hasColorHeightVariance()
- * - analyzeMaterialNeeds()
  * - computeGeneratedShapeSignature()
+ * - analyzeMaterialNeeds()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  */
 import { type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
@@ -19,11 +17,11 @@ import type { GeneratedShape } from "./shapeGeneration";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, ShapePartType } from "./shapeTypes";
 import { isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
-export interface FillerNeedStats {
+interface FillerNeedStats {
   roleCounts: Map<FillerRole, number>;
 }
 
-export interface MaterialNeedStats {
+interface MaterialNeedStats {
   blockCounts: Record<string, number>;
   baseColorCounts: Record<number, number>;
   numUniqueColorShadesForPart: number;
@@ -174,6 +172,8 @@ function mixShapePart(state: HashState, part: GeneratedShape["parts"][number]): 
   }
 }
 
+// Callers:
+// - src/Index.tsx
 export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
   const roleCounts = new Map<FillerRole, number>();
 
@@ -189,6 +189,8 @@ export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
   return { roleCounts };
 }
 
+// Callers:
+// - src/Index.tsx
 export function northRowIsSingleLine(shape: GeneratedShape): boolean {
   let northY: number | undefined;
   for (const part of shape.parts) {
@@ -202,6 +204,8 @@ export function northRowIsSingleLine(shape: GeneratedShape): boolean {
   return true;
 }
 
+// Callers:
+// - src/Index.tsx
 export function hasColorHeightVariance(shape: GeneratedShape): boolean {
   let firstY: number | undefined;
   for (const part of shape.parts) {
@@ -215,6 +219,8 @@ export function hasColorHeightVariance(shape: GeneratedShape): boolean {
   return false;
 }
 
+// Callers:
+// - src/Index.tsx
 export function computeGeneratedShapeSignature(shape: GeneratedShape): string {
   const state = createHashState();
   mixString(state, shape.partType);
@@ -226,6 +232,8 @@ export function computeGeneratedShapeSignature(shape: GeneratedShape): string {
   return state.map(part => part.toString(16).padStart(8, "0")).join("");
 }
 
+// Callers:
+// - src/Index.tsx
 export function analyzeMaterialNeeds(
   colorGrid: ColorGrid,
   shape: GeneratedShape,

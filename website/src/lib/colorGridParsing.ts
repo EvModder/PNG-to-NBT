@@ -3,7 +3,7 @@
  * - convertImageToColorGrid()
  * - convertFileToColorGrid()
  *
- * Used by:
+ * Callers:
  * - src/Index.tsx
  */
 import * as UTIF from "utif";
@@ -217,6 +217,8 @@ async function loadImageDataFromFile(file: File): Promise<ImageData> {
   return loadBrowserImageData(file);
 }
 
+// Callers:
+// - src/Index.tsx
 export function convertImageToColorGrid(
   imageData: ImageData,
   customColors: CustomColorLike[],
@@ -269,6 +271,8 @@ export function convertImageToColorGrid(
   };
 }
 
+// Callers:
+// - src/Index.tsx
 export async function convertFileToColorGrid(
   file: File,
   customColors: CustomColorLike[],

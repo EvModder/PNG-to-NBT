@@ -5,8 +5,10 @@
  * - resolveShapeColorBlockName()
  * - getMappedShapeColorBlockId()
  *
- * Used by:
+ * Callers:
+ * - src/lib/fillerRules.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeCellRules.ts
  * - src/lib/shapeSubstitution.ts
  */
 import { BASE_COLORS } from "../data/mapColors";
@@ -19,6 +21,8 @@ function normalizeBlockId(raw: string): string {
   return base.startsWith("minecraft:") ? base.slice("minecraft:".length) : base;
 }
 
+// Callers:
+// - src/lib/fillerRules.ts
 export function resolveBlockName(block: string): string {
   let name: string;
   const props: Record<string, string> = {};
@@ -44,6 +48,8 @@ export function resolveBlockName(block: string): string {
     : fullName;
 }
 
+// Callers:
+// - src/lib/shapeAnalysis.ts
 export function toDisplayName(blockName: string): string {
   const stripped = blockName.replace(/^minecraft:/, "");
   if (!stripped.includes("[")) return stripped;
@@ -53,6 +59,9 @@ export function toDisplayName(blockName: string): string {
   return props.length > 0 ? `${name}[${props.join(",")}]` : name;
 }
 
+// Callers:
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeSubstitution.ts
 export function resolveShapeColorBlockName(
   color: ShapeColor,
   options: { blockMapping: Record<number, string>; customColors: CustomColor[] },
@@ -65,6 +74,8 @@ export function resolveShapeColorBlockName(
   return mapped ? resolveBlockName(mapped) : null;
 }
 
+// Callers:
+// - src/lib/shapeCellRules.ts
 export function getMappedShapeColorBlockId(
   color: ShapeColor,
   options: { blockMapping: Record<number, string>; customColors: CustomColor[] },
