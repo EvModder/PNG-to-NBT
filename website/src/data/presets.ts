@@ -1,5 +1,15 @@
+/**
+ * Public API:
+ * - Preset
+  * - BUILTIN_PRESET_NAMES
+ * - getBuiltinPreset()
+ * - isAutoCustomPresetName()
+ * - loadPresets()
+ *
+ * Used by:
+ * - src/Index.tsx
+ */
 import { BASE_COLORS } from "@/data/mapColors";
-import { isFragileBlock } from "@/data/fragileBlocks";
 
 export interface Preset {
   name: string;
@@ -8,37 +18,73 @@ export interface Preset {
 
 export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear"] as const;
 
-export function buildPistonClearPreset(): Preset {
-  const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const c = BASE_COLORS[i];
-    // Use fragile blocks only; prefer carpet for COLOR_ names, then pressure_plate, then any fragile
-    const carpet = c.blocks.find(b => b.endsWith("_carpet"));
-    const plate = c.blocks.find(b => b.endsWith("_pressure_plate"));
-    const anyFragile = c.blocks.find(b => isFragileBlock(b));
-    if (c.name.startsWith("COLOR_") && carpet) {
-      blocks[i] = carpet;
-    } else if (plate) {
-      blocks[i] = plate;
-    } else if (anyFragile) {
-      blocks[i] = anyFragile;
-    } else {
-      blocks[i] = ""; // no fragile option -> (none)
-    }
-  }
-  // Apply specific overrides from old Default that used fragile blocks
-  const overrides: Record<string, string> = {
-    SNOW: "white_carpet",
-    WOOL: "white_candle",
-    WOOD: "oak_pressure_plate",
-    NETHER: "crimson_roots",
-    PLANT: "pink_petals",
+function buildPistonClearPreset(): Preset {
+  return {
+    name: "PistonClear",
+    blocks: {
+      1: "",
+      2: "birch_pressure_plate",
+      3: "white_candle",
+      4: "fire",
+      5: "",
+      6: "heavy_weighted_pressure_plate",
+      7: "pink_petals",
+      8: "white_carpet",
+      9: "",
+      10: "jungle_pressure_plate",
+      11: "stone_pressure_plate",
+      12: "",
+      13: "oak_pressure_plate",
+      14: "pale_oak_pressure_plate",
+      15: "orange_carpet",
+      16: "magenta_carpet",
+      17: "light_blue_carpet",
+      18: "yellow_carpet",
+      19: "lime_carpet",
+      20: "pink_carpet",
+      21: "gray_carpet",
+      22: "light_gray_carpet",
+      23: "cyan_carpet",
+      24: "purple_carpet",
+      25: "blue_carpet",
+      26: "brown_carpet",
+      27: "green_carpet",
+      28: "red_carpet",
+      29: "black_carpet",
+      30: "light_weighted_pressure_plate",
+      31: "",
+      32: "",
+      33: "",
+      34: "spruce_pressure_plate",
+      35: "crimson_roots",
+      36: "cherry_pressure_plate",
+      37: "resin_clump[down=true]",
+      38: "",
+      39: "",
+      40: "",
+      41: "",
+      42: "",
+      43: "",
+      44: "",
+      45: "",
+      46: "",
+      47: "",
+      48: "pointed_dripstone",
+      49: "",
+      50: "",
+      51: "",
+      52: "",
+      53: "crimson_pressure_plate",
+      54: "",
+      55: "",
+      56: "warped_pressure_plate",
+      57: "",
+      58: "",
+      59: "",
+      60: "",
+      61: "glow_lichen[down=true]",
+    },
   };
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const name = BASE_COLORS[i].name;
-    if (overrides[name]) blocks[i] = overrides[name];
-  }
-  return { name: "PistonClear", blocks };
 }
 
 function buildCarpetsPreset(): Preset {

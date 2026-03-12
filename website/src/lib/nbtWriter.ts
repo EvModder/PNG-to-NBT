@@ -1,7 +1,19 @@
-// Binary NBT writer for Minecraft structure format
-// All values are big-endian
+/**
+ * Public API:
+ * - BlockEntry
+ * - writeStructureNbt()
+ * - gzipCompress()
+ *
+ * Used by:
+ * - src/lib/nbtExport.ts
+ * - src/lib/shapeSubstitution.ts
+ *
+ * Notes:
+ * - Binary NBT writer for Minecraft structure format.
+ * - All values are big-endian.
+ */
 
-export class NbtWriter {
+class NbtWriter {
   private data: number[] = [];
 
   writeByte(v: number) {
@@ -48,7 +60,7 @@ export class NbtWriter {
   }
 }
 
-export const TAG = {
+const TAG = {
   End: 0, Byte: 1, Short: 2, Int: 3, Long: 4, Float: 5, Double: 6,
   ByteArray: 7, String: 8, List: 9, Compound: 10, IntArray: 11, LongArray: 12,
 } as const;

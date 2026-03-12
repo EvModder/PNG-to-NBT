@@ -1,5 +1,13 @@
-// Minimal ZIP file generator (no compression, store only)
-// Sufficient for bundling small NBT files
+/**
+ * Public API:
+ * - createZip()
+ *
+ * Used by:
+ * - src/lib/nbtExport.ts
+ *
+ * Notes:
+ * - Minimal ZIP file generator (store only, no compression).
+ */
 
 function crc32(data: Uint8Array): number {
   let crc = 0xFFFFFFFF;
@@ -20,7 +28,7 @@ function writeU32LE(arr: number[], v: number) {
   arr.push(v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF);
 }
 
-export interface ZipEntry {
+interface ZipEntry {
   name: string;
   data: Uint8Array;
 }

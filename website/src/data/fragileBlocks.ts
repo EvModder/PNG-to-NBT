@@ -1,8 +1,17 @@
-// Blocks with placement conditions (from MCPropertyEncyclopedia)
-// These blocks require a supporting block below them to stay placed.
-// Source: https://joakimthorsen.github.io/MCPropertyEncyclopedia/?selection=placement_condition&filter=(placement_condition:No)
-
-export const FRAGILE_BLOCKS = new Set([
+/**
+ * Public API:
+ * - isFragileBlock()
+ *
+ * Used by:
+ * - src/Index.tsx
+ * - src/data/presets.ts
+ * - src/lib/shapeSubstitution.ts
+ *
+ * Notes:
+ * - Blocks with placement conditions from MCPropertyEncyclopedia.
+ * - These blocks require a supporting block below them to stay placed.
+ */
+const FRAGILE_BLOCKS = new Set([
   // Carpets
   "white_carpet", "orange_carpet", "magenta_carpet", "light_blue_carpet",
   "yellow_carpet", "lime_carpet", "pink_carpet", "gray_carpet",

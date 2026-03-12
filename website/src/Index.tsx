@@ -1,38 +1,40 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
-import { Moon, Sun, Plus, Minus } from "lucide-react";
-import { BASE_COLORS, WATER_BASE_INDEX, getColorLookup, getShadedRgb } from "@/data/mapColors";
-import { EXCLUDED_COLORS } from "@/data/excludedColors";
+import { Moon, Sun, Plus, Minus, Glasses } from "lucide-react";
+import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb } from "@/data/mapColors";
+import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
+import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
+import { convertToNbt } from "@/lib/nbtExport";
+import { generateShapeMap } from "@/lib/shapeGeneration";
+import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridFromImage";
+import { computeColorGridStats } from "@/lib/colorGridAnalyzer";
 import {
-  validatePng,
-  convertToNbt,
-  computeMaterialCounts,
-  computeBuildModeSignature,
+  analyzeMaterialNeeds,
   analyzeFillerNeeds,
-  isFillerDisabled,
-  isShadeFillerDisabled,
-  type CustomColor,
-  type BuildMode,
-  type SupportMode,
-} from "@/lib/converter";
+  computeGeneratedShapeSignature,
+  hasColorHeightVariance as generatedShapeHasColorHeightVariance,
+  northRowIsSingleLine as generatedShapeNorthRowIsSingleLine,
+} from "@/lib/shapeAnalysis";
+import { isFillerDisabled, isShadeFillerDisabled } from "@/lib/fillerRules";
+import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
+import { getSupportedColorAbove, isWithinShapeBounds } from "@/lib/shapeCellRules";
 import {
-  analyzeVoidShadows,
-  buildCustomShadeLookup,
-  computeImageInfo,
-  countVoidShadows,
-  detectUniformNonFlatDirection,
-  imageHasNonFlatShades,
-  scanSuppressedPixels,
-} from "@/lib/imageAnalysis";
-import { toBlockIconKey } from "@/lib/blockIconKey";
+  BuildMode,
+  type FillerAssignment,
+  FillerRole,
+  buildModeUsesLayerGap,
+  getBuildModeRangeMax,
+  isStaircaseBuildMode,
+  isSuppressBuildMode,
+  type CustomColor,
+} from "@/lib/conversionTypes";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import {
   BUILTIN_PRESET_NAMES,
-  buildPistonClearPreset,
   getBuiltinPreset,
   isAutoCustomPresetName,
   loadPresets,
   type Preset,
-} from "@/lib/presets";
+} from "@/data/presets";
 
 function loadCached<T>(key: string, fallback: T): T {
   try {
@@ -48,27 +50,30 @@ const getDisplayName = (name: string): string =>
   name === "SNOW" ? "WHITE" : name === "WOOL" ? "STEM" : name.startsWith("COLOR_") ? name.slice(6) : name;
 
 const normalizeBlockIconId = (raw: string): string => raw.trim().replace(/^minecraft:/, "").split("[")[0];
+const ICE_WATER_TOOLTIP = "Ice can be built in place of water or waterlogged blocks, but must be converted to water in-game to get the correct map colors.";
+const toBlockIconKey = (raw: string): string =>
+  raw.trim()
+    .replace(/^minecraft:/, "")
+    .replace(/__/g, "__us__")
+    .replace(/\[/g, "__lb__")
+    .replace(/\]/g, "__rb__")
+    .replace(/=/g, "__eq__")
+    .replace(/,/g, "__cm__")
+    .replace(/:/g, "__cl__");
+
+type ShapeWarning = {
+  text: string;
+  invalid: boolean;
+};
 const KNOWN_PRIMARY_ICON_BLOCKS = new Set(
   BASE_COLORS.flatMap(c => c.blocks),
 );
-const KNOWN_EXCLUDED_ICON_BLOCKS = new Set(EXCLUDED_COLORS.flat());
+const KNOWN_EXCLUDED_ICON_BLOCKS = new Set(EXCLUDED_BLOCKS.flat());
 const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set([...KNOWN_PRIMARY_ICON_BLOCKS, ...KNOWN_EXCLUDED_ICON_BLOCKS]);
 const isTextureHiddenBlock = (blockName: string): boolean => {
   const id = normalizeBlockIconId(blockName);
   return id.endsWith("_door") || id.endsWith("_fence_gate") || id === "bedrock";
 };
-
-// ── Creative menu order for wool/terracotta colors ──
-const WOOL_CREATIVE_ORDER = [8, 22, 21, 29, 26, 28, 15, 18, 19, 27, 23, 17, 25, 24, 16, 20];
-const TERRACOTTA_CREATIVE_ORDER = [36, 44, 43, 51, 48, 50, 37, 40, 41, 49, 45, 39, 47, 46, 38, 42];
-
-const DEFAULT_SORTED = (() => {
-  const fixedSet = new Set([...WOOL_CREATIVE_ORDER, ...TERRACOTTA_CREATIVE_ORDER]);
-  const others = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => i + 1)
-    .filter(i => !fixedSet.has(i))
-    .sort((a, b) => BASE_COLORS[b].blocks.length - BASE_COLORS[a].blocks.length);
-  return [...WOOL_CREATIVE_ORDER, ...TERRACOTTA_CREATIVE_ORDER, ...others];
-})();
 
 function getHue(r: number, g: number, b: number): number {
   const [rn, gn, bn] = [r / 255, g / 255, b / 255];
@@ -90,47 +95,135 @@ type ModeOption = { value: BuildMode; label: string; disabled?: boolean; muted?:
 type ColumnId = "clr" | "id" | "name" | "block" | "options" | "required";
 const ALL_COLUMNS: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 
+enum SupportMode {
+  None = "none",
+  Steps = "steps",
+  All = "all",
+  Fragile = "fragile",
+  Water = "water",
+}
+
+function normalizeStoredBuildMode(raw: unknown): BuildMode {
+  return Object.values(BuildMode).includes(raw as BuildMode) ? (raw as BuildMode) : BuildMode.StaircaseClassic;
+}
+
+function createFillerAssignments(
+  supportFillerBlock: string,
+  shadeFillerBlock: string,
+  dominateVoidFillerBlock: string,
+  recessiveVoidFillerBlock: string,
+  suppress2LayerLateFillerBlock: string,
+  supportMode: SupportMode,
+  usesDirectWaterBlock: boolean,
+  usesIceWaterBlock: boolean,
+): FillerAssignment[] {
+  const assignments: FillerAssignment[] = [
+    { role: FillerRole.ShadeSuppress, block: shadeFillerBlock },
+    { role: FillerRole.ShadeNorthRow, block: shadeFillerBlock },
+    { role: FillerRole.ShadeVoidDominant, block: dominateVoidFillerBlock || shadeFillerBlock },
+    { role: FillerRole.ShadeVoidRecessive, block: recessiveVoidFillerBlock || shadeFillerBlock },
+    { role: FillerRole.ShadeSuppressLate, block: suppress2LayerLateFillerBlock || shadeFillerBlock },
+  ];
+  switch (supportMode) {
+    case SupportMode.Steps:
+      assignments.push({ role: FillerRole.StairStep, block: supportFillerBlock });
+      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
+      break;
+    case SupportMode.All:
+      assignments.push({ role: FillerRole.SupportAll, block: supportFillerBlock });
+      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
+      break;
+    case SupportMode.Fragile:
+      assignments.push({ role: FillerRole.SupportFragile, block: supportFillerBlock });
+      break;
+    case SupportMode.Water:
+      assignments.push({
+        role: usesDirectWaterBlock ? FillerRole.SupportWaterSides : FillerRole.SupportWaterBase,
+        block: supportFillerBlock,
+      });
+      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
+      break;
+    case SupportMode.None:
+      break;
+  }
+  if (
+    supportMode !== SupportMode.None &&
+    usesIceWaterBlock &&
+    !assignments.some(({ role }) => role === FillerRole.SupportWaterBase)
+  ) {
+    assignments.push({ role: FillerRole.SupportWaterBase, block: supportFillerBlock });
+  }
+  return assignments;
+}
+
+function isStaircaseLikeMode(mode: BuildMode): boolean {
+  return mode === BuildMode.Flat || isStaircaseBuildMode(mode);
+}
+
 const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
-  { value: "staircase_valley", label: "Staircase (Valley)" },
-  { value: "staircase_classic", label: "Staircase (Classic)" },
-  { value: "staircase_grouped", label: "Staircase (Grouped)" },
-  { value: "staircase_northline", label: "Staircase (Northline)" },
-  { value: "staircase_southline", label: "Staircase (Southline)" },
-  { value: "staircase_pro", label: "Staircase (Pro Version)" },
+  { value: BuildMode.Flat, label: "Flat" },
+  { value: BuildMode.InclineUp, label: "Incline (Up)" },
+  { value: BuildMode.InclineDown, label: "Incline (Down)" },
+  { value: BuildMode.StaircaseValley, label: "Staircase (Valley)" },
+  { value: BuildMode.StaircaseClassic, label: "Staircase (Classic)" },
+  { value: BuildMode.StaircaseGrouped, label: "Staircase (Grouped)" },
+  { value: BuildMode.StaircaseNorthline, label: "Staircase (Northline)" },
+  { value: BuildMode.StaircaseSouthline, label: "Staircase (Southline)" },
+  { value: BuildMode.StaircaseParty, label: "Staircase (Party)" },
 ];
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
-  { value: "suppress_rowsplit", label: "Suppress (Row-split)", muted: true },
-  { value: "suppress_checker", label: "Suppress (Checker-split)" },
-  { value: "suppress_checker_ew", label: "Suppress (Checker, E→W)" },
-  { value: "suppress_pairs_ew", label: "Suppress (Pairs, E→W)" },
+  { value: BuildMode.SuppressSplitRow, label: "Suppress (Row-split)", muted: true },
+  { value: BuildMode.SuppressSplitChecker, label: "Suppress (Checker-split)" },
+  { value: BuildMode.SuppressCheckerEW, label: "Suppress (Checker, E→W)" },
+  { value: BuildMode.SuppressPairsEW, label: "Suppress (Pairs, E→W)" },
+  { value: BuildMode.Suppress2Layer, label: "Suppress (2-Layer)" },
+  { value: BuildMode.Suppress2LayerLateFillers, label: "Suppress (2-Layer, Late-Fillers)" },
+  { value: BuildMode.Suppress2LayerLatePairs, label: "Suppress (2-Layer, Late-Pairs)" },
 ];
 
 const CUSTOM_COLOR_TOOLTIP_LINE1 = "Custom RGB is interpreted as the base/light shade for the color ID.";
 const CUSTOM_COLOR_TOOLTIP_LINE2 = "Dark and flat shades are derived automatically using standard multipliers.";
 const CUSTOM_COLOR_TOOLTIP_LINE3 = "Once added, all three new shades will be available to use for input images.";
 const CUSTOM_COLOR_TOOLTIP = `${CUSTOM_COLOR_TOOLTIP_LINE1}\n${CUSTOM_COLOR_TOOLTIP_LINE2}\n${CUSTOM_COLOR_TOOLTIP_LINE3}`;
-const CALC_FILLER_SENTINEL = "__calc_filler__";
-const CALC_DOMINANT_VOID_FILLER_SENTINEL = "__calc_dominant_void_filler__";
-const CALC_RECESSIVE_VOID_FILLER_SENTINEL = "__calc_recessive_void_filler__";
-const CALC_DELAYED_FILLER_SENTINEL = "__calc_delayed_filler__";
-const CALC_BASE_TOKEN_PREFIX = "__calc_base_";
-const CALC_CUSTOM_TOKEN_PREFIX = "__calc_custom_";
 
-const SUPPRESS_2LAYER_BASE_FLOW =
+const SUPPRESS_2LAYER_GUIDE =
   "Steps:\n" +
-  "1) Build all 'non-late' blocks\n" +
+  "1) Build everything\n" +
   "2) Update the full map\n" +
-  "3) Begin remove the upper layer, 1-2 columns at a time\n" +
-  "4) For each removed column, also add in any late-blocks\n" +
-  "5) Carefully update just the dominate pixels for the target column(s)\n" +
-  "6) Repeat for the entire map\n\n" +
+  "3) Remove the upper layer, 1-2 columns at a time\n" +
+  "4) Carefully update *just* the dominate pixels for the target column(s)\n" +
+  "5) Repeat, column-by-column, for the entire map\n\n" +
+  "Layer gap controls vertical spacing between lower and upper suppress layers."
+const SUPPRESS_2LAYER_GUIDE_WITH_VS_FILLER =
+  "Steps:\n" +
+  "1) Build all 'non-late' blocks\n" + // Diff
+  "2) Update the full map\n" +
+  "3) Remove the upper layer, 1-2 columns at a time\n" +
+  "4) For each removed column, add in any late-blocks\n" + // Added
+  "5) Carefully update *just* the dominate pixels for the target column(s)\n" +
+  "6) Repeat for the whole map\n\n" +
   "Layer gap controls vertical spacing between lower and upper suppress layers.";
+
 const LAYER_GAP_TOOLTIP = "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function hashString32(input: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < input.length; ++i) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function getPaletteSeedOffset(blockMapping: Record<number, string>): number {
+  const serialized = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => `${i + 1}:${blockMapping[i + 1] ?? ""}`).join("|");
+  return hashString32(serialized);
+}
 
 function formatStacks(count: number): string {
   if (count < 64) return String(count);
@@ -142,9 +235,9 @@ function formatStacks(count: number): string {
 }
 
 function encodePreset(
-  preset: Preset, fillerBlock: string, supportMode: SupportMode,
+  preset: Preset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
-  suppress2LayerDelayedFillerBlock: string, proPaletteSeed: boolean,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
@@ -156,12 +249,13 @@ function encodePreset(
   const s = [
     preset.name,
     parts.join(","),
-    fillerBlock,
+    supportFillerBlock,
+    shadeFillerBlock,
     supportMode,
     buildMode,
     ccStr,
     convertUnsupported ? "1" : "0",
-    suppress2LayerDelayedFillerBlock,
+    suppress2LayerLateFillerBlock,
     proPaletteSeed ? "1" : "0",
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
@@ -170,9 +264,9 @@ function encodePreset(
 }
 
 function decodePreset(encoded: string): {
-  preset: Preset; filler?: string; supportMode?: SupportMode;
+  preset: Preset; supportFiller?: string; shadeFiller?: string; supportMode?: SupportMode;
   buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
-  suppress2LayerDelayedFillerBlock?: string; proPaletteSeed?: boolean;
+  suppress2LayerLateFillerBlock?: string; proPaletteSeed?: boolean;
   dominateVoidFillerBlock?: string; recessiveVoidFillerBlock?: string;
 } | null {
   try {
@@ -181,9 +275,9 @@ function decodePreset(encoded: string): {
     const sections = atob(s).split("|");
     if (sections.length < 2) return null;
 
-    const supportRaw = sections[3] || "none";
+    const supportRaw = sections[4] || SupportMode.None;
     const supportMode: SupportMode =
-      supportRaw === "1" ? "steps" : supportRaw === "0" ? "none" : (supportRaw as SupportMode);
+      supportRaw === "1" ? SupportMode.Steps : supportRaw === "0" ? SupportMode.None : (supportRaw as SupportMode);
 
     const blocks: Record<number, string> = {};
     for (const [i, p] of sections[1].split(",").entries()) {
@@ -193,8 +287,8 @@ function decodePreset(encoded: string): {
         p === "-" || p === "" ? "" : p.startsWith("=") ? p.slice(1) : BASE_COLORS[baseIdx].blocks[parseInt(p)] || "";
     }
 
-    const customColors = sections[5]
-      ? sections[5]
+    const customColors = sections[6]
+      ? sections[6]
           .split(";")
           .map(entry => {
             const [rgb, block] = entry.split(":");
@@ -204,16 +298,16 @@ function decodePreset(encoded: string): {
           .filter(cc => !isNaN(cc.r) && cc.block)
       : undefined;
 
-    const convertUnsupported = sections[6] === "1" ? true : sections[6] === "0" ? false : undefined;
-    const suppress2LayerDelayedFillerBlock = sections[7] || undefined;
-    const proPaletteSeed = sections[8] === "1" ? true : sections[8] === "0" ? false : undefined;
-    const dominateVoidFillerBlock = sections[9] || undefined;
-    const recessiveVoidFillerBlock = sections[10] || undefined;
+    const convertUnsupported = sections[7] === "1" ? true : sections[7] === "0" ? false : undefined;
+    const suppress2LayerLateFillerBlock = sections[8] || undefined;
+    const proPaletteSeed = sections[9] === "1" ? true : sections[9] === "0" ? false : undefined;
+    const dominateVoidFillerBlock = sections[10] || undefined;
+    const recessiveVoidFillerBlock = sections[11] || undefined;
 
     return {
-      preset: { name: sections[0], blocks }, filler: sections[2] || undefined,
-      supportMode, buildMode: (sections[4] || undefined) as BuildMode | undefined,
-      customColors, convertUnsupported, suppress2LayerDelayedFillerBlock, proPaletteSeed,
+      preset: { name: sections[0], blocks }, supportFiller: sections[2] || undefined, shadeFiller: sections[3] || undefined,
+      supportMode, buildMode: sections[5] ? normalizeStoredBuildMode(sections[5]) : undefined,
+      customColors, convertUnsupported, suppress2LayerLateFillerBlock, proPaletteSeed,
       dominateVoidFillerBlock, recessiveVoidFillerBlock,
     };
   } catch {
@@ -223,7 +317,8 @@ function decodePreset(encoded: string): {
 
 // ── Cached localStorage keys ──
 const LS_KEYS = {
-  filler: "mapart_filler",
+  supportFiller: "mapart_support_filler",
+  shadeFiller: "mapart_shade_filler",
   buildMode: "mapart_buildMode",
   supportMode: "mapart_supportMode",
   showStacks: "mapart_showStacks",
@@ -236,16 +331,18 @@ const LS_KEYS = {
   sortKey: "mapart_sortKey",
   sortDir: "mapart_sortDir",
   layerGap: "mapart_layerGap",
-  suppress2LayerDelayedFiller: "mapart_suppress2layer_delayed_filler",
-  proPaletteSeed: "mapart_pro_palette_seed",
+  suppress2LayerLateFiller: "mapart_suppress2layer_late_filler",
+  paletteSeed: "mapart_palette_seed",
   dominateVoidFiller: "mapart_dominate_void_filler",
   recessiveVoidFiller: "mapart_recessive_void_filler",
   columnOrder: "mapart_columnOrder",
   showTransparentRow: "mapart_secret_showTransparentRow",
   showExcludedBlocks: "mapart_secret_showExcludedBlocks",
   forceZ129: "mapart_secret_forceZ129",
+  assumeFloor: "mapart_secret_assumeFloor",
   showVsFillerWarnings: "mapart_secret_showVsFillerWarnings",
   showAlignmentReminder: "mapart_secret_showAlignmentReminder",
+  showNooblineWarnings: "mapart_secret_showNooblineWarnings",
 } as const;
 
 const getStoredTheme = (): "light" | "dark" | null => {
@@ -280,9 +377,14 @@ const Index = () => {
     }
     return 0;
   });
-  const [fillerBlock, setFillerBlock] = useState(() => loadCached(LS_KEYS.filler, "resin_block"));
-  const [suppress2LayerDelayedFillerBlock, setSuppress2LayerDelayedFillerBlock] = useState(() =>
-    loadCached(LS_KEYS.suppress2LayerDelayedFiller, "slime_block"),
+  const [supportFillerBlock, setSupportFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.supportFiller, loadCached("mapart_filler", "resin_block")),
+  );
+  const [shadeFillerBlock, setShadeFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.shadeFiller, loadCached("mapart_filler", "resin_block")),
+  );
+  const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.suppress2LayerLateFiller, "slime_block"),
   );
   const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() =>
     loadCached(LS_KEYS.dominateVoidFiller, "slime_block"),
@@ -291,9 +393,9 @@ const Index = () => {
     loadCached(LS_KEYS.recessiveVoidFiller, "honey_block"),
   );
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
-    loadCached(LS_KEYS.buildMode, "staircase_classic" as BuildMode),
+    normalizeStoredBuildMode(loadCached(LS_KEYS.buildMode, BuildMode.StaircaseClassic)),
   );
-  const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.proPaletteSeed, false));
+  const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.paletteSeed, false));
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
   const calcLayerGap = useDeferredValue(layerGap);
@@ -305,7 +407,7 @@ const Index = () => {
   useEffect(() => { colStartRef.current = colStart; }, [colStart]);
   useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
-    loadCached(LS_KEYS.supportMode, "none" as SupportMode),
+    loadCached(LS_KEYS.supportMode, SupportMode.None),
   );
   const [customColors, setCustomColors] = useState<CustomColor[]>([]);
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
@@ -332,9 +434,16 @@ const Index = () => {
   const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, false));
   const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, false));
   const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, false));
+  const [assumeFloor, setAssumeFloor] = useState(() => loadCached(LS_KEYS.assumeFloor, true));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, true));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, true));
+  const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, false));
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
+  const parsedImage = useMemo(
+    () => imageData ? convertImageToColorGrid(imageData, customColors, convertUnsupported) : null,
+    [imageData, customColors, convertUnsupported],
+  );
+  const imageColorGrid = parsedImage?.colorGrid ?? null;
   const dragColRef = useRef<ColumnId | null>(null);
   const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -342,7 +451,7 @@ const Index = () => {
   const swatchTooltipPendingRef = useRef<{ text: string; x: number; y: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const fillerInputRef = useRef<HTMLInputElement>(null);
+  const supportFillerInputRef = useRef<HTMLInputElement>(null);
   const blockMeasureSelectRef = useRef<HTMLSelectElement | null>(null);
   const blockHeaderCollapseBtnRef = useRef<HTMLButtonElement | null>(null);
   const [blockMeasureFont, setBlockMeasureFont] = useState("11px monospace");
@@ -384,7 +493,7 @@ const Index = () => {
     [],
   );
 
-  const preset = presets[activeIdx] || buildPistonClearPreset();
+  const preset = presets[activeIdx] || getBuiltinPreset("PistonClear")!;
 
   const [savedBlocks, setSavedBlocks] = useState<Record<number, string> | null>(null);
 
@@ -429,7 +538,8 @@ const Index = () => {
   }, [presets, activeIdx, presetDirty]);
   const persistedSettings = useMemo(
     () => ({
-      [LS_KEYS.filler]: fillerBlock,
+      [LS_KEYS.supportFiller]: supportFillerBlock,
+      [LS_KEYS.shadeFiller]: shadeFillerBlock,
       [LS_KEYS.buildMode]: buildMode,
       [LS_KEYS.supportMode]: supportMode,
       [LS_KEYS.showStacks]: showStacks,
@@ -442,19 +552,22 @@ const Index = () => {
       [LS_KEYS.sortKey]: sortKey,
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
-      [LS_KEYS.suppress2LayerDelayedFiller]: suppress2LayerDelayedFillerBlock,
-      [LS_KEYS.proPaletteSeed]: proPaletteSeed,
+      [LS_KEYS.suppress2LayerLateFiller]: suppress2LayerLateFillerBlock,
+      [LS_KEYS.paletteSeed]: proPaletteSeed,
       [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
       [LS_KEYS.recessiveVoidFiller]: recessiveVoidFillerBlock,
       [LS_KEYS.columnOrder]: columnOrder,
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
       [LS_KEYS.forceZ129]: forceZ129,
+      [LS_KEYS.assumeFloor]: assumeFloor,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
+      [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
     }),
     [
-      fillerBlock,
+      supportFillerBlock,
+      shadeFillerBlock,
       buildMode,
       supportMode,
       showStacks,
@@ -467,7 +580,7 @@ const Index = () => {
       sortKey,
       sortDir,
       layerGap,
-      suppress2LayerDelayedFillerBlock,
+      suppress2LayerLateFillerBlock,
       proPaletteSeed,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
@@ -475,8 +588,10 @@ const Index = () => {
       showTransparentRow,
       showExcludedBlocks,
       forceZ129,
+      assumeFloor,
       showVsFillerWarnings,
       showAlignmentReminder,
+      showNooblineWarnings,
     ],
   );
   const persistedSettingsRef = useRef<Record<string, unknown>>({});
@@ -488,269 +603,240 @@ const Index = () => {
     }
   }, [persistedSettings]);
 
-  const hasNonFlatShades = useMemo(
-    () => imageData ? imageHasNonFlatShades(imageData, customColors) : false,
-    [imageData, customColors],
+  const paletteSeedOffset = useMemo(
+    () => (calcProPaletteSeed ? getPaletteSeedOffset(preset.blocks) : 0),
+    [calcProPaletteSeed, preset.blocks],
   );
-  const hasSuppressPattern = useMemo(
-    () => imageData && hasNonFlatShades ? scanSuppressedPixels(imageData, customColors, false) > 0 : false,
-    [imageData, customColors, hasNonFlatShades],
+  const imageStats = useMemo(
+    () => (imageColorGrid && imageValid ? computeColorGridStats(imageColorGrid) : null),
+    [imageColorGrid, imageValid],
   );
-  const voidShadowCount = useMemo(
-    () => imageData ? countVoidShadows(imageData, customColors) : 0,
-    [imageData, customColors],
+  const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
+  const usesWaterForWater = normalizeBlockIconId(selectedWaterBlock) === "water";
+  const usesIceForWater = normalizeBlockIconId(selectedWaterBlock) === "ice";
+  const imageHasNonLightWater = imageStats?.hasNonLightWater ?? false;
+  const usesBelowOnlyWaterSupport = useMemo(
+    () => (supportMode === SupportMode.Water && !usesWaterForWater) || (supportMode !== SupportMode.None && usesIceForWater),
+    [supportMode, usesWaterForWater, usesIceForWater],
   );
-  const voidShadowStats = useMemo(
-    () => imageData ? analyzeVoidShadows(imageData, customColors) : { total: 0, dominant: 0, recessive: 0 },
-    [imageData, customColors],
+  const waterFillerOffset = useMemo(
+    () => imageHasNonLightWater && usesBelowOnlyWaterSupport,
+    [imageHasNonLightWater, usesBelowOnlyWaterSupport],
   );
+  const shapeMap = useMemo(
+    () => imageColorGrid && imageValid
+      ? generateShapeMap(imageColorGrid, {
+          layerGap: calcLayerGap,
+          paletteSeed: paletteSeedOffset,
+          waterFillerOffset,
+        }, imageStats ? {
+          hasWater: imageStats.hasWater,
+          hasTransparency: imageStats.hasTransparency,
+          uniformNonFlatDirection: imageStats.uniformNonFlatDirection,
+          hasTwoLayerLateVoidNeed: imageStats.voidShadowStats.dominant > 0,
+        } : undefined)
+      : null,
+    [imageColorGrid, imageValid, calcLayerGap, paletteSeedOffset, waterFillerOffset, imageStats],
+  );
+  const hasNonFlatShades = imageStats?.hasNonFlatShades ?? false;
+  const hasSuppressPattern = imageStats?.hasSuppressPattern ?? false;
+  const northlineShape = shapeMap?.[BuildMode.StaircaseNorthline] ?? null;
+  const isFlatShape = useMemo(
+    () => !!northlineShape && !generatedShapeHasColorHeightVariance(northlineShape),
+    [northlineShape],
+  );
+  const fullImageUsedShadesByBase = imageStats?.usedShadesByBase ?? new Map<number, Set<number>>();
+  const usedBaseColors = imageStats?.usedBaseColors ?? new Set<number>();
+  const voidShadowStats = imageStats?.voidShadowStats ?? { dominant: 0, recessive: 0 };
+  const voidShadowCount = voidShadowStats.dominant + voidShadowStats.recessive;
 
-  const usedShadesByBase = useMemo(() => {
-    if (!imageData || !imageValid) return new Map<number, Set<number>>();
-    const lookup = getColorLookup();
-    const used = new Map<number, Set<number>>();
-    const d = imageData.data;
-    for (let i = 0; i < d.length; i += 4) {
-      if (d[i + 3] === 0) continue;
-      const match = lookup.get(`${d[i]},${d[i + 1]},${d[i + 2]}`);
-      if (!match) continue;
-      let shades = used.get(match.baseIndex);
-      if (!shades) {
-        shades = new Set<number>();
-        used.set(match.baseIndex, shades);
-      }
-      shades.add(match.shade);
-    }
-    return used;
-  }, [imageData, imageValid]);
-  const usedBaseColors = useMemo(() => new Set<number>(usedShadesByBase.keys()), [usedShadesByBase]);
+  const imageHasWater = imageStats?.hasWater ?? false;
+  const imageHasTransparency = imageStats?.hasTransparency ?? false;
 
-  const imageHasWater = useMemo(() => usedBaseColors.has(WATER_BASE_INDEX), [usedBaseColors]);
-  const imageHasTransparency = useMemo(() => {
-    if (!imageData) return false;
-    const d = imageData.data;
-    for (let i = 3; i < d.length; i += 4) {
-      if (d[i] === 0) return true;
-    }
-    return false;
-  }, [imageData]);
-
-  const fillerIsNoneColor = useMemo(() => {
-    const stripped = fillerBlock.split("[")[0];
-    return !BASE_COLORS.slice(1).some(bc => bc.blocks.some(b => b.split("[")[0] === stripped));
-  }, [fillerBlock]);
-  const fillerBlockId = useMemo(() => fillerBlock.trim().toLowerCase().replace(/^minecraft:/, "").split("[")[0], [fillerBlock]);
-  const fillerIsFragile = useMemo(() => fillerBlockId.length > 0 && isFragileBlock(fillerBlockId), [fillerBlockId]);
-  const fillerDisabled = useMemo(() => isFillerDisabled(fillerBlock), [fillerBlock]);
-  const fillerShadingDisabled = useMemo(() => isShadeFillerDisabled(fillerBlock), [fillerBlock]);
+  const supportFillerBlockId = useMemo(
+    () => supportFillerBlock.trim().toLowerCase().replace(/^minecraft:/, "").split("[")[0],
+    [supportFillerBlock],
+  );
+  const supportFillerIsFragile = useMemo(
+    () => supportFillerBlockId.length > 0 && isFragileBlock(supportFillerBlockId),
+    [supportFillerBlockId],
+  );
+  const supportFillerDisabled = useMemo(() => isFillerDisabled(supportFillerBlock), [supportFillerBlock]);
+  const commitSupportFillerBlock = useCallback((value: string) => {
+    if (isFillerDisabled(value)) setSupportMode(SupportMode.None);
+  }, []);
+  const shadeFillerShadingDisabled = useMemo(() => isShadeFillerDisabled(shadeFillerBlock), [shadeFillerBlock]);
   const dominateVoidFillerShadingDisabled = useMemo(
-    () => isShadeFillerDisabled(dominateVoidFillerBlock || fillerBlock),
-    [dominateVoidFillerBlock, fillerBlock],
+    () => isShadeFillerDisabled(dominateVoidFillerBlock || shadeFillerBlock),
+    [dominateVoidFillerBlock, shadeFillerBlock],
   );
   const recessiveVoidFillerShadingDisabled = useMemo(
-    () => isShadeFillerDisabled(recessiveVoidFillerBlock || fillerBlock),
-    [recessiveVoidFillerBlock, fillerBlock],
+    () => isShadeFillerDisabled(recessiveVoidFillerBlock || shadeFillerBlock),
+    [recessiveVoidFillerBlock, shadeFillerBlock],
   );
-  const disabledFillerPlaceholder = useMemo(() => {
-    const used = new Set<string>();
-    for (const b of Object.values(preset.blocks)) if (b) used.add(b);
-    for (const cc of customColors) if (cc.block?.trim()) used.add(cc.block.trim());
-    return BASE_COLORS[0].blocks.find(b => !used.has(b)) ?? BASE_COLORS[0].blocks[0];
-  }, [preset.blocks, customColors]);
+  const lateFillerShadingDisabled = useMemo(
+    () => isShadeFillerDisabled(suppress2LayerLateFillerBlock || shadeFillerBlock),
+    [suppress2LayerLateFillerBlock, shadeFillerBlock],
+  );
+  const uiFillerAssignments = useMemo(
+    () => createFillerAssignments(
+      supportFillerBlock,
+      shadeFillerBlock,
+      dominateVoidFillerBlock,
+      recessiveVoidFillerBlock,
+      suppress2LayerLateFillerBlock,
+      supportMode,
+      usesWaterForWater,
+      usesIceForWater,
+    ),
+    [
+      supportFillerBlock,
+      shadeFillerBlock,
+      dominateVoidFillerBlock,
+      recessiveVoidFillerBlock,
+      suppress2LayerLateFillerBlock,
+      supportMode,
+      usesWaterForWater,
+      usesIceForWater,
+    ],
+  );
 
   const missingBlocks = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return [];
     return [...usedBaseColors].filter(idx => idx > 0 && !preset.blocks[idx]);
   }, [imageValid, usedBaseColors, preset.blocks]);
 
-  const imageInfo = useMemo(
-    () => imageData && imageValid ? computeImageInfo(imageData, customColors) : null,
-    [imageData, imageValid, customColors],
-  );
+  const imageInfo = imageStats?.imageInfo ?? null;
 
-  const effectiveBuildMode = hasNonFlatShades ? buildMode : "flat";
-  const isStepRangeMode = effectiveBuildMode === "suppress_pairs_ew" || effectiveBuildMode === "suppress_checker_ew";
-  const maxRangeIndex = useMemo(() => {
-    if (effectiveBuildMode === "suppress_checker_ew") return 64; // 65 steps
-    if (effectiveBuildMode === "suppress_pairs_ew") return 128; // 129 steps
-    return 127; // column range mode
-  }, [effectiveBuildMode]);
-  const minLayerGap = supportMode === "fragile" || supportMode === "all" ? 3 : 2;
-  const calcLayerGapForBuild = effectiveBuildMode.startsWith("suppress_2layer") ? calcLayerGap : minLayerGap;
-  const structuralProSeed = effectiveBuildMode === "staircase_pro" ? calcProPaletteSeed : false;
-  const supportNeedsRealBlockTypes = supportMode === "fragile" || supportMode === "water";
-  const structuralBlockMapping = useMemo(() => {
-    const mapping: Record<number, string> = {};
-    for (let i = 1; i < BASE_COLORS.length; ++i) mapping[i] = `${CALC_BASE_TOKEN_PREFIX}${i}`;
-    return mapping;
-  }, []);
-  const structuralCustomColors = useMemo(
-    () => customColors.map((cc, idx) => ({ ...cc, block: `${CALC_CUSTOM_TOKEN_PREFIX}${idx}` })),
-    [customColors],
+  const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
+  const isStepRangeMode = effectiveBuildMode === BuildMode.SuppressPairsEW || effectiveBuildMode === BuildMode.SuppressCheckerEW;
+  const maxRangeIndex = useMemo(() => getBuildModeRangeMax(effectiveBuildMode), [effectiveBuildMode]);
+  const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
+  const calcLayerGapForBuild =
+    (effectiveBuildMode === BuildMode.Suppress2Layer ||
+      effectiveBuildMode === BuildMode.Suppress2LayerLateFillers ||
+      effectiveBuildMode === BuildMode.Suppress2LayerLatePairs)
+      ? calcLayerGap
+      : minLayerGap;
+  const supportShape = useMemo(
+    () => effectiveBuildMode === BuildMode.Flat
+      ? northlineShape
+      : (shapeMap?.[effectiveBuildMode] ?? null),
+    [shapeMap, effectiveBuildMode, northlineShape],
   );
-  const signatureBlockMapping = useMemo(
-    () => (supportNeedsRealBlockTypes ? preset.blocks : structuralBlockMapping),
-    [supportNeedsRealBlockTypes, preset.blocks, structuralBlockMapping],
+  const candidateVisibleInPart = useCallback(
+    (part: NonNullable<typeof supportShape>["parts"][number], candidate: { x: number; y: number; z: number }) =>
+      isWithinShapeBounds(candidate, part.bounds, assumeFloor),
+    [assumeFloor],
   );
-  const signatureCustomColors = useMemo(
-    () => (supportNeedsRealBlockTypes ? customColors : structuralCustomColors),
-    [supportNeedsRealBlockTypes, customColors, structuralCustomColors],
+  const enableStepsSupportOption = !imageData || !!supportShape?.parts.some(part =>
+      [...part.cells.entries()].some(([coord, cell]) => {
+      if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
+      const [x, y, z] = parseShapeCoordKey(coord);
+      return candidateVisibleInPart(part, { x, y, z });
+    }),
   );
-
-  const uniformNonFlatDirection = useMemo(
-    () => imageData && imageValid ? detectUniformNonFlatDirection(imageData, customColors) : "mixed",
-    [imageData, imageValid, customColors],
-  );
-
-  const staircaseModeOptionsByFillerMode = useMemo((): { enabled: ModeOption[]; disabled: ModeOption[] } => {
-    if (!imageData || !imageValid || !hasNonFlatShades) {
-      return { enabled: DEFAULT_STAIRCASE_OPTIONS, disabled: DEFAULT_STAIRCASE_OPTIONS };
+  const enableFragileSupportOption = useMemo(() => {
+    const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockIconId(block));
+    if (!imageData) {
+      return Object.values(preset.blocks).some(hasFragileMappedBlock) || customColors.some(color => hasFragileMappedBlock(color.block));
     }
-
-    if (!imageHasTransparency && uniformNonFlatDirection === "all_light") {
-      const single = [{ value: "staircase_northline", label: "Incline (Down)" }];
-      return { enabled: single, disabled: single };
+    if (!supportShape) return false;
+    return supportShape.parts.some(part =>
+      [...part.cells.entries()].some(([coord, cell]) => {
+        if (!isShapeFillerCell(cell)) return false;
+        const [x, y, z] = parseShapeCoordKey(coord);
+        if (!candidateVisibleInPart(part, { x, y, z })) return false;
+        if (!cell.includes(FillerRole.SupportFragile)) return false;
+        const color = getSupportedColorAbove(part, coord);
+        if (!color) return false;
+        const mapped = color.isCustom
+          ? (customColors[color.id]?.block ?? "")
+          : (preset.blocks[color.id] || BASE_COLORS[color.id].blocks[0] || "");
+        return hasFragileMappedBlock(mapped);
+      }),
+    );
+  }, [imageData, supportShape, preset.blocks, customColors, candidateVisibleInPart]);
+  const enableWaterSupportOption = !imageData || imageHasWater;
+  const staircaseModeOptions = useMemo((): ModeOption[] => {
+    if (!shapeMap || !imageValid || isFlatShape) {
+      return DEFAULT_STAIRCASE_OPTIONS;
     }
-    if (!imageHasTransparency && uniformNonFlatDirection === "all_dark") {
-      const single = [{ value: "staircase_northline", label: "Incline (Up)" }];
-      return { enabled: single, disabled: single };
+    const sourceModes = DEFAULT_STAIRCASE_OPTIONS
+      .map(option => option.value)
+      .filter(mode => mode !== BuildMode.Flat && !!shapeMap[mode]);
+    const seen = new Set<string>();
+    const unique: BuildMode[] = [];
+    for (const mode of sourceModes) {
+      const shape = shapeMap[mode];
+      if (!shape) continue;
+      const signature = computeGeneratedShapeSignature(shape);
+      if (seen.has(signature)) continue;
+      seen.add(signature);
+      unique.push(mode);
     }
-
-    const build = (shadeDisabled: boolean): ModeOption[] => {
-      const seen = new Set<string>();
-      const unique: ModeOption[] = [];
-      const signatureFillerBlock = shadeDisabled ? disabledFillerPlaceholder : CALC_FILLER_SENTINEL;
-      for (const opt of DEFAULT_STAIRCASE_OPTIONS) {
-        try {
-          const signature = computeBuildModeSignature(imageData, {
-            blockMapping: signatureBlockMapping,
-            fillerBlock: signatureFillerBlock,
-            suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-            // Palette-seed toggle only affects Pro Version output randomness;
-            // mode-list dedupe should stay stable/cheap when toggling it.
-            proPaletteSeed: false,
-            forceZ129,
-            customColors: signatureCustomColors,
-            buildMode: opt.value,
-            supportMode,
-            baseName: "",
-            layerGap: minLayerGap,
-          });
-          if (seen.has(signature)) continue;
-          seen.add(signature);
-        } catch {
-          // If signature generation fails for any mode, keep option visible.
-        }
-        unique.push(opt);
-      }
-      return unique.length > 0 ? unique : DEFAULT_STAIRCASE_OPTIONS;
-    };
-
-    return {
-      enabled: build(false),
-      disabled: build(true),
-    };
+    const buildModes = unique.length > 0 ? unique : [...sourceModes];
+    return buildModes.map(mode => DEFAULT_STAIRCASE_OPTIONS.find(option => option.value === mode) || { value: mode, label: mode });
   }, [
-    imageData,
+    shapeMap,
     imageValid,
-    hasNonFlatShades,
-    imageHasTransparency,
-    uniformNonFlatDirection,
-    signatureBlockMapping,
-    signatureCustomColors,
-    supportMode,
-    minLayerGap,
-    forceZ129,
-    disabledFillerPlaceholder,
-  ]);
-  const staircaseModeOptions = useMemo(
-    () => (fillerShadingDisabled ? staircaseModeOptionsByFillerMode.disabled : staircaseModeOptionsByFillerMode.enabled),
-    [fillerShadingDisabled, staircaseModeOptionsByFillerMode],
-  );
-
-  const lateFillersNeedStats = useMemo(() => {
-    if (!imageData || !imageValid || !hasNonFlatShades) return null;
-    try {
-      return analyzeFillerNeeds(imageData, {
-        blockMapping: structuralBlockMapping,
-        fillerBlock: CALC_FILLER_SENTINEL,
-        suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-        proPaletteSeed: false,
-        customColors: structuralCustomColors,
-        buildMode: "suppress_2layer_late_fillers",
-        supportMode: "none",
-        baseName: "",
-        layerGap: calcLayerGap,
-      });
-    } catch {
-      return null;
-    }
-  }, [
-    imageData,
-    imageValid,
-    hasNonFlatShades,
-    structuralBlockMapping,
-    structuralCustomColors,
-    calcLayerGap,
+    isFlatShape,
   ]);
 
-  const twoLayerHasLateVoidNeed = (lateFillersNeedStats?.delayedTotal ?? 0) > 0;
+  const twoLayerHasLateVoidNeed = !!shapeMap?.[BuildMode.Suppress2LayerLatePairs];
 
   const suppressModeOptions = useMemo((): ModeOption[] => {
-    const options: ModeOption[] = [...BASE_SUPPRESS_OPTIONS];
-    if (twoLayerHasLateVoidNeed) {
-      options.push({ value: "suppress_2layer_late_fillers", label: "Suppress (2-Layer, Late-Fillers)" });
-      options.push({ value: "suppress_2layer_late_pairs", label: "Suppress (2-Layer, Late-Pairs)" });
-    } else {
-      options.push({ value: "suppress_2layer_late_fillers", label: "Suppress (2-Layer)" });
-    }
-    return options;
-  }, [twoLayerHasLateVoidNeed]);
+    const suppressModes = BASE_SUPPRESS_OPTIONS
+      .map(option => option.value)
+      .filter(mode => !!shapeMap?.[mode]);
+    return suppressModes.map(mode => {
+      return BASE_SUPPRESS_OPTIONS.find(option => option.value === mode) || { value: mode, label: mode };
+    });
+  }, [shapeMap]);
 
   const getBuildModeTooltip = useCallback(
     (mode: BuildMode): string => {
       switch (mode) {
-        case "staircase_valley":
+        case BuildMode.InclineDown:
+          return "All non-transparent non-water pixels slope downward uniformly, so all staircase methods collapse to the northline output.";
+        case BuildMode.InclineUp:
+          return "All non-transparent non-water pixels slope upward uniformly, so all staircase methods collapse to the northline output.";
+        case BuildMode.StaircaseValley:
           return "Minimizes maxY-minY diff, and splits up N→S columns, lowering each segment as much as possible";
-        case "staircase_classic":
+        case BuildMode.StaircaseClassic:
           return "Minimizes maxY-minY diff, while keeping N→S columns contiguous";
-        case "staircase_grouped":
+        case BuildMode.StaircaseGrouped:
           return "Valley-style segmentation with safe cross-column grouping to reduce isolated low runs";
-        case "staircase_northline":
+        case BuildMode.StaircaseNorthline:
           return "Aligns each column N→S from a reference (noob)line of blocks";
-        case "staircase_southline":
+        case BuildMode.StaircaseSouthline:
           return "Aligns each column S→N from a reference line of blocks (the bottom row)";
-        case "staircase_pro":
+        case BuildMode.StaircaseParty:
           return "Same MapArt, but makes the build process more fun and exciting!";
-        case "suppress_rowsplit":
+        case BuildMode.SuppressSplitRow:
           return "Split-row; available for compatibility, but generally not useful";
-        case "suppress_checker":
+        case BuildMode.SuppressSplitChecker:
           return "Split NBT generations for dominant/recessive placements";
-        case "suppress_checker_ew":
+        case BuildMode.SuppressCheckerEW:
           return "Stepwise E→W checker handling: 4 columns per step (2 dominant east, 2 recessive west), overlapping by 2 columns";
-        case "suppress_pairs_ew":
+        case BuildMode.SuppressPairsEW:
           return "Split into East-West pairs in a interlacing 'brick' pattern; currently only supports updating from E→W";
-        case "suppress_2layer_late_pairs":
+        case BuildMode.Suppress2LayerLatePairs:
           return (
-            "Suppress-phase placements are isolated on the highest Y-layer, and should be skipped during initial build-phase.\n\n" +
-            SUPPRESS_2LAYER_BASE_FLOW
+            "Suppress-phase placements use a custom 'late filler' block (at the highest Y-layer), and should be skipped during initial build-phase.\n\n" +
+            SUPPRESS_2LAYER_GUIDE_WITH_VS_FILLER
           );
-        case "suppress_2layer_late_fillers":
-          if (twoLayerHasLateVoidNeed) return (
-            "Suppress-phase placements use a custom 'late filler' block, and should be skipped during initial build-phase.\n\n" +
-            SUPPRESS_2LAYER_BASE_FLOW
-          );
+        case BuildMode.Suppress2LayerLateFillers:
+          // if (twoLayerHasLateVoidNeed)
           return (
-            "Steps:\n" +
-            "1) Build everything\n" +
-            "2) Update the full map\n" +
-            "3) Begin removing the upper layer, 1-2 columns at a time\n" +
-            "4) Carefully update *just* the dominate pixels for the target column(s)\n" +
-            "5) Repeat, column-by-column, for the entire map\n\n" +
-            "Layer gap controls vertical spacing between lower and upper suppress layers."
+            "Suppress-phase placements use a custom 'late filler' block (on the lower layer), and should be skipped during initial build-phase.\n\n" +
+            SUPPRESS_2LAYER_GUIDE_WITH_VS_FILLER
           );
-        case "flat":
-          return "Flat: no staircase/suppress shading needed (all non-transparent pixels are flat shade).";
+          // FALLTHROUGH_INTENDED
+        case BuildMode.Suppress2Layer:
+          return SUPPRESS_2LAYER_GUIDE
+        case BuildMode.Flat:
+          return "Flat: all color blocks in the generated shape are at the same Y-level.";
         default:
           return "Selected shading method.";
       }
@@ -762,150 +848,47 @@ const Index = () => {
 
   const getSupportModeTooltip = useCallback((mode: SupportMode): string => {
     switch (mode) {
-      case "none":
-        return "No extra support blocks are added.";
-      case "steps":
-        return "Adds support blocks under staircase step transitions.";
-      case "all":
-        return "Adds support blocks below every generated block.";
-      case "fragile":
-        return "Adds support blocks only below fragile blocks.";
-      case "water":
-        return "Adds support blocks around water blocks (N/S/E/W and below).";
+      case SupportMode.None:
+        return "No support blocks (shading only)";
+      case SupportMode.Steps:
+        return "Adds support blocks below staircase steps.";
+      case SupportMode.All:
+        return "Adds support blocks below every block.";
+      case SupportMode.Fragile:
+        return "Adds support blocks below fragile blocks.";
+      case SupportMode.Water:
+        return "Adds support blocks around water, or below ice pillars (if used instead of water).";
       default:
         return "Selected support mode.";
     }
   }, []);
   const supportModeTooltip = useMemo(() => getSupportModeTooltip(supportMode), [getSupportModeTooltip, supportMode]);
 
-  const materialStatsProSeed = useMemo(
-    () => (
-      effectiveBuildMode === "staircase_pro" && supportMode === "none"
-        ? false
-        : structuralProSeed
-    ),
-    [effectiveBuildMode, supportMode, structuralProSeed],
-  );
-  const materialNeedsRealBlocks = useMemo(
-    () => supportNeedsRealBlockTypes || (effectiveBuildMode === "staircase_pro" && materialStatsProSeed),
-    [supportNeedsRealBlockTypes, effectiveBuildMode, materialStatsProSeed],
-  );
-  const materialBlockMapping = useMemo(
-    () => (materialNeedsRealBlocks ? preset.blocks : structuralBlockMapping),
-    [materialNeedsRealBlocks, preset.blocks, structuralBlockMapping],
-  );
-  const materialCustomColors = useMemo(
-    () => (materialNeedsRealBlocks ? customColors : structuralCustomColors),
-    [materialNeedsRealBlocks, customColors, structuralCustomColors],
-  );
+  const effectiveShape = supportShape;
 
-  const rawMaterialCountsByFillerMode = useMemo(() => {
-    if (!imageData || !imageValid) return null;
-    const baseOptions = {
-      blockMapping: materialBlockMapping,
-      suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-      dominateVoidFillerBlock: CALC_DOMINANT_VOID_FILLER_SENTINEL,
-      recessiveVoidFillerBlock: CALC_RECESSIVE_VOID_FILLER_SENTINEL,
-      proPaletteSeed: materialStatsProSeed,
-      customColors: materialCustomColors,
-      buildMode: effectiveBuildMode,
-      supportMode,
-      baseName: "",
-      layerGap: calcLayerGapForBuild,
+  const materialNeedStats = useMemo(() => {
+    if (!effectiveShape || !imageValid) return null;
+    return analyzeMaterialNeeds(imageColorGrid, effectiveShape, {
+      blockMapping: preset.blocks,
+      fillerAssignments: uiFillerAssignments,
+      assumeFloor,
+      customColors,
       ...(colRangeEnabled ? (isStepRangeMode ? { stepRange: [colStart, colEnd] } : { columnRange: [colStart, colEnd] }) : {}),
-    };
-    try {
-      const enabled = computeMaterialCounts(imageData, {
-        ...baseOptions,
-        fillerBlock: CALC_FILLER_SENTINEL,
-      });
-      const disabled = computeMaterialCounts(imageData, {
-        ...baseOptions,
-        fillerBlock: disabledFillerPlaceholder,
-      });
-      return { enabled, disabled };
-    } catch {
-      return null;
-    }
+    });
   }, [
-    imageData,
+    effectiveShape,
     imageValid,
-    materialBlockMapping,
-    materialStatsProSeed,
-    materialCustomColors,
-    effectiveBuildMode,
-    supportMode,
-    calcLayerGapForBuild,
-    isStepRangeMode,
+    imageColorGrid,
+    preset.blocks,
+    uiFillerAssignments,
+    assumeFloor,
+    customColors,
     colRangeEnabled,
+    isStepRangeMode,
     colStart,
     colEnd,
-    disabledFillerPlaceholder,
   ]);
-  const rawMaterialCounts = useMemo(
-    () =>
-      rawMaterialCountsByFillerMode
-        ? (fillerShadingDisabled ? rawMaterialCountsByFillerMode.disabled : rawMaterialCountsByFillerMode.enabled)
-        : null,
-    [rawMaterialCountsByFillerMode, fillerShadingDisabled],
-  );
-
-  const remappedMaterialStats = useMemo(() => {
-    if (!rawMaterialCounts) return null;
-    const remapped: Record<string, number> = {};
-    const fillerOnlyByName: Record<string, number> = {};
-    for (const [name, count] of Object.entries(rawMaterialCounts)) {
-      const targetBase =
-        name === CALC_FILLER_SENTINEL
-          ? fillerBlock
-          : name === CALC_DOMINANT_VOID_FILLER_SENTINEL
-            ? dominateVoidFillerBlock
-            : name === CALC_RECESSIVE_VOID_FILLER_SENTINEL
-              ? recessiveVoidFillerBlock
-          : name === CALC_DELAYED_FILLER_SENTINEL
-            ? suppress2LayerDelayedFillerBlock
-            : fillerShadingDisabled && name === disabledFillerPlaceholder
-              ? fillerBlock
-              : name;
-      let target = targetBase;
-      if (target.startsWith(CALC_BASE_TOKEN_PREFIX)) {
-        const idx = parseInt(target.slice(CALC_BASE_TOKEN_PREFIX.length), 10);
-        if (Number.isFinite(idx) && idx > 0 && idx < BASE_COLORS.length) {
-          target = preset.blocks[idx] || BASE_COLORS[idx].blocks[0] || target;
-        }
-      } else if (target.startsWith(CALC_CUSTOM_TOKEN_PREFIX)) {
-        const idx = parseInt(target.slice(CALC_CUSTOM_TOKEN_PREFIX.length), 10);
-        if (Number.isFinite(idx) && idx >= 0 && idx < customColors.length) {
-          target = customColors[idx].block.trim() || target;
-        }
-      }
-      remapped[target] = (remapped[target] || 0) + count;
-      if (
-        name === CALC_FILLER_SENTINEL ||
-        name === CALC_DOMINANT_VOID_FILLER_SENTINEL ||
-        name === CALC_RECESSIVE_VOID_FILLER_SENTINEL ||
-        (fillerShadingDisabled && name === disabledFillerPlaceholder)
-      ) {
-        fillerOnlyByName[target] = (fillerOnlyByName[target] || 0) + count;
-      }
-    }
-    return { materialCounts: remapped, fillerOnlyByName };
-  }, [
-    rawMaterialCounts,
-    fillerShadingDisabled,
-    fillerBlock,
-    dominateVoidFillerBlock,
-    recessiveVoidFillerBlock,
-    suppress2LayerDelayedFillerBlock,
-    disabledFillerPlaceholder,
-    preset.blocks,
-    customColors,
-  ]);
-  const materialCounts = useMemo(() => remappedMaterialStats?.materialCounts ?? null, [remappedMaterialStats]);
-  const fillerOnlyCountsByName = useMemo(
-    () => remappedMaterialStats?.fillerOnlyByName ?? ({} as Record<string, number>),
-    [remappedMaterialStats],
-  );
+  const materialCounts = useMemo(() => materialNeedStats?.blockCounts ?? null, [materialNeedStats]);
 
   const sortedMaterials = useMemo(
     () =>
@@ -916,23 +899,26 @@ const Index = () => {
         : [],
     [materialCounts],
   );
-
-  const fillerOnlyCount = useMemo(() => {
-    return fillerOnlyCountsByName[fillerBlock] || 0;
-  }, [fillerOnlyCountsByName, fillerBlock]);
+  const numUniqueColorShadesForPart = useMemo(
+    () => materialNeedStats?.numUniqueColorShadesForPart ?? (imageInfo?.uniqueShadeCount ?? 0),
+    [materialNeedStats, imageInfo],
+  );
+  const usedShadesByBase = useMemo(
+    () => materialNeedStats?.usedShadesByBase ?? fullImageUsedShadesByBase,
+    [materialNeedStats, fullImageUsedShadesByBase],
+  );
+  const formatRequiredCount = useCallback(
+    (count: number) => (showStacks ? formatStacks(count) : count),
+    [showStacks],
+  );
 
   const colorRequiredMap = useMemo(() => {
-    if (!materialCounts) return {} as Record<number, number>;
-    const map: Record<number, number> = {};
-    for (let i = 1; i < BASE_COLORS.length; ++i) {
-      const block = preset.blocks[i];
-      if (!block) continue;
-      const total = materialCounts[block] || 0;
-      const colorOnly = Math.max(0, total - (fillerOnlyCountsByName[block] || 0));
-      if (colorOnly > 0) map[i] = colorOnly;
-    }
-    return map;
-  }, [materialCounts, preset.blocks, fillerOnlyCountsByName]);
+    return materialNeedStats?.baseColorCounts ?? ({} as Record<number, number>);
+  }, [materialNeedStats]);
+  const numColorBlockTypesForPart = useMemo(
+    () => Object.values(colorRequiredMap).filter(count => count > 0).length,
+    [colorRequiredMap],
+  );
 
   const blockToBaseIndex = useMemo(() => {
     const map: Record<string, number> = {};
@@ -971,12 +957,13 @@ const Index = () => {
       setActiveIdx(prev.length);
       return [...prev, decoded.preset];
     });
-    if (decoded.filler) setFillerBlock(decoded.filler);
+    if (decoded.supportFiller) setSupportFillerBlock(decoded.supportFiller);
+    if (decoded.shadeFiller) setShadeFillerBlock(decoded.shadeFiller);
     if (decoded.supportMode !== undefined) setSupportMode(decoded.supportMode);
     if (decoded.buildMode) setBuildMode(decoded.buildMode);
     if (decoded.customColors) setCustomColors(decoded.customColors);
-    if (decoded.suppress2LayerDelayedFillerBlock) {
-      setSuppress2LayerDelayedFillerBlock(decoded.suppress2LayerDelayedFillerBlock);
+    if (decoded.suppress2LayerLateFillerBlock) {
+      setSuppress2LayerLateFillerBlock(decoded.suppress2LayerLateFillerBlock);
     }
     if (decoded.proPaletteSeed !== undefined) setProPaletteSeed(decoded.proPaletteSeed);
     if (decoded.dominateVoidFillerBlock) setDominateVoidFillerBlock(decoded.dominateVoidFillerBlock);
@@ -987,37 +974,40 @@ const Index = () => {
   // Auto-select mode when image changes
   useEffect(() => {
     if (!imageData) return;
-    if (!hasNonFlatShades) setBuildMode("flat");
+    if (isFlatShape) setBuildMode(BuildMode.Flat);
     else if (hasSuppressPattern)
-      setBuildMode(prev => prev.startsWith("staircase") || prev === "flat" ? "suppress_2layer_late_pairs" : prev);
-    else setBuildMode(prev => prev === "flat" ? "staircase_classic" : prev);
-  }, [imageData, hasNonFlatShades, hasSuppressPattern]);
+      setBuildMode(prev => isStaircaseLikeMode(prev) ? (twoLayerHasLateVoidNeed ? BuildMode.Suppress2LayerLatePairs : BuildMode.Suppress2Layer) : prev);
+    else setBuildMode(prev => prev === BuildMode.Flat ? BuildMode.StaircaseClassic : prev);
+  }, [imageData, isFlatShape, hasSuppressPattern, twoLayerHasLateVoidNeed]);
 
   useEffect(() => {
-    if (!imageData || !hasNonFlatShades) return;
+    if (!imageData || isFlatShape) return;
     const visible = new Set<BuildMode>([
       ...staircaseModeOptions.map(o => o.value),
       ...suppressModeOptions.map(o => o.value),
     ]);
     if (!visible.has(buildMode)) {
-      if (buildMode === "suppress_2layer_late_pairs" && visible.has("suppress_2layer_late_fillers")) {
-        setBuildMode("suppress_2layer_late_fillers");
+      if (buildMode === BuildMode.Suppress2Layer && visible.has(BuildMode.Suppress2LayerLateFillers)) {
+        setBuildMode(BuildMode.Suppress2LayerLateFillers);
+      } else if (buildMode === BuildMode.Suppress2LayerLatePairs && visible.has(BuildMode.Suppress2Layer)) {
+        setBuildMode(BuildMode.Suppress2Layer);
+      } else if (buildMode === BuildMode.Suppress2LayerLatePairs && visible.has(BuildMode.Suppress2LayerLateFillers)) {
+        setBuildMode(BuildMode.Suppress2LayerLateFillers);
       } else {
-        setBuildMode(staircaseModeOptions[0]?.value ?? "staircase_classic");
+        setBuildMode(staircaseModeOptions[0]?.value ?? BuildMode.StaircaseClassic);
       }
     }
-  }, [imageData, hasNonFlatShades, buildMode, staircaseModeOptions, suppressModeOptions]);
+  }, [imageData, isFlatShape, buildMode, staircaseModeOptions, suppressModeOptions]);
 
   useEffect(() => {
     if (!imageData) return;
-    if (fillerDisabled) { setSupportMode("none"); return; }
-    if (supportMode === "fragile" && fillerIsFragile) { setSupportMode("none"); return; }
-    if (supportMode === "steps" && !hasNonFlatShades) setSupportMode("none");
-    if (supportMode === "water" && (!imageHasWater || !fillerIsNoneColor)) setSupportMode("none");
-  }, [imageData, hasNonFlatShades, imageHasWater, fillerIsNoneColor, supportMode, fillerDisabled, fillerIsFragile]);
+    if (supportMode === SupportMode.Fragile && (supportFillerIsFragile || !enableFragileSupportOption)) { setSupportMode(SupportMode.None); return; }
+    if (supportMode === SupportMode.Steps && !enableStepsSupportOption) setSupportMode(SupportMode.None);
+    if (supportMode === SupportMode.Water && !enableWaterSupportOption) setSupportMode(SupportMode.None);
+  }, [imageData, enableStepsSupportOption, enableFragileSupportOption, enableWaterSupportOption, supportMode, supportFillerIsFragile]);
 
   useEffect(() => {
-    if ((supportMode === "fragile" || supportMode === "all") && layerGap < 3) setLayerGap(3);
+    if ((supportMode === SupportMode.Fragile || supportMode === SupportMode.All) && layerGap < 3) setLayerGap(3);
   }, [supportMode, layerGap]);
 
   const customBlocksByBase = useMemo(() => {
@@ -1034,7 +1024,7 @@ const Index = () => {
   }, [customColors]);
 
   const sortedIndices = useMemo(() => {
-    const base = showTransparentRow ? [0, ...DEFAULT_SORTED] : [...DEFAULT_SORTED];
+    const base = showTransparentRow ? [0, ...DEFAULT_COLOR_ROW_ORDER] : [...DEFAULT_COLOR_ROW_ORDER];
     if (sortKey === "default") return base;
     const dir = sortDir === "asc" ? 1 : -1;
     const sorters: Record<string, (a: number, b: number) => number> = {
@@ -1134,12 +1124,13 @@ const Index = () => {
     markSavedImmediate();
     const url = `${location.origin}${location.pathname}?preset=${encodePreset(
       preset,
-      fillerBlock,
+      supportFillerBlock,
+      shadeFillerBlock,
       supportMode,
       buildMode,
       customColors,
       convertUnsupported,
-      suppress2LayerDelayedFillerBlock,
+      suppress2LayerLateFillerBlock,
       proPaletteSeed,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
@@ -1157,146 +1148,104 @@ const Index = () => {
     if (fileRef.current) fileRef.current.value = "";
   };
 
+  const isLikelyLossyImageFile = useCallback((file: File) => {
+    const type = file.type.toLowerCase();
+    const name = file.name.toLowerCase();
+    return (
+      type === "image/jpeg" ||
+      type === "image/jpg" ||
+      type === "image/avif" ||
+      type === "image/heic" ||
+      type === "image/heif" ||
+      name.endsWith(".jpg") ||
+      name.endsWith(".jpeg") ||
+      name.endsWith(".avif") ||
+      name.endsWith(".heic") ||
+      name.endsWith(".heif")
+    );
+  }, []);
+
+  const getLossyImageFormatLabel = useCallback((file: File) => {
+    const type = file.type.toLowerCase();
+    const name = file.name.toLowerCase();
+    if (type === "image/jpeg" || type === "image/jpg" || name.endsWith(".jpg") || name.endsWith(".jpeg")) return "JPG";
+    if (type === "image/avif" || name.endsWith(".avif")) return "AVIF";
+    if (type === "image/heic" || name.endsWith(".heic")) return "HEIC";
+    if (type === "image/heif" || name.endsWith(".heif")) return "HEIF";
+    return "lossy";
+  }, []);
+
   const handleFile = useCallback(
     (file: File) => {
       setPaletteErrors([]);
-      const img = new Image();
-      img.onload = () => {
-        const canvas = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height });
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0);
-        const data = ctx.getImageData(0, 0, img.width, img.height);
-        const result = validatePng(data, customColors);
-        if (!result.valid) {
-          // Check if the only errors are palette errors and conversion is enabled
-          const sizeError = result.errors.find(e => e.includes("128×128"));
-          if (sizeError || !convertUnsupported) {
-            setImageData(null);
-            setImageName("");
-            setImageValid(false);
-            setPaletteErrors(result.errors);
-            if (fileRef.current) fileRef.current.value = "";
-            return;
-          }
-          // Convert unsupported colors to nearest available palette color
-          const lookup = getColorLookup();
-          const customLookup = buildCustomShadeLookup(customColors);
-
-          // Build set of available shaded RGB values (only base colors that have a block mapping in preset)
-          const availableColors: { r: number; g: number; b: number; key: string }[] = [];
-          for (const [key, match] of lookup.entries()) {
-            // Include all palette colors (they might assign blocks later)
-            const [r, g, b] = key.split(",").map(Number);
-            availableColors.push({ r, g, b, key });
-          }
-
-          const d = data.data;
-          const allInputColors = new Set<string>();
-          const convertedColors = new Set<string>();
-          const targetColors = new Set<string>();
-          for (let i = 0; i < d.length; i += 4) {
-            if (d[i + 3] === 0) continue;
-            const key = `${d[i]},${d[i + 1]},${d[i + 2]}`;
-            allInputColors.add(key);
-            if (lookup.has(key) || customLookup.has(key)) continue;
-            // Find nearest color
-            let bestDist = Infinity, bestR = 0, bestG = 0, bestB = 0;
-            for (const ac of availableColors) {
-              const dr = d[i] - ac.r,
-                dg = d[i + 1] - ac.g,
-                db = d[i + 2] - ac.b;
-              const dist = dr * dr + dg * dg + db * db;
-              if (dist < bestDist) {
-                bestDist = dist;
-                bestR = ac.r;
-                bestG = ac.g;
-                bestB = ac.b;
-              }
-            }
-            convertedColors.add(key);
-            targetColors.add(`${bestR},${bestG},${bestB}`);
-            d[i] = bestR;
-            d[i + 1] = bestG;
-            d[i + 2] = bestB;
-          }
-          // Re-validate after conversion (should pass now)
-          const recheck = validatePng(data, customColors);
-          setImageData(data);
-          setImageName(file.name);
-          setImageValid(recheck.valid);
-          const cc = convertedColors.size;
-          const totalUnique = allInputColors.size;
-          // Output unique colors = original colors minus converted ones, plus target palette colors
-          const outputColors = new Set<string>();
-          for (const c of allInputColors) {
-            if (!convertedColors.has(c)) outputColors.add(c);
-          }
-          for (const c of targetColors) outputColors.add(c);
-          const fewer = totalUnique - outputColors.size;
-          const convLine1 =
-            cc === totalUnique
-              ? `Converted ${cc} color${cc === 1 ? "" : "s"} to nearest palette match.`
-              : `Converted ${cc} (of ${totalUnique}) color${totalUnique === 1 ? "" : "s"} to nearest palette match.`;
-          const convLines = [convLine1];
-          if (fewer > 0) {
-            convLines.push(`${fewer} fewer unique color${fewer === 1 ? "" : "s"} than source image.`);
-          }
-          setPaletteErrors(recheck.valid ? convLines : recheck.errors);
-          setShowUnusedColors(false);
-          if (sortKey === "default") {
-            setSortKey("required");
-            setSortDir("desc");
-          }
+      convertFileToColorGrid(file, customColors, convertUnsupported)
+        .then(analysis => {
+        const paletteErrors =
+          isLikelyLossyImageFile(file) && analysis.paletteErrors[0]?.startsWith("Converted")
+            ? [
+                ...analysis.paletteErrors,
+                `This is likely due to ${getLossyImageFormatLabel(file)} being a lossy format.`,
+              ]
+            : analysis.paletteErrors;
+        if (analysis.sizeErrors.length > 0 || analysis.unsupportedColors.length > 0) {
+          setImageData(null);
+          setImageName("");
+          setImageValid(false);
+          setPaletteErrors(paletteErrors);
+          if (fileRef.current) fileRef.current.value = "";
           return;
         }
-        setImageData(data);
+        setImageData(analysis.imageData);
         setImageName(file.name);
         setImageValid(true);
-        setPaletteErrors([]);
+        setPaletteErrors(paletteErrors);
         setShowUnusedColors(false);
         if (sortKey === "default") {
           setSortKey("required");
           setSortDir("desc");
         }
-      };
-      img.src = URL.createObjectURL(file);
+        })
+        .catch((err: unknown) => {
+          setImageData(null);
+          setImageName("");
+          setImageValid(false);
+          setPaletteErrors([(err as Error)?.message || "Unable to decode this image format."]);
+          if (fileRef.current) fileRef.current.value = "";
+        });
     },
-    [customColors, convertUnsupported, preset.blocks],
+    [customColors, convertUnsupported, getLossyImageFormatLabel, isLikelyLossyImageFile, preset.blocks],
   );
 
   const handleConvertAndDownload = async () => {
-    if (!imageData) return;
+    if (!effectiveShape) return;
     setConverting(true);
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
-      const result = await convertToNbt(imageData, {
+      const result = await convertToNbt(effectiveShape, {
         blockMapping: preset.blocks,
-        fillerBlock,
-        dominateVoidFillerBlock,
-        recessiveVoidFillerBlock,
-        suppress2LayerDelayedFillerBlock,
-        proPaletteSeed,
+        fillerAssignments: uiFillerAssignments,
+        assumeFloor,
         forceZ129,
         customColors,
-        buildMode,
-        supportMode,
         baseName,
-        layerGap,
       });
-      const suffixMap: Record<string, string> = {
-        flat: "",
-        staircase_northline: "-staircase_northline",
-        staircase_southline: "-staircase_southline",
-        staircase_classic: "-staircase_classic",
-        staircase_grouped: "-staircase_grouped",
-        staircase_valley: "-staircase_valley",
-        staircase_pro: "-staircase_pro",
-        suppress_rowsplit: "-suppress_rowsplit",
-        suppress_checker: "-suppress_checker",
-        suppress_checker_ew: "-suppress_checker_EW",
-        suppress_pairs_ew: "-suppress_pairs_EW",
-        suppress_2layer_late_fillers: "-suppress_2layer",
-        suppress_2layer_late_pairs: "-suppress_2layer_late_pairs",
+      const suffixMap: Record<BuildMode, string> = {
+        [BuildMode.Flat]: "",
+        [BuildMode.InclineDown]: "-incline_down",
+        [BuildMode.InclineUp]: "-incline_up",
+        [BuildMode.StaircaseNorthline]: "-northline",
+        [BuildMode.StaircaseSouthline]: "-southline",
+        [BuildMode.StaircaseClassic]: "-classic",
+        [BuildMode.StaircaseGrouped]: "-grouped",
+        [BuildMode.StaircaseValley]: "-valley",
+        [BuildMode.StaircaseParty]: "-party",
+        [BuildMode.SuppressSplitRow]: "-split_row",
+        [BuildMode.SuppressSplitChecker]: "-split_checker",
+        [BuildMode.SuppressCheckerEW]: "-suppress_checker_EW",
+        [BuildMode.SuppressPairsEW]: "-suppress_pairs_EW",
+        [BuildMode.Suppress2Layer]: "-suppress_2layer",
+        [BuildMode.Suppress2LayerLateFillers]: "-suppress_2layer",
+        [BuildMode.Suppress2LayerLatePairs]: "-suppress_2layer",
       };
       const suffix = suffixMap[buildMode] ?? `-${buildMode}`;
       const ext = result.isZip ? "zip" : "nbt";
@@ -1343,120 +1292,177 @@ const Index = () => {
       colorRowRefs.current[baseIdx]?.scrollIntoView({ behavior: "smooth", block: "center" });
       setTimeout(() => setHighlightedColorIdx(null), 2000);
     } else {
-      fillerInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      fillerInputRef.current?.focus();
+      supportFillerInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      supportFillerInputRef.current?.focus();
     }
   };
 
-  const fillerNeedStats = useMemo(() => {
-    if (!imageData || !imageValid) return null;
-    if (effectiveBuildMode === "suppress_2layer_late_fillers") return lateFillersNeedStats;
-    try {
-      return analyzeFillerNeeds(imageData, {
-        blockMapping: structuralBlockMapping,
-        fillerBlock: CALC_FILLER_SENTINEL,
-        suppress2LayerDelayedFillerBlock: CALC_DELAYED_FILLER_SENTINEL,
-        // Filler-need analysis is topology/shade driven and does not depend on Pro Version RNG seed.
-        proPaletteSeed: false,
-        customColors: structuralCustomColors,
-        buildMode: effectiveBuildMode,
-        supportMode: "none",
-        baseName: "",
-        layerGap: calcLayerGapForBuild,
-      });
-    } catch {
-      return null;
-    }
-  }, [
-    imageData,
-    imageValid,
-    structuralBlockMapping,
-    structuralCustomColors,
-    effectiveBuildMode,
-    lateFillersNeedStats,
-    calcLayerGapForBuild,
-  ]);
+  const fillerNeedStats = useMemo(
+    () => effectiveShape ? analyzeFillerNeeds(effectiveShape) : null,
+    [effectiveShape],
+  );
+  const northRowSingleLine = useMemo(
+    () => effectiveShape ? generatedShapeNorthRowIsSingleLine(effectiveShape) : true,
+    [effectiveShape],
+  );
 
   const canGenerate = imageValid && missingBlocks.length === 0;
   const hasRequiredCol = materialCounts !== null;
-  const hasInGridFillerNeed = (fillerNeedStats?.inGrid ?? 0) > 0;
-  const inGridFillerCountsAsWarning = hasInGridFillerNeed && effectiveBuildMode.startsWith("suppress");
-  const hasComplexNorthNeed = (fillerNeedStats?.north ?? 0) > 0 && !(fillerNeedStats?.northIsSingleLine ?? true);
+  const northRowFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeNorthRow) ?? 0;
+  const suppressFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeSuppress) ?? 0;
+  const lateSuppressFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeSuppressLate) ?? 0;
+  const getStructuralFillerRoleCount = useCallback(
+    (...roles: FillerRole[]) => roles.reduce((sum, role) => sum + (fillerNeedStats?.roleCounts.get(role) ?? 0), 0),
+    [fillerNeedStats],
+  );
+  const shadeFillerRequiredCount = getStructuralFillerRoleCount(
+    FillerRole.ShadeNorthRow,
+    FillerRole.ShadeSuppress,
+  );
+  const lateFillerRequiredCount = getStructuralFillerRoleCount(FillerRole.ShadeSuppressLate);
+  const dominateVoidFillerRequiredCount = getStructuralFillerRoleCount(FillerRole.ShadeVoidDominant);
+  const recessiveVoidFillerRequiredCount = getStructuralFillerRoleCount(FillerRole.ShadeVoidRecessive);
+  const supportFillerRequiredCount = useMemo(() => {
+    switch (supportMode) {
+      case SupportMode.Steps:
+        return getStructuralFillerRoleCount(
+          FillerRole.StairStep,
+          FillerRole.WaterPath,
+          FillerRole.SupportWaterBase,
+        );
+      case SupportMode.All:
+        return getStructuralFillerRoleCount(
+          FillerRole.SupportAll,
+          FillerRole.WaterPath,
+          FillerRole.SupportWaterBase,
+        );
+      case SupportMode.Fragile:
+        return getStructuralFillerRoleCount(
+          FillerRole.SupportFragile,
+          FillerRole.SupportWaterBase,
+        );
+      case SupportMode.Water:
+        return getStructuralFillerRoleCount(
+          FillerRole.SupportWaterSides,
+          FillerRole.SupportWaterBase,
+          FillerRole.WaterPath,
+        );
+      case SupportMode.None:
+      default:
+        return 0;
+    }
+  }, [getStructuralFillerRoleCount, supportMode]);
+  const hasInGridFillerNeed = suppressFillerCount + lateSuppressFillerCount > 0;
+  const inGridShadingCountsAsWarning = hasInGridFillerNeed && isSuppressBuildMode(effectiveBuildMode);
+  const hasComplexNorthNeed = northRowFillerCount > 0 && (showNooblineWarnings || !northRowSingleLine);
   const showNoFillerWarning =
     imageValid &&
-    hasNonFlatShades &&
-    ((inGridFillerCountsAsWarning && fillerShadingDisabled) || (hasComplexNorthNeed && fillerShadingDisabled));
+    ((inGridShadingCountsAsWarning && shadeFillerShadingDisabled) || (hasComplexNorthNeed && shadeFillerShadingDisabled));
   const showLateFillerInput =
-    imageData &&
-    buildMode === "suppress_2layer_late_fillers" &&
-    !fillerShadingDisabled &&
-    (fillerNeedStats?.delayedTotal ?? 0) > 0;
+    !!imageData &&
+    buildMode === BuildMode.Suppress2LayerLateFillers &&
+    lateFillerRequiredCount > 0;
+  const showSupportFillerInput =
+    supportMode !== SupportMode.None &&
+    (!imageData || supportFillerRequiredCount > 0);
+  const showShadeFillerInput = !!imageData && shadeFillerRequiredCount > 0;
   const showDominateVoidFillerInput =
-    imageData &&
-    effectiveBuildMode.startsWith("staircase_") &&
-    effectiveBuildMode !== "flat" &&
-    voidShadowStats.dominant > 0;
+    !!imageData &&
+    isStaircaseBuildMode(effectiveBuildMode) &&
+    effectiveBuildMode !== BuildMode.Flat &&
+    dominateVoidFillerRequiredCount > 0;
   const showRecessiveVoidFillerInput =
-    imageData &&
-    effectiveBuildMode.startsWith("staircase_") &&
-    effectiveBuildMode !== "flat" &&
-    voidShadowStats.recessive > 0;
+    !!imageData &&
+    isStaircaseBuildMode(effectiveBuildMode) &&
+    effectiveBuildMode !== BuildMode.Flat &&
+    recessiveVoidFillerRequiredCount > 0;
+  const hasAnyFillerInput =
+    showSupportFillerInput ||
+    showShadeFillerInput ||
+    showDominateVoidFillerInput ||
+    showRecessiveVoidFillerInput ||
+    showLateFillerInput;
   const showNorthRowAlignmentInfo =
     showAlignmentReminder &&
     canGenerate &&
-    (forceZ129 || (!fillerShadingDisabled && (fillerNeedStats?.north ?? 0) > 0));
-  const noFillerWarningFields = useMemo(() => {
-    if (!showNoFillerWarning) return [];
-    return [{ label: "Filler", value: fillerBlock.trim() || "none" }];
-  }, [fillerBlock, showNoFillerWarning]);
-  const noFillerWarningFieldSummary = useMemo(
-    () => noFillerWarningFields.map(field => `${field.label} (${field.value})`).join(", "),
-    [noFillerWarningFields],
-  );
-  const vsFillerWarnings = useMemo(() => {
-    type VsWarningEntry = {
+    (forceZ129 || (!shadeFillerShadingDisabled && northRowFillerCount > 0));
+  const noFillerWarning = useMemo(() => {
+    if (!showNoFillerWarning || !fillerNeedStats) return null;
+    const parts: string[] = [];
+    if (northRowFillerCount > 0 && (showNooblineWarnings || !northRowSingleLine)) {
+      parts.push("North-row shading requires filler placements.");
+    }
+    if (hasInGridFillerNeed) {
+      const suppressLike = isSuppressBuildMode(effectiveBuildMode) || lateSuppressFillerCount > 0;
+      parts.push(
+        suppressLike
+          ? "Suppress-shading requires filler placements."
+          : "Some shading-critical fillers are required inside the 128x128 grid.",
+      );
+    }
+    if (parts.length === 0) return null;
+    return `Shade-Filler is disabled (${shadeFillerBlock.trim() || "none"}).\n${parts.join("\n")}`;
+  }, [
+    effectiveBuildMode,
+    shadeFillerBlock,
+    fillerNeedStats,
+    hasInGridFillerNeed,
+    lateSuppressFillerCount,
+    northRowFillerCount,
+    northRowSingleLine,
+    showNoFillerWarning,
+    showNooblineWarnings,
+  ]);
+  const vsFillerWarning = useMemo<ShapeWarning | null>(() => {
+    type VsEntry = {
       label: "VS-Filler-1" | "VS-Filler-2";
       value: string;
       invalid: boolean;
       noobPixels: number;
     };
-    const buildEntry = (show: boolean, label: VsWarningEntry["label"], rawValue: string, noobPixels: number): VsWarningEntry | null => {
+    const makeEntry = (
+      show: boolean,
+      label: VsEntry["label"],
+      rawValue: string,
+      noobPixels: number,
+    ): VsEntry | null => {
       if (!show) return null;
-      const value = rawValue.trim() || fillerBlock.trim() || "none";
+      const value = rawValue.trim() || shadeFillerBlock.trim() || "none";
       return { label, value, invalid: isFillerDisabled(value), noobPixels };
     };
-    const formatInvalid = (entry: VsWarningEntry) =>
-      `${entry.label} is invalid (${entry.value}). There will be ${entry.noobPixels} noob pixel${entry.noobPixels === 1 ? "" : "s"} (south-of-transparent with incorrect shaded).`;
-    const formatRequired = (entry: VsWarningEntry) =>
-      `${entry.label} is required for this image.\n${entry.noobPixels} pixel${entry.noobPixels === 1 ? "" : "s"} will require manual color-suppression.`;
-    const first = buildEntry(showDominateVoidFillerInput, "VS-Filler-1", dominateVoidFillerBlock, voidShadowStats.dominant);
-    const second = buildEntry(showRecessiveVoidFillerInput, "VS-Filler-2", recessiveVoidFillerBlock, voidShadowStats.recessive);
+    const formatInvalid = (entry: VsEntry) =>
+      `${entry.label} is invalid (${entry.value}).\nThere will be ${entry.noobPixels} noob pixel${entry.noobPixels === 1 ? "" : "s"}.`;
+    const formatRequired = (label: string, pixels: number) =>
+      `${label} ${label.endsWith("s") ? "are" : "is"} required for this image.\n${pixels} spot${pixels === 1 ? "" : "s"} will need manual color-suppression.`;
 
-    if (!first && !second) return [];
-    if (!first) {
-      if (second!.invalid) return [formatInvalid(second!)];
-      return showVsFillerWarnings ? [formatRequired(second!)] : [];
-    }
-    if (!second) {
-      if (first.invalid) return [formatInvalid(first)];
-      return showVsFillerWarnings ? [formatRequired(first)] : [];
-    }
+    const dominant = makeEntry(showDominateVoidFillerInput, "VS-Filler-1", dominateVoidFillerBlock, voidShadowStats.dominant);
+    const recessive = makeEntry(showRecessiveVoidFillerInput, "VS-Filler-2", recessiveVoidFillerBlock, voidShadowStats.recessive);
 
-    if (first.invalid && second.invalid) {
-      return [
-        `VS-Fillers are invalid (${first.value}, ${second.value}). There will be ${first.noobPixels + second.noobPixels} noob pixel${first.noobPixels + second.noobPixels === 1 ? "" : "s"} (south-of-transparent with incorrect shading).`,
-      ];
+    if (!dominant && !recessive) return null;
+    if (!dominant) {
+      if (recessive!.invalid) return { text: formatInvalid(recessive!), invalid: true };
+      return showVsFillerWarnings ? { text: formatRequired(recessive!.label, recessive!.noobPixels), invalid: false } : null;
     }
-    if (!first.invalid && !second.invalid) {
-      if (!showVsFillerWarnings) return [];
-      return [
-        `VS-Fillers are required for this image.\n${first.noobPixels + second.noobPixels} pixel${first.noobPixels + second.noobPixels === 1 ? "" : "s"} will require manual color-suppression.`,
-      ];
+    if (!recessive) {
+      if (dominant.invalid) return { text: formatInvalid(dominant), invalid: true };
+      return showVsFillerWarnings ? { text: formatRequired(dominant.label, dominant.noobPixels), invalid: false } : null;
     }
-    return [formatInvalid(first.invalid ? first : second)];
+    if (dominant.invalid && recessive.invalid) {
+      const pixels = dominant.noobPixels + recessive.noobPixels;
+      return {
+        text: `VS-Fillers are invalid (${dominant.value}, ${recessive.value}). There will be ${pixels} noob pixel${pixels === 1 ? "" : "s"} (south-of-transparent with incorrect shading).`,
+        invalid: true,
+      };
+    }
+    if (dominant.invalid || recessive.invalid) {
+      return { text: formatInvalid(dominant.invalid ? dominant : recessive), invalid: true };
+    }
+    if (!showVsFillerWarnings) return null;
+    const pixels = dominant.noobPixels + recessive.noobPixels;
+    return { text: formatRequired("VS-Fillers", pixels), invalid: false };
   }, [
     dominateVoidFillerBlock,
-    fillerBlock,
+    shadeFillerBlock,
     recessiveVoidFillerBlock,
     showDominateVoidFillerInput,
     showRecessiveVoidFillerInput,
@@ -1464,42 +1470,19 @@ const Index = () => {
     voidShadowStats.dominant,
     voidShadowStats.recessive,
   ]);
-  const hasInvalidVsFillerWarning = useMemo(() => {
-    if (showDominateVoidFillerInput && isFillerDisabled(dominateVoidFillerBlock.trim() || fillerBlock.trim() || "none")) {
-      return true;
-    }
-    if (showRecessiveVoidFillerInput && isFillerDisabled(recessiveVoidFillerBlock.trim() || fillerBlock.trim() || "none")) {
-      return true;
-    }
-    return false;
+  const lateFillerWarning = useMemo<ShapeWarning | null>(() => {
+    if (!showLateFillerInput || lateFillerRequiredCount <= 0 || !lateFillerShadingDisabled) return null;
+    const value = suppress2LayerLateFillerBlock.trim() || shadeFillerBlock.trim() || "none";
+    return {
+      text: `Late-Filler is invalid (${value}).\n${lateFillerRequiredCount} late suppress spot${lateFillerRequiredCount === 1 ? "" : "s"} require shading.`,
+      invalid: true,
+    };
   }, [
-    dominateVoidFillerBlock,
-    fillerBlock,
-    recessiveVoidFillerBlock,
-    showDominateVoidFillerInput,
-    showRecessiveVoidFillerInput,
-  ]);
-  const noFillerWarningDetails = useMemo(() => {
-    if (!showNoFillerWarning || !fillerNeedStats) return "";
-    const parts: string[] = [];
-    if (hasComplexNorthNeed) {
-      parts.push("North-row shading requires filler placements.");
-    }
-    if (inGridFillerCountsAsWarning) {
-      const suppressLike = effectiveBuildMode.startsWith("suppress") || (fillerNeedStats.delayedInGrid ?? 0) > 0;
-      if (suppressLike) {
-        parts.push("Suppress-shading requires filler placements.");
-      } else {
-        parts.push("Some shading-critical fillers are required inside the 128x128 grid.");
-      }
-    }
-    return parts.join("\n");
-  }, [
-    showNoFillerWarning,
-    fillerNeedStats,
-    inGridFillerCountsAsWarning,
-    hasComplexNorthNeed,
-    effectiveBuildMode,
+    showLateFillerInput,
+    lateFillerRequiredCount,
+    lateFillerShadingDisabled,
+    suppress2LayerLateFillerBlock,
+    shadeFillerBlock,
   ]);
 
   const requiredColWidth = useMemo(() => {
@@ -1529,7 +1512,7 @@ const Index = () => {
   const longestBlockName = useMemo(() => {
     let longest = "(none)";
     for (let idx = 0; idx < BASE_COLORS.length; ++idx) {
-      const excluded = showExcludedBlocks ? EXCLUDED_COLORS[idx] ?? [] : [];
+      const excluded = showExcludedBlocks ? EXCLUDED_BLOCKS[idx] ?? [] : [];
       const extra = customBlocksByBase[idx] || [];
       for (const b of BASE_COLORS[idx].blocks) if (b.length > longest.length) longest = b;
       for (const b of excluded) if (b.length > longest.length) longest = b;
@@ -1801,7 +1784,7 @@ const Index = () => {
   });
 
   const getAllBlocks = (idx: number) => {
-    const excluded = showExcludedBlocks ? EXCLUDED_COLORS[idx] ?? [] : [];
+    const excluded = showExcludedBlocks ? EXCLUDED_BLOCKS[idx] ?? [] : [];
     const extra = customBlocksByBase[idx] || [];
     const selected = preset.blocks[idx] || "";
     const withExcluded = [
@@ -1828,14 +1811,14 @@ const Index = () => {
     const shades = getColorSwatchShades(idx);
     if (shades.length <= 1) {
       const shade = shades[0] ?? 2;
-      const [r, g, b] = getShadedRgb(idx, shade);
+      const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
       return { backgroundColor: `rgb(${r},${g},${b})` };
     }
 
     const stops: string[] = [];
     for (let i = 0; i < shades.length; ++i) {
       const shade = shades[i];
-      const [r, g, b] = getShadedRgb(idx, shade);
+      const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
       const color = `rgb(${r},${g},${b})`;
       const start = (i * 100) / shades.length;
       const end = ((i + 1) * 100) / shades.length;
@@ -1862,7 +1845,7 @@ const Index = () => {
   );
 
   const getShadeTooltip = (idx: number, shade: number): string => {
-    const [r, g, b] = getShadedRgb(idx, shade);
+    const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
     const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
     return `${hex} - Click to copy (${getShadeLabel(shade)})`;
   };
@@ -1914,6 +1897,7 @@ const Index = () => {
     const nameBlocks = getNameBlocks(allBlocks);
     const textureBlocks = getTextureBlocks(allBlocks);
     const selectedBlock = preset.blocks[idx] || "";
+    const selectedIsIceWater = idx === WATER_BASE_INDEX && normalizeBlockIconId(selectedBlock) === "ice";
     const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
     const reqCount = colorRequiredMap[idx] || 0;
     const cells: Record<ColumnId, React.ReactNode> = {
@@ -1955,7 +1939,7 @@ const Index = () => {
             onMouseLeave={() => queueSwatchTooltip(null)}
             onClick={e => {
               const shade = getSwatchShadeAtPointer(e, swatchShades);
-              const [r, g, b] = getShadedRgb(idx, shade);
+              const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
               copyColorToClipboard(r, g, b);
             }}
           />
@@ -1980,13 +1964,16 @@ const Index = () => {
           <select
             key="block"
             ref={idx === usedIndices[0] ? blockMeasureSelectRef : undefined}
-            className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full"
+            className={`bg-input border rounded px-1 h-6 text-[11px] font-mono text-foreground min-w-0 w-full ${
+              selectedIsIceWater ? "border-warning/60 bg-warning/10" : "border-border"
+            }`}
             value={preset.blocks[idx] || ""}
             onChange={e => updateBlock(idx, e.target.value)}
+            title={selectedIsIceWater ? ICE_WATER_TOOLTIP : undefined}
           >
             <option value="">(none)</option>
             {nameBlocks.map(b => (
-              <option key={b} value={b}>
+              <option key={b} value={b} title={idx === WATER_BASE_INDEX && normalizeBlockIconId(b) === "ice" ? ICE_WATER_TOOLTIP : undefined}>
                 {b}
               </option>
             ))}
@@ -2021,6 +2008,7 @@ const Index = () => {
                 : textureBlocks
               ).map(b => {
                 const selected = selectedBlock === b;
+                const isIceWaterOption = idx === WATER_BASE_INDEX && normalizeBlockIconId(b) === "ice";
                 const hasIcon = KNOWN_PRECOMPUTED_ICON_BLOCKS.has(b);
                 return (
                   <button
@@ -2030,10 +2018,14 @@ const Index = () => {
                       textureCollapsed
                         ? "border-border"
                         : selected
-                        ? "border-transparent shadow-[0_0_0_2px_hsl(var(--primary))]"
-                        : "border-border hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                        ? isIceWaterOption
+                          ? "border-transparent shadow-[0_0_0_2px_hsl(var(--warning))]"
+                          : "border-transparent shadow-[0_0_0_2px_hsl(var(--primary))]"
+                        : isIceWaterOption
+                          ? "border-border hover:shadow-[0_0_0_1px_hsl(var(--warning))]"
+                          : "border-border hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
                     }`}
-                    title={b}
+                    title={isIceWaterOption ? `${b} - ${ICE_WATER_TOOLTIP}` : b}
                     onClick={() => updateBlock(idx, b)}
                   >
                     {hasIcon ? (
@@ -2088,7 +2080,7 @@ const Index = () => {
             onClick={() => setShowSecretsDialog(true)}
             title="Open secrets settings"
           >
-            MapArt PNG → NBT
+            Image → NBT
           </button>
         </h1>
         <button
@@ -2147,6 +2139,25 @@ const Index = () => {
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
                 )}
               </div>
+              <div className="inline-flex items-center gap-1">
+                <span className="text-xs font-semibold text-accent whitespace-nowrap">Support:</span>
+                <select
+                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
+                  value={supportMode}
+                  onChange={e => setSupportMode(e.target.value as SupportMode)}
+                  title={supportModeTooltip}
+                >
+                  <option value={SupportMode.All} title={getSupportModeTooltip(SupportMode.All)}>All</option>
+                  <option value={SupportMode.None} title={getSupportModeTooltip(SupportMode.None)}>None</option>
+                  <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={getSupportModeTooltip(SupportMode.Steps)}>
+                    Steps
+                  </option>
+                  <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={getSupportModeTooltip(SupportMode.Water)}>
+                    Water
+                  </option>
+                  <option value={SupportMode.Fragile} disabled={supportFillerIsFragile || !enableFragileSupportOption} title={getSupportModeTooltip(SupportMode.Fragile)}>Fragile</option>
+                </select>
+              </div>
               {!isBuiltinUnedited && (
                 <button
                   className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
@@ -2170,9 +2181,9 @@ const Index = () => {
               >
                 +
               </button>
-              {imageData && hasNonFlatShades && (
+              {imageData && !isFlatShape && (
                 <div className="ml-auto flex items-center gap-1">
-                  {(buildMode === "suppress_2layer_late_fillers" || buildMode === "suppress_2layer_late_pairs") && (
+                  {buildModeUsesLayerGap(buildMode) && (
                     <>
                       <span
                         className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
@@ -2191,7 +2202,7 @@ const Index = () => {
                       />
                     </>
                   )}
-                  {buildMode === "staircase_pro" && (
+                  {buildMode === BuildMode.StaircaseParty && (
                     <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
                       <span>Palette Seed:</span>
                       <input
@@ -2207,7 +2218,7 @@ const Index = () => {
                   </span>
                   <select
                     className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
-                      buildMode === "suppress_rowsplit" ? "text-muted-foreground" : "text-foreground"
+                      buildMode === BuildMode.SuppressSplitRow ? "text-muted-foreground" : "text-foreground"
                     }`}
                     value={buildMode}
                     onChange={e => setBuildMode(e.target.value as BuildMode)}
@@ -2227,7 +2238,7 @@ const Index = () => {
                           value={opt.value}
                           disabled={opt.disabled}
                           data-muted={opt.muted ? "true" : undefined}
-                          style={opt.muted ? { color: "var(--muted-foreground)" } : undefined}
+                          style={opt.muted ? { color: "var(--muted-foreground)", fontStyle: "italic" } : undefined}
                           title={getBuildModeTooltip(opt.value)}
                         >
                           {opt.label}
@@ -2241,116 +2252,198 @@ const Index = () => {
           </section>
 
           {/* Filler Block + Support + Shading Method */}
+          {hasAnyFillerInput && (
           <section
             ref={fillerToolbarSectionRef}
             className={`bg-card border border-border rounded-md p-1.5 flex items-center gap-1.5 ${
               isStackedLayout ? "flex-wrap" : "flex-nowrap"
             }`}
           >
-            <span className="text-xs font-semibold text-accent whitespace-nowrap">Filler:</span>
-            <input
-              ref={fillerInputRef}
-              type="text"
-              value={fillerBlock}
-              onChange={e => setFillerBlock(e.target.value)}
-              placeholder="resin_block"
-              className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-            />
-            {!fillerDisabled && (
-              <div className="flex items-center gap-1">
-                <span className="text-xs font-semibold text-accent whitespace-nowrap">
+            <span
+              className="text-[10px] font-bold uppercase tracking-wide text-primary whitespace-nowrap cursor-help inline-flex items-center px-1.5 h-6 rounded bg-muted border border-border"
+              title="Filler block assignments for support, shading, and special-case placements."
+            >
+              Fillers
+            </span>
+            <span className="h-4 border-l border-border/70" />
+            {showSupportFillerInput && (
+              <div className="inline-flex items-center gap-1 shrink-0">
+                <span
+                  className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                  title="Used for support and convenience filler placements, including Steps, All, Fragile, Water support, and water-path connectors."
+                >
                   Support:
                 </span>
-                <select
-                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
-                  value={supportMode}
-                  onChange={e => setSupportMode(e.target.value as SupportMode)}
-                  title={supportModeTooltip}
-                >
-                  <option value="none" title={getSupportModeTooltip("none")}>None</option>
-                  <option value="steps" disabled={!hasNonFlatShades} title={getSupportModeTooltip("steps")}>
-                    Steps
-                  </option>
-                  <option value="all" title={getSupportModeTooltip("all")}>All</option>
-                  {!fillerIsFragile && (
-                    <option value="fragile" title={getSupportModeTooltip("fragile")}>Fragile</option>
+                <div className="inline-flex items-center gap-0 shrink-0">
+                  <input
+                    ref={supportFillerInputRef}
+                    type="text"
+                    value={supportFillerBlock}
+                    onChange={e => setSupportFillerBlock(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") commitSupportFillerBlock(e.currentTarget.value);
+                    }}
+                    placeholder="resin_block"
+                    title="Used for support and convenience filler placements, including Steps, All, Fragile, Water support, and water-path connectors."
+                    className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                  />
+                  {!!imageData && !supportFillerDisabled && supportFillerRequiredCount > 0 && (
+                    <>
+                      <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
+                      <span
+                        className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
+                        title="Required support/convenience filler placements for the current output range."
+                      >
+                        <span className="font-semibold">R:</span>
+                        <span className="text-foreground">{formatRequiredCount(supportFillerRequiredCount)}</span>
+                      </span>
+                    </>
                   )}
-                  <option value="water" disabled={!imageHasWater || !fillerIsNoneColor} title={getSupportModeTooltip("water")}>
-                    Water
-                  </option>
-                </select>
+                </div>
               </div>
             )}
-            {materialCounts && fillerOnlyCount > 0 && !fillerDisabled && (
-              <span className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6">
-                <span className="font-semibold">Required:</span>
-                <span className="text-foreground">
-                  {materialCounts[fillerBlock] !== undefined && materialCounts[fillerBlock] > fillerOnlyCount
-                    ? fillerOnlyCount
-                    : showStacks
-                      ? formatStacks(fillerOnlyCount)
-                      : fillerOnlyCount}
-                </span>
-                {materialCounts[fillerBlock] !== undefined && materialCounts[fillerBlock] > fillerOnlyCount && (
-                  <>
-                    <span>(Total:</span>
-                    <span className="text-foreground">
-                      {showStacks ? formatStacks(materialCounts[fillerBlock]) : materialCounts[fillerBlock]}
-                    </span>
-                    <span>)</span>
-                  </>
-                )}
-              </span>
+            {showShadeFillerInput && (
+              <>
+                {showSupportFillerInput && <span className="h-4 border-l border-border/70" />}
+                <div className="inline-flex items-center gap-1 shrink-0">
+                  <span
+                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                    title="Used for north-row and suppress shading filler placements."
+                  >
+                    Shade:
+                  </span>
+                  <div className="inline-flex items-center gap-0 shrink-0">
+                    <input
+                      type="text"
+                      value={shadeFillerBlock}
+                      onChange={e => setShadeFillerBlock(e.target.value)}
+                      placeholder="resin_block"
+                      title="Used for north-row and suppress shading filler placements."
+                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                    />
+                    {!!imageData && !shadeFillerShadingDisabled && shadeFillerRequiredCount > 0 && (
+                      <>
+                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
+                        <span
+                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
+                          title="Required north-row and suppress-shading filler placements for the current output range."
+                        >
+                          <span className="font-semibold">R:</span>
+                          <span className="text-foreground">{formatRequiredCount(shadeFillerRequiredCount)}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
             {showDominateVoidFillerInput && (
               <>
-                <span
-                  className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                  title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
-                >
-                  VS-Filler-1:
-                </span>
-                <input
-                  type="text"
-                  value={dominateVoidFillerBlock}
-                  onChange={e => setDominateVoidFillerBlock(e.target.value)}
-                  placeholder="slime_block"
-                  title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
-                  className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                />
+                {(showSupportFillerInput || showShadeFillerInput) && <span className="h-4 border-l border-border/70" />}
+                <div className="inline-flex items-center gap-1 shrink-0">
+                  <span
+                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                    title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                  >
+                    VS-1:
+                  </span>
+                  <div className="inline-flex items-center gap-0 shrink-0">
+                    <input
+                      type="text"
+                      value={dominateVoidFillerBlock}
+                      onChange={e => setDominateVoidFillerBlock(e.target.value)}
+                      placeholder="slime_block"
+                      title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                    />
+                    {!!imageData && !dominateVoidFillerShadingDisabled && dominateVoidFillerRequiredCount > 0 && (
+                      <>
+                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
+                        <span
+                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
+                          title="Required VS-Filler-1 placements for the current output range."
+                        >
+                          <span className="font-semibold">R:</span>
+                          <span className="text-foreground">{formatRequiredCount(dominateVoidFillerRequiredCount)}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </>
             )}
             {showRecessiveVoidFillerInput && (
               <>
-                <span
-                  className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                  title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
-                >
-                  VS-Filler-2:
-                </span>
-                <input
-                  type="text"
-                  value={recessiveVoidFillerBlock}
-                  onChange={e => setRecessiveVoidFillerBlock(e.target.value)}
-                  placeholder="honey_block"
-                  title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
-                  className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                />
+                {(showSupportFillerInput || showShadeFillerInput || showDominateVoidFillerInput) && <span className="h-4 border-l border-border/70" />}
+                <div className="inline-flex items-center gap-1 shrink-0">
+                  <span
+                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                    title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                  >
+                    VS-2:
+                  </span>
+                  <div className="inline-flex items-center gap-0 shrink-0">
+                    <input
+                      type="text"
+                      value={recessiveVoidFillerBlock}
+                      onChange={e => setRecessiveVoidFillerBlock(e.target.value)}
+                      placeholder="honey_block"
+                      title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                    />
+                    {!!imageData && !recessiveVoidFillerShadingDisabled && recessiveVoidFillerRequiredCount > 0 && (
+                      <>
+                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
+                        <span
+                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
+                          title="Required VS-Filler-2 placements for the current output range."
+                        >
+                          <span className="font-semibold">R:</span>
+                          <span className="text-foreground">{formatRequiredCount(recessiveVoidFillerRequiredCount)}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </>
             )}
             {showLateFillerInput && (
               <>
-                <span className="text-xs font-semibold text-accent whitespace-nowrap">Late-Filler:</span>
-                <input
-                  type="text"
-                  value={suppress2LayerDelayedFillerBlock}
-                  onChange={e => setSuppress2LayerDelayedFillerBlock(e.target.value)}
-                  placeholder="slime_block"
-                  className="max-w-[126px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                />
+                {(showSupportFillerInput || showShadeFillerInput || showDominateVoidFillerInput || showRecessiveVoidFillerInput) && <span className="h-4 border-l border-border/70" />}
+                <div className="inline-flex items-center gap-1 shrink-0">
+                  <span
+                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                    title="Used by Suppress (2-Layer, Late-Fillers) for late lower-layer suppress placements."
+                  >
+                    Late:
+                  </span>
+                  <div className="inline-flex items-center gap-0 shrink-0">
+                    <input
+                      type="text"
+                      value={suppress2LayerLateFillerBlock}
+                      onChange={e => setSuppress2LayerLateFillerBlock(e.target.value)}
+                      placeholder="slime_block"
+                      title="Used by Suppress (2-Layer, Late-Fillers) for late lower-layer suppress placements."
+                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+                    />
+                    {!!imageData && !lateFillerShadingDisabled && lateFillerRequiredCount > 0 && (
+                      <>
+                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
+                        <span
+                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
+                          title="Required late suppress filler placements for the current output range."
+                        >
+                          <span className="font-semibold">R:</span>
+                          <span className="text-foreground">{formatRequiredCount(lateFillerRequiredCount)}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </>
             )}
           </section>
+          )}
           </div>
 
           <div className={`${isStackedLayout ? "order-3" : "mt-2"} space-y-2`}>
@@ -2391,7 +2484,8 @@ const Index = () => {
                   onClick={() => setBlockDisplayMode(v => (v === "names" ? "textures" : "names"))}
                   title="Toggle block display mode"
                 >
-                  View: {blockDisplayMode}
+                  <Glasses aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.9} />
+                  {blockDisplayMode}
                 </button>
               </div>
               {imageInfo && imageValid && (
@@ -2407,25 +2501,26 @@ const Index = () => {
               )}
             </div>
             <div key={`${showIds}-${showNames}-${showOptions}-${columnOrder.join(",")}`} className="relative">
-              {hasRequiredCol && usedIndices.length > 0 && visibleColumns.includes("required") && (
+              <div className="relative overflow-hidden">
+                {hasRequiredCol && usedIndices.length > 0 && visibleColumns.includes("required") && (
+                  <div
+                    className="absolute inset-0 pointer-events-none grid gap-1"
+                    style={gridColsStyle}
+                  >
+                    {visibleColumns.map(col => (
+                      <div
+                        key={`required-outline-${col}`}
+                        className={col === "required" ? "border-2 border-primary/60 bg-primary/10 rounded" : ""}
+                      />
+                    ))}
+                  </div>
+                )}
                 <div
-                  className="absolute inset-0 pointer-events-none grid gap-1"
+                  className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
                   style={gridColsStyle}
                 >
-                  {visibleColumns.map(col => (
-                    <div
-                      key={`required-outline-${col}`}
-                      className={col === "required" ? "border-2 border-primary/60 bg-primary/10 rounded" : ""}
-                    />
-                  ))}
-                </div>
-              )}
-              <div
-                className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
-                style={gridColsStyle}
-              >
-                {visibleColumns.map(col => {
-                  const headerMap: Record<ColumnId, React.ReactNode> = {
+                  {visibleColumns.map(col => {
+                    const headerMap: Record<ColumnId, React.ReactNode> = {
                     clr: (
                       <span
                         key="clr"
@@ -2506,10 +2601,11 @@ const Index = () => {
                       </span>
                     ),
                   };
-                  return headerMap[col];
-                })}
+                    return headerMap[col];
+                  })}
+                </div>
+                <div>{usedIndices.map(renderColorRow)}</div>
               </div>
-              <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>
 
               {imageValid && unusedIndices.length > 0 && (
                 <div>
@@ -2622,7 +2718,7 @@ const Index = () => {
         >
           <div className={isStackedLayout ? "order-2" : ""}>
             <section className="bg-card border border-border rounded-md p-3">
-            <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt PNG</h2>
+            <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt Image</h2>
             {/* Convert unsupported colors checkbox – hidden; conversion is now always on
             <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none">
               <input
@@ -2637,7 +2733,7 @@ const Index = () => {
             <input
               ref={fileRef}
               type="file"
-              accept=".png"
+              accept="image/*"
               className="hidden"
               onChange={e => {
                 const f = e.target.files?.[0];
@@ -2669,7 +2765,7 @@ const Index = () => {
                     }}
                   />
                 ) : (
-                  <p className="text-xs text-muted-foreground text-center px-2">Click or drop a 128×128 .png</p>
+                  <p className="text-xs text-muted-foreground text-center px-2">Click or drop a 128×128 image</p>
                 )}
               </div>
             </div>
@@ -2691,7 +2787,9 @@ const Index = () => {
                       !imageValid
                         ? "text-destructive font-medium"
                         : e.endsWith("than source image.")
-                          ? "text-destructive font-bold"
+                        ? "text-destructive font-bold"
+                          : e.startsWith("This is likely due to ")
+                            ? "text-warning font-medium"
                           : e.startsWith("Converted")
                             ? "text-warning font-medium"
                             : "text-primary font-medium"
@@ -2712,31 +2810,42 @@ const Index = () => {
               </div>
             )}
 
-            {showNoFillerWarning && (
+            {noFillerWarning && (
               <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
                 <p className="text-xs text-warning font-medium whitespace-pre-line">
-                  {noFillerWarningFieldSummary
-                    ? `Filler is disabled (${noFillerWarningFields[0]?.value ?? "none"}).`
-                    : "Shading filler is disabled."}
-                  {noFillerWarningDetails ? `\n${noFillerWarningDetails}` : ""}
+                  {noFillerWarning}
                 </p>
               </div>
             )}
 
-            {vsFillerWarnings.length > 0 && (
+            {vsFillerWarning && (
               <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                {vsFillerWarnings.map((warning, idx) => (
-                  <p key={idx} className={`text-xs whitespace-pre-line ${hasInvalidVsFillerWarning ? "text-destructive font-bold" : "text-warning font-medium"}`}>
-                    {warning}
-                  </p>
-                ))}
+                <p className={`text-xs whitespace-pre-line ${vsFillerWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
+                  {vsFillerWarning.text}
+                </p>
+              </div>
+            )}
+
+            {lateFillerWarning && (
+              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
+                <p className={`text-xs whitespace-pre-line ${lateFillerWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
+                  {lateFillerWarning.text}
+                </p>
               </div>
             )}
 
             {showNorthRowAlignmentInfo && (
               <div className="mt-2 bg-muted/30 border border-border rounded p-2">
-                <p className="text-xs text-muted-foreground font-medium">
-                  Note: Align 128x128 color area to the map grid, with the extra row one block north (Schematic is 128x129).
+                <p className="text-xs text-muted-foreground font-medium whitespace-pre-line">
+                  {"Note: Align 128x128 color area to the map grid.\nExpect 1 extra top north row (NBT is 128x129)."}
+                </p>
+              </div>
+            )}
+
+            {canGenerate && imageHasWater && usesIceForWater && (
+              <div className="mt-2 bg-muted/30 border border-border rounded p-2">
+                <p className="text-xs text-muted-foreground font-medium whitespace-pre-line">
+                  {"Note: Ice has been selected for water-color.\nConvert it to water in-game for colors to be accurate."}
                 </p>
               </div>
             )}
@@ -2757,7 +2866,7 @@ const Index = () => {
                   >
                     {converting
                       ? "Converting..."
-                      : buildMode === "suppress_rowsplit" || buildMode === "suppress_checker"
+                      : buildMode === BuildMode.SuppressSplitRow || buildMode === BuildMode.SuppressSplitChecker
                         ? "Generate .zip"
                         : "Generate .nbt"}
                   </button>
@@ -2768,13 +2877,13 @@ const Index = () => {
             {imageInfo && imageValid && (
               <div className="mt-2 space-y-1">
                 <div className="flex gap-3 text-[11px] text-muted-foreground flex-wrap items-center">
-                  {imageInfo.uniqueShadeCount > sortedMaterials.length && (
+                  {numUniqueColorShadesForPart > numColorBlockTypesForPart && (
                     <span>
-                      <strong className="text-foreground">{plural(imageInfo.uniqueShadeCount, "unique color")}</strong>
+                      <strong className="text-foreground">{plural(numUniqueColorShadesForPart, "unique color")}</strong>
                     </span>
                   )}
                   <span>
-                    <strong className="text-foreground">{plural(sortedMaterials.length, "block type")}</strong>
+                    <strong className="text-foreground">{plural(numColorBlockTypesForPart, "block type")}</strong>
                   </span>
                   {voidShadowCount > 0 && (
                     <span>
@@ -2805,8 +2914,11 @@ const Index = () => {
                             return Math.round(pct * maxRangeIndex);
                           };
                           const val = valFromEvent(e.nativeEvent);
-                          // Lock which thumb we're dragging based on initial proximity
-                          const grabStart = Math.abs(val - colStartRef.current) <= Math.abs(val - colEndRef.current);
+                          // When both thumbs overlap, choose the side that allows the range to expand again.
+                          const grabStart =
+                            colStartRef.current === colEndRef.current
+                              ? colStartRef.current >= maxRangeIndex
+                              : Math.abs(val - colStartRef.current) <= Math.abs(val - colEndRef.current);
                           const update = (v: number) => {
                             if (grabStart) setColStart(Math.min(v, colEndRef.current));
                             else setColEnd(Math.max(v, colStartRef.current));
@@ -2949,11 +3061,29 @@ const Index = () => {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
+                  checked={assumeFloor}
+                  onChange={e => setAssumeFloor(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Assume floor</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
                   checked={showAlignmentReminder}
                   onChange={e => setShowAlignmentReminder(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
                 <span>Show alignment reminder</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showNooblineWarnings}
+                  onChange={e => setShowNooblineWarnings(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Show warnings for nooblines</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
