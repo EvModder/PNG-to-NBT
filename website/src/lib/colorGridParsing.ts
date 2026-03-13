@@ -69,24 +69,24 @@ function scanImageToColorGrid(
   const colorGrid = createEmptyColorGrid();
   const unsupported = new Set<number>();
 
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const idx = (z * MAP_SIZE + x) * 4;
       if (imageData.data[idx + 3] === 0) {
-        colorGrid[z][x] = TRANSPARENT_COLOR;
+        colorGrid[x][z] = TRANSPARENT_COLOR;
         continue;
       }
 
       const key = packRgb(imageData.data[idx], imageData.data[idx + 1], imageData.data[idx + 2]);
       const baseMatch = baseLookup.get(key);
       if (baseMatch) {
-        colorGrid[z][x] = { isCustom: false, id: baseMatch.baseIndex, shade: baseMatch.shade };
+        colorGrid[x][z] = { isCustom: false, id: baseMatch.baseIndex, shade: baseMatch.shade };
         continue;
       }
 
       const customMatch = customLookup.get(key);
       if (customMatch) {
-        colorGrid[z][x] = customMatch;
+        colorGrid[x][z] = customMatch;
         continue;
       }
 

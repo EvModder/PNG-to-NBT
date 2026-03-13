@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
 import { Moon, Sun, Plus, Minus, Glasses } from "lucide-react";
-import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb } from "@/data/mapColors";
+import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb, type Shade } from "@/data/mapColors";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
 import { convertToNbt } from "@/lib/nbtExport";
@@ -14,6 +14,7 @@ import {
   hasColorHeightVariance as generatedShapeHasColorHeightVariance,
   northRowIsSingleLine as generatedShapeNorthRowIsSingleLine,
 } from "@/lib/shapeAnalysis";
+import { normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
 import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { getSupportedColorAbove, isWithinShapeBounds } from "@/lib/shapeCellRules";
@@ -22,6 +23,7 @@ import {
   type FillerAssignment,
   FillerRole,
   buildModeUsesLayerGap,
+  buildModeUsesPaletteSeed,
   getBuildModeRangeMax,
   isStaircaseBuildMode,
   isSuppressBuildMode,
@@ -49,11 +51,9 @@ function loadCached<T>(key: string, fallback: T): T {
 const getDisplayName = (name: string): string =>
   name === "SNOW" ? "WHITE" : name === "WOOL" ? "STEM" : name.startsWith("COLOR_") ? name.slice(6) : name;
 
-const normalizeBlockIconId = (raw: string): string => raw.trim().replace(/^minecraft:/, "").split("[")[0];
 const ICE_WATER_TOOLTIP = "Ice can be built in place of water or waterlogged blocks, but must be converted to water in-game to get the correct map colors.";
 const toBlockIconKey = (raw: string): string =>
-  raw.trim()
-    .replace(/^minecraft:/, "")
+  stripBlockNamespace(raw)
     .replace(/__/g, "__us__")
     .replace(/\[/g, "__lb__")
     .replace(/\]/g, "__rb__")
@@ -65,13 +65,14 @@ type ShapeWarning = {
   text: string;
   invalid: boolean;
 };
+const DEFAULT_SWATCH_SHADES: Shade[] = [2, 1, 0];
 const KNOWN_PRIMARY_ICON_BLOCKS = new Set(
   BASE_COLORS.flatMap(c => c.blocks),
 );
 const KNOWN_EXCLUDED_ICON_BLOCKS = new Set(EXCLUDED_BLOCKS.flat());
 const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set([...KNOWN_PRIMARY_ICON_BLOCKS, ...KNOWN_EXCLUDED_ICON_BLOCKS]);
 const isTextureHiddenBlock = (blockName: string): boolean => {
-  const id = normalizeBlockIconId(blockName);
+  const id = normalizeBlockId(blockName);
   return id.endsWith("_door") || id.endsWith("_fence_gate") || id === "bedrock";
 };
 
@@ -452,12 +453,10 @@ const Index = () => {
   );
   const imageColorGrid = parsedImage?.colorGrid ?? null;
   const dragColRef = useRef<ColumnId | null>(null);
-  const [highlightedColorIdx, setHighlightedColorIdx] = useState<number | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const swatchTooltipRafRef = useRef<number | null>(null);
   const swatchTooltipPendingRef = useRef<{ text: string; x: number; y: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const colorRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const supportFillerInputRef = useRef<HTMLInputElement>(null);
   const blockMeasureSelectRef = useRef<HTMLSelectElement | null>(null);
   const blockHeaderCollapseBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -614,17 +613,18 @@ const Index = () => {
     }
   }, [persistedSettings]);
 
+  const showPaletteSeedToggle = useMemo(() => buildModeUsesPaletteSeed(buildMode), [buildMode]);
   const paletteSeedOffset = useMemo(
-    () => (calcProPaletteSeed ? getPaletteSeedOffset(preset.blocks) : 0),
-    [calcProPaletteSeed, preset.blocks],
+    () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(preset.blocks) : 0),
+    [showPaletteSeedToggle, calcProPaletteSeed, preset.blocks],
   );
   const imageStats = useMemo(
     () => (imageColorGrid && imageValid ? computeColorGridStats(imageColorGrid) : null),
     [imageColorGrid, imageValid],
   );
   const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
-  const usesWaterForWater = normalizeBlockIconId(selectedWaterBlock) === "water";
-  const usesIceForWater = normalizeBlockIconId(selectedWaterBlock) === "ice";
+  const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
+  const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
   const imageHasNonLightWater = imageStats?.hasNonLightWater ?? false;
   const usesBelowOnlyWaterSupport = useMemo(
     () => (supportMode === SupportMode.Water && !usesWaterForWater) || (supportMode !== SupportMode.None && usesIceForWater),
@@ -662,10 +662,9 @@ const Index = () => {
   const voidShadowCount = voidShadowStats.dominant + voidShadowStats.recessive;
 
   const imageHasWater = imageStats?.hasWater ?? false;
-  const imageHasTransparency = imageStats?.hasTransparency ?? false;
 
   const supportFillerBlockId = useMemo(
-    () => supportFillerBlock.trim().toLowerCase().replace(/^minecraft:/, "").split("[")[0],
+    () => normalizeBlockId(supportFillerBlock),
     [supportFillerBlock],
   );
   const supportFillerIsFragile = useMemo(
@@ -727,12 +726,6 @@ const Index = () => {
   const isStepRangeMode = effectiveBuildMode === BuildMode.SuppressPairsEW || effectiveBuildMode === BuildMode.SuppressCheckerEW;
   const maxRangeIndex = useMemo(() => getBuildModeRangeMax(effectiveBuildMode), [effectiveBuildMode]);
   const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
-  const calcLayerGapForBuild =
-    (effectiveBuildMode === BuildMode.Suppress2Layer ||
-      effectiveBuildMode === BuildMode.Suppress2LayerLateFillers ||
-      effectiveBuildMode === BuildMode.Suppress2LayerLatePairs)
-      ? calcLayerGap
-      : minLayerGap;
   const supportShape = useMemo(
     () => effectiveBuildMode === BuildMode.Flat
       ? northlineShape
@@ -752,7 +745,7 @@ const Index = () => {
     }),
   );
   const enableFragileSupportOption = useMemo(() => {
-    const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockIconId(block));
+    const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
       return Object.values(preset.blocks).some(hasFragileMappedBlock) || customColors.some(color => hasFragileMappedBlock(color.block));
     }
@@ -879,29 +872,21 @@ const Index = () => {
   const supportModeTooltip = useMemo(() => getSupportModeTooltip(supportMode), [getSupportModeTooltip, supportMode]);
 
   const effectiveShape = supportShape;
+  const buildMaterialAnalysisOptions = useCallback(
+    (fillerAssignments: FillerAssignment[]) => ({
+      blockMapping: preset.blocks,
+      fillerAssignments,
+      assumeFloor,
+      customColors,
+      ...(colRangeEnabled ? (isStepRangeMode ? { stepRange: [colStart, colEnd] as [number, number] } : { columnRange: [colStart, colEnd] as [number, number] }) : {}),
+    }),
+    [preset.blocks, assumeFloor, customColors, colRangeEnabled, isStepRangeMode, colStart, colEnd],
+  );
 
   const materialNeedStats = useMemo(() => {
     if (!effectiveShape || !imageValid) return null;
-    return analyzeMaterialNeeds(imageColorGrid, effectiveShape, {
-      blockMapping: preset.blocks,
-      fillerAssignments: uiFillerAssignments,
-      assumeFloor,
-      customColors,
-      ...(colRangeEnabled ? (isStepRangeMode ? { stepRange: [colStart, colEnd] } : { columnRange: [colStart, colEnd] }) : {}),
-    });
-  }, [
-    effectiveShape,
-    imageValid,
-    imageColorGrid,
-    preset.blocks,
-    uiFillerAssignments,
-    assumeFloor,
-    customColors,
-    colRangeEnabled,
-    isStepRangeMode,
-    colStart,
-    colEnd,
-  ]);
+    return analyzeMaterialNeeds(imageColorGrid, effectiveShape, buildMaterialAnalysisOptions(uiFillerAssignments));
+  }, [effectiveShape, imageValid, imageColorGrid, buildMaterialAnalysisOptions, uiFillerAssignments]);
   const supportModeRoleCounts = useMemo(() => {
     if (!effectiveShape || !imageValid) return null;
 
@@ -918,9 +903,8 @@ const Index = () => {
         materialNeedStats &&
         !(modeUsesDirectWaterSides && !supportWaterSidesFillerValid);
       if (shouldReuseCurrentStats) return materialNeedStats.fillerRoleCounts;
-      return analyzeMaterialNeeds(imageColorGrid, effectiveShape, {
-        blockMapping: preset.blocks,
-        fillerAssignments: createFillerAssignments(
+      return analyzeMaterialNeeds(imageColorGrid, effectiveShape, buildMaterialAnalysisOptions(
+        createFillerAssignments(
           waterAvailabilitySupportFiller,
           shadeFillerBlock,
           dominateVoidFillerBlock,
@@ -930,10 +914,7 @@ const Index = () => {
           usesWaterForWater,
           usesIceForWater,
         ),
-        assumeFloor,
-        customColors,
-        ...(colRangeEnabled ? (isStepRangeMode ? { stepRange: [colStart, colEnd] } : { columnRange: [colStart, colEnd] }) : {}),
-      }).fillerRoleCounts;
+      )).fillerRoleCounts;
     };
 
     return {
@@ -944,9 +925,9 @@ const Index = () => {
     effectiveShape,
     imageValid,
     imageColorGrid,
+    buildMaterialAnalysisOptions,
     supportMode,
     materialNeedStats,
-    preset.blocks,
     supportFillerBlock,
     shadeFillerBlock,
     dominateVoidFillerBlock,
@@ -955,12 +936,6 @@ const Index = () => {
     usesWaterForWater,
     usesIceForWater,
     supportWaterSidesFillerValid,
-    assumeFloor,
-    customColors,
-    colRangeEnabled,
-    isStepRangeMode,
-    colStart,
-    colEnd,
   ]);
   const getSupportModeRoleCount = useCallback(
     (mode: SupportMode, ...roles: FillerRole[]) =>
@@ -987,16 +962,6 @@ const Index = () => {
     (!supportFillerIsFragile && enableFragileSupportOption)
   );
   const materialCounts = useMemo(() => materialNeedStats?.blockCounts ?? null, [materialNeedStats]);
-
-  const sortedMaterials = useMemo(
-    () =>
-      materialCounts
-        ? Object.entries(materialCounts)
-            .filter(([, c]) => c > 0)
-            .sort((a, b) => b[1] - a[1])
-        : [],
-    [materialCounts],
-  );
   const numUniqueColorShadesForPart = useMemo(
     () => materialNeedStats?.numUniqueColorShadesForPart ?? (imageInfo?.uniqueShadeCount ?? 0),
     [materialNeedStats, imageInfo],
@@ -1017,15 +982,6 @@ const Index = () => {
     () => Object.values(colorRequiredMap).filter(count => count > 0).length,
     [colorRequiredMap],
   );
-
-  const blockToBaseIndex = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (let i = 1; i < BASE_COLORS.length; ++i) {
-      const b = preset.blocks[i];
-      if (b && !map[b]) map[b] = i;
-    }
-    return map;
-  }, [preset.blocks]);
 
   const isBuiltinUnedited = useMemo(() => {
     const builtin = getBuiltinPreset(preset.name);
@@ -1394,18 +1350,6 @@ const Index = () => {
     localStorage.setItem("mapart_theme", next);
     document.documentElement.classList.toggle("dark", next === "dark");
     setIsDark(next === "dark");
-  };
-
-  const handleMaterialClick = (blockName: string) => {
-    const baseIdx = blockToBaseIndex[blockName];
-    if (baseIdx) {
-      setHighlightedColorIdx(baseIdx);
-      colorRowRefs.current[baseIdx]?.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => setHighlightedColorIdx(null), 2000);
-    } else {
-      supportFillerInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      supportFillerInputRef.current?.focus();
-    }
   };
 
   const fillerNeedStats = useMemo(
@@ -1938,11 +1882,11 @@ const Index = () => {
 
   const pad2 = (n: number) => String(n).padStart(2, "\u2007");
 
-  const getColorSwatchShades = useCallback((idx: number): number[] => {
-    if (!imageData || !imageValid) return [2, 1, 0];
+  const getColorSwatchShades = useCallback((idx: number): Shade[] => {
+    if (!imageData || !imageValid) return DEFAULT_SWATCH_SHADES;
     const used = usedShadesByBase.get(idx);
-    if (!used || used.size === 0) return [2, 1, 0];
-    return [...used].sort((a, b) => b - a);
+    if (!used || used.size === 0) return DEFAULT_SWATCH_SHADES;
+    return [...used].sort((a, b) => b - a) as Shade[];
   }, [imageData, imageValid, usedShadesByBase]);
 
   const getColorSwatchStyle = useCallback((idx: number): React.CSSProperties => {
@@ -1965,7 +1909,7 @@ const Index = () => {
     return { backgroundImage: `linear-gradient(to bottom, ${stops.join(", ")})` };
   }, [getColorSwatchShades]);
 
-  const getShadeLabel = (shade: number): string =>
+  const getShadeLabel = (shade: Shade): string =>
     shade === 2 ? "light" : shade === 1 ? "flat" : "dark";
 
   const getBlockIconSrc = useCallback(
@@ -1982,7 +1926,7 @@ const Index = () => {
     [],
   );
 
-  const getShadeTooltip = (idx: number, shade: number): string => {
+  const getShadeTooltip = (idx: number, shade: Shade): string => {
     const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
     const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
     return `${hex} - Click to copy (${getShadeLabel(shade)})`;
@@ -2009,7 +1953,7 @@ const Index = () => {
     });
   }, []);
 
-  const getSwatchShadeAtPointer = useCallback((e: React.MouseEvent<HTMLDivElement>, swatchShades: number[]): number => {
+  const getSwatchShadeAtPointer = useCallback((e: React.MouseEvent<HTMLDivElement>, swatchShades: Shade[]): Shade => {
     const rect = e.currentTarget.getBoundingClientRect();
     const y = Math.min(rect.height - 0.001, Math.max(0, e.clientY - rect.top));
     const bandHeight = rect.height / swatchShades.length;
@@ -2017,7 +1961,7 @@ const Index = () => {
     return swatchShades[bandIndex] ?? swatchShades[0] ?? 2;
   }, []);
 
-  const handleSwatchTooltip = useCallback((e: React.MouseEvent<HTMLDivElement>, idx: number, swatchShades: number[]) => {
+  const handleSwatchTooltip = useCallback((e: React.MouseEvent<HTMLDivElement>, idx: number, swatchShades: Shade[]) => {
     const shade = getSwatchShadeAtPointer(e, swatchShades);
     queueSwatchTooltip({
       text: getShadeTooltip(idx, shade),
@@ -2030,12 +1974,11 @@ const Index = () => {
     const color = BASE_COLORS[idx];
     const swatchShades = getColorSwatchShades(idx);
     const isMissing = missingBlocks.includes(idx);
-    const isHighlighted = highlightedColorIdx === idx;
     const allBlocks = getAllBlocks(idx);
     const nameBlocks = getNameBlocks(allBlocks);
     const textureBlocks = getTextureBlocks(allBlocks);
     const selectedBlock = preset.blocks[idx] || "";
-    const selectedIsIceWater = idx === WATER_BASE_INDEX && normalizeBlockIconId(selectedBlock) === "ice";
+    const selectedIsIceWater = idx === WATER_BASE_INDEX && normalizeBlockId(selectedBlock) === "ice";
     const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
     const reqCount = colorRequiredMap[idx] || 0;
     const cells: Record<ColumnId, React.ReactNode> = {
@@ -2111,7 +2054,7 @@ const Index = () => {
           >
             <option value="">(none)</option>
             {nameBlocks.map(b => (
-              <option key={b} value={b} title={idx === WATER_BASE_INDEX && normalizeBlockIconId(b) === "ice" ? ICE_WATER_TOOLTIP : undefined}>
+              <option key={b} value={b} title={idx === WATER_BASE_INDEX && normalizeBlockId(b) === "ice" ? ICE_WATER_TOOLTIP : undefined}>
                 {b}
               </option>
             ))}
@@ -2146,7 +2089,7 @@ const Index = () => {
                 : textureBlocks
               ).map(b => {
                 const selected = selectedBlock === b;
-                const isIceWaterOption = idx === WATER_BASE_INDEX && normalizeBlockIconId(b) === "ice";
+                const isIceWaterOption = idx === WATER_BASE_INDEX && normalizeBlockId(b) === "ice";
                 const hasIcon = KNOWN_PRECOMPUTED_ICON_BLOCKS.has(b);
                 return (
                   <button
@@ -2199,8 +2142,7 @@ const Index = () => {
     return (
       <div
         key={idx}
-        ref={el => { colorRowRefs.current[idx] = el; }}
-        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 overflow-hidden ${isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""} ${isHighlighted ? "bg-primary/20 ring-1 ring-primary/60 rounded" : ""}`}
+        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 overflow-hidden ${isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""}`}
         style={gridColsStyle}
       >
         {visibleColumns.map(col => cells[col])}
@@ -2342,7 +2284,7 @@ const Index = () => {
                       />
                     </>
                   )}
-                  {buildMode === BuildMode.StaircaseParty && (
+                  {showPaletteSeedToggle && (
                     <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
                       <span>Palette Seed:</span>
                       <input

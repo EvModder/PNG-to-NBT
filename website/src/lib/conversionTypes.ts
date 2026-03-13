@@ -3,21 +3,17 @@
  * - CustomColor
  * - BuildMode
  * - FillerRole
- * - getCanonicalBuildMode()
  * - isStaircaseBuildMode()
  * - isSuppressBuildMode()
  * - buildModeUsesLayerGap()
  * - buildModeUsesPaletteSeed()
  * - getBuildModeRangeMax()
  * - FillerAssignment
- * - SubstitutionOptions
- * - ExportOptions
  *
  * Callers:
  * - src/Index.tsx
  * - src/lib/fillerRules.ts
  * - src/lib/materialRules.ts
- * - src/lib/nbtExport.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeCellRules.ts
  * - src/lib/shapeGeneration.ts
@@ -29,6 +25,7 @@
 // - src/lib/materialRules.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeCellRules.ts
+// - src/lib/shapeSubstitution.ts
 export interface CustomColor {
   r: number;
   g: number;
@@ -82,26 +79,6 @@ export enum FillerRole {
   SupportWaterSidesCovered = "support_water_sides_covered",
 }
 
-type CanonicalBuildMode = Exclude<
-  BuildMode,
-  BuildMode.Flat | BuildMode.InclineUp | BuildMode.InclineDown | BuildMode.Suppress2Layer
->;
-
-// Callers:
-// - src/lib/shapeGeneration.ts
-export function getCanonicalBuildMode(buildMode: BuildMode): CanonicalBuildMode {
-  switch (buildMode) {
-    case BuildMode.Flat:
-    case BuildMode.InclineUp:
-    case BuildMode.InclineDown:
-      return BuildMode.StaircaseNorthline;
-    case BuildMode.Suppress2Layer:
-      return BuildMode.Suppress2LayerLateFillers;
-    default:
-      return buildMode;
-  }
-}
-
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
@@ -124,7 +101,6 @@ export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/shapeGeneration.ts
 export function isSuppressBuildMode(buildMode: BuildMode): boolean {
   return !isStaircaseBuildMode(buildMode);
 }
@@ -144,6 +120,7 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 }
 
 // Callers:
+// - src/Index.tsx
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
   return buildMode === BuildMode.StaircaseParty;
@@ -166,25 +143,8 @@ export function getBuildModeRangeMax(buildMode: BuildMode): number {
 // - src/Index.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeSubstitution.ts
 export interface FillerAssignment {
   role: FillerRole;
   block: string;
-}
-
-// Callers:
-// - src/lib/shapeSubstitution.ts
-export interface SubstitutionOptions {
-  blockMapping: Record<number, string>;
-  fillerAssignments: FillerAssignment[];
-  assumeFloor: boolean;
-  forceZ129?: boolean;
-  customColors: CustomColor[];
-  columnRange?: [number, number];
-  stepRange?: [number, number];
-}
-
-// Callers:
-// - src/lib/nbtExport.ts
-export interface ExportOptions extends SubstitutionOptions {
-  baseName: string;
 }

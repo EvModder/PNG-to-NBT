@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
+import { blockIdOnly, normalizeBlockEntry } from "./block-entry-utils.mjs";
+import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS } from "./excluded-blocks.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
@@ -15,79 +17,6 @@ const BLOCK_ICON_HTACCESS = `<IfModule mod_headers.c>
 </IfModule>
 `;
 const UNUSED_DIR = path.join(OUT_DIR, "unused");
-
-// Keep icons for explicitly excluded blocks under precomputed/unused so they can
-// be surfaced by future UI toggles without reworking the icon pipeline.
-const EXCLUDED_BLOCK_PATTERNS = [
-  /_stairs$/,
-  /_shulker_box$/,
-  /_button$/,
-  /_wall$/,
-  /_fence$/,
-  /_fence_gate$/,
-  /_trapdoor$/,
-  /_door$/,
-  /_sign$/,
-  /_stained_glass_pane$/,
-  /lightning_rod$/,
-];
-
-const EXCLUDED_BLOCK_IDS = new Set([
-  // Obtainable but intentionally excluded.
-  "dragon_egg",
-  "nether_portal",
-  "hopper",
-  "cauldron",
-  "farmland",
-  "dirt_path",
-  "grindstone",
-  "brewing_stand",
-  "heavy_core",
-  "player_head",
-  "player_wall_head",
-  "zombie_head",
-  "zombie_wall_head",
-  "skeleton_skull",
-  "skeleton_wall_skull",
-  "wither_skeleton_skull",
-  "wither_skeleton_wall_skull",
-  "creeper_head",
-  "creeper_wall_head",
-  "dragon_head",
-  "dragon_wall_head",
-  "piglin_head",
-  "piglin_wall_head",
-  // Unobtainable/admin-only omissions.
-  "barrier",
-  "structure_void",
-  "light",
-  "jigsaw",
-  "structure_block",
-  "command_block",
-  "chain_command_block",
-  "repeating_command_block",
-  "end_portal",
-  "reinforced_deepslate",
-  "spawner",
-  "budding_amethyst",
-  "trial_spawner",
-  "vault",
-  "infested_stone",
-  "infested_cobblestone",
-  "infested_stone_bricks",
-  "infested_mossy_stone_bricks",
-  "infested_cracked_stone_bricks",
-  "infested_chiseled_stone_bricks",
-  "infested_deepslate",
-]);
-
-function normalizeBlockEntry(entry) {
-  return entry.trim().replace(/^minecraft:/, "");
-}
-
-function blockIdOnly(entry) {
-  return normalizeBlockEntry(entry).split("[")[0];
-}
 
 function isExplicitlyExcludedBlockId(blockId) {
   if (EXCLUDED_BLOCK_IDS.has(blockId)) return true;

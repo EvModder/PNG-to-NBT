@@ -1,7 +1,6 @@
 /**
  * Public API:
  * - MAP_SIZE
- * - Shade
  * - ColorData
  * - ColorGrid
  * - TRANSPARENT_COLOR
@@ -18,7 +17,7 @@
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeSubstitution.ts
  */
-import { WATER_BASE_INDEX } from "@/data/mapColors";
+import { WATER_BASE_INDEX, type Shade } from "@/data/mapColors";
 
 // Callers:
 // - src/lib/colorGridAnalysis.ts
@@ -27,9 +26,6 @@ import { WATER_BASE_INDEX } from "@/data/mapColors";
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeSubstitution.ts
 export const MAP_SIZE = 128;
-// Callers:
-// - src/Index.tsx
-export type Shade = 0 | 1 | 2 | 3;
 
 // Callers:
 // - src/lib/colorGridParsing.ts
@@ -40,6 +36,8 @@ export interface ColorData {
   shade: Shade;
 }
 
+// Indexed as [x][z], with East-West/X on the outer axis and North-South/Z on the inner axis.
+//
 // Callers:
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts
@@ -48,7 +46,6 @@ export interface ColorData {
 export type ColorGrid = ColorData[][];
 // Callers:
 // - src/lib/colorGridParsing.ts
-// - src/lib/shapeGeneration.ts
 export const TRANSPARENT_COLOR: ColorData = Object.freeze({ isCustom: false, id: 0, shade: 0 });
 
 // Callers:
@@ -57,7 +54,7 @@ export const TRANSPARENT_COLOR: ColorData = Object.freeze({ isCustom: false, id:
 // - src/lib/shapeGeneration.ts
 export function getColorCell(grid: ColorGrid, x: number, z: number): ColorData {
   if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) return TRANSPARENT_COLOR;
-  return grid[z]?.[x] ?? TRANSPARENT_COLOR;
+  return grid[x]?.[z] ?? TRANSPARENT_COLOR;
 }
 
 // Callers:

@@ -1,5 +1,6 @@
 /**
  * Public API:
+ * - SubstitutionOptions
  * - normalizeAndMeasure()
  * - materializeShapeParts()
  *
@@ -8,12 +9,24 @@
  */
 import { MAP_SIZE } from "./colorGridTypes";
 import type { BlockEntry } from "./nbtWriter";
-import { type SubstitutionOptions } from "./conversionTypes";
+import type { CustomColor, FillerAssignment } from "./conversionTypes";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart } from "./shapeTypes";
 import { isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
+
+// Callers:
+// - src/lib/nbtExport.ts
+export interface SubstitutionOptions {
+  blockMapping: Record<number, string>;
+  fillerAssignments: FillerAssignment[];
+  assumeFloor: boolean;
+  forceZ129?: boolean;
+  customColors: CustomColor[];
+  columnRange?: [number, number];
+  stepRange?: [number, number];
+}
 
 function materializePart(part: ShapePart, options: SubstitutionOptions): BlockEntry[] {
   const resolved: BlockEntry[] = [];

@@ -1,5 +1,6 @@
 /**
  * Public API:
+ * - Shade
  * - SHADE_MULTIPLIERS
  * - WATER_BASE_INDEX
  * - BASE_COLORS
@@ -12,11 +13,13 @@
  * - src/data/colorSortOrder.ts
  * - src/data/excludedColors.ts
  * - src/data/presets.ts
- * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridTypes.ts
+ * - src/lib/colorGridParsing.ts
  * - src/lib/fillerRules.ts
  * - src/lib/materialRules.ts
+ * - src/lib/shapeCellRules.ts
  */
+
 /* Intentional omission policy (enforced/audited by `bun run audit:mapcolors`):
  * - Explicitly excluded block IDs (unobtainable):
  *   - `command_block`, `chain_command_block`, `repeating_command_block`
@@ -47,10 +50,14 @@
 
 
 // Callers:
+// - src/Index.tsx
+// - src/lib/colorGridTypes.ts
+// Index 0=dark, 1=flat, 2=light, 3=darkest (not obtainable)
+export type Shade = 0 | 1 | 2 | 3;
+
+// Callers:
 // - src/lib/colorGridParsing.ts
 export const SHADE_MULTIPLIERS = [180, 220, 255, 135] as const;
-// Index 0=dark, 1=flat, 2=light, 3=darkest (table-only; not obtainable)
-const OBTAINABLE_SHADE_INDICES = [0, 1, 2] as const;
 
 interface BaseColor {
   name: string;
@@ -75,6 +82,7 @@ export const WATER_BASE_INDEX = 12;
 // - src/lib/colorGridParsing.ts
 // - src/lib/fillerRules.ts
 // - src/lib/materialRules.ts
+// - src/lib/shapeCellRules.ts
 export const BASE_COLORS: BaseColor[] = [
   { name: "NONE", r: 0, g: 0, b: 0, blocks: ["glass", "glass_pane", "iron_chain", "end_rod", "ladder", "rail", "powered_rail", "detector_rail", "activator_rail", "lever", "torch", "wall_torch", "soul_torch", "soul_wall_torch", "redstone_wire", "repeater", "comparator", "tripwire_hook", "tripwire", "flower_pot", "cake"] },
   { name: "GRASS", r: 127, g: 178, b: 56, blocks: ["grass_block", "slime_block"] },
@@ -145,7 +153,7 @@ export const BASE_COLORS: BaseColor[] = [
 // - src/lib/colorGridParsing.ts
 export interface ColorShade {
   baseIndex: number;
-  shade: number; // 0=dark, 1=flat, 2=light
+  shade: Shade;
 }
 
 // Callers:

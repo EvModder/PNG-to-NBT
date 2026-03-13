@@ -2,7 +2,6 @@
  * Public API:
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
- * - isTransparentMapColorBlock()
  * - isWaterSideSupportFillerValid()
  * - buildFillerAssignmentMap()
  * - resolveAssignedFillerName()
@@ -15,14 +14,9 @@
  * - src/lib/shapeSubstitution.ts
  */
 import { BASE_COLORS } from "../data/mapColors";
+import { normalizeBlockId } from "./blockId";
 import { FillerRole, type FillerAssignment } from "./conversionTypes";
 import { resolveBlockName } from "./materialRules";
-
-function normalizeBlockId(raw: string): string {
-  const lower = raw.trim().toLowerCase();
-  const base = lower.split("[")[0];
-  return base.startsWith("minecraft:") ? base.slice("minecraft:".length) : base;
-}
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(BASE_COLORS[0].blocks.map(normalizeBlockId));
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
@@ -55,16 +49,13 @@ export function isShadeFillerDisabled(fillerBlock: string): boolean {
   return DISABLED_FILLER_ALIASES.has(normalized) || TRANSPARENT_FILLER_BLOCKS.has(normalized);
 }
 
-// Callers:
-// - src/Index.tsx
-export function isTransparentMapColorBlock(fillerBlock: string): boolean {
+function isTransparentMapColorBlock(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   return normalized ? TRANSPARENT_FILLER_BLOCKS.has(normalized) : false;
 }
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/fillerRules.ts
 export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
   return !isFillerDisabled(fillerBlock) && isTransparentMapColorBlock(fillerBlock);
 }
@@ -81,6 +72,7 @@ export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[
 }
 
 // Callers:
+// - src/lib/shapeAnalysis.ts
 // - src/lib/shapeSubstitution.ts
 export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, role: FillerRole): string | null {
   const block = assignments.get(role) ?? "";
