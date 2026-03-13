@@ -3,7 +3,7 @@
  * - analyzeFillerNeeds()
  * - northRowIsSingleLine()
  * - hasColorHeightVariance()
- * - computeGeneratedShapeSignature()
+ * - computeExportShapeSignature()
  * - analyzeMaterialNeeds()
  *
  * Callers:
@@ -11,9 +11,12 @@
  */
 import { type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
 import { FillerRole, type CustomColor, type FillerAssignment } from "./conversionTypes";
+import { canonicalizeBlockEntry } from "./blockId";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
+import type { BlockEntry } from "./nbtWriter";
+import { materializeShapeParts, normalizeAndMeasure, type SubstitutionOptions } from "./shapeSubstitution";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart, ShapePartType } from "./shapeTypes";
 import { isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
@@ -153,31 +156,11 @@ function mixString(state: HashState, value: string): void {
   mixUint32(state, 0xff);
 }
 
-function mixShapePart(state: HashState, part: GeneratedShape["parts"][number]): void {
-  mixUint32(state, part.bounds.minY);
-  mixUint32(state, part.bounds.maxY);
-  mixUint32(state, part.bounds.minZ);
-  mixUint32(state, part.bounds.maxZ);
-  mixUint32(state, part.cells.size);
-
-  const cells = [...part.cells.entries()].sort(([a], [b]) => a - b);
-  for (const [coord, cell] of cells) {
-    mixUint32(state, coord);
-    const [x, y, z] = parseShapeCoordKey(coord);
-    mixUint32(state, x);
-    mixUint32(state, y);
-    mixUint32(state, z);
-    if (isShapeColorCell(cell)) {
-      mixUint32(state, 0xc0110);
-      mixUint32(state, cell.isCustom ? 1 : 0);
-      mixUint32(state, cell.id);
-    } else {
-      mixUint32(state, 0xf1113);
-      const roles = [...cell].sort();
-      mixUint32(state, roles.length);
-      for (const role of roles) mixString(state, role);
-    }
-  }
+function mixBlockEntry(state: HashState, block: BlockEntry): void {
+  mixUint32(state, block.x);
+  mixUint32(state, block.y);
+  mixUint32(state, block.z);
+  mixString(state, canonicalizeBlockEntry(block.blockName));
 }
 
 // Callers:
@@ -229,14 +212,33 @@ export function hasColorHeightVariance(shape: GeneratedShape): boolean {
 
 // Callers:
 // - src/Index.tsx
-export function computeGeneratedShapeSignature(shape: GeneratedShape): string {
+export function computeExportShapeSignature(
+  shape: GeneratedShape,
+  options: Pick<SubstitutionOptions, "blockMapping" | "fillerAssignments" | "assumeFloor" | "forceZ129" | "customColors">,
+): string {
   const state = createHashState();
   mixString(state, shape.partType);
   mixString(state, shape.splitExportNames?.[0] ?? "");
   mixString(state, shape.splitExportNames?.[1] ?? "");
-  mixUint32(state, shape.parts.length);
-  for (const part of shape.parts) mixShapePart(state, part);
-  // Render the 4x32-bit hash lanes as one stable 128-bit lowercase hex signature.
+
+  const parts = materializeShapeParts(shape, options);
+  mixUint32(state, parts.length);
+  for (const partBlocks of parts) {
+    const normalizedBlocks = partBlocks.map(block => ({ ...block }));
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(normalizedBlocks, options.forceZ129 === true);
+    mixUint32(state, sizeX);
+    mixUint32(state, sizeY);
+    mixUint32(state, sizeZ);
+    mixUint32(state, normalizedBlocks.length);
+    normalizedBlocks.sort((a, b) =>
+      a.x - b.x ||
+      a.y - b.y ||
+      a.z - b.z ||
+      canonicalizeBlockEntry(a.blockName).localeCompare(canonicalizeBlockEntry(b.blockName)),
+    );
+    for (const block of normalizedBlocks) mixBlockEntry(state, block);
+  }
+
   return state.map(part => part.toString(16).padStart(8, "0")).join("");
 }
 

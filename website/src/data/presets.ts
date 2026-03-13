@@ -10,6 +10,7 @@
  * - src/Index.tsx
  */
 import { BASE_COLORS } from "@/data/mapColors";
+import { canonicalizeBlockEntry } from "@/lib/blockId";
 
 // Callers:
 // - src/Index.tsx
@@ -176,6 +177,13 @@ const BUILTIN_BUILDERS: Record<string, () => Preset> = {
   Fullblock: buildFullblockPreset,
 };
 
+function canonicalizePreset(preset: Preset): Preset {
+  const blocks = Object.fromEntries(
+    Object.entries(preset.blocks).map(([baseIndex, block]) => [Number(baseIndex), canonicalizeBlockEntry(block)]),
+  ) as Record<number, string>;
+  return { ...preset, blocks };
+}
+
 // Callers:
 // - src/Index.tsx
 export const getBuiltinPreset = (name: string): Preset | null => BUILTIN_BUILDERS[name]?.() ?? null;
@@ -186,14 +194,16 @@ export const isAutoCustomPresetName = (name: string): boolean => /^Custom(?: \d+
 // Callers:
 // - src/Index.tsx
 export function loadPresets(): Preset[] {
-  const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => BUILTIN_BUILDERS[n]());
+  const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => canonicalizePreset(BUILTIN_BUILDERS[n]()));
   try {
     const raw = localStorage.getItem("mapart_presets");
     if (raw) {
       const parsed: Preset[] = JSON.parse(raw);
       return [
         ...builtins,
-        ...parsed.filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number])),
+        ...parsed
+          .filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number]))
+          .map(canonicalizePreset),
       ];
     }
   } catch {

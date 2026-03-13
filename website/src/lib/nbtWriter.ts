@@ -8,6 +8,8 @@
  * - src/lib/nbtExport.ts
  * - src/lib/shapeSubstitution.ts
  */
+import { canonicalizeBlockEntry } from "./blockId";
+
 class NbtWriter {
   private data: number[] = [];
 
@@ -97,9 +99,10 @@ export function writeStructureNbt(
   const paletteMap = new Map<string, number>();
   const palette: { name: string; props: Record<string, string> }[] = [];
   for (const b of blocks) {
-    if (!paletteMap.has(b.blockName)) {
-      paletteMap.set(b.blockName, palette.length);
-      palette.push(parseBlockId(b.blockName));
+    const blockName = canonicalizeBlockEntry(b.blockName);
+    if (!paletteMap.has(blockName)) {
+      paletteMap.set(blockName, palette.length);
+      palette.push(parseBlockId(blockName));
     }
   }
 
@@ -129,11 +132,12 @@ export function writeStructureNbt(
 
   w.beginList("blocks", TAG.Compound, blocks.length);
   for (const b of blocks) {
+    const blockName = canonicalizeBlockEntry(b.blockName);
     w.beginList("pos", TAG.Int, 3);
     w.writeInt(b.x);
     w.writeInt(b.y);
     w.writeInt(b.z);
-    w.intTag("state", paletteMap.get(b.blockName)!);
+    w.intTag("state", paletteMap.get(blockName)!);
     w.endCompoundElement();
   }
 

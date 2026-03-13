@@ -12,8 +12,10 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/data/i18n/*
  * - src/lib/fillerRules.ts
  * - src/lib/materialRules.ts
+ * - src/lib/messages.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeCellRules.ts
  * - src/lib/shapeGeneration.ts
@@ -35,6 +37,8 @@ export interface CustomColor {
 
 // Callers:
 // - src/Index.tsx
+// - src/data/i18n/*
+// - src/lib/messages.ts
 // - src/lib/shapeGeneration.ts
 export enum BuildMode {
   Flat = "flat",

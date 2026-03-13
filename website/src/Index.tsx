@@ -10,13 +10,15 @@ import { computeColorGridStats } from "@/lib/colorGridAnalysis";
 import {
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
-  computeGeneratedShapeSignature,
+  computeExportShapeSignature,
   hasColorHeightVariance as generatedShapeHasColorHeightVariance,
   northRowIsSingleLine as generatedShapeNorthRowIsSingleLine,
 } from "@/lib/shapeAnalysis";
-import { normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
+import { canonicalizeBlockEntry, normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
 import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
+import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
+import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
 import { getSupportedColorAbove, isWithinShapeBounds } from "@/lib/shapeCellRules";
 import {
   BuildMode,
@@ -48,10 +50,6 @@ function loadCached<T>(key: string, fallback: T): T {
   return fallback;
 }
 
-const getDisplayName = (name: string): string =>
-  name === "SNOW" ? "WHITE" : name === "WOOL" ? "STEM" : name.startsWith("COLOR_") ? name.slice(6) : name;
-
-const ICE_WATER_TOOLTIP = "Ice can be built in place of water or waterlogged blocks, but must be converted to water in-game to get the correct map colors.";
 const toBlockIconKey = (raw: string): string =>
   stripBlockNamespace(raw)
     .replace(/__/g, "__us__")
@@ -93,16 +91,7 @@ type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 type SortDir = "asc" | "desc";
 type ModeOption = { value: BuildMode; label: string; disabled?: boolean; muted?: boolean };
 
-type ColumnId = "clr" | "id" | "name" | "block" | "options" | "required";
 const ALL_COLUMNS: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
-
-enum SupportMode {
-  None = "none",
-  Steps = "steps",
-  All = "all",
-  Fragile = "fragile",
-  Water = "water",
-}
 
 function normalizeStoredBuildMode(raw: unknown): BuildMode {
   return Object.values(BuildMode).includes(raw as BuildMode) ? (raw as BuildMode) : BuildMode.StaircaseClassic;
@@ -169,55 +158,28 @@ function isStaircaseLikeMode(mode: BuildMode): boolean {
 }
 
 const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
-  { value: BuildMode.Flat, label: "Flat" },
-  { value: BuildMode.InclineUp, label: "Incline (Up)" },
-  { value: BuildMode.InclineDown, label: "Incline (Down)" },
-  { value: BuildMode.StaircaseValley, label: "Staircase (Valley)" },
-  { value: BuildMode.StaircaseClassic, label: "Staircase (Classic)" },
-  { value: BuildMode.StaircaseGrouped, label: "Staircase (Grouped)" },
-  { value: BuildMode.StaircaseNorthline, label: "Staircase (Northline)" },
-  { value: BuildMode.StaircaseSouthline, label: "Staircase (Southline)" },
-  { value: BuildMode.StaircaseParty, label: "Staircase (Party)" },
+  { value: BuildMode.Flat, label: messages.buildMode.optionLabel(BuildMode.Flat) },
+  { value: BuildMode.InclineUp, label: messages.buildMode.optionLabel(BuildMode.InclineUp) },
+  { value: BuildMode.InclineDown, label: messages.buildMode.optionLabel(BuildMode.InclineDown) },
+  { value: BuildMode.StaircaseValley, label: messages.buildMode.optionLabel(BuildMode.StaircaseValley) },
+  { value: BuildMode.StaircaseClassic, label: messages.buildMode.optionLabel(BuildMode.StaircaseClassic) },
+  { value: BuildMode.StaircaseGrouped, label: messages.buildMode.optionLabel(BuildMode.StaircaseGrouped) },
+  { value: BuildMode.StaircaseNorthline, label: messages.buildMode.optionLabel(BuildMode.StaircaseNorthline) },
+  { value: BuildMode.StaircaseSouthline, label: messages.buildMode.optionLabel(BuildMode.StaircaseSouthline) },
+  { value: BuildMode.StaircaseParty, label: messages.buildMode.optionLabel(BuildMode.StaircaseParty) },
 ];
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
-  { value: BuildMode.SuppressSplitRow, label: "Suppress (Row-split)", muted: true },
-  { value: BuildMode.SuppressSplitChecker, label: "Suppress (Checker-split)" },
-  { value: BuildMode.SuppressCheckerEW, label: "Suppress (Checker, E→W)" },
-  { value: BuildMode.SuppressPairsEW, label: "Suppress (Pairs, E→W)" },
-  { value: BuildMode.Suppress2Layer, label: "Suppress (2-Layer)" },
-  { value: BuildMode.Suppress2LayerLateFillers, label: "Suppress (2-Layer, Late-Fillers)" },
-  { value: BuildMode.Suppress2LayerLatePairs, label: "Suppress (2-Layer, Late-Pairs)" },
+  { value: BuildMode.SuppressSplitRow, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitRow), muted: true },
+  { value: BuildMode.SuppressSplitChecker, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitChecker) },
+  { value: BuildMode.SuppressCheckerEW, label: messages.buildMode.optionLabel(BuildMode.SuppressCheckerEW) },
+  { value: BuildMode.SuppressPairsEW, label: messages.buildMode.optionLabel(BuildMode.SuppressPairsEW) },
+  { value: BuildMode.Suppress2Layer, label: messages.buildMode.optionLabel(BuildMode.Suppress2Layer) },
+  { value: BuildMode.Suppress2LayerLateFillers, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLateFillers) },
+  { value: BuildMode.Suppress2LayerLatePairs, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLatePairs) },
 ];
-
-const CUSTOM_COLOR_TOOLTIP_LINE1 = "Custom RGB is interpreted as the base/light shade for the color ID.";
-const CUSTOM_COLOR_TOOLTIP_LINE2 = "Dark and flat shades are derived automatically using standard multipliers.";
-const CUSTOM_COLOR_TOOLTIP_LINE3 = "Once added, all three new shades will be available to use for input images.";
-const CUSTOM_COLOR_TOOLTIP = `${CUSTOM_COLOR_TOOLTIP_LINE1}\n${CUSTOM_COLOR_TOOLTIP_LINE2}\n${CUSTOM_COLOR_TOOLTIP_LINE3}`;
-
-const SUPPRESS_2LAYER_GUIDE =
-  "Steps:\n" +
-  "1) Build everything\n" +
-  "2) Update the full map\n" +
-  "3) Remove the upper layer, 1-2 columns at a time\n" +
-  "4) Carefully update *just* the dominate pixels for the target column(s)\n" +
-  "5) Repeat, column-by-column, for the entire map\n\n" +
-  "Layer gap controls vertical spacing between lower and upper suppress layers."
-const SUPPRESS_2LAYER_GUIDE_WITH_VS_FILLER =
-  "Steps:\n" +
-  "1) Build all 'non-late' blocks\n" + // Diff
-  "2) Update the full map\n" +
-  "3) Remove the upper layer, 1-2 columns at a time\n" +
-  "4) For each removed column, add in any late-blocks\n" + // Added
-  "5) Carefully update *just* the dominate pixels for the target column(s)\n" +
-  "6) Repeat for the whole map\n\n" +
-  "Layer gap controls vertical spacing between lower and upper suppress layers.";
-
-const LAYER_GAP_TOOLTIP = "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.";
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function hashString32(input: string): number {
   let h = 2166136261 >>> 0;
@@ -249,24 +211,24 @@ function encodePreset(
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
-    const block = preset.blocks[i + 1] || "";
+    const block = canonicalizeBlockEntry(preset.blocks[i + 1] || "");
     const idx = BASE_COLORS[i + 1].blocks.indexOf(block);
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
-  const ccStr = customColors.length > 0 ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${cc.block}`).join(";") : "";
+  const ccStr = customColors.length > 0 ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${canonicalizeBlockEntry(cc.block)}`).join(";") : "";
   const s = [
     preset.name,
     parts.join(","),
-    supportFillerBlock,
-    shadeFillerBlock,
+    canonicalizeBlockEntry(supportFillerBlock),
+    canonicalizeBlockEntry(shadeFillerBlock),
     supportMode,
     buildMode,
     ccStr,
     convertUnsupported ? "1" : "0",
-    suppress2LayerLateFillerBlock,
+    canonicalizeBlockEntry(suppress2LayerLateFillerBlock),
     proPaletteSeed ? "1" : "0",
-    dominateVoidFillerBlock,
-    recessiveVoidFillerBlock,
+    canonicalizeBlockEntry(dominateVoidFillerBlock),
+    canonicalizeBlockEntry(recessiveVoidFillerBlock),
   ].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
@@ -292,7 +254,7 @@ function decodePreset(encoded: string): {
       if (i >= BASE_COLORS.length - 1) break;
       const baseIdx = i + 1;
       blocks[baseIdx] =
-        p === "-" || p === "" ? "" : p.startsWith("=") ? p.slice(1) : BASE_COLORS[baseIdx].blocks[parseInt(p)] || "";
+        p === "-" || p === "" ? "" : p.startsWith("=") ? canonicalizeBlockEntry(p.slice(1)) : BASE_COLORS[baseIdx].blocks[parseInt(p)] || "";
     }
 
     const customColors = sections[6]
@@ -301,7 +263,7 @@ function decodePreset(encoded: string): {
           .map(entry => {
             const [rgb, block] = entry.split(":");
             const [r, g, b] = rgb.split(",").map(Number);
-            return { r, g, b, block };
+            return { r, g, b, block: canonicalizeBlockEntry(block || "") };
           })
           .filter(cc => !isNaN(cc.r) && cc.block)
       : undefined;
@@ -313,10 +275,14 @@ function decodePreset(encoded: string): {
     const recessiveVoidFillerBlock = sections[11] || undefined;
 
     return {
-      preset: { name: sections[0], blocks }, supportFiller: sections[2] || undefined, shadeFiller: sections[3] || undefined,
+      preset: { name: sections[0], blocks },
+      supportFiller: sections[2] ? canonicalizeBlockEntry(sections[2]) : undefined,
+      shadeFiller: sections[3] ? canonicalizeBlockEntry(sections[3]) : undefined,
       supportMode, buildMode: sections[5] ? normalizeStoredBuildMode(sections[5]) : undefined,
-      customColors, convertUnsupported, suppress2LayerLateFillerBlock, proPaletteSeed,
-      dominateVoidFillerBlock, recessiveVoidFillerBlock,
+      customColors, convertUnsupported, proPaletteSeed,
+      suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock ? canonicalizeBlockEntry(suppress2LayerLateFillerBlock) : undefined,
+      dominateVoidFillerBlock: dominateVoidFillerBlock ? canonicalizeBlockEntry(dominateVoidFillerBlock) : undefined,
+      recessiveVoidFillerBlock: recessiveVoidFillerBlock ? canonicalizeBlockEntry(recessiveVoidFillerBlock) : undefined,
     };
   } catch {
     return null;
@@ -386,19 +352,19 @@ const Index = () => {
     return 0;
   });
   const [supportFillerBlock, setSupportFillerBlock] = useState(() =>
-    loadCached(LS_KEYS.supportFiller, loadCached("mapart_filler", "resin_block")),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.supportFiller, loadCached("mapart_filler", "resin_block"))),
   );
   const [shadeFillerBlock, setShadeFillerBlock] = useState(() =>
-    loadCached(LS_KEYS.shadeFiller, loadCached("mapart_filler", "resin_block")),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.shadeFiller, loadCached("mapart_filler", "resin_block"))),
   );
   const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() =>
-    loadCached(LS_KEYS.suppress2LayerLateFiller, "slime_block"),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.suppress2LayerLateFiller, "slime_block")),
   );
   const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() =>
-    loadCached(LS_KEYS.dominateVoidFiller, "slime_block"),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.dominateVoidFiller, "slime_block")),
   );
   const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() =>
-    loadCached(LS_KEYS.recessiveVoidFiller, "honey_block"),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.recessiveVoidFiller, "honey_block")),
   );
   const [buildMode, setBuildMode] = useState<BuildMode>(() =>
     normalizeStoredBuildMode(loadCached(LS_KEYS.buildMode, BuildMode.StaircaseClassic)),
@@ -423,13 +389,13 @@ const Index = () => {
   const [imageData, setImageData] = useState<ImageData | null>(null);
   const [imageName, setImageName] = useState("");
   const [imageValid, setImageValid] = useState(false);
-  const [paletteErrors, setPaletteErrors] = useState<string[]>([]);
+  const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
   const [converting, setConverting] = useState(false);
   const [showNames, setShowNames] = useState(() => loadCached(LS_KEYS.showNames, false));
   const [showIds, setShowIds] = useState(() => loadCached(LS_KEYS.showIds, false));
   const [showOptions, setShowOptions] = useState(() => loadCached(LS_KEYS.showOptions, false));
-  const [blockDisplayMode, setBlockDisplayMode] = useState<"names" | "textures">(() =>
-    loadCached(LS_KEYS.blockDisplayMode, "textures" as "names" | "textures"),
+  const [blockDisplayMode, setBlockDisplayMode] = useState<BlockDisplayMode>(() =>
+    loadCached(LS_KEYS.blockDisplayMode, "textures" as BlockDisplayMode),
   );
   const [blockColExpanded, setBlockColExpanded] = useState(() => loadCached(LS_KEYS.blockColExpanded, true));
   const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, "default" as SortKey));
@@ -500,6 +466,10 @@ const Index = () => {
   );
 
   const preset = presets[activeIdx] || getBuiltinPreset("PistonClear")!;
+  const activePresetBuiltinTooltip = useMemo(
+    () => (activeIdx < BUILTIN_PRESET_NAMES.length ? messages.presets.builtinTooltip(preset.name) : undefined),
+    [activeIdx, preset.name],
+  );
 
   const [savedBlocks, setSavedBlocks] = useState<Record<number, string> | null>(null);
 
@@ -777,7 +747,13 @@ const Index = () => {
     for (const mode of sourceModes) {
       const shape = shapeMap[mode];
       if (!shape) continue;
-      const signature = computeGeneratedShapeSignature(shape);
+      const signature = computeExportShapeSignature(shape, {
+        blockMapping: preset.blocks,
+        fillerAssignments: uiFillerAssignments,
+        assumeFloor,
+        forceZ129,
+        customColors,
+      });
       if (seen.has(signature)) continue;
       seen.add(signature);
       unique.push(mode);
@@ -788,6 +764,11 @@ const Index = () => {
     shapeMap,
     imageValid,
     isFlatShape,
+    preset.blocks,
+    uiFillerAssignments,
+    assumeFloor,
+    forceZ129,
+    customColors,
   ]);
 
   const twoLayerHasLateVoidNeed = !!shapeMap?.[BuildMode.Suppress2LayerLatePairs];
@@ -801,75 +782,8 @@ const Index = () => {
     });
   }, [shapeMap]);
 
-  const getBuildModeTooltip = useCallback(
-    (mode: BuildMode): string => {
-      switch (mode) {
-        case BuildMode.InclineDown:
-          return "All non-transparent non-water pixels slope downward uniformly, so all staircase methods collapse to the northline output.";
-        case BuildMode.InclineUp:
-          return "All non-transparent non-water pixels slope upward uniformly, so all staircase methods collapse to the northline output.";
-        case BuildMode.StaircaseValley:
-          return "Minimizes maxY-minY diff, and splits up N→S columns, lowering each segment as much as possible";
-        case BuildMode.StaircaseClassic:
-          return "Minimizes maxY-minY diff, while keeping N→S columns contiguous";
-        case BuildMode.StaircaseGrouped:
-          return "Valley-style segmentation with safe cross-column grouping to reduce isolated low runs";
-        case BuildMode.StaircaseNorthline:
-          return "Aligns each column N→S from a reference (noob)line of blocks";
-        case BuildMode.StaircaseSouthline:
-          return "Aligns each column S→N from a reference line of blocks (the bottom row)";
-        case BuildMode.StaircaseParty:
-          return "Same MapArt, but makes the build process more fun and exciting!";
-        case BuildMode.SuppressSplitRow:
-          return "Split-row; available for compatibility, but generally not useful";
-        case BuildMode.SuppressSplitChecker:
-          return "Split NBT generations for dominant/recessive placements";
-        case BuildMode.SuppressCheckerEW:
-          return "Stepwise E→W checker handling: 4 columns per step (2 dominant east, 2 recessive west), overlapping by 2 columns";
-        case BuildMode.SuppressPairsEW:
-          return "Split into East-West pairs in a interlacing 'brick' pattern; currently only supports updating from E→W";
-        case BuildMode.Suppress2LayerLatePairs:
-          return (
-            "Suppress-phase placements use a custom 'late filler' block (at the highest Y-layer), and should be skipped during initial build-phase.\n\n" +
-            SUPPRESS_2LAYER_GUIDE_WITH_VS_FILLER
-          );
-        case BuildMode.Suppress2LayerLateFillers:
-          // if (twoLayerHasLateVoidNeed)
-          return (
-            "Suppress-phase placements use a custom 'late filler' block (on the lower layer), and should be skipped during initial build-phase.\n\n" +
-            SUPPRESS_2LAYER_GUIDE_WITH_VS_FILLER
-          );
-          // FALLTHROUGH_INTENDED
-        case BuildMode.Suppress2Layer:
-          return SUPPRESS_2LAYER_GUIDE
-        case BuildMode.Flat:
-          return "Flat: all color blocks in the generated shape are at the same Y-level.";
-        default:
-          return "Selected shading method.";
-      }
-    },
-    [twoLayerHasLateVoidNeed],
-  );
-
-  const shadingMethodTooltip = useMemo(() => getBuildModeTooltip(buildMode), [getBuildModeTooltip, buildMode]);
-
-  const getSupportModeTooltip = useCallback((mode: SupportMode): string => {
-    switch (mode) {
-      case SupportMode.None:
-        return "No support blocks (shading only)";
-      case SupportMode.Steps:
-        return "Adds support blocks below staircase steps.";
-      case SupportMode.All:
-        return "Adds support blocks below every block.";
-      case SupportMode.Fragile:
-        return "Adds support blocks below fragile blocks.";
-      case SupportMode.Water:
-        return "Adds support blocks around water, or below ice pillars (if used instead of water).";
-      default:
-        return "Selected support mode.";
-    }
-  }, []);
-  const supportModeTooltip = useMemo(() => getSupportModeTooltip(supportMode), [getSupportModeTooltip, supportMode]);
+  const shadingMethodTooltip = useMemo(() => messages.buildMode.tooltip(buildMode), [buildMode]);
+  const supportModeTooltip = useMemo(() => messages.supportMode.tooltip(supportMode), [supportMode]);
 
   const effectiveShape = supportShape;
   const buildMaterialAnalysisOptions = useCallback(
@@ -1083,7 +997,8 @@ const Index = () => {
     if (sortKey === "default") return base;
     const dir = sortDir === "asc" ? 1 : -1;
     const sorters: Record<string, (a: number, b: number) => number> = {
-      name: (a, b) => dir * getDisplayName(BASE_COLORS[a].name).localeCompare(getDisplayName(BASE_COLORS[b].name)),
+      name: (a, b) =>
+        dir * BASE_COLORS[a].name.localeCompare(BASE_COLORS[b].name),
       options: (a, b) => dir * (BASE_COLORS[a].blocks.length - BASE_COLORS[b].blocks.length),
       color: (a, b) =>
         dir *
@@ -1117,14 +1032,15 @@ const Index = () => {
   const sortArrow = (key: SortKey) => (sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "");
 
   const updateBlock = (baseIndex: number, block: string) => {
+    const nextBlock = canonicalizeBlockEntry(block);
     const isBuiltin = activeIdx < BUILTIN_PRESET_NAMES.length;
     if (isBuiltin) {
       // Spawn a new "Custom" preset instead of mutating the builtin
       const originalBlocks = preset.blocks;
       setSavedBlocks({ ...originalBlocks });
-      const newBlocks = { ...originalBlocks, [baseIndex]: block };
+      const newBlocks = { ...originalBlocks, [baseIndex]: nextBlock };
       setPresets(prev => {
-        let customName = "Custom";
+        let customName: string = messages.presets.customGroupLabel;
         const existingNames = new Set(prev.map(p => p.name));
         let suffix = 2;
         while (existingNames.has(customName)) {
@@ -1136,7 +1052,7 @@ const Index = () => {
     } else {
       setPresets(prev => {
         const n = [...prev];
-        n[activeIdx] = { ...n[activeIdx], blocks: { ...n[activeIdx].blocks, [baseIndex]: block } };
+        n[activeIdx] = { ...n[activeIdx], blocks: { ...n[activeIdx].blocks, [baseIndex]: nextBlock } };
         return n;
       });
     }
@@ -1158,7 +1074,7 @@ const Index = () => {
   };
 
   const createPreset = () => {
-    const name = prompt("Enter preset name:")?.trim();
+    const name = prompt(messages.presets.namePrompt)?.trim();
     if (!name) return;
     // If a preset with this name already exists, switch to it
     const existingIdx = presets.findIndex(p => p.name === name);
@@ -1203,14 +1119,14 @@ const Index = () => {
       recessiveVoidFillerBlock,
     )}`;
     navigator.clipboard.writeText(url);
-    alert("Preset URL copied to clipboard!");
+    alert(messages.presets.copiedUrlAlert);
   };
 
   const clearImage = () => {
     setImageData(null);
     setImageName("");
     setImageValid(false);
-    setPaletteErrors([]);
+    setPaletteNotices([]);
     setShowUnusedColors(false);
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -1244,28 +1160,28 @@ const Index = () => {
 
   const handleFile = useCallback(
     (file: File) => {
-      setPaletteErrors([]);
+      setPaletteNotices([]);
       convertFileToColorGrid(file, customColors, convertUnsupported)
         .then(analysis => {
-        const paletteErrors =
-          isLikelyLossyImageFile(file) && analysis.paletteErrors[0]?.startsWith("Converted")
+        const paletteNotices =
+          isLikelyLossyImageFile(file) && analysis.paletteNotices.some(notice => notice.kind === PaletteNoticeKind.ConvertedPaletteColors)
             ? [
-                ...analysis.paletteErrors,
-                `This is likely due to ${getLossyImageFormatLabel(file)} being a lossy format.`,
+                ...analysis.paletteNotices,
+                messages.parsing.lossyFormatHintNotice(getLossyImageFormatLabel(file)),
               ]
-            : analysis.paletteErrors;
-        if (analysis.sizeErrors.length > 0 || analysis.unsupportedColors.length > 0) {
+            : analysis.paletteNotices;
+        if (analysis.hasBlockingIssue) {
           setImageData(null);
           setImageName("");
           setImageValid(false);
-          setPaletteErrors(paletteErrors);
+          setPaletteNotices(paletteNotices);
           if (fileRef.current) fileRef.current.value = "";
           return;
         }
         setImageData(analysis.imageData);
         setImageName(file.name);
         setImageValid(true);
-        setPaletteErrors(paletteErrors);
+        setPaletteNotices(paletteNotices);
         setShowUnusedColors(false);
         if (sortKey === "default") {
           setSortKey("required");
@@ -1276,7 +1192,7 @@ const Index = () => {
           setImageData(null);
           setImageName("");
           setImageValid(false);
-          setPaletteErrors([(err as Error)?.message || "Unable to decode this image format."]);
+          setPaletteNotices([messages.parsing.errorNotice((err as Error)?.message || messages.parsing.genericDecodeFailure)]);
           if (fileRef.current) fileRef.current.value = "";
         });
     },
@@ -1323,13 +1239,13 @@ const Index = () => {
       });
       a.click();
     } catch (e: unknown) {
-      setPaletteErrors([(e as Error).message || "Conversion failed"]);
+      setPaletteNotices([messages.parsing.errorNotice((e as Error).message || messages.parsing.conversionFailed)]);
     }
     setConverting(false);
   };
 
   const addCustomColor = () => {
-    const block = newCustom.block.trim();
+    const block = canonicalizeBlockEntry(newCustom.block);
     if (!block) return;
     if (customMode === "custom") {
       const [r, g, b] = [newCustom.r, newCustom.g, newCustom.b].map(v => parseInt(v));
@@ -1431,13 +1347,9 @@ const Index = () => {
     (!imageData || supportFillerRequiredCount > 0 || showWaterSideSupportWarning);
   const showShadeFillerInput = !!imageData && shadeFillerRequiredCount > 0;
   const shadeFillerIsNorthRowOnly = northRowFillerCount > 0 && suppressFillerCount === 0;
-  const shadeFillerLabel = shadeFillerIsNorthRowOnly ? "Noobline:" : "Shade:";
-  const shadeFillerTooltip = shadeFillerIsNorthRowOnly
-    ? "Used for north-row shading filler placements."
-    : "Used for north-row and suppress shading filler placements.";
-  const shadeFillerRequiredTooltip = shadeFillerIsNorthRowOnly
-    ? "Required north-row shading filler placements for the current output range."
-    : "Required north-row and suppress-shading filler placements for the current output range.";
+  const shadeFillerLabel = messages.fillers.shadeLabel(shadeFillerIsNorthRowOnly);
+  const shadeFillerTooltip = messages.fillers.shadeTooltip(shadeFillerIsNorthRowOnly);
+  const shadeFillerRequiredTooltip = messages.fillers.shadeRequiredTooltip(shadeFillerIsNorthRowOnly);
   const showDominateVoidFillerInput =
     !!imageData &&
     isStaircaseBuildMode(effectiveBuildMode) &&
@@ -1462,18 +1374,18 @@ const Index = () => {
     if (!showNoFillerWarning || !fillerNeedStats) return null;
     const parts: string[] = [];
     if (northRowFillerCount > 0 && (showNooblineWarnings || !northRowSingleLine)) {
-      parts.push("North-row shading requires filler placements.");
+      parts.push(messages.preview.noFillerNorthRowLine);
     }
     if (hasInGridFillerNeed) {
       const suppressLike = isSuppressBuildMode(effectiveBuildMode) || lateSuppressFillerCount > 0;
       parts.push(
         suppressLike
-          ? "Suppress-shading requires filler placements."
-          : "Some shading-critical fillers are required inside the 128x128 grid.",
+          ? messages.preview.noFillerSuppressLine
+          : messages.preview.noFillerInGridLine,
       );
     }
     if (parts.length === 0) return null;
-    return `Shade-Filler is disabled (${shadeFillerBlock.trim() || "none"}).\n${parts.join("\n")}`;
+    return messages.preview.noFillerWarning(shadeFillerBlock.trim() || messages.common.none, parts);
   }, [
     effectiveBuildMode,
     shadeFillerBlock,
@@ -1487,17 +1399,15 @@ const Index = () => {
   ]);
   const waterSideSupportWarning = useMemo<ShapeWarning | null>(() => {
     if (!showWaterSideSupportWarning) return null;
-    const value = supportFillerBlock.trim() || "none";
+    const value = supportFillerBlock.trim() || messages.common.none;
     return {
-      text: supportFillerDisabled
-        ? `Support filler is invalid (${value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.`
-        : `Support filler is not color_id=0 (${value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.`,
+      text: messages.preview.waterSideSupportWarning(value, supportFillerDisabled),
       invalid: true,
     };
   }, [showWaterSideSupportWarning, supportFillerBlock, supportFillerDisabled]);
   const vsFillerWarning = useMemo<ShapeWarning | null>(() => {
     type VsEntry = {
-      label: "VS-Filler-1" | "VS-Filler-2";
+      label: string;
       value: string;
       invalid: boolean;
       noobPixels: number;
@@ -1509,16 +1419,25 @@ const Index = () => {
       noobPixels: number,
     ): VsEntry | null => {
       if (!show) return null;
-      const value = rawValue.trim() || shadeFillerBlock.trim() || "none";
+      const value = rawValue.trim() || shadeFillerBlock.trim() || messages.common.none;
       return { label, value, invalid: isFillerDisabled(value), noobPixels };
     };
-    const formatInvalid = (entry: VsEntry) =>
-      `${entry.label} is invalid (${entry.value}).\nThere will be ${entry.noobPixels} noob pixel${entry.noobPixels === 1 ? "" : "s"}.`;
-    const formatRequired = (label: string, pixels: number) =>
-      `${label} ${label.endsWith("s") ? "are" : "is"} required for this image.\n${pixels} spot${pixels === 1 ? "" : "s"} will need manual color-suppression.`;
+    const formatInvalid = (entry: VsEntry) => messages.preview.vsFillerInvalid(entry.label, entry.value, entry.noobPixels);
+    const formatRequired = (label: string, pixels: number, isPluralLabel = false) =>
+      messages.preview.vsFillerRequired(label, pixels, isPluralLabel);
 
-    const dominant = makeEntry(showDominateVoidFillerInput, "VS-Filler-1", dominateVoidFillerBlock, voidShadowStats.dominant);
-    const recessive = makeEntry(showRecessiveVoidFillerInput, "VS-Filler-2", recessiveVoidFillerBlock, voidShadowStats.recessive);
+    const dominant = makeEntry(
+      showDominateVoidFillerInput,
+      messages.fillers.dominateVoidWarningLabel,
+      dominateVoidFillerBlock,
+      voidShadowStats.dominant,
+    );
+    const recessive = makeEntry(
+      showRecessiveVoidFillerInput,
+      messages.fillers.recessiveVoidWarningLabel,
+      recessiveVoidFillerBlock,
+      voidShadowStats.recessive,
+    );
 
     if (!dominant && !recessive) return null;
     if (!dominant) {
@@ -1532,7 +1451,7 @@ const Index = () => {
     if (dominant.invalid && recessive.invalid) {
       const pixels = dominant.noobPixels + recessive.noobPixels;
       return {
-        text: `VS-Fillers are invalid (${dominant.value}, ${recessive.value}). There will be ${pixels} noob pixel${pixels === 1 ? "" : "s"} (south-of-transparent with incorrect shading).`,
+        text: messages.preview.vsFillersInvalid([dominant.value, recessive.value], pixels),
         invalid: true,
       };
     }
@@ -1541,7 +1460,7 @@ const Index = () => {
     }
     if (!showVsFillerWarnings) return null;
     const pixels = dominant.noobPixels + recessive.noobPixels;
-    return { text: formatRequired("VS-Fillers", pixels), invalid: false };
+    return { text: formatRequired(messages.fillers.voidFillersWarningLabel, pixels, true), invalid: false };
   }, [
     dominateVoidFillerBlock,
     shadeFillerBlock,
@@ -1554,9 +1473,9 @@ const Index = () => {
   ]);
   const lateFillerWarning = useMemo<ShapeWarning | null>(() => {
     if (!showLateFillerInput || lateFillerRequiredCount <= 0 || !lateFillerShadingDisabled) return null;
-    const value = suppress2LayerLateFillerBlock.trim() || shadeFillerBlock.trim() || "none";
+    const value = suppress2LayerLateFillerBlock.trim() || shadeFillerBlock.trim() || messages.common.none;
     return {
-      text: `Late-Filler is invalid (${value}).\n${lateFillerRequiredCount} late suppress spot${lateFillerRequiredCount === 1 ? "" : "s"} require shading.`,
+      text: messages.preview.lateFillerInvalid(value, lateFillerRequiredCount),
       invalid: true,
     };
   }, [
@@ -1592,7 +1511,7 @@ const Index = () => {
   );
 
   const longestBlockName = useMemo(() => {
-    let longest = "(none)";
+    let longest: string = messages.common.none;
     for (let idx = 0; idx < BASE_COLORS.length; ++idx) {
       const excluded = showExcludedBlocks ? EXCLUDED_BLOCKS[idx] ?? [] : [];
       const extra = customBlocksByBase[idx] || [];
@@ -1780,7 +1699,7 @@ const Index = () => {
     recalcCreditsFloatGap,
     imageData,
     imageValid,
-    paletteErrors.length,
+    paletteNotices.length,
     missingBlocks.length,
     showNoFillerWarning,
     showNorthRowAlignmentInfo,
@@ -1909,9 +1828,6 @@ const Index = () => {
     return { backgroundImage: `linear-gradient(to bottom, ${stops.join(", ")})` };
   }, [getColorSwatchShades]);
 
-  const getShadeLabel = (shade: Shade): string =>
-    shade === 2 ? "light" : shade === 1 ? "flat" : "dark";
-
   const getBlockIconSrc = useCallback(
     (block: string): string => {
       const key = toBlockIconKey(block);
@@ -1929,7 +1845,7 @@ const Index = () => {
   const getShadeTooltip = (idx: number, shade: Shade): string => {
     const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
     const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
-    return `${hex} - Click to copy (${getShadeLabel(shade)})`;
+    return messages.swatches.shadeTooltip(hex, shade);
   };
 
   const queueSwatchTooltip = useCallback((next: { text: string; x: number; y: number } | null) => {
@@ -1989,14 +1905,14 @@ const Index = () => {
             className="w-5 h-5 rounded border border-border transition-shadow"
             onMouseEnter={e =>
               queueSwatchTooltip({
-                text: "Transparent",
+                text: messages.swatches.transparent,
                 x: e.clientX + 12,
                 y: e.clientY + 12,
               })
             }
             onMouseMove={e =>
               queueSwatchTooltip({
-                text: "Transparent",
+                text: messages.swatches.transparent,
                 x: e.clientX + 12,
                 y: e.clientY + 12,
               })
@@ -2005,7 +1921,7 @@ const Index = () => {
           >
             <img
               src={`${import.meta.env.BASE_URL}block-icons/precomputed/world_border.png`}
-              alt="Transparent"
+              alt={messages.swatches.transparent}
               className="w-full h-full object-cover"
               style={{ imageRendering: "pixelated" }}
             />
@@ -2035,9 +1951,8 @@ const Index = () => {
         <span
           key="name"
           className="text-[10px] font-mono text-muted-foreground truncate"
-          title={getDisplayName(color.name)}
         >
-          {getDisplayName(color.name)}
+          {color.name}
         </span>
       ),
       block: (
@@ -2050,11 +1965,21 @@ const Index = () => {
             }`}
             value={preset.blocks[idx] || ""}
             onChange={e => updateBlock(idx, e.target.value)}
-            title={selectedIsIceWater ? ICE_WATER_TOOLTIP : undefined}
+            title={
+              selectedBlock
+                ? selectedIsIceWater
+                  ? messages.blocks.iceWaterOptionTitle(selectedBlock)
+                  : selectedBlock
+                : undefined
+            }
           >
-            <option value="">(none)</option>
+            <option value="">{messages.common.none}</option>
             {nameBlocks.map(b => (
-              <option key={b} value={b} title={idx === WATER_BASE_INDEX && normalizeBlockId(b) === "ice" ? ICE_WATER_TOOLTIP : undefined}>
+              <option
+                key={b}
+                value={b}
+                title={idx === WATER_BASE_INDEX && normalizeBlockId(b) === "ice" ? messages.blocks.iceWaterOptionTitle(b) : b}
+              >
                 {b}
               </option>
             ))}
@@ -2078,10 +2003,10 @@ const Index = () => {
                       ? "border-transparent text-foreground shadow-[0_0_0_2px_hsl(var(--primary))]"
                       : "border-border text-muted-foreground hover:text-foreground hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
                   }`}
-                  title="(none)"
+                  title={messages.common.none}
                   onClick={() => updateBlock(idx, "")}
                 >
-                  ∅
+                  {messages.common.clearSelectionSymbol}
                 </button>
               )}
               {(textureCollapsed
@@ -2106,7 +2031,7 @@ const Index = () => {
                           ? "border-border hover:shadow-[0_0_0_1px_hsl(var(--warning))]"
                           : "border-border hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
                     }`}
-                    title={isIceWaterOption ? `${b} - ${ICE_WATER_TOOLTIP}` : b}
+                    title={isIceWaterOption ? messages.blocks.iceWaterOptionTitle(b) : b}
                     onClick={() => updateBlock(idx, b)}
                   >
                     {hasIcon ? (
@@ -2119,7 +2044,7 @@ const Index = () => {
                         style={{ imageRendering: "pixelated" }}
                       />
                     ) : (
-                      <span className="text-[9px] text-muted-foreground">?</span>
+                      <span className="text-[9px] text-muted-foreground">{messages.common.missingTextureSymbol}</span>
                     )}
                   </button>
                 );
@@ -2158,15 +2083,15 @@ const Index = () => {
             type="button"
             className="hover:underline decoration-dotted underline-offset-2"
             onClick={() => setShowSecretsDialog(true)}
-            title="Open secrets settings"
+            title={messages.common.openSecretsSettings}
           >
-            Image → NBT
+            {messages.app.title}
           </button>
         </h1>
         <button
           onClick={toggleTheme}
           className="p-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
-          aria-label="Toggle theme"
+          aria-label={messages.common.toggleThemeAriaLabel}
         >
           {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
         </button>
@@ -2193,20 +2118,23 @@ const Index = () => {
             <div
               className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
             >
-              <span className="text-xs font-semibold text-accent">Preset:</span>
+              <span className="text-xs font-semibold text-accent">{messages.presets.label}</span>
               <div className="inline-flex items-center gap-1">
                 <select
                   className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
                   value={activeIdx}
                   onChange={e => selectPreset(Number(e.target.value))}
+                  title={activePresetBuiltinTooltip}
                 >
-                  <optgroup label="Built-in">
+                  <optgroup label={messages.presets.builtInGroupLabel}>
                     {presets.slice(0, BUILTIN_PRESET_NAMES.length).map((p, i) => (
-                      <option key={i} value={i}>{p.name}</option>
+                      <option key={i} value={i} title={messages.presets.builtinTooltip(p.name)}>
+                        {p.name}
+                      </option>
                     ))}
                   </optgroup>
                   {presets.length > BUILTIN_PRESET_NAMES.length && (
-                    <optgroup label="Custom">
+                    <optgroup label={messages.presets.customGroupLabel}>
                       {presets.slice(BUILTIN_PRESET_NAMES.length).map((p, i) => (
                         <option key={i + BUILTIN_PRESET_NAMES.length} value={i + BUILTIN_PRESET_NAMES.length}>
                           {p.name}
@@ -2216,27 +2144,37 @@ const Index = () => {
                   )}
                 </select>
                 {presetDirty && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title={messages.common.unsavedChanges} />
                 )}
               </div>
               {showSupportModeSelector && (
                 <div className="inline-flex items-center gap-1">
-                  <span className="text-xs font-semibold text-accent whitespace-nowrap">Support:</span>
+                  <span className="text-xs font-semibold text-accent whitespace-nowrap">{messages.supportMode.label}</span>
                   <select
                     className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
                     value={supportMode}
                     onChange={e => setSupportMode(e.target.value as SupportMode)}
                     title={supportModeTooltip}
                   >
-                    <option value={SupportMode.All} disabled={!enableAllSupportOption} title={getSupportModeTooltip(SupportMode.All)}>All</option>
-                    <option value={SupportMode.None} title={getSupportModeTooltip(SupportMode.None)}>None</option>
-                    <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={getSupportModeTooltip(SupportMode.Steps)}>
-                      Steps
+                    <option value={SupportMode.All} disabled={!enableAllSupportOption} title={messages.supportMode.tooltip(SupportMode.All)}>
+                      {messages.supportMode.optionLabel(SupportMode.All)}
                     </option>
-                    <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={getSupportModeTooltip(SupportMode.Water)}>
-                      Water
+                    <option value={SupportMode.None} title={messages.supportMode.tooltip(SupportMode.None)}>
+                      {messages.supportMode.optionLabel(SupportMode.None)}
                     </option>
-                    <option value={SupportMode.Fragile} disabled={supportFillerIsFragile || !enableFragileSupportOption} title={getSupportModeTooltip(SupportMode.Fragile)}>Fragile</option>
+                    <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={messages.supportMode.tooltip(SupportMode.Steps)}>
+                      {messages.supportMode.optionLabel(SupportMode.Steps)}
+                    </option>
+                    <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={messages.supportMode.tooltip(SupportMode.Water)}>
+                      {messages.supportMode.optionLabel(SupportMode.Water)}
+                    </option>
+                    <option
+                      value={SupportMode.Fragile}
+                      disabled={supportFillerIsFragile || !enableFragileSupportOption}
+                      title={messages.supportMode.tooltip(SupportMode.Fragile)}
+                    >
+                      {messages.supportMode.optionLabel(SupportMode.Fragile)}
+                    </option>
                   </select>
                 </div>
               )}
@@ -2245,7 +2183,7 @@ const Index = () => {
                   className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
                   onClick={sharePreset}
                 >
-                  Share
+                  {messages.common.share}
                 </button>
               )}
               {activeIdx >= BUILTIN_PRESET_NAMES.length && presets.length > BUILTIN_PRESET_NAMES.length && (
@@ -2253,13 +2191,13 @@ const Index = () => {
                   className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
                   onClick={deletePreset}
                 >
-                  Del
+                  {messages.common.deleteShort}
                 </button>
               )}
               <button
                 className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20"
                 onClick={createPreset}
-                title="New preset"
+                title={messages.common.newPresetTitle}
               >
                 +
               </button>
@@ -2269,9 +2207,9 @@ const Index = () => {
                     <>
                       <span
                         className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                        title={LAYER_GAP_TOOLTIP}
+                        title={messages.buildMode.layerGapTooltip}
                       >
-                        Layer gap:
+                        {messages.buildMode.layerGapLabel}
                       </span>
                       <input
                         type="number"
@@ -2279,14 +2217,14 @@ const Index = () => {
                         max={20}
                         value={layerGap}
                         onChange={e => setLayerGap(Math.max(minLayerGap, Math.min(20, parseInt(e.target.value) || 5)))}
-                        title={LAYER_GAP_TOOLTIP}
+                        title={messages.buildMode.layerGapTooltip}
                         className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
                       />
                     </>
                   )}
                   {showPaletteSeedToggle && (
                     <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
-                      <span>Palette Seed:</span>
+                      <span>{messages.buildMode.paletteSeedLabel}</span>
                       <input
                         type="checkbox"
                         checked={proPaletteSeed}
@@ -2296,7 +2234,7 @@ const Index = () => {
                     </label>
                   )}
                   <span className="text-xs font-semibold text-accent whitespace-nowrap">
-                    Shading:
+                    {messages.buildMode.label}
                   </span>
                   <select
                     className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
@@ -2306,14 +2244,14 @@ const Index = () => {
                     onChange={e => setBuildMode(e.target.value as BuildMode)}
                     title={shadingMethodTooltip}
                   >
-                    <optgroup label="Staircase">
+                    <optgroup label={messages.buildMode.staircaseGroupLabel}>
                       {staircaseModeOptions.map(opt => (
-                        <option key={opt.value} value={opt.value} title={getBuildModeTooltip(opt.value)}>
+                        <option key={opt.value} value={opt.value} title={messages.buildMode.tooltip(opt.value)}>
                           {opt.label}
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label="Suppress">
+                    <optgroup label={messages.buildMode.suppressGroupLabel}>
                       {suppressModeOptions.map(opt => (
                         <option
                           key={opt.value}
@@ -2321,7 +2259,7 @@ const Index = () => {
                           disabled={opt.disabled}
                           data-muted={opt.muted ? "true" : undefined}
                           style={opt.muted ? { color: "var(--muted-foreground)", fontStyle: "italic" } : undefined}
-                          title={getBuildModeTooltip(opt.value)}
+                          title={messages.buildMode.tooltip(opt.value)}
                         >
                           {opt.label}
                         </option>
@@ -2343,18 +2281,18 @@ const Index = () => {
           >
             <span
               className="text-[10px] font-bold uppercase tracking-wide text-primary whitespace-nowrap cursor-help inline-flex items-center px-1.5 h-6 rounded bg-muted border border-border"
-              title="Filler block assignments for support, shading, and special-case placements."
+              title={messages.fillers.headingTooltip}
             >
-              Fillers
+              {messages.fillers.heading}
             </span>
             <span className="h-4 border-l border-border/70" />
             {showSupportFillerInput && (
               <div className="inline-flex items-center gap-1 shrink-0">
                 <span
                   className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                  title="Used for support and convenience filler placements, including Steps, All, Fragile, Water support, and water-path connectors."
+                  title={messages.fillers.supportTooltip}
                 >
-                  Support:
+                  {messages.fillers.supportLabel}
                 </span>
                 <div className="inline-flex items-center gap-0 shrink-0">
                   <input
@@ -2365,8 +2303,8 @@ const Index = () => {
                     onKeyDown={e => {
                       if (e.key === "Enter") commitSupportFillerBlock(e.currentTarget.value);
                     }}
-                    placeholder="resin_block"
-                    title="Used for support and convenience filler placements, including Steps, All, Fragile, Water support, and water-path connectors."
+                    placeholder={messages.fillers.supportPlaceholder}
+                    title={messages.fillers.supportTooltip}
                     className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                   />
                   {!!imageData && !supportFillerDisabled && supportFillerRequiredCount > 0 && (
@@ -2374,9 +2312,9 @@ const Index = () => {
                       <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
                       <span
                         className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                        title="Required support/convenience filler placements for the current output range."
+                        title={messages.fillers.supportRequiredTooltip}
                       >
-                        <span className="font-semibold">R:</span>
+                        <span className="font-semibold">{messages.common.requiredBadge}</span>
                         <span className="text-foreground">{formatRequiredCount(supportFillerRequiredCount)}</span>
                       </span>
                     </>
@@ -2399,7 +2337,7 @@ const Index = () => {
                       type="text"
                       value={shadeFillerBlock}
                       onChange={e => setShadeFillerBlock(e.target.value)}
-                      placeholder="resin_block"
+                      placeholder={messages.fillers.supportPlaceholder}
                       title={shadeFillerTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
@@ -2410,7 +2348,7 @@ const Index = () => {
                           className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
                           title={shadeFillerRequiredTooltip}
                         >
-                          <span className="font-semibold">R:</span>
+                          <span className="font-semibold">{messages.common.requiredBadge}</span>
                           <span className="text-foreground">{formatRequiredCount(shadeFillerRequiredCount)}</span>
                         </span>
                       </>
@@ -2425,17 +2363,17 @@ const Index = () => {
                 <div className="inline-flex items-center gap-1 shrink-0">
                   <span
                     className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                    title={messages.fillers.dominateVoidTooltip}
                   >
-                    VS-1:
+                    {messages.fillers.dominateVoidLabel}
                   </span>
                   <div className="inline-flex items-center gap-0 shrink-0">
                     <input
                       type="text"
                       value={dominateVoidFillerBlock}
                       onChange={e => setDominateVoidFillerBlock(e.target.value)}
-                      placeholder="slime_block"
-                      title="Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                      placeholder={messages.fillers.dominateVoidPlaceholder}
+                      title={messages.fillers.dominateVoidTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
                     {!!imageData && !dominateVoidFillerShadingDisabled && dominateVoidFillerRequiredCount > 0 && (
@@ -2443,9 +2381,9 @@ const Index = () => {
                         <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
                         <span
                           className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title="Required VS-Filler-1 placements for the current output range."
+                          title={messages.fillers.dominateVoidRequiredTooltip}
                         >
-                          <span className="font-semibold">R:</span>
+                          <span className="font-semibold">{messages.common.requiredBadge}</span>
                           <span className="text-foreground">{formatRequiredCount(dominateVoidFillerRequiredCount)}</span>
                         </span>
                       </>
@@ -2460,17 +2398,17 @@ const Index = () => {
                 <div className="inline-flex items-center gap-1 shrink-0">
                   <span
                     className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                    title={messages.fillers.recessiveVoidTooltip}
                   >
-                    VS-2:
+                    {messages.fillers.recessiveVoidLabel}
                   </span>
                   <div className="inline-flex items-center gap-0 shrink-0">
                     <input
                       type="text"
                       value={recessiveVoidFillerBlock}
                       onChange={e => setRecessiveVoidFillerBlock(e.target.value)}
-                      placeholder="honey_block"
-                      title="Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT."
+                      placeholder={messages.fillers.recessiveVoidPlaceholder}
+                      title={messages.fillers.recessiveVoidTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
                     {!!imageData && !recessiveVoidFillerShadingDisabled && recessiveVoidFillerRequiredCount > 0 && (
@@ -2478,9 +2416,9 @@ const Index = () => {
                         <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
                         <span
                           className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title="Required VS-Filler-2 placements for the current output range."
+                          title={messages.fillers.recessiveVoidRequiredTooltip}
                         >
-                          <span className="font-semibold">R:</span>
+                          <span className="font-semibold">{messages.common.requiredBadge}</span>
                           <span className="text-foreground">{formatRequiredCount(recessiveVoidFillerRequiredCount)}</span>
                         </span>
                       </>
@@ -2495,17 +2433,17 @@ const Index = () => {
                 <div className="inline-flex items-center gap-1 shrink-0">
                   <span
                     className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title="Used by Suppress (2-Layer, Late-Fillers) for late lower-layer suppress placements."
+                    title={messages.fillers.lateTooltip}
                   >
-                    Late:
+                    {messages.fillers.lateLabel}
                   </span>
                   <div className="inline-flex items-center gap-0 shrink-0">
                     <input
                       type="text"
                       value={suppress2LayerLateFillerBlock}
                       onChange={e => setSuppress2LayerLateFillerBlock(e.target.value)}
-                      placeholder="slime_block"
-                      title="Used by Suppress (2-Layer, Late-Fillers) for late lower-layer suppress placements."
+                      placeholder={messages.fillers.latePlaceholder}
+                      title={messages.fillers.lateTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
                     {!!imageData && !lateFillerShadingDisabled && lateFillerRequiredCount > 0 && (
@@ -2513,9 +2451,9 @@ const Index = () => {
                         <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
                         <span
                           className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title="Required late suppress filler placements for the current output range."
+                          title={messages.fillers.lateRequiredTooltip}
                         >
-                          <span className="font-semibold">R:</span>
+                          <span className="font-semibold">{messages.common.requiredBadge}</span>
                           <span className="text-foreground">{formatRequiredCount(lateFillerRequiredCount)}</span>
                         </span>
                       </>
@@ -2535,14 +2473,14 @@ const Index = () => {
           >
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5">
-                <h2 className="text-sm font-semibold text-accent">Color → Block</h2>
+                <h2 className="text-sm font-semibold text-accent">{messages.table.title}</h2>
                 <span className="h-3 border-l border-border/70" />
                 <button
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setShowIds(v => !v)}
                 >
                   {showIds ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
-                  IDs
+                  {messages.table.toggleIds}
                 </button>
                 <span className="h-3 border-l border-border/70" />
                 <button
@@ -2550,7 +2488,7 @@ const Index = () => {
                   onClick={() => setShowNames(v => !v)}
                 >
                   {showNames ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
-                  Names
+                  {messages.table.toggleNames}
                 </button>
                 <span className="h-3 border-l border-border/70" />
                 <button
@@ -2558,21 +2496,21 @@ const Index = () => {
                   onClick={() => setShowOptions(v => !v)}
                 >
                   {showOptions ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
-                  #Options
+                  {messages.table.toggleOptions}
                 </button>
                 <span className="h-3 border-l border-border/70" />
                 <button
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => setBlockDisplayMode(v => (v === "names" ? "textures" : "names"))}
-                  title="Toggle block display mode"
+                  title={messages.table.toggleBlockDisplayTitle}
                 >
                   <Glasses aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.9} />
-                  {blockDisplayMode}
+                  {messages.table.blockDisplayMode(blockDisplayMode)}
                 </button>
               </div>
               {imageInfo && imageValid && (
                 <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
-                  <span className="font-semibold text-accent">MC units:</span>
+                  <span className="font-semibold text-accent">{messages.table.mcUnitsLabel}</span>
                   <input
                     type="checkbox"
                     checked={showStacks}
@@ -2608,10 +2546,10 @@ const Index = () => {
                         key="clr"
                         className="cursor-pointer select-none whitespace-nowrap"
                         onClick={() => toggleSort("color")}
-                        title="Sort by color hue"
+                        title={messages.table.columnSortTitle("clr")}
                         {...colDragProps("clr")}
                       >
-                        Clr{sortArrow("color")}
+                        {messages.table.columnLabel("clr")}{sortArrow("color")}
                       </span>
                     ),
                     id: (
@@ -2619,10 +2557,10 @@ const Index = () => {
                         key="id"
                         className="cursor-pointer select-none whitespace-nowrap pl-0.5"
                         onClick={() => toggleSort("id")}
-                        title="Sort by color ID"
+                        title={messages.table.columnSortTitle("id")}
                         {...colDragProps("id")}
                       >
-                        ID{sortArrow("id")}
+                        {messages.table.columnLabel("id")}{sortArrow("id")}
                       </span>
                     ),
                     name: (
@@ -2630,25 +2568,25 @@ const Index = () => {
                         key="name"
                         className="cursor-pointer select-none"
                         onClick={() => toggleSort("name")}
-                        title="Sort by color name"
+                        title={messages.table.columnSortTitle("name")}
                         {...colDragProps("name")}
                       >
-                        Name{sortArrow("name")}
+                        {messages.table.columnLabel("name")}{sortArrow("name")}
                       </span>
                     ),
                     block: (
                       <span
                         key="block"
                         className="inline-flex items-center gap-1 min-w-0 w-full"
-                        title="Assigned block used for this color"
+                        title={messages.table.columnSortTitle("block")}
                         {...colDragProps("block")}
                       >
                         <button
                           ref={blockHeaderCollapseBtnRef}
                           type="button"
                           className="shrink-0 inline-flex items-center gap-0.5 cursor-pointer select-none whitespace-nowrap text-left"
-                          title={blockColExpanded ? "Collapse block column to minimum width" : "Expand block column to fill available width"}
-                          aria-label={blockColExpanded ? "Collapse block column" : "Expand block column"}
+                          title={messages.table.blockColumnResizeTitle(blockColExpanded)}
+                          aria-label={messages.table.blockColumnResizeAriaLabel(blockColExpanded)}
                           onClick={e => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -2656,7 +2594,7 @@ const Index = () => {
                           }}
                         >
                           {blockColExpanded ? <Minus size={10} /> : <Plus size={10} />}
-                          <span>Block</span>
+                          <span>{messages.table.columnLabel("block")}</span>
                         </button>
                       </span>
                     ),
@@ -2665,10 +2603,10 @@ const Index = () => {
                         key="options"
                         className="cursor-pointer select-none whitespace-nowrap pr-1"
                         onClick={() => toggleSort("options")}
-                        title="Sort by number of available block options"
+                        title={messages.table.columnSortTitle("options")}
                         {...colDragProps("options")}
                       >
-                        Options{sortArrow("options")}
+                        {messages.table.columnLabel("options")}{sortArrow("options")}
                       </span>
                     ),
                     required: (
@@ -2676,10 +2614,10 @@ const Index = () => {
                         key="required"
                         className="cursor-pointer select-none whitespace-nowrap text-right pr-2"
                         onClick={() => toggleSort("required")}
-                        title="Sort by required block count in the current output"
+                        title={messages.table.columnSortTitle("required")}
                         {...colDragProps("required")}
                       >
-                        Required{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
+                        {messages.table.columnLabel("required")}{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
                       </span>
                     ),
                   };
@@ -2698,7 +2636,7 @@ const Index = () => {
                     <span className={`inline-block transition-transform ${showUnusedColors ? "rotate-180" : ""}`}>
                       ▼
                     </span>
-                    <span>{plural(unusedIndices.length, "unused color")} (not in image)</span>
+                    <span>{messages.table.unusedColorsLabel(unusedIndices.length)}</span>
                   </button>
                   {showUnusedColors && <div className="opacity-50">{unusedIndices.map(renderColorRow)}</div>}
                 </div>
@@ -2711,10 +2649,10 @@ const Index = () => {
             <div className="flex items-center gap-1 mb-1">
               <h2
                 className="text-sm font-semibold text-accent cursor-help"
-                title={CUSTOM_COLOR_TOOLTIP}
-                aria-label="Custom color shading info"
+                title={messages.customColors.tooltip}
+                aria-label={messages.customColors.ariaLabel}
               >
-                Custom Color Mappings
+                {messages.customColors.title}
               </h2>
             </div>
             {customColors.length > 0 && (
@@ -2745,10 +2683,10 @@ const Index = () => {
                 value={customMode === "custom" ? "custom" : String(customMode)}
                 onChange={e => setCustomMode(e.target.value === "custom" ? "custom" : parseInt(e.target.value))}
               >
-                <option value="custom">Custom RGB</option>
+                <option value="custom">{messages.customColors.customRgbOption}</option>
                 {BASE_COLORS.map((_, idx) => (
                   <option key={idx} value={idx}>
-                    {idx} – {getDisplayName(BASE_COLORS[idx].name)}
+                    {idx} – {BASE_COLORS[idx].name}
                   </option>
                 ))}
               </select>
@@ -2756,7 +2694,7 @@ const Index = () => {
                 <>
                   {(["r", "g", "b"] as const).map(ch => (
                     <div key={ch} className="flex items-center gap-0.5">
-                      <label className="text-[10px] text-muted-foreground">{ch.toUpperCase()}</label>
+                      <label className="text-[10px] text-muted-foreground">{messages.customColors.channelLabel(ch)}</label>
                       <input
                         className="w-10 h-6 text-[11px] font-mono no-spinner px-1 bg-input border border-border rounded"
                         type="number"
@@ -2770,10 +2708,10 @@ const Index = () => {
                 </>
               )}
               <div className="flex items-center gap-0.5">
-                <label className="text-[10px] text-muted-foreground">Block</label>
+                <label className="text-[10px] text-muted-foreground">{messages.customColors.blockLabel}</label>
                 <input
                   className="w-40 h-6 text-[11px] font-mono px-1 bg-input border border-border rounded"
-                  placeholder="e.g. fart_block"
+                  placeholder={messages.customColors.blockPlaceholder}
                   value={newCustom.block}
                   onChange={e => setNewCustom(p => ({ ...p, block: e.target.value }))}
                 />
@@ -2782,7 +2720,7 @@ const Index = () => {
                 className="h-6 px-2 text-xs rounded border border-border text-muted-foreground hover:text-foreground"
                 onClick={addCustomColor}
               >
-                Add
+                {messages.common.add}
               </button>
             </div>
           </section>
@@ -2800,18 +2738,8 @@ const Index = () => {
         >
           <div className={isStackedLayout ? "order-2" : ""}>
             <section className="bg-card border border-border rounded-md p-3">
-            <h2 className="text-sm font-semibold text-accent mb-2">Upload MapArt Image</h2>
-            {/* Convert unsupported colors checkbox – hidden; conversion is now always on
-            <label className="flex items-center gap-1.5 mb-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={convertUnsupported}
-                onChange={e => setConvertUnsupported(e.target.checked)}
-                className="h-3.5 w-3.5"
-              />
-              <span className="text-xs text-muted-foreground">Convert unsupported colors</span>
-            </label>
-            */}
+            <h2 className="text-sm font-semibold text-accent mb-2">{messages.upload.title}</h2>
+            {/* Unsupported-color conversion toggle intentionally hidden; conversion is always on. */}
             <input
               ref={fileRef}
               type="file"
@@ -2847,37 +2775,35 @@ const Index = () => {
                     }}
                   />
                 ) : (
-                  <p className="text-xs text-muted-foreground text-center px-2">Click or drop a 128×128 image</p>
+                  <p className="text-sm text-muted-foreground text-center px-2">{messages.upload.placeholder}</p>
                 )}
               </div>
             </div>
 
-            {paletteErrors.length > 0 && (
+            {paletteNotices.length > 0 && (
               <div
                 className={`mt-2 rounded p-2 ${
-                  !imageValid
+                  messages.parsing.bannerTone(paletteNotices) === "error"
                     ? "bg-destructive/25 border-2 border-destructive/50"
-                    : paletteErrors[0]?.startsWith("Converted")
+                    : messages.parsing.bannerTone(paletteNotices) === "warning"
                       ? "bg-warning/20 border-2 border-warning/40"
                       : "bg-primary/10 border-2 border-primary/30"
                 }`}
               >
-                {paletteErrors.map((e, i) => (
+                {paletteNotices.map((notice, i) => (
                   <p
                     key={i}
                     className={`text-xs whitespace-pre-wrap ${
-                      !imageValid
-                        ? "text-destructive font-medium"
-                        : e.endsWith("than source image.")
-                        ? "text-destructive font-bold"
-                          : e.startsWith("This is likely due to ")
-                            ? "text-warning font-medium"
-                          : e.startsWith("Converted")
-                            ? "text-warning font-medium"
-                            : "text-primary font-medium"
+                      messages.parsing.noticeTone(notice) === "error"
+                        ? notice.kind === PaletteNoticeKind.ReducedUniqueColors
+                          ? "text-destructive font-bold"
+                          : "text-destructive font-medium"
+                        : messages.parsing.noticeTone(notice) === "warning"
+                          ? "text-warning font-medium"
+                          : "text-primary font-medium"
                     }`}
                   >
-                    {e}
+                    {messages.parsing.noticeText(notice)}
                   </p>
                 ))}
               </div>
@@ -2886,8 +2812,7 @@ const Index = () => {
             {imageValid && missingBlocks.length > 0 && (
               <div className="mt-2 bg-destructive/25 border-2 border-destructive/50 rounded p-2">
                 <p className="text-xs text-destructive font-medium">
-                  {plural(missingBlocks.length, "color")} in the image {missingBlocks.length === 1 ? "has" : "have"} no
-                  block assigned in the preset.
+                  {messages.preview.missingBlockAssignments(missingBlocks.length)}
                 </p>
               </div>
             )}
@@ -2927,7 +2852,7 @@ const Index = () => {
             {showNorthRowAlignmentInfo && (
               <div className="mt-2 bg-muted/30 border border-border rounded p-2">
                 <p className="text-xs text-muted-foreground font-medium whitespace-pre-line">
-                  {"Note: Align 128x128 color area to the map grid.\nExpect 1 extra top north row (NBT is 128x129)."}
+                  {messages.preview.northRowAlignmentInfo}
                 </p>
               </div>
             )}
@@ -2935,7 +2860,7 @@ const Index = () => {
             {canGenerate && imageHasWater && usesIceForWater && (
               <div className="mt-2 bg-muted/30 border border-border rounded p-2">
                 <p className="text-xs text-muted-foreground font-medium whitespace-pre-line">
-                  {"Note: Ice has been selected for water-color.\nConvert it to water in-game for colors to be accurate."}
+                  {messages.preview.iceConversionInfo}
                 </p>
               </div>
             )}
@@ -2946,7 +2871,7 @@ const Index = () => {
                   className="text-xs px-2 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/20 whitespace-nowrap"
                   onClick={clearImage}
                 >
-                  Remove
+                  {messages.common.remove}
                 </button>
                 {canGenerate && (
                   <button
@@ -2955,10 +2880,11 @@ const Index = () => {
                     className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                   >
                     {converting
-                      ? "Converting..."
-                      : buildMode === BuildMode.SuppressSplitRow || buildMode === BuildMode.SuppressSplitChecker
-                        ? "Generate .zip"
-                        : "Generate .nbt"}
+                      ? messages.upload.convertButton(true, false)
+                      : messages.upload.convertButton(
+                          false,
+                          buildMode === BuildMode.SuppressSplitRow || buildMode === BuildMode.SuppressSplitChecker,
+                        )}
                   </button>
                 )}
               </div>
@@ -2969,15 +2895,15 @@ const Index = () => {
                 <div className="flex gap-3 text-[11px] text-muted-foreground flex-wrap items-center">
                   {numUniqueColorShadesForPart > numColorBlockTypesForPart && (
                     <span>
-                      <strong className="text-foreground">{plural(numUniqueColorShadesForPart, "unique color")}</strong>
+                      <strong className="text-foreground">{messages.preview.uniqueColorCount(numUniqueColorShadesForPart)}</strong>
                     </span>
                   )}
                   <span>
-                    <strong className="text-foreground">{plural(numColorBlockTypesForPart, "block type")}</strong>
+                    <strong className="text-foreground">{messages.preview.blockTypeCount(numColorBlockTypesForPart)}</strong>
                   </span>
                   {voidShadowCount > 0 && (
                     <span>
-                      <strong className="text-foreground">{plural(voidShadowCount, "void shadow")}</strong>
+                      <strong className="text-foreground">{messages.preview.voidShadowCount(voidShadowCount)}</strong>
                     </span>
                   )}
                 </div>
@@ -2986,7 +2912,7 @@ const Index = () => {
                     className={`text-[10px] px-1.5 py-0.5 rounded border ${colRangeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
                     onClick={() => setColRangeEnabled(v => !v)}
                   >
-                    {isStepRangeMode ? "Step range" : "Column range"}
+                    {messages.preview.rangeButtonLabel(isStepRangeMode)}
                   </button>
                 </div>
                 {colRangeEnabled && (
@@ -3055,49 +2981,49 @@ const Index = () => {
             className={`${isStackedLayout ? "order-4" : ""} text-[11px] text-muted-foreground text-left space-y-0.5 px-1 pt-4`}
             style={creditsFloatGapPx > 0 ? { transform: `translateY(${creditsFloatGapPx}px)` } : undefined}
           >
-            <h3 className="text-xs font-semibold text-accent mb-1">Credits</h3>
+            <h3 className="text-xs font-semibold text-accent mb-1">{messages.credits.title}</h3>
             <p>
               <a
-                href="https://www.youtube.com/@evmodder"
+                href={messages.credits.evModderUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline hover:text-foreground"
               >
-                EvModder
+                {messages.credits.evModderName}
               </a>{" "}
-              — Developer
+              — {messages.credits.evModderRole}
             </p>
             <p>
               <a
-                href="https://rebane2001.com/"
+                href={messages.credits.rebaneUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline hover:text-foreground"
               >
-                Rebane2001
+                {messages.credits.rebaneName}
               </a>{" "}
-              — Original creator of{" "}
+              —{" "}
               <a
-                href="https://mike2b2t.github.io/mapartcraft/"
+                href={messages.credits.mapArtCraftUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline hover:text-foreground"
               >
-                MapArtCraft
+                {messages.credits.rebaneRole(messages.credits.mapArtCraftName)}
               </a>
             </p>
             <p>
               <a
-                href="https://youtube.com/@gust4v_"
+                href={messages.credits.gu2t4vUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline hover:text-foreground"
               >
-                Gu2t4v
+                {messages.credits.gu2t4vName}
               </a>{" "}
-              — Suppression expert, inventor of 2‑Layer method
+              — {messages.credits.gu2t4vRole}
             </p>
-            <p>Note: GPT was used for parts of this site</p>
+            <p>{messages.credits.gptNote}</p>
           </div>
         </div>
       </div>
@@ -3111,13 +3037,13 @@ const Index = () => {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-accent">Secret Settings</h2>
+              <h2 className="text-sm font-semibold text-accent">{messages.dialogs.secretSettingsTitle}</h2>
               <button
                 type="button"
                 className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
                 onClick={() => setShowSecretsDialog(false)}
               >
-                Close
+                {messages.common.close}
               </button>
             </div>
             <div className="space-y-2 text-xs">
@@ -3128,7 +3054,7 @@ const Index = () => {
                   onChange={e => setShowTransparentRow(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
-                <span>Show color_id=0 row</span>
+                <span>{messages.dialogs.options.showTransparentRow}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -3137,7 +3063,7 @@ const Index = () => {
                   onChange={e => setShowExcludedBlocks(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
-                <span>Show excluded blocks</span>
+                <span>{messages.dialogs.options.showExcludedBlocks}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -3146,7 +3072,7 @@ const Index = () => {
                   onChange={e => setForceZ129(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
-                <span>Z-width always 129</span>
+                <span>{messages.dialogs.options.forceZ129}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -3155,7 +3081,7 @@ const Index = () => {
                   onChange={e => setAssumeFloor(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
-                <span>Assume floor</span>
+                <span>{messages.dialogs.options.assumeFloor}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -3164,7 +3090,7 @@ const Index = () => {
                   onChange={e => setShowAlignmentReminder(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
-                <span>Show alignment reminder</span>
+                <span>{messages.dialogs.options.showAlignmentReminder}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -3173,7 +3099,7 @@ const Index = () => {
                   onChange={e => setShowNooblineWarnings(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
-                <span>Show warnings for nooblines</span>
+                <span>{messages.dialogs.options.showNooblineWarnings}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -3182,7 +3108,7 @@ const Index = () => {
                   onChange={e => setShowVsFillerWarnings(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
-                <span>Show warnings when VS-Fillers are required in Staircase maps</span>
+                <span>{messages.dialogs.options.showVsFillerWarnings}</span>
               </label>
             </div>
           </div>

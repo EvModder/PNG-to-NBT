@@ -7,7 +7,8 @@
  * - src/Index.tsx
  */
 import * as UTIF from "utif";
-import { BASE_COLORS, type ColorShade, SHADE_MULTIPLIERS, packRgb } from "@/data/mapColors";
+import { BASE_COLORS, type ColorShade, SHADE_MULTIPLIERS, packRgb, unpackRgb } from "@/data/mapColors";
+import { messages, type PaletteNotice } from "@/lib/messages";
 import { type ColorData, type ColorGrid, MAP_SIZE, TRANSPARENT_COLOR } from "./colorGridTypes";
 
 interface CustomColorLike {
@@ -20,9 +21,8 @@ interface CustomColorLike {
 interface ColorGridAnalysis {
   imageData: ImageData;
   colorGrid: ColorGrid;
-  unsupportedColors: number[];
-  paletteErrors: string[];
-  sizeErrors: string[];
+  paletteNotices: PaletteNotice[];
+  hasBlockingIssue: boolean;
 }
 
 let baseColorLookup: Map<number, ColorShade> | null = null;
@@ -97,18 +97,6 @@ function scanImageToColorGrid(
   return { colorGrid, unsupportedColors: [...unsupported] };
 }
 
-function unpackRgb(key: number): [number, number, number] {
-  return [(key >> 16) & 255, (key >> 8) & 255, key & 255];
-}
-
-function formatPaletteErrors(unsupportedColors: number[]): string[] {
-  if (unsupportedColors.length === 0) return [];
-  const shown = unsupportedColors.slice(0, 10);
-  return [
-    `Found ${unsupportedColors.length} color${unsupportedColors.length === 1 ? "" : "s"} not in Minecraft map palette:\n\n${shown.map(color => `rgb(${unpackRgb(color).join(",")})`).join(", ")}${unsupportedColors.length > 10 ? "..." : ""}`,
-  ];
-}
-
 function cloneImageData(imageData: ImageData): ImageData {
   return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
 }
@@ -159,18 +147,6 @@ function convertUnsupportedToNearestBasePalette(imageData: ImageData, baseLookup
   };
 }
 
-function buildConversionMessages(convertedCount: number, totalInputColorCount: number, fewerOutputColorCount: number): string[] {
-  const line1 =
-    convertedCount === totalInputColorCount
-      ? `Converted ${convertedCount} color${convertedCount === 1 ? "" : "s"} to nearest palette id.`
-      : `Converted ${convertedCount} (of ${totalInputColorCount}) color${totalInputColorCount === 1 ? "" : "s"} to nearest palette id.`;
-  const lines = [line1];
-  if (fewerOutputColorCount > 0) {
-    lines.push(`${fewerOutputColorCount} fewer unique color${fewerOutputColorCount === 1 ? "" : "s"} than source image.`);
-  }
-  return lines;
-}
-
 function isTiffFile(file: File): boolean {
   const type = file.type.toLowerCase();
   const name = file.name.toLowerCase();
@@ -185,18 +161,18 @@ function loadBrowserImageData(file: File): Promise<ImageData> {
       try {
         const canvas = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height });
         const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("Unable to create image canvas.");
+        if (!ctx) throw new Error(messages.parsing.unableToCreateImageCanvas);
         ctx.drawImage(img, 0, 0);
         resolve(ctx.getImageData(0, 0, img.width, img.height));
       } catch (err) {
-        reject(err instanceof Error ? err : new Error("Failed to decode image."));
+        reject(err instanceof Error ? err : new Error(messages.parsing.failedToDecodeImage));
       } finally {
         URL.revokeObjectURL(objectUrl);
       }
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(new Error("Unable to decode this image format in the browser."));
+      reject(new Error(messages.parsing.browserDecodeFailure));
     };
     img.src = objectUrl;
   });
@@ -206,7 +182,7 @@ async function loadTiffImageData(file: File): Promise<ImageData> {
   const buffer = await file.arrayBuffer();
   const ifds = UTIF.decode(buffer);
   const ifd = ifds[0];
-  if (!ifd) throw new Error("TIFF file contains no image data.");
+  if (!ifd) throw new Error(messages.parsing.tiffNoImageData);
   UTIF.decodeImage(buffer, ifd);
   const rgba = UTIF.toRGBA8(ifd);
   return new ImageData(new Uint8ClampedArray(rgba), ifd.width, ifd.height);
@@ -215,6 +191,14 @@ async function loadTiffImageData(file: File): Promise<ImageData> {
 async function loadImageDataFromFile(file: File): Promise<ImageData> {
   if (isTiffFile(file)) return loadTiffImageData(file);
   return loadBrowserImageData(file);
+}
+
+function buildConversionNotices(convertedCount: number, totalInputColorCount: number, fewerOutputColorCount: number): PaletteNotice[] {
+  const notices: PaletteNotice[] = [
+    messages.parsing.convertedPaletteColorsNotice(convertedCount, totalInputColorCount),
+  ];
+  if (fewerOutputColorCount > 0) notices.push(messages.parsing.reducedUniqueColorsNotice(fewerOutputColorCount));
+  return notices;
 }
 
 // Callers:
@@ -226,18 +210,14 @@ export function convertImageToColorGrid(
 ): ColorGridAnalysis {
   const baseLookup = getBaseColorLookup();
   const customLookup = buildCustomShadeLookup(customColors);
-  const sizeErrors =
-    imageData.width === MAP_SIZE && imageData.height === MAP_SIZE
-      ? []
-      : [`Image must be 128×128 pixels (got ${imageData.width}×${imageData.height})`];
+  const hasSizeError = imageData.width !== MAP_SIZE || imageData.height !== MAP_SIZE;
 
-  if (sizeErrors.length > 0) {
+  if (hasSizeError) {
     return {
       imageData,
       colorGrid: createEmptyColorGrid(),
-      unsupportedColors: [],
-      paletteErrors: sizeErrors,
-      sizeErrors,
+      paletteNotices: [messages.parsing.imageSizeNotice(imageData.width, imageData.height)],
+      hasBlockingIssue: true,
     };
   }
 
@@ -246,9 +226,11 @@ export function convertImageToColorGrid(
     return {
       imageData,
       colorGrid: initial.colorGrid,
-      unsupportedColors: initial.unsupportedColors,
-      paletteErrors: formatPaletteErrors(initial.unsupportedColors),
-      sizeErrors: [],
+      paletteNotices:
+        initial.unsupportedColors.length > 0
+          ? [messages.parsing.unsupportedPaletteColorsNotice(initial.unsupportedColors)]
+          : [],
+      hasBlockingIssue: initial.unsupportedColors.length > 0,
     };
   }
 
@@ -258,16 +240,15 @@ export function convertImageToColorGrid(
   return {
     imageData: convertedImageData,
     colorGrid: converted.colorGrid,
-    unsupportedColors: converted.unsupportedColors,
-    paletteErrors:
+    paletteNotices:
       converted.unsupportedColors.length === 0
-        ? buildConversionMessages(
+        ? buildConversionNotices(
             conversionSummary.convertedCount,
             conversionSummary.totalInputColorCount,
             conversionSummary.fewerOutputColorCount,
           )
-        : formatPaletteErrors(converted.unsupportedColors),
-    sizeErrors: [],
+        : [messages.parsing.unsupportedPaletteColorsNotice(converted.unsupportedColors)],
+    hasBlockingIssue: converted.unsupportedColors.length > 0,
   };
 }
 
