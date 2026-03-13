@@ -636,7 +636,7 @@ function addStaircaseWaterConvenienceFillers(
   return fillerCandidates;
 }
 
-function applyStaircaseVariantGrouped<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, cache: GridShapeCache) {
+function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, cache: GridShapeCache) {
   const rowKey = (x: number, z: number) => toColumnCoordKey(x, z);
   type PixelInfo = { shade: number; isWater: boolean };
   interface RowRecord {
@@ -1745,11 +1745,8 @@ function getCachedStaircaseParts(
         applyStaircaseVariantClassic(blocks);
         break;
       case BuildMode.StaircaseValley:
-        applyStaircaseVariantValley(blocks, colorGrid, cache);
-        break;
       case BuildMode.StaircaseGrouped:
         applyStaircaseVariantValley(blocks, colorGrid, cache);
-        applyStaircaseVariantGrouped(blocks, colorGrid, cache);
         break;
       case BuildMode.StaircaseParty:
         applyStaircaseVariantParty(blocks, colorGrid, paletteSeed, cache);
@@ -1757,8 +1754,9 @@ function getCachedStaircaseParts(
       default:
         assertUnhandledBuildMode(buildMode, "getCachedStaircaseParts");
     }
-    const extraFillerCandidates = addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache, waterFillerOffset);
-    return [buildShapePart(blocks, extraFillerCandidates)];
+    const waterConvenienceFillerCandidates = addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache, waterFillerOffset);
+    if (buildMode == BuildMode.StaircaseGrouped) applyStaircaseVariantGroupedPostProcess(blocks, colorGrid, cache);
+    return [buildShapePart(blocks, waterConvenienceFillerCandidates)];
   });
 }
 

@@ -19,6 +19,7 @@ AXIS_X_OVERRIDES = {
     "spruce_log[axis=x]": "spruce_log",
     "jungle_log[axis=x]": "jungle_log",
     "cherry_log[axis=x]": "cherry_log",
+    "pale_oak_log[axis=x]": "pale_oak_log",
 }
 
 DOWN_FACE_OVERRIDES = {
