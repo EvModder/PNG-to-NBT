@@ -161,11 +161,11 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: BuildMode.Flat, label: messages.buildMode.optionLabel(BuildMode.Flat) },
   { value: BuildMode.InclineUp, label: messages.buildMode.optionLabel(BuildMode.InclineUp) },
   { value: BuildMode.InclineDown, label: messages.buildMode.optionLabel(BuildMode.InclineDown) },
-  { value: BuildMode.StaircaseValley, label: messages.buildMode.optionLabel(BuildMode.StaircaseValley) },
-  { value: BuildMode.StaircaseClassic, label: messages.buildMode.optionLabel(BuildMode.StaircaseClassic) },
-  { value: BuildMode.StaircaseGrouped, label: messages.buildMode.optionLabel(BuildMode.StaircaseGrouped) },
   { value: BuildMode.StaircaseNorthline, label: messages.buildMode.optionLabel(BuildMode.StaircaseNorthline) },
   { value: BuildMode.StaircaseSouthline, label: messages.buildMode.optionLabel(BuildMode.StaircaseSouthline) },
+  { value: BuildMode.StaircaseClassic, label: messages.buildMode.optionLabel(BuildMode.StaircaseClassic) },
+  { value: BuildMode.StaircaseValley, label: messages.buildMode.optionLabel(BuildMode.StaircaseValley) },
+  { value: BuildMode.StaircaseGrouped, label: messages.buildMode.optionLabel(BuildMode.StaircaseGrouped) },
   { value: BuildMode.StaircaseParty, label: messages.buildMode.optionLabel(BuildMode.StaircaseParty) },
 ];
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
@@ -1214,13 +1214,13 @@ const Index = () => {
       });
       const suffixMap: Record<BuildMode, string> = {
         [BuildMode.Flat]: "",
-        [BuildMode.InclineDown]: "-incline_down",
         [BuildMode.InclineUp]: "-incline_up",
+        [BuildMode.InclineDown]: "-incline_down",
         [BuildMode.StaircaseNorthline]: "-northline",
         [BuildMode.StaircaseSouthline]: "-southline",
         [BuildMode.StaircaseClassic]: "-classic",
-        [BuildMode.StaircaseGrouped]: "-grouped",
         [BuildMode.StaircaseValley]: "-valley",
+        [BuildMode.StaircaseGrouped]: "-grouped",
         [BuildMode.StaircaseParty]: "-party",
         [BuildMode.SuppressSplitRow]: "-split_row",
         [BuildMode.SuppressSplitChecker]: "-split_checker",

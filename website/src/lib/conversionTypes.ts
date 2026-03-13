@@ -47,8 +47,8 @@ export enum BuildMode {
   StaircaseNorthline = "staircase_northline",
   StaircaseSouthline = "staircase_southline",
   StaircaseClassic = "staircase_classic",
-  StaircaseGrouped = "staircase_grouped",
   StaircaseValley = "staircase_valley",
+  StaircaseGrouped = "staircase_grouped",
   StaircaseParty = "staircase_party",
   SuppressSplitRow = "suppress_split_row",
   SuppressSplitChecker = "suppress_split_checker",
@@ -94,8 +94,8 @@ export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
     case BuildMode.StaircaseNorthline:
     case BuildMode.StaircaseSouthline:
     case BuildMode.StaircaseClassic:
-    case BuildMode.StaircaseGrouped:
     case BuildMode.StaircaseValley:
+    case BuildMode.StaircaseGrouped:
     case BuildMode.StaircaseParty:
       return true;
     default:

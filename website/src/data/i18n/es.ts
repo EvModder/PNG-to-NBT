@@ -88,11 +88,11 @@ export const esCatalog = {
       [BuildMode.Flat]: "Plano",
       [BuildMode.InclineUp]: "Inclinación (Sube)",
       [BuildMode.InclineDown]: "Inclinación (Baja)",
-      [BuildMode.StaircaseValley]: "Escalera (Valle)",
-      [BuildMode.StaircaseClassic]: "Escalera (Clásica)",
-      [BuildMode.StaircaseGrouped]: "Escalera (Agrupada)",
       [BuildMode.StaircaseNorthline]: "Escalera (Northline)",
       [BuildMode.StaircaseSouthline]: "Escalera (Southline)",
+      [BuildMode.StaircaseClassic]: "Escalera (Clásica)",
+      [BuildMode.StaircaseValley]: "Escalera (Valle)",
+      [BuildMode.StaircaseGrouped]: "Escalera (Agrupada)",
       [BuildMode.StaircaseParty]: "Escalera (Party)",
       [BuildMode.SuppressSplitRow]: "Supresión (división por filas)",
       [BuildMode.SuppressSplitChecker]: "Supresión (división ajedrezada)",
@@ -105,16 +105,16 @@ export const esCatalog = {
     tooltips: {
       [BuildMode.Flat]: "Plano: todos los bloques de color de la forma generada están al mismo nivel Y.",
       [BuildMode.InclineUp]:
-        "Todos los píxeles no transparentes y no acuáticos suben de forma uniforme, así que todos los métodos de escalera colapsan a la salida northline.",
+        "Todos los píxeles no transparentes y no acuáticos suben de forma uniforme, así que todos los métodos de escalera colapsan a este alias de inclinación ascendente (la misma salida backend que northline).",
       [BuildMode.InclineDown]:
-        "Todos los píxeles no transparentes y no acuáticos bajan de forma uniforme, así que todos los métodos de escalera colapsan a la salida northline.",
+        "Todos los píxeles no transparentes y no acuáticos bajan de forma uniforme, así que todos los métodos de escalera colapsan a este alias de inclinación descendente (la misma salida backend que northline).",
       [BuildMode.StaircaseNorthline]: "Alinea cada columna N→S desde una línea de referencia (noobline) de bloques",
       [BuildMode.StaircaseSouthline]: "Alinea cada columna S→N desde una línea de referencia de bloques (la fila inferior)",
       [BuildMode.StaircaseClassic]: "Minimiza la diferencia maxY-minY manteniendo contiguas las columnas N→S",
-      [BuildMode.StaircaseGrouped]:
-        "Segmentación estilo valle con agrupación segura entre columnas para reducir tramos bajos aislados",
       [BuildMode.StaircaseValley]:
         "Minimiza la diferencia maxY-minY y divide las columnas N→S, bajando cada segmento todo lo posible",
+      [BuildMode.StaircaseGrouped]:
+        "Segmentación estilo valle con agrupación segura entre columnas para reducir tramos bajos aislados",
       [BuildMode.StaircaseParty]: "El mismo MapArt, pero hace el proceso de construcción más divertido y emocionante.",
       [BuildMode.SuppressSplitRow]: "División por filas; se mantiene por compatibilidad, pero en general no es útil",
       [BuildMode.SuppressSplitChecker]: "Divide las generaciones NBT para colocaciones dominantes/recesivas",
@@ -210,7 +210,7 @@ export const esCatalog = {
     blockPlaceholder: "p. ej. fart_block",
   },
   upload: {
-    title: "Subir imagen de MapArt",
+    title: "Vista previa de imagen",
     placeholder: "Haz clic o suelta una imagen de 128×128",
     removeButton: "Quitar",
     convertButtonConverting: "Convirtiendo...",
