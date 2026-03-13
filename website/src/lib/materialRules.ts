@@ -3,23 +3,15 @@
  * - resolveBlockName()
  * - toDisplayName()
  * - resolveShapeColorBlockName()
- * - getMappedShapeColorBlockId()
  *
  * Callers:
  * - src/lib/fillerRules.ts
  * - src/lib/shapeAnalysis.ts
- * - src/lib/shapeCellRules.ts
  * - src/lib/shapeSubstitution.ts
  */
 import { BASE_COLORS } from "../data/mapColors";
 import type { CustomColor } from "./conversionTypes";
 import type { ShapeColor } from "./shapeTypes";
-
-function normalizeBlockId(raw: string): string {
-  const lower = raw.trim().toLowerCase();
-  const base = lower.split("[")[0];
-  return base.startsWith("minecraft:") ? base.slice("minecraft:".length) : base;
-}
 
 // Callers:
 // - src/lib/fillerRules.ts
@@ -72,18 +64,4 @@ export function resolveShapeColorBlockName(
   }
   const mapped = options.blockMapping[color.id] || BASE_COLORS[color.id].blocks[0];
   return mapped ? resolveBlockName(mapped) : null;
-}
-
-// Callers:
-// - src/lib/shapeCellRules.ts
-export function getMappedShapeColorBlockId(
-  color: ShapeColor,
-  options: { blockMapping: Record<number, string>; customColors: CustomColor[] },
-): string | null {
-  if (color.isCustom) {
-    const block = options.customColors[color.id]?.block ?? "";
-    return block ? normalizeBlockId(block) : null;
-  }
-  const mapped = options.blockMapping[color.id] || BASE_COLORS[color.id].blocks[0] || "";
-  return mapped ? normalizeBlockId(mapped) : null;
 }

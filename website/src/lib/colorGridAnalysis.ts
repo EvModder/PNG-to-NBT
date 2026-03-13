@@ -49,8 +49,8 @@ export function getPixelParity(x: number, z: number): PixelParity {
 }
 
 function imageHasNonFlatShades(colorGrid: ColorGrid): boolean {
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getColorCell(colorGrid, x, z);
       if (!isTransparentColor(color) && color.shade !== 1) return true;
     }
@@ -77,8 +77,8 @@ function scanSuppressedPixels(colorGrid: ColorGrid): boolean {
 function analyzeVoidShadows(colorGrid: ColorGrid) {
   const stats = { dominant: 0, recessive: 0 };
 
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getColorCell(colorGrid, x, z);
       if (isTransparentColor(color)) continue;
       if (z === 0 || !isTransparentColor(getColorCell(colorGrid, x, z - 1))) continue;
@@ -94,8 +94,8 @@ function analyzeVoidShadows(colorGrid: ColorGrid) {
 function computeImageInfo(colorGrid: ColorGrid) {
   const usedBaseColors = new Set<number>();
   const usedShades = new Set<string>();
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getColorCell(colorGrid, x, z);
       if (isTransparentColor(color)) continue;
       if (color.isCustom) usedShades.add(`custom:${color.id}:${color.shade}`);
@@ -113,8 +113,8 @@ function detectUniformNonFlatDirection(colorGrid: ColorGrid): UniformNonFlatDire
   let allLight = true;
   let allDark = true;
 
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getColorCell(colorGrid, x, z);
       if (isTransparentColor(color)) continue;
       sawNonTransparent = true;
@@ -131,8 +131,8 @@ function detectUniformNonFlatDirection(colorGrid: ColorGrid): UniformNonFlatDire
 
 function computeUsedShadesByBase(colorGrid: ColorGrid): Map<number, Set<number>> {
   const used = new Map<number, Set<number>>();
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getColorCell(colorGrid, x, z);
       if (isTransparentColor(color) || color.isCustom) continue;
       let shades = used.get(color.id);
@@ -148,8 +148,8 @@ function computeUsedShadesByBase(colorGrid: ColorGrid): Map<number, Set<number>>
 
 function computeUsedBaseColors(colorGrid: ColorGrid): Set<number> {
   const used = new Set<number>();
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getColorCell(colorGrid, x, z);
       if (color.isCustom) continue;
       if (isTransparentColor(color)) {
@@ -163,8 +163,8 @@ function computeUsedBaseColors(colorGrid: ColorGrid): Set<number> {
 }
 
 function colorGridHasTransparency(colorGrid: ColorGrid): boolean {
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       if (isTransparentColor(getColorCell(colorGrid, x, z))) return true;
     }
   }
@@ -172,8 +172,8 @@ function colorGridHasTransparency(colorGrid: ColorGrid): boolean {
 }
 
 function colorGridHasWater(colorGrid: ColorGrid): boolean {
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       if (isWaterColor(getColorCell(colorGrid, x, z))) return true;
     }
   }
@@ -181,8 +181,8 @@ function colorGridHasWater(colorGrid: ColorGrid): boolean {
 }
 
 function colorGridHasNonLightWater(colorGrid: ColorGrid): boolean {
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getColorCell(colorGrid, x, z);
       if (isWaterColor(color) && color.shade !== 2) return true;
     }

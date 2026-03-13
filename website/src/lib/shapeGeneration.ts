@@ -13,12 +13,10 @@ import {
   BuildMode,
   buildModeUsesLayerGap,
   buildModeUsesPaletteSeed,
-  getCanonicalBuildMode,
   isStaircaseBuildMode,
-  isSuppressBuildMode,
 } from "./conversionTypes";
 import { FillerRole } from "./conversionTypes";
-import { MAP_SIZE, TRANSPARENT_COLOR, type ColorData, type ColorGrid, getColorCell, isTransparentColor, isWaterColor } from "./colorGridTypes";
+import { MAP_SIZE, type ColorData, type ColorGrid, getColorCell, isTransparentColor, isWaterColor } from "./colorGridTypes";
 import { PixelParity, UniformNonFlatDirection, getPixelParity } from "./colorGridAnalysis";
 import { ShapePartType, type ShapeCell, type ShapeColor, type ShapeCoordKey, type ShapePart, parseShapeCoordKey, toShapeCoordKey } from "./shapeTypes";
 
@@ -66,6 +64,26 @@ type InternalBuildMode =
   | BuildMode.SuppressPairsEW
   | BuildMode.Suppress2LayerLateFillers
   | BuildMode.Suppress2LayerLatePairs;
+type ShapeCacheKey = Readonly<{
+  buildMode: InternalBuildMode;
+  layerGap: number;
+  paletteSeed: number;
+  waterFillerOffset: boolean;
+}>;
+type ShapeCacheKeyId = string & { readonly __shapeCacheKeyId: unique symbol };
+type StaircaseBaseBlocksCache = { // Shared northline-style staircase block layouts before per-mode reshaping.
+  base?: ShapeBlock[];
+  waterOffset?: ShapeBlock[];
+};
+// Alias build modes are canonicalized before staircase-mode dispatch.
+type StaircaseInternalBuildMode =
+  | BuildMode.StaircaseNorthline
+  | BuildMode.StaircaseSouthline
+  | BuildMode.StaircaseClassic
+  | BuildMode.StaircaseGrouped
+  | BuildMode.StaircaseValley
+  | BuildMode.StaircaseParty;
+
 type ColumnPixelCell = { shade: number; isWater: boolean };
 type ColumnCoordKey = number;
 
@@ -99,6 +117,23 @@ const ALL_VISIBLE_BUILD_MODE_SET = new Set<BuildMode>([
 const COLUMN_COORD_Z_OFFSET = 256;
 const COLUMN_COORD_Z_SIZE = 512;
 
+function assertUnhandledBuildMode(buildMode: never, context: string): never {
+  throw new Error(`Unhandled BuildMode in ${context}: ${String(buildMode)}`);
+}
+
+function getCanonicalBuildMode(buildMode: BuildMode): InternalBuildMode {
+  switch (buildMode) {
+    case BuildMode.Flat:
+    case BuildMode.InclineUp:
+    case BuildMode.InclineDown:
+      return BuildMode.StaircaseNorthline;
+    case BuildMode.Suppress2Layer:
+      return BuildMode.Suppress2LayerLateFillers;
+    default:
+      return buildMode;
+  }
+}
+
 function toColumnCoordKey(x: number, z: number): ColumnCoordKey {
   return (x + 1) * COLUMN_COORD_Z_SIZE + (z + COLUMN_COORD_Z_OFFSET);
 }
@@ -108,14 +143,12 @@ function parseColumnCoordKey(key: ColumnCoordKey): [number, number] {
 }
 
 interface GridShapeCache {
-  shapes: Map<string, GeneratedShape>;
+  shapes: Map<ShapeCacheKeyId, GeneratedShape>;
+  rawParts: Map<ShapeCacheKeyId, RawShapePart[]>;
+   // Per-X non-transparent source-pixel lookup used by staircase transforms.
   columnPixelInfo: Map<number, Map<number, ColumnPixelCell>>;
-  densePixelGrid?: (ColorData | null)[][];
-  staircaseBaseBlocks: Map<"base" | "water_offset", ShapeBlock[]>;
-  staircaseModeData: Map<string, { blocks: ShapeBlock[]; extraFillerCandidates: FillerCandidate[] }>;
-  suppressBlockSets: Map<BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker, ShapeBlock[][]>;
-  stepVariantParts: Map<StepwiseBuildMode, RawShapePart[]>;
-  suppress2LayerBlocks: Map<string, ShapeBlock[]>;
+  staircaseBaseBlocks: StaircaseBaseBlocksCache;
+  // Cached vertical spacing between suppress step parts for this image.
   stepVariantYOffset?: number;
 }
 
@@ -126,12 +159,9 @@ function getGridShapeCache(colorGrid: ColorGrid): GridShapeCache {
   if (cache) return cache;
   cache = {
     shapes: new Map(),
+    rawParts: new Map(),
     columnPixelInfo: new Map(),
-    staircaseBaseBlocks: new Map(),
-    staircaseModeData: new Map(),
-    suppressBlockSets: new Map(),
-    stepVariantParts: new Map(),
-    suppress2LayerBlocks: new Map(),
+    staircaseBaseBlocks: {},
   };
   SHAPE_CACHE.set(colorGrid, cache);
   return cache;
@@ -151,19 +181,6 @@ function getCachedColumnPixelInfo(colorGrid: ColorGrid, cache: GridShapeCache, x
   }
   cache.columnPixelInfo.set(x, info);
   return info;
-}
-
-function getCachedDensePixelGrid(colorGrid: ColorGrid, cache: GridShapeCache): (ColorData | null)[][] {
-  if (cache.densePixelGrid) return cache.densePixelGrid;
-  const pixelGrid: (ColorData | null)[][] = Array.from({ length: MAP_SIZE }, () => new Array<ColorData | null>(MAP_SIZE).fill(null));
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getPixelColor(colorGrid, x, z);
-      if (!isTransparentColor(color)) pixelGrid[x][z] = color;
-    }
-  }
-  cache.densePixelGrid = pixelGrid;
-  return pixelGrid;
 }
 
 function toColorRef(color: ColorData): ShapeRef {
@@ -389,10 +406,6 @@ function buildShapePart(blocks: ShapeBlock[], extraFillerCandidates: FillerCandi
   };
 }
 
-function buildShapePartsFromBlockLists(parts: ShapeBlock[][]): RawShapePart[] {
-  return parts.map(blocks => buildShapePart(blocks));
-}
-
 function getShadeFillerRole(z: number): FillerRole {
   return z < 0 ? FillerRole.ShadeNorthRow : FillerRole.ShadeSuppress;
 }
@@ -428,11 +441,10 @@ function appendSuppressPixelBlocks(blocks: ShapeBlock[], x: number, baseY: numbe
 
 function getStepVariantYOffset(colorGrid: ColorGrid, cache?: GridShapeCache): number {
   if (cache?.stepVariantYOffset !== undefined) return cache.stepVariantYOffset;
-  const pixelGrid = cache ? getCachedDensePixelGrid(colorGrid, cache) : undefined;
   let yOffset = 1;
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
-      const color = pixelGrid?.[x][z] ?? getPixelColor(colorGrid, x, z);
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      const color = getPixelColor(colorGrid, x, z);
       if (isTransparentColor(color)) continue;
       if (isWaterColor(color)) {
         if (color.shade !== 2) yOffset = Math.max(yOffset, getWaterDepth(color.shade, x, z));
@@ -624,7 +636,7 @@ function addStaircaseWaterConvenienceFillers(
   return fillerCandidates;
 }
 
-function applyGroupedModePostProcess<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, cache: GridShapeCache) {
+function applyStaircaseVariantGrouped<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, cache: GridShapeCache) {
   const rowKey = (x: number, z: number) => toColumnCoordKey(x, z);
   type PixelInfo = { shade: number; isWater: boolean };
   interface RowRecord {
@@ -915,47 +927,47 @@ function applyGroupedModePostProcess<T extends PositionedEntry>(blocks: T[], col
   }
 }
 
-function applyStaircaseVariant<T extends PositionedEntry>(
-  blocks: T[],
-  mode: BuildMode,
-  colorGrid: ColorGrid,
-  paletteSeed?: number,
-  cache?: GridShapeCache,
-) {
-  if (mode === BuildMode.StaircaseNorthline || isSuppressBuildMode(mode)) return;
-  if (mode === BuildMode.StaircaseParty) {
-    applyProMode(blocks, colorGrid, paletteSeed, cache);
-    return;
-  }
-
+function applyStaircaseVariantClassic<T extends PositionedEntry>(blocks: T[]) {
   const columns = groupBlocksByColumn(blocks);
   for (let x = 0; x < MAP_SIZE; ++x) {
     const colBlocks = columns[x];
     if (colBlocks.length === 0) continue;
-    if (mode === BuildMode.StaircaseClassic) {
-      let minY = Infinity;
-      for (const block of colBlocks) if (block.y < minY) minY = block.y;
-      for (const block of colBlocks) block.y -= minY;
-      continue;
-    }
-    if (mode === BuildMode.StaircaseSouthline) {
-      let maxZ = -Infinity;
-      let southY = 0;
-      for (const block of colBlocks) {
-        if (block.z > maxZ) {
-          maxZ = block.z;
-          southY = block.y;
-        }
-      }
-      for (const block of colBlocks) block.y -= southY;
-      continue;
-    }
-    if (mode !== BuildMode.StaircaseValley) continue;
+    let minY = Infinity;
+    for (const block of colBlocks) if (block.y < minY) minY = block.y;
+    for (const block of colBlocks) block.y -= minY;
+  }
+}
 
+function applyStaircaseVariantSouthline<T extends PositionedEntry>(blocks: T[]) {
+  const columns = groupBlocksByColumn(blocks);
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    const colBlocks = columns[x];
+    if (colBlocks.length === 0) continue;
+    let maxZ = -Infinity;
+    let southY = 0;
+    for (const block of colBlocks) {
+      if (block.z > maxZ) {
+        maxZ = block.z;
+        southY = block.y;
+      }
+    }
+    for (const block of colBlocks) block.y -= southY;
+  }
+}
+
+function applyStaircaseVariantValley<T extends PositionedEntry>(
+  blocks: T[],
+  colorGrid: ColorGrid,
+  cache?: GridShapeCache,
+) {
+  const columns = groupBlocksByColumn(blocks);
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    const colBlocks = columns[x];
+    if (colBlocks.length === 0) continue;
     const pixelShade = cache
       ? getCachedColumnPixelInfo(colorGrid, cache, x)
       : getCachedColumnPixelInfo(colorGrid, getGridShapeCache(colorGrid), x);
-    const { rowBlocks, rowMinY, rowMaxY, rowPresent, zValues } = buildColumnBlockRows(colBlocks);
+    const { rowBlocks, rowMinY, rowMaxY, zValues } = buildColumnBlockRows(colBlocks);
     const waterZ = new Uint8Array(MAP_SIZE);
     const primaryPresent = new Uint8Array(MAP_SIZE);
     const currentMaxY = new Array<number>(MAP_SIZE).fill(0);
@@ -1017,9 +1029,7 @@ function applyStaircaseVariant<T extends PositionedEntry>(
 
     for (const segment of segments) {
       const southZ = segment.zEnd + 1;
-      const northZ = segment.zStart - 1;
       const southInfo = pixelShade.get(southZ);
-      const northInfo = pixelShade.get(northZ);
       let targetTopY: number;
       if (!southInfo || southInfo.isWater || southInfo.shade === 2) {
         targetTopY = 0;
@@ -1099,7 +1109,7 @@ function applyStaircaseVariant<T extends PositionedEntry>(
   }
 }
 
-function applyProMode<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, paletteSeed = 0, cache?: GridShapeCache) {
+function applyStaircaseVariantParty<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, paletteSeed = 0, cache?: GridShapeCache) {
   const seedBase = (42 ^ paletteSeed) >>> 0;
   const mulberry32 = (seed: number) => () => {
     let t = (seed += 0x6d2b79f5);
@@ -1429,14 +1439,13 @@ function applyProMode<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGr
   }
 }
 
-function buildSuppressSplitRowBlockSets(colorGrid: ColorGrid, cache?: GridShapeCache): ShapeBlock[][] {
-  const pixelGrid = cache ? getCachedDensePixelGrid(colorGrid, cache) : undefined;
+function buildSuppressSplitRowBlockSets(colorGrid: ColorGrid): ShapeBlock[][] {
   const buildHalf = (startRow: 0 | 1): ShapeBlock[] => {
     const blocks: ShapeBlock[] = [];
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      if (z % 2 !== startRow) continue;
-      for (let x = 0; x < MAP_SIZE; ++x) {
-        const color = pixelGrid?.[x][z] ?? getPixelColor(colorGrid, x, z);
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      for (let z = 0; z < MAP_SIZE; ++z) {
+        if (z % 2 !== startRow) continue;
+        const color = getPixelColor(colorGrid, x, z);
         if (isTransparentColor(color)) continue;
         appendSuppressPixelBlocks(blocks, x, 0, z, color);
       }
@@ -1447,15 +1456,14 @@ function buildSuppressSplitRowBlockSets(colorGrid: ColorGrid, cache?: GridShapeC
   return [buildHalf(0), buildHalf(1)];
 }
 
-function buildSuppressSplitCheckerBlockSets(colorGrid: ColorGrid, cache?: GridShapeCache): ShapeBlock[][] {
-  const pixelGrid = cache ? getCachedDensePixelGrid(colorGrid, cache) : undefined;
+function buildSuppressSplitCheckerBlockSets(colorGrid: ColorGrid): ShapeBlock[][] {
   const buildHalf = (useDominant: boolean): ShapeBlock[] => {
     const blocks: ShapeBlock[] = [];
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      for (let z = 0; z < MAP_SIZE; ++z) {
         const isDominant = getPixelParity(x, z) === PixelParity.Dominant;
         if (isDominant !== useDominant) continue;
-        const color = pixelGrid?.[x][z] ?? getPixelColor(colorGrid, x, z);
+        const color = getPixelColor(colorGrid, x, z);
         if (isTransparentColor(color)) continue;
         if (isWaterColor(color)) {
           const depth = getWaterDepth(color.shade, x, z);
@@ -1475,9 +1483,7 @@ function buildSuppressDualLayerBlocks(
   colorGrid: ColorGrid,
   layerGap: number | undefined,
   buildMode: TwoLayerSuppressBuildMode,
-  cache?: GridShapeCache,
 ): ShapeBlock[] {
-  const pixelGrid = cache ? getCachedDensePixelGrid(colorGrid, cache) : getCachedDensePixelGrid(colorGrid, getGridShapeCache(colorGrid));
   const topYGrid: (number | undefined)[][] = Array.from({ length: MAP_SIZE }, () => new Array<number | undefined>(MAP_SIZE).fill(undefined));
   const blocks: ShapeBlock[] = [];
   const occupied = new Set<ShapeCoordKey>();
@@ -1503,18 +1509,18 @@ function buildSuppressDualLayerBlocks(
       if (!isRecessive(x, recZ)) continue;
       const domZ = recZ + 1;
       if (!isDominant(x, domZ)) continue;
-      const dom = pixelGrid[x][domZ];
-      const rec = pixelGrid[x][recZ];
-      if (!dom || !rec || isWaterColor(dom) || isWaterColor(rec) || dom.shade !== 1) continue;
+      const dom = getPixelColor(colorGrid, x, domZ);
+      const rec = getPixelColor(colorGrid, x, recZ);
+      if (isTransparentColor(dom) || isTransparentColor(rec) || isWaterColor(dom) || isWaterColor(rec) || dom.shade !== 1) continue;
       const northZ = recZ - 1;
-      const north = northZ >= 0 ? pixelGrid[x][northZ] : null;
+      const north = getPixelColor(colorGrid, x, northZ);
       let canLower = false;
       if (isDarkShade(rec.shade)) canLower = recZ === 0;
       else if (rec.shade === 1) {
-        const hasRegularNorthDominant = northZ >= 0 && isDominant(x, northZ) && !!north && !isWaterColor(north);
+        const hasRegularNorthDominant = northZ >= 0 && isDominant(x, northZ) && !isTransparentColor(north) && !isWaterColor(north);
         canLower = recZ === 0 || hasRegularNorthDominant;
       } else if (rec.shade === 2) {
-        canLower = !north;
+        canLower = isTransparentColor(north);
       }
       if (canLower) loweredRecessive.add(cellKey(x, recZ));
     }
@@ -1522,13 +1528,13 @@ function buildSuppressDualLayerBlocks(
 
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = MAP_SIZE - 1; z >= 0; --z) {
-      const color = pixelGrid[x][z] ?? TRANSPARENT_COLOR;
-      if (!color) continue;
+      const color = getPixelColor(colorGrid, x, z);
+      if (isTransparentColor(color)) continue;
       if (isWaterColor(color)) {
-        const south = z < MAP_SIZE - 1 ? pixelGrid[x][z + 1] : null;
+        const south = getPixelColor(colorGrid, x, z + 1);
         const southTopY = z < MAP_SIZE - 1 ? topYGrid[x][z + 1] : undefined;
         let topY = lowerY - 1;
-        if (isRecessive(x, z) && south && !isWaterColor(south) && southTopY !== undefined) {
+        if (isRecessive(x, z) && !isTransparentColor(south) && !isWaterColor(south) && southTopY !== undefined) {
           topY = southTopY + shadeDeltaFromSouth(color.shade);
         }
         const depth = getWaterDepth(color.shade, x, z);
@@ -1538,7 +1544,7 @@ function buildSuppressDualLayerBlocks(
       }
 
       let y = isDominant(x, z) || loweredRecessive.has(cellKey(x, z)) ? lowerY : upperY;
-      if (buildMode === BuildMode.Suppress2LayerLatePairs && isDominant(x, z) && color.shade === 1 && z > 0 && !pixelGrid[x][z - 1]) {
+      if (buildMode === BuildMode.Suppress2LayerLatePairs && isDominant(x, z) && color.shade === 1 && z > 0 && isTransparentColor(getPixelColor(colorGrid, x, z - 1))) {
         y = lateY;
         lateDominant.add(cellKey(x, z));
       }
@@ -1550,15 +1556,15 @@ function buildSuppressDualLayerBlocks(
   const fillerPlacements = new Map<ShapeCoordKey, ShapeRef>();
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = pixelGrid[x][z] ?? TRANSPARENT_COLOR;
-      if (!color || isWaterColor(color) || color.shade === 2) continue;
+      const color = getPixelColor(colorGrid, x, z);
+      if (isTransparentColor(color) || isWaterColor(color) || color.shade === 2) continue;
       const topY = topYGrid[x][z];
       if (topY === undefined) continue;
       const fillY = topY + (isDarkShade(color.shade) ? 1 : 0);
       const fillZ = z - 1;
       const coord = toShapeCoordKey(x, fillY, fillZ);
       if (occupied.has(coord)) continue;
-      const lateSuppressDominantVoid = isDominant(x, z) && fillZ >= 0 && !pixelGrid[x][fillZ];
+      const lateSuppressDominantVoid = isDominant(x, z) && fillZ >= 0 && isTransparentColor(getPixelColor(colorGrid, x, fillZ));
       if (lateSuppressDominantVoid) {
         if (buildMode === BuildMode.Suppress2LayerLatePairs) {
           const lateCoord = toShapeCoordKey(x, lateY, fillZ);
@@ -1575,8 +1581,8 @@ function buildSuppressDualLayerBlocks(
   if (buildMode === BuildMode.Suppress2LayerLatePairs) {
     for (const key of loweredRecessive) {
       const [x, z] = parseColumnCoordKey(key);
-      const color = pixelGrid[x][z] ?? TRANSPARENT_COLOR;
-      if (!color || isWaterColor(color) || color.shade !== 1) continue;
+      const color = getPixelColor(colorGrid, x, z);
+      if (isTransparentColor(color) || isWaterColor(color) || color.shade !== 1) continue;
       const northZ = z - 1;
       if (northZ < 0 || !lateDominant.has(cellKey(x, northZ))) continue;
       const recY = topYGrid[x][z];
@@ -1600,7 +1606,6 @@ function buildStepVariantParts(colorGrid: ColorGrid, buildMode: StepwiseBuildMod
   const steps: RawShapePart[] = [];
   let baseY = 0;
   const yOffset = getStepVariantYOffset(colorGrid, cache);
-  const pixelGrid = cache ? getCachedDensePixelGrid(colorGrid, cache) : undefined;
 
   const emitStep = (cols: number[], includeAt: (x: number, z: number) => boolean) => {
     const stepBlocks: ShapeBlock[] = [];
@@ -1609,7 +1614,7 @@ function buildStepVariantParts(colorGrid: ColorGrid, buildMode: StepwiseBuildMod
       if (x < 0 || x >= MAP_SIZE) continue;
       for (let z = 0; z < MAP_SIZE; ++z) {
         if (!includeAt(x, z)) continue;
-        const color = pixelGrid?.[x][z] ?? getPixelColor(colorGrid, x, z);
+        const color = getPixelColor(colorGrid, x, z);
         if (isTransparentColor(color)) continue;
 
         appendSuppressPixelBlocks(stepBlocks, x, baseY, z, color);
@@ -1680,7 +1685,7 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
 }
 
 function toInternalBuildMode(buildMode: BuildMode): InternalBuildMode {
-  return getCanonicalBuildMode(buildMode) as InternalBuildMode;
+  return getCanonicalBuildMode(buildMode);
 }
 
 function getShapeCacheKey(
@@ -1688,83 +1693,101 @@ function getShapeCacheKey(
   layerGap: number,
   paletteSeed: number,
   waterFillerOffset: boolean,
-): string {
-  let key = buildMode;
-  if (buildModeUsesLayerGap(buildMode)) key += `|gap:${layerGap}`;
-  if (buildModeUsesPaletteSeed(buildMode)) key += `|seed:${paletteSeed}`;
-  if (isStaircaseBuildMode(buildMode) && waterFillerOffset) key += "|wateroffset:1";
-  return key;
+): ShapeCacheKey {
+  return { buildMode, layerGap, paletteSeed, waterFillerOffset };
 }
 
-function getCachedStaircaseBaseBlocks(colorGrid: ColorGrid, cache: GridShapeCache, waterFillerOffset: boolean): ShapeBlock[] {
-  const baseKey = waterFillerOffset ? "water_offset" : "base";
-  const cached = cache.staircaseBaseBlocks.get(baseKey);
-  if (cached) return cached;
-  const blocks = buildStaircaseBlocks(colorGrid, waterFillerOffset);
-  cache.staircaseBaseBlocks.set(baseKey, blocks);
-  return blocks;
+function getShapeCacheKeyId(key: ShapeCacheKey): ShapeCacheKeyId {
+  let id: string = key.buildMode;
+  if (buildModeUsesLayerGap(key.buildMode)) id += `|gap:${key.layerGap}`;
+  if (buildModeUsesPaletteSeed(key.buildMode)) id += `|seed:${key.paletteSeed}`;
+  if (isStaircaseBuildMode(key.buildMode) && key.waterFillerOffset) id += "|wateroffset:1";
+  return id as ShapeCacheKeyId;
 }
 
-function getCachedStaircaseModeData(
-  colorGrid: ColorGrid,
-  cache: GridShapeCache,
-  buildMode: Exclude<InternalBuildMode, BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker | BuildMode.SuppressCheckerEW | BuildMode.SuppressPairsEW | BuildMode.Suppress2LayerLateFillers | BuildMode.Suppress2LayerLatePairs>,
-  paletteSeed: number,
-  waterFillerOffset: boolean,
-): { blocks: ShapeBlock[]; extraFillerCandidates: FillerCandidate[] } {
-  const modeKey = getShapeCacheKey(buildMode, 0, paletteSeed, waterFillerOffset);
-  const cached = cache.staircaseModeData.get(modeKey);
+function getCachedRawParts(cache: GridShapeCache, key: ShapeCacheKey, build: () => RawShapePart[]): RawShapePart[] {
+  const keyId = getShapeCacheKeyId(key);
+  const cached = cache.rawParts.get(keyId);
   if (cached) return cached;
-
-  const blocks = cloneShapeBlocks(getCachedStaircaseBaseBlocks(colorGrid, cache, waterFillerOffset));
-
-  if (buildMode === BuildMode.StaircaseGrouped) {
-    applyStaircaseVariant(blocks, BuildMode.StaircaseValley, colorGrid, undefined, cache);
-    applyGroupedModePostProcess(blocks, colorGrid, cache);
-  } else {
-    applyStaircaseVariant(blocks, buildMode, colorGrid, paletteSeed, cache);
-  }
-  const extraFillerCandidates = addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache, waterFillerOffset);
-
-  const modeData = { blocks, extraFillerCandidates };
-  cache.staircaseModeData.set(modeKey, modeData);
-  return modeData;
-}
-
-function getCachedSuppressBlockSets(
-  colorGrid: ColorGrid,
-  cache: GridShapeCache,
-  buildMode: BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker,
-): ShapeBlock[][] {
-  const cached = cache.suppressBlockSets.get(buildMode);
-  if (cached) return cached;
-  const blockSets = buildMode === BuildMode.SuppressSplitRow
-    ? buildSuppressSplitRowBlockSets(colorGrid, cache)
-    : buildSuppressSplitCheckerBlockSets(colorGrid, cache);
-  cache.suppressBlockSets.set(buildMode, blockSets);
-  return blockSets;
-}
-
-function getCachedStepVariantParts(colorGrid: ColorGrid, cache: GridShapeCache, buildMode: StepwiseBuildMode): RawShapePart[] {
-  const cached = cache.stepVariantParts.get(buildMode);
-  if (cached) return cached;
-  const parts = buildStepVariantParts(colorGrid, buildMode, cache);
-  cache.stepVariantParts.set(buildMode, parts);
+  const parts = build();
+  cache.rawParts.set(keyId, parts);
   return parts;
 }
 
-function getCachedSuppress2LayerBlocks(
+function getCachedStaircaseBaseBlocks(colorGrid: ColorGrid, cache: GridShapeCache, waterFillerOffset: boolean): ShapeBlock[] {
+  const cached = waterFillerOffset ? cache.staircaseBaseBlocks.waterOffset : cache.staircaseBaseBlocks.base;
+  if (cached) return cached;
+  const blocks = buildStaircaseBlocks(colorGrid, waterFillerOffset);
+  if (waterFillerOffset) cache.staircaseBaseBlocks.waterOffset = blocks;
+  else cache.staircaseBaseBlocks.base = blocks;
+  return blocks;
+}
+
+function getCachedStaircaseParts(
+  colorGrid: ColorGrid,
+  cache: GridShapeCache,
+  buildMode: StaircaseInternalBuildMode,
+  paletteSeed: number,
+  waterFillerOffset: boolean,
+): RawShapePart[] {
+  const modeKey = getShapeCacheKey(buildMode, 0, paletteSeed, waterFillerOffset);
+  return getCachedRawParts(cache, modeKey, () => {
+    const blocks = cloneShapeBlocks(getCachedStaircaseBaseBlocks(colorGrid, cache, waterFillerOffset));
+    switch (buildMode) {
+      case BuildMode.StaircaseNorthline:
+        // No special handling.
+        // Just (potentially) adding water convenience fillers (below).
+        break;
+      case BuildMode.StaircaseSouthline:
+        applyStaircaseVariantSouthline(blocks);
+        break;
+      case BuildMode.StaircaseClassic:
+        applyStaircaseVariantClassic(blocks);
+        break;
+      case BuildMode.StaircaseValley:
+        applyStaircaseVariantValley(blocks, colorGrid, cache);
+        break;
+      case BuildMode.StaircaseGrouped:
+        applyStaircaseVariantValley(blocks, colorGrid, cache);
+        applyStaircaseVariantGrouped(blocks, colorGrid, cache);
+        break;
+      case BuildMode.StaircaseParty:
+        applyStaircaseVariantParty(blocks, colorGrid, paletteSeed, cache);
+        break;
+      default:
+        assertUnhandledBuildMode(buildMode, "getCachedStaircaseParts");
+    }
+    const extraFillerCandidates = addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache, waterFillerOffset);
+    return [buildShapePart(blocks, extraFillerCandidates)];
+  });
+}
+
+function getCachedSuppressSplitParts(
+  colorGrid: ColorGrid,
+  cache: GridShapeCache,
+  buildMode: BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker,
+): RawShapePart[] {
+  const key = getShapeCacheKey(buildMode, 0, 0, false);
+  return getCachedRawParts(cache, key, () =>
+    buildMode === BuildMode.SuppressSplitRow
+      ? buildSuppressSplitRowBlockSets(colorGrid).map(blocks => buildShapePart(blocks))
+      : buildSuppressSplitCheckerBlockSets(colorGrid).map(blocks => buildShapePart(blocks)),
+  );
+}
+
+function getCachedSuppressStepParts(colorGrid: ColorGrid, cache: GridShapeCache, buildMode: StepwiseBuildMode): RawShapePart[] {
+  const key = getShapeCacheKey(buildMode, 0, 0, false);
+  return getCachedRawParts(cache, key, () => buildStepVariantParts(colorGrid, buildMode, cache));
+}
+
+function getCachedSuppress2LayerParts(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
   layerGap: number,
   buildMode: TwoLayerSuppressBuildMode,
-): ShapeBlock[] {
-  const key = `${buildMode}|gap:${layerGap}`;
-  const cached = cache.suppress2LayerBlocks.get(key);
-  if (cached) return cached;
-  const blocks = buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode, cache);
-  cache.suppress2LayerBlocks.set(key, blocks);
-  return blocks;
+): RawShapePart[] {
+  const key = getShapeCacheKey(buildMode, layerGap, 0, false);
+  return getCachedRawParts(cache, key, () => [buildShapePart(buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode))]);
 }
 
 function buildGeneratedShapeParts(
@@ -1777,20 +1800,19 @@ function buildGeneratedShapeParts(
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
-      return buildShapePartsFromBlockLists(getCachedSuppressBlockSets(colorGrid, cache, BuildMode.SuppressSplitRow));
+      return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitRow);
     case BuildMode.SuppressSplitChecker:
-      return buildShapePartsFromBlockLists(getCachedSuppressBlockSets(colorGrid, cache, BuildMode.SuppressSplitChecker));
+      return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker);
     case BuildMode.SuppressPairsEW:
-      return getCachedStepVariantParts(colorGrid, cache, BuildMode.SuppressPairsEW);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressPairsEW);
     case BuildMode.SuppressCheckerEW:
-      return getCachedStepVariantParts(colorGrid, cache, BuildMode.SuppressCheckerEW);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressCheckerEW);
     case BuildMode.Suppress2LayerLateFillers:
-      return buildShapePartsFromBlockLists([getCachedSuppress2LayerBlocks(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLateFillers)]);
+      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLateFillers);
     case BuildMode.Suppress2LayerLatePairs:
-      return buildShapePartsFromBlockLists([getCachedSuppress2LayerBlocks(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs)]);
+      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs);
     default: {
-      const modeData = getCachedStaircaseModeData(colorGrid, cache, buildMode, paletteSeed, waterFillerOffset);
-      return [buildShapePart(modeData.blocks, modeData.extraFillerCandidates)];
+      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterFillerOffset);
     }
   }
 }
@@ -1804,7 +1826,8 @@ function getGeneratedShape(
   waterFillerOffset: boolean,
 ): GeneratedShape {
   const cacheKey = getShapeCacheKey(buildMode, layerGap, paletteSeed, waterFillerOffset);
-  const cached = cache.shapes.get(cacheKey);
+  const cacheKeyId = getShapeCacheKeyId(cacheKey);
+  const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
   const rawParts = buildGeneratedShapeParts(colorGrid, cache, buildMode, layerGap, paletteSeed, waterFillerOffset);
@@ -1823,7 +1846,7 @@ function getGeneratedShape(
         : ShapePartType.SingleColumn,
     splitExportNames,
   };
-  cache.shapes.set(cacheKey, shape);
+  cache.shapes.set(cacheKeyId, shape);
   return shape;
 }
 

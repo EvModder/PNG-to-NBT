@@ -9,11 +9,24 @@
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeSubstitution.ts
  */
+import { BASE_COLORS } from "../data/mapColors";
 import { MAP_SIZE } from "./colorGridTypes";
 import { isFragileBlock } from "../data/fragileBlocks";
 import { FillerRole, type CustomColor } from "./conversionTypes";
-import { getMappedShapeColorBlockId } from "./materialRules";
+import { normalizeBlockId } from "./blockId";
 import { isShapeColorCell, parseShapeCoordKey, toShapeCoordKey, type ShapeColor, type ShapePart } from "./shapeTypes";
+
+function getMappedShapeColorBlockId(
+  color: ShapeColor,
+  options: { blockMapping: Record<number, string>; customColors: CustomColor[] },
+): string | null {
+  if (color.isCustom) {
+    const block = options.customColors[color.id]?.block ?? "";
+    return block ? normalizeBlockId(block) : null;
+  }
+  const mapped = options.blockMapping[color.id] || BASE_COLORS[color.id].blocks[0] || "";
+  return mapped ? normalizeBlockId(mapped) : null;
+}
 
 // Callers:
 // - src/Index.tsx

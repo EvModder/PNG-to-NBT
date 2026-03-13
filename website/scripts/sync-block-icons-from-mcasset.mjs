@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
+import { blockIdOnly, mapLegacyBlockId } from "./block-entry-utils.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
@@ -18,12 +19,6 @@ const TOP_KEYS = ["top", "up", "end", "all", "particle", "side", "texture", "cro
 const BOTTOM_KEYS = ["bottom", "down", "end", "all", "particle", "side", "texture", "cross"];
 const FALLBACK_TEXTURE = "assets/minecraft/textures/block/stone.png";
 
-const BLOCK_ID_ALIASES = {
-  chain: "iron_chain",
-  jigsaw_block: "jigsaw",
-  vines: "vine",
-  lapis_lazuli_ore: "lapis_ore",
-};
 const SIDE_ICON_PREFER_ITEM_PATTERNS = [
   /_carpet$/,
   /_slab$/,
@@ -96,23 +91,6 @@ const jsonCache = new Map();
 const modelCache = new Map();
 const binPathCache = new Map();
 
-function normalizeBlockEntry(entry) {
-  return entry.trim().replace(/^minecraft:/, "").split("[")[0];
-}
-
-function mapLegacyBlockId(blockId) {
-  if (BLOCK_ID_ALIASES[blockId]) return BLOCK_ID_ALIASES[blockId];
-  if (blockId.endsWith("_stripped_log")) {
-    const prefix = blockId.slice(0, -"_stripped_log".length);
-    return `stripped_${prefix}_log`;
-  }
-  if (blockId.endsWith("_stripped_wood")) {
-    const prefix = blockId.slice(0, -"_stripped_wood".length);
-    return `stripped_${prefix}_wood`;
-  }
-  return blockId;
-}
-
 function parseBlocksFromMapColors(tsText) {
   const entries = [];
   const rowRe = /\{\s*name:\s*"([^"]+)"[\s\S]*?blocks:\s*\[([\s\S]*?)\]\s*\}/g;
@@ -122,7 +100,7 @@ function parseBlocksFromMapColors(tsText) {
       entries.push(strMatch[1]);
     }
   }
-  return [...new Set(entries.map(normalizeBlockEntry).filter(Boolean))].sort();
+  return [...new Set(entries.map(blockIdOnly).filter(Boolean))].sort();
 }
 
 function assetUrl(assetPath) {

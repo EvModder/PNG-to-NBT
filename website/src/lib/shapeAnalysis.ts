@@ -14,7 +14,7 @@ import { FillerRole, type CustomColor, type FillerAssignment } from "./conversio
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
-import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, ShapePartType } from "./shapeTypes";
+import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart, ShapePartType } from "./shapeTypes";
 import { isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
 interface FillerNeedStats {

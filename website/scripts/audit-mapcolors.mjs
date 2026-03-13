@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
+import { blockIdOnly, mapLegacyBlockId, normalizeBlockEntry } from "./block-entry-utils.mjs";
+import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, isExcludedBlockPattern } from "./excluded-blocks.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
@@ -8,97 +10,6 @@ const REPORT_DIR = path.join(ROOT, "reports", "mapcolors");
 
 const ASSET_HOST = "https://assets.mcasset.cloud";
 const ASSET_VERSION = "latest";
-
-const EXCLUDED_BLOCK_PATTERNS = [
-  /_stairs$/,
-  /_shulker_box$/,
-  /_button$/,
-  /_wall$/,
-  /_fence$/,
-  /_fence_gate$/,
-  /_trapdoor$/,
-  /_door$/,
-  /_sign$/,
-  /_stained_glass_pane$/,
-  /lightning_rod$/,
-];
-
-const EXCLUDED_BLOCK_IDS = new Set([
-  // Obtainable but intentionally excluded.
-  "dragon_egg",
-  "nether_portal",
-  "hopper",
-  "cauldron",
-  "farmland",
-  "dirt_path",
-  "grindstone",
-  "brewing_stand",
-  "heavy_core",
-  "player_head",
-  "player_wall_head",
-  "zombie_head",
-  "zombie_wall_head",
-  "skeleton_skull",
-  "skeleton_wall_skull",
-  "wither_skeleton_skull",
-  "wither_skeleton_wall_skull",
-  "creeper_head",
-  "creeper_wall_head",
-  "dragon_head",
-  "dragon_wall_head",
-  "piglin_head",
-  "piglin_wall_head",
-  // Unobtainable/admin-only omissions.
-  "barrier",
-  "structure_void",
-  "light",
-  "jigsaw",
-  "structure_block",
-  "command_block",
-  "chain_command_block",
-  "repeating_command_block",
-  "end_portal",
-  "reinforced_deepslate",
-  "spawner",
-  "budding_amethyst",
-  "trial_spawner",
-  "vault",
-  "infested_stone",
-  "infested_cobblestone",
-  "infested_stone_bricks",
-  "infested_mossy_stone_bricks",
-  "infested_cracked_stone_bricks",
-  "infested_chiseled_stone_bricks",
-  "infested_deepslate",
-]);
-
-const BLOCK_ID_ALIASES = {
-  chain: "iron_chain",
-  jigsaw_block: "jigsaw",
-  vines: "vine",
-  lapis_lazuli_ore: "lapis_ore",
-};
-
-function normalizeBlockEntry(entry) {
-  return entry.trim().replace(/^minecraft:/, "");
-}
-
-function blockIdOnly(entry) {
-  return normalizeBlockEntry(entry).split("[")[0];
-}
-
-function mapLegacyBlockId(blockId) {
-  if (BLOCK_ID_ALIASES[blockId]) return BLOCK_ID_ALIASES[blockId];
-  if (blockId.endsWith("_stripped_log")) {
-    const prefix = blockId.slice(0, -"_stripped_log".length);
-    return `stripped_${prefix}_log`;
-  }
-  if (blockId.endsWith("_stripped_wood")) {
-    const prefix = blockId.slice(0, -"_stripped_wood".length);
-    return `stripped_${prefix}_wood`;
-  }
-  return blockId;
-}
 
 function parseMapColors(tsText) {
   const rows = [];
@@ -116,10 +27,6 @@ function parseArgs(argv) {
   return {
     strictMissing: argv.includes("--strict-missing"),
   };
-}
-
-function isPatternExcluded(blockId) {
-  return EXCLUDED_BLOCK_PATTERNS.some(rx => rx.test(blockId));
 }
 
 async function fetchJson(assetPath) {
@@ -198,9 +105,9 @@ async function main() {
   const allBlockstateIds = await loadAllBlockstateIds();
   const latestVersion = await getLatestVersionLabel();
   const missingAll = allBlockstateIds.filter(id => !mapBlockIds.has(id));
-  const missingPatternExcluded = missingAll.filter(isPatternExcluded);
+  const missingPatternExcluded = missingAll.filter(isExcludedBlockPattern);
   const missingExplicitExcluded = missingAll.filter(id => EXCLUDED_BLOCK_IDS.has(id));
-  const missingActionable = missingAll.filter(id => !isPatternExcluded(id) && !EXCLUDED_BLOCK_IDS.has(id));
+  const missingActionable = missingAll.filter(id => !isExcludedBlockPattern(id) && !EXCLUDED_BLOCK_IDS.has(id));
 
   const excludedPresentInMapColors = [...EXCLUDED_BLOCK_IDS].filter(id => mapBlockIds.has(id));
 

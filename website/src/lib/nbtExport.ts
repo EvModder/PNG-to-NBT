@@ -5,11 +5,14 @@
  * Callers:
  * - src/Index.tsx
  */
-import type { ExportOptions } from "./conversionTypes";
 import type { GeneratedShape } from "./shapeGeneration";
 import { type BlockEntry, gzipCompress, writeStructureNbt } from "./nbtWriter";
-import { materializeShapeParts, normalizeAndMeasure } from "./shapeSubstitution";
+import { materializeShapeParts, normalizeAndMeasure, type SubstitutionOptions } from "./shapeSubstitution";
 import { createZip } from "./zip";
+
+interface ExportOptions extends SubstitutionOptions {
+  baseName: string;
+}
 
 async function buildSplitZip(
   parts: BlockEntry[][],
