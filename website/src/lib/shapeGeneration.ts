@@ -55,8 +55,8 @@ type InternalBuildMode =
   | BuildMode.StaircaseNorthline
   | BuildMode.StaircaseSouthline
   | BuildMode.StaircaseClassic
-  | BuildMode.StaircaseGrouped
   | BuildMode.StaircaseValley
+  | BuildMode.StaircaseGrouped
   | BuildMode.StaircaseParty
   | BuildMode.SuppressSplitRow
   | BuildMode.SuppressSplitChecker
@@ -80,19 +80,19 @@ type StaircaseInternalBuildMode =
   | BuildMode.StaircaseNorthline
   | BuildMode.StaircaseSouthline
   | BuildMode.StaircaseClassic
-  | BuildMode.StaircaseGrouped
   | BuildMode.StaircaseValley
+  | BuildMode.StaircaseGrouped
   | BuildMode.StaircaseParty;
 
 type ColumnPixelCell = { shade: number; isWater: boolean };
 type ColumnCoordKey = number;
 
 const DEFAULT_STAIRCASE_BUILD_MODES: InternalBuildMode[] = [
-  BuildMode.StaircaseValley,
-  BuildMode.StaircaseClassic,
-  BuildMode.StaircaseGrouped,
   BuildMode.StaircaseNorthline,
   BuildMode.StaircaseSouthline,
+  BuildMode.StaircaseClassic,
+  BuildMode.StaircaseValley,
+  BuildMode.StaircaseGrouped,
   BuildMode.StaircaseParty,
 ];
 
@@ -105,8 +105,8 @@ const BASE_SUPPRESS_BUILD_MODES: InternalBuildMode[] = [
 
 const ALL_VISIBLE_BUILD_MODE_SET = new Set<BuildMode>([
   BuildMode.Flat,
-  BuildMode.InclineDown,
   BuildMode.InclineUp,
+  BuildMode.InclineDown,
   ...DEFAULT_STAIRCASE_BUILD_MODES,
   ...BASE_SUPPRESS_BUILD_MODES,
   BuildMode.Suppress2Layer,
@@ -1745,6 +1745,8 @@ function getCachedStaircaseParts(
         applyStaircaseVariantClassic(blocks);
         break;
       case BuildMode.StaircaseValley:
+        applyStaircaseVariantValley(blocks, colorGrid, cache);
+        break;
       case BuildMode.StaircaseGrouped:
         applyStaircaseVariantValley(blocks, colorGrid, cache);
         break;
@@ -1862,14 +1864,7 @@ export function generateShapeMap(
   const staircaseVisibleModes: BuildMode[] =
     modeStats && !modeStats.hasTransparency && !modeStats.hasWater &&
     (modeStats.uniformNonFlatDirection !== UniformNonFlatDirection.Mixed)
-      ? [
-          BuildMode.StaircaseValley,
-          BuildMode.StaircaseClassic,
-          BuildMode.StaircaseGrouped,
-          modeStats.uniformNonFlatDirection === UniformNonFlatDirection.AllLight ? BuildMode.InclineDown : BuildMode.InclineUp,
-          BuildMode.StaircaseSouthline,
-          BuildMode.StaircaseParty,
-        ]
+      ? [modeStats.uniformNonFlatDirection === UniformNonFlatDirection.AllDark ? BuildMode.InclineUp : BuildMode.InclineDown]
       : [...DEFAULT_STAIRCASE_BUILD_MODES];
   const suppressVisibleModes: BuildMode[] = twoLayerHasLateVoidNeed
     ? [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]

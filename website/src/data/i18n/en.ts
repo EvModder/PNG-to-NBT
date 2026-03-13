@@ -94,11 +94,11 @@ export const enCatalog = {
       [BuildMode.Flat]: "Flat",
       [BuildMode.InclineUp]: "Incline (Up)",
       [BuildMode.InclineDown]: "Incline (Down)",
-      [BuildMode.StaircaseValley]: "Staircase (Valley)",
-      [BuildMode.StaircaseClassic]: "Staircase (Classic)",
-      [BuildMode.StaircaseGrouped]: "Staircase (Grouped)",
       [BuildMode.StaircaseNorthline]: "Staircase (Northline)",
       [BuildMode.StaircaseSouthline]: "Staircase (Southline)",
+      [BuildMode.StaircaseClassic]: "Staircase (Classic)",
+      [BuildMode.StaircaseValley]: "Staircase (Valley)",
+      [BuildMode.StaircaseGrouped]: "Staircase (Grouped)",
       [BuildMode.StaircaseParty]: "Staircase (Party)",
       [BuildMode.SuppressSplitRow]: "Suppress (Row-split)",
       [BuildMode.SuppressSplitChecker]: "Suppress (Checker-split)",
@@ -111,15 +111,15 @@ export const enCatalog = {
     tooltips: {
       [BuildMode.Flat]: "Flat: all color blocks in the generated shape are at the same Y-level.",
       [BuildMode.InclineUp]:
-        "All non-transparent non-water pixels slope upward uniformly, so all staircase methods collapse to the northline output.",
+        "All non-transparent non-water pixels slope upward uniformly, so all staircase methods collapse to this incline-up alias (same backend output as northline).",
       [BuildMode.InclineDown]:
-        "All non-transparent non-water pixels slope downward uniformly, so all staircase methods collapse to the northline output.",
+        "All non-transparent non-water pixels slope downward uniformly, so all staircase methods collapse to this incline-down alias (same backend output as northline).",
       [BuildMode.StaircaseNorthline]: "Aligns each column N→S from a reference (noob)line of blocks",
       [BuildMode.StaircaseSouthline]: "Aligns each column S→N from a reference line of blocks (the bottom row)",
       [BuildMode.StaircaseClassic]: "Minimizes maxY-minY diff, while keeping N→S columns contiguous",
-      [BuildMode.StaircaseGrouped]: "Valley-style segmentation with safe cross-column grouping to reduce isolated low runs",
       [BuildMode.StaircaseValley]:
         "Minimizes maxY-minY diff, and splits up N→S columns, lowering each segment as much as possible",
+      [BuildMode.StaircaseGrouped]: "Valley-style segmentation with safe cross-column grouping to reduce isolated low runs",
       [BuildMode.StaircaseParty]: "Same MapArt, but makes the build process more fun and exciting!",
       [BuildMode.SuppressSplitRow]: "Split-row; available for compatibility, but generally not useful",
       [BuildMode.SuppressSplitChecker]: "Split NBT generations for dominant/recessive placements",
@@ -214,7 +214,7 @@ export const enCatalog = {
     blockPlaceholder: "e.g. fart_block",
   },
   upload: {
-    title: "Upload Image",
+    title: "Image Preview",
     placeholder: "Click or drop a 128×128 image",
     removeButton: "Remove",
     convertButtonConverting: "Converting...",
