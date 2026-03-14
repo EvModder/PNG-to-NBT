@@ -93,6 +93,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   11: [
     "andesite_stairs",
     "andesite_wall",
+    "bedrock",
     "cauldron",
     "cobblestone_stairs",
     "cobblestone_wall",

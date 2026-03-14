@@ -69,10 +69,6 @@ const KNOWN_PRIMARY_ICON_BLOCKS = new Set(
 );
 const KNOWN_EXCLUDED_ICON_BLOCKS = new Set(EXCLUDED_BLOCKS.flat());
 const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set([...KNOWN_PRIMARY_ICON_BLOCKS, ...KNOWN_EXCLUDED_ICON_BLOCKS]);
-const isTextureHiddenBlock = (blockName: string): boolean => {
-  const id = normalizeBlockId(blockName);
-  return id.endsWith("_door") || id.endsWith("_fence_gate") || id === "bedrock";
-};
 
 function getHue(r: number, g: number, b: number): number {
   const [rn, gn, bn] = [r / 255, g / 255, b / 255];
@@ -1796,8 +1792,7 @@ const Index = () => {
     return selected && !withCustom.includes(selected) ? [...withCustom, selected] : withCustom;
   };
   const getNameBlocks = (blocks: string[]): string[] => [...blocks].sort();
-  const getTextureBlocks = (blocks: string[]): string[] =>
-    showExcludedBlocks ? blocks : blocks.filter(b => !isTextureHiddenBlock(b));
+  const getTextureBlocks = (blocks: string[]): string[] => blocks;
 
   const pad2 = (n: number) => String(n).padStart(2, "\u2007");
 
