@@ -10,7 +10,6 @@ import { computeColorGridStats } from "@/lib/colorGridAnalysis";
 import {
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
-  computeExportShapeSignature,
   hasColorHeightVariance as generatedShapeHasColorHeightVariance,
   northRowIsSingleLine as generatedShapeNorthRowIsSingleLine,
 } from "@/lib/shapeAnalysis";
@@ -775,37 +774,8 @@ const Index = () => {
     if (!shapeMap || !imageValid || isFlatShape) {
       return DEFAULT_STAIRCASE_OPTIONS;
     }
-    const sourceModes = DEFAULT_STAIRCASE_OPTIONS
-      .map(option => option.value)
-      .filter(mode => mode !== BuildMode.Flat && !!shapeMap[mode]);
-    const seen = new Set<string>();
-    const unique: BuildMode[] = [];
-    for (const mode of sourceModes) {
-      const shape = shapeMap[mode];
-      if (!shape) continue;
-      const signature = computeExportShapeSignature(shape, {
-        blockMapping: preset.blocks,
-        fillerAssignments: uiFillerAssignments,
-        assumeFloor,
-        forceZ129,
-        customColors,
-      });
-      if (seen.has(signature)) continue;
-      seen.add(signature);
-      unique.push(mode);
-    }
-    const buildModes = unique.length > 0 ? unique : [...sourceModes];
-    return buildModes.map(mode => DEFAULT_STAIRCASE_OPTIONS.find(option => option.value === mode) || { value: mode, label: mode });
-  }, [
-    shapeMap,
-    imageValid,
-    isFlatShape,
-    preset.blocks,
-    uiFillerAssignments,
-    assumeFloor,
-    forceZ129,
-    customColors,
-  ]);
+    return DEFAULT_STAIRCASE_OPTIONS.filter(option => option.value !== BuildMode.Flat && !!shapeMap[option.value]);
+  }, [shapeMap, imageValid, isFlatShape]);
 
   const twoLayerHasLateVoidNeed = !!shapeMap?.[BuildMode.Suppress2LayerLatePairs];
 
