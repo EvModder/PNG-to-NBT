@@ -9,7 +9,7 @@
  * - src/Index.tsx
  * - src/lib/shapeGeneration.ts
  */
-import { MAP_SIZE, type ColorGrid, getColorCell, isTransparentColor, isWaterColor } from "./colorGridTypes";
+import { MAP_SIZE, type ColorGrid, isTransparentColor, isWaterColor } from "./colorGridTypes";
 
 // Callers:
 // - src/lib/shapeGeneration.ts
@@ -29,6 +29,7 @@ export enum UniformNonFlatDirection {
 interface ColorGridStats {
   hasNonFlatShades: boolean;
   hasSuppressPattern: boolean;
+  hasStepMixOpportunity: boolean;
   hasTransparency: boolean;
   hasWater: boolean;
   hasNonLightWater: boolean;
@@ -51,7 +52,7 @@ export function getPixelParity(x: number, z: number): PixelParity {
 function imageHasNonFlatShades(colorGrid: ColorGrid): boolean {
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getColorCell(colorGrid, x, z);
+      const color = colorGrid[x][z];
       if (!isTransparentColor(color) && color.shade !== 1) return true;
     }
   }
@@ -61,9 +62,9 @@ function imageHasNonFlatShades(colorGrid: ColorGrid): boolean {
 function scanSuppressedPixels(colorGrid: ColorGrid): boolean {
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      if (!isTransparentColor(getColorCell(colorGrid, x, z))) continue;
+      if (!isTransparentColor(colorGrid[x][z])) continue;
       for (let southZ = z + 1; southZ < MAP_SIZE; ++southZ) {
-        const south = getColorCell(colorGrid, x, southZ);
+        const south = colorGrid[x][southZ];
         if (isTransparentColor(south)) continue;
         if (south.shade === 2) break;
         if (south.shade === 0 || south.shade === 3) return true;
@@ -74,14 +75,27 @@ function scanSuppressedPixels(colorGrid: ColorGrid): boolean {
   return false;
 }
 
+function scanStepMixOpportunities(colorGrid: ColorGrid): boolean {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 1; z < MAP_SIZE; ++z) {
+      const color = colorGrid[x][z];
+      if (isTransparentColor(color) || isWaterColor(color) || color.shade !== 1) continue;
+      const north = colorGrid[x][z-1];
+      if (isTransparentColor(north) || isWaterColor(north)) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
 function analyzeVoidShadows(colorGrid: ColorGrid) {
   const stats = { dominant: 0, recessive: 0 };
 
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getColorCell(colorGrid, x, z);
+      const color = colorGrid[x][z];
       if (isTransparentColor(color)) continue;
-      if (z === 0 || !isTransparentColor(getColorCell(colorGrid, x, z - 1))) continue;
+      if (z === 0 || !isTransparentColor(colorGrid[x][z - 1])) continue;
       if (isWaterColor(color) || color.shade === 2) continue;
       if (getPixelParity(x, z - 1) === PixelParity.Recessive) ++stats.recessive;
       else ++stats.dominant;
@@ -96,7 +110,7 @@ function computeImageInfo(colorGrid: ColorGrid) {
   const usedShades = new Set<string>();
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getColorCell(colorGrid, x, z);
+      const color = colorGrid[x][z];
       if (isTransparentColor(color)) continue;
       if (color.isCustom) usedShades.add(`custom:${color.id}:${color.shade}`);
       else {
@@ -115,7 +129,7 @@ function detectUniformNonFlatDirection(colorGrid: ColorGrid): UniformNonFlatDire
 
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getColorCell(colorGrid, x, z);
+      const color = colorGrid[x][z];
       if (isTransparentColor(color)) continue;
       sawNonTransparent = true;
       if (color.shade !== 2) allLight = false;
@@ -133,7 +147,7 @@ function computeUsedShadesByBase(colorGrid: ColorGrid): Map<number, Set<number>>
   const used = new Map<number, Set<number>>();
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getColorCell(colorGrid, x, z);
+      const color = colorGrid[x][z];
       if (isTransparentColor(color) || color.isCustom) continue;
       let shades = used.get(color.id);
       if (!shades) {
@@ -150,7 +164,7 @@ function computeUsedBaseColors(colorGrid: ColorGrid): Set<number> {
   const used = new Set<number>();
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getColorCell(colorGrid, x, z);
+      const color = colorGrid[x][z];
       if (color.isCustom) continue;
       if (isTransparentColor(color)) {
         used.add(0);
@@ -165,7 +179,7 @@ function computeUsedBaseColors(colorGrid: ColorGrid): Set<number> {
 function colorGridHasTransparency(colorGrid: ColorGrid): boolean {
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      if (isTransparentColor(getColorCell(colorGrid, x, z))) return true;
+      if (isTransparentColor(colorGrid[x][z])) return true;
     }
   }
   return false;
@@ -174,7 +188,7 @@ function colorGridHasTransparency(colorGrid: ColorGrid): boolean {
 function colorGridHasWater(colorGrid: ColorGrid): boolean {
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      if (isWaterColor(getColorCell(colorGrid, x, z))) return true;
+      if (isWaterColor(colorGrid[x][z])) return true;
     }
   }
   return false;
@@ -183,7 +197,7 @@ function colorGridHasWater(colorGrid: ColorGrid): boolean {
 function colorGridHasNonLightWater(colorGrid: ColorGrid): boolean {
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = getColorCell(colorGrid, x, z);
+      const color = colorGrid[x][z];
       if (isWaterColor(color) && color.shade !== 2) return true;
     }
   }
@@ -197,6 +211,7 @@ export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
   return {
     hasNonFlatShades: imageHasNonFlatShades(colorGrid),
     hasSuppressPattern: scanSuppressedPixels(colorGrid),
+    hasStepMixOpportunity: scanStepMixOpportunities(colorGrid),
     hasTransparency: colorGridHasTransparency(colorGrid),
     hasWater: colorGridHasWater(colorGrid),
     hasNonLightWater: colorGridHasNonLightWater(colorGrid),

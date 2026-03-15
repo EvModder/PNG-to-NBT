@@ -83,6 +83,9 @@ export const esCatalog = {
     layerGapLabel: "Separación de capas:",
     layerGapTooltip:
       "La separación de capas controla el espacio vertical entre las secciones inferior y superior de la supresión de 2 capas.",
+    mixStepsLabel: "Mezclar pasos:",
+    mixStepsTooltip:
+      "Permite que pasos adyacentes de supresión E→O compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
     paletteSeedLabel: "Semilla de paleta:",
     optionLabels: {
       [BuildMode.Flat]: "Plano",
@@ -119,9 +122,9 @@ export const esCatalog = {
       [BuildMode.SuppressSplitRow]: "División por filas; se mantiene por compatibilidad, pero en general no es útil",
       [BuildMode.SuppressSplitChecker]: "Divide las generaciones NBT para colocaciones dominantes/recesivas",
       [BuildMode.SuppressCheckerEW]:
-        "Manejo ajedrezado por pasos E→O: 4 columnas por paso (2 dominantes al este, 2 recesivas al oeste), con solapamiento de 2 columnas",
+        "Como Supresión (2 capas), pero codificada como fases E→O separadas verticalmente en vez de capas superior/inferior. Cada paso maneja 4 columnas: 2 columnas dominantes más lejanas y 2 columnas recesivas más cercanas. Construye y actualiza un paso, luego reconstruye el siguiente más lejos para remapear las columnas dominantes sin remapear las recesivas cercanas.",
       [BuildMode.SuppressPairsEW]:
-        "Divide en pares Este-Oeste con un patrón entrelazado de 'ladrillo'; actualmente solo admite actualización de E→O",
+        "Supresión E→O por pasos en pares entrelazados. Cada paso actualiza un píxel dominante más lejano y un píxel recesivo más cercano de columnas adyacentes; luego se reconstruye el siguiente paso más lejos para remapear el dominante sin remapear el recesivo.",
       [BuildMode.Suppress2Layer]:
         "Pasos:\n1) Construye todo\n2) Actualiza el mapa completo\n3) Retira la capa superior, 1-2 columnas cada vez\n4) Actualiza con cuidado *solo* los píxeles dominantes de la(s) columna(s) objetivo\n5) Repite, columna por columna, para todo el mapa\n\nLa separación de capas controla el espacio vertical entre las capas de supresión inferior y superior.",
       [BuildMode.Suppress2LayerLateFillers]:

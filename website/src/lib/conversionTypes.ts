@@ -6,6 +6,7 @@
  * - isStaircaseBuildMode()
  * - isSuppressBuildMode()
  * - buildModeUsesLayerGap()
+ * - buildModeUsesMixSteps()
  * - buildModeUsesPaletteSeed()
  * - getBuildModeRangeMax()
  * - FillerAssignment
@@ -117,6 +118,19 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
     case BuildMode.Suppress2Layer:
     case BuildMode.Suppress2LayerLateFillers:
     case BuildMode.Suppress2LayerLatePairs:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeGeneration.ts
+export function buildModeUsesMixSteps(buildMode: BuildMode): boolean {
+  switch (buildMode) {
+    case BuildMode.SuppressCheckerEW:
+    case BuildMode.SuppressPairsEW:
       return true;
     default:
       return false;
