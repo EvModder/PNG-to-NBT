@@ -73,14 +73,12 @@ type InternalBuildMode =
   | BuildMode.SuppressPairsEW
   | BuildMode.Suppress2LayerLateFillers
   | BuildMode.Suppress2LayerLatePairs;
-type ShapeCacheKey = Readonly<{
-  buildMode: InternalBuildMode;
-  layerGap: number;
-  mixSteps: boolean;
-  paletteSeed: number;
-  waterFillerOffset: boolean;
-}>;
 type ShapeCacheKeyId = string & { readonly __shapeCacheKeyId: unique symbol };
+type GeneratedShapeSignatureId = string & { readonly __generatedShapeSignatureId: unique symbol };
+type CachedGeneratedShape = {
+  shape: GeneratedShape;
+  signatureId: GeneratedShapeSignatureId;
+};
 type StaircaseBaseBlocksCache = { // Shared northline-style staircase block layouts before per-mode reshaping.
   base?: ShapeBlock[];
   waterOffset?: ShapeBlock[];
@@ -113,17 +111,6 @@ const BASE_SUPPRESS_BUILD_MODES: InternalBuildMode[] = [
   BuildMode.SuppressPairsEW,
 ];
 
-const ALL_VISIBLE_BUILD_MODE_SET = new Set<BuildMode>([
-  BuildMode.Flat,
-  BuildMode.InclineUp,
-  BuildMode.InclineDown,
-  ...DEFAULT_STAIRCASE_BUILD_MODES,
-  ...BASE_SUPPRESS_BUILD_MODES,
-  BuildMode.Suppress2Layer,
-  BuildMode.Suppress2LayerLateFillers,
-  BuildMode.Suppress2LayerLatePairs,
-]);
-
 const COLUMN_COORD_Z_OFFSET = 256;
 const COLUMN_COORD_Z_SIZE = 512;
 
@@ -153,7 +140,7 @@ function parseColumnCoordKey(key: ColumnCoordKey): [number, number] {
 }
 
 interface GridShapeCache {
-  shapes: Map<ShapeCacheKeyId, GeneratedShape>;
+  shapes: Map<ShapeCacheKeyId, CachedGeneratedShape>;
   rawParts: Map<ShapeCacheKeyId, RawShapePart[]>;
    // Per-X non-transparent source-pixel lookup used by staircase transforms.
   columnPixelInfo: Map<number, Map<number, ColumnPixelCell>>;
@@ -175,6 +162,59 @@ function getGridShapeCache(colorGrid: ColorGrid): GridShapeCache {
   };
   SHAPE_CACHE.set(colorGrid, cache);
   return cache;
+}
+
+type HashState = [number, number, number, number];
+
+function createHashState(): HashState {
+  return [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];
+}
+
+function mixUint32(state: HashState, value: number): void {
+  const v = value >>> 0;
+  state[0] = Math.imul((state[0] ^ v) >>> 0, 0x01000193) >>> 0;
+  state[1] = Math.imul((state[1] + v + 0x7f4a7c15) >>> 0, 0x27d4eb2d) >>> 0;
+  state[2] = Math.imul((state[2] ^ ((v << 16) | (v >>> 16))) >>> 0, 0x165667b1) >>> 0;
+  state[3] = Math.imul((state[3] + (v ^ 0x9e3779b9)) >>> 0, 0x85ebca77) >>> 0;
+}
+
+function mixString(state: HashState, value: string): void {
+  for (let i = 0; i < value.length; ++i) mixUint32(state, value.charCodeAt(i));
+  mixUint32(state, 0xff);
+}
+
+function getGeneratedShapeSignatureId(shape: GeneratedShape): GeneratedShapeSignatureId {
+  const state = createHashState();
+  mixString(state, shape.partType);
+  mixString(state, shape.splitExportNames?.[0] ?? "");
+  mixString(state, shape.splitExportNames?.[1] ?? "");
+  mixUint32(state, shape.parts.length);
+
+  for (const part of shape.parts) {
+    mixUint32(state, part.bounds.minY);
+    mixUint32(state, part.bounds.maxY);
+    mixUint32(state, part.bounds.minZ);
+    mixUint32(state, part.bounds.maxZ);
+
+    const cells = [...part.cells.entries()].sort(([coordA], [coordB]) => coordA - coordB);
+    mixUint32(state, cells.length);
+    for (const [coord, cell] of cells) {
+      mixUint32(state, coord);
+      if (!Array.isArray(cell)) {
+        mixUint32(state, 0);
+        mixUint32(state, cell.isCustom ? 1 : 0);
+        mixUint32(state, cell.id);
+        continue;
+      }
+
+      mixUint32(state, 1);
+      const roles = [...cell].sort();
+      mixUint32(state, roles.length);
+      for (const role of roles) mixString(state, role);
+    }
+  }
+
+  return state.map(part => part.toString(16).padStart(8, "0")).join("") as GeneratedShapeSignatureId;
 }
 
 function getPixelColor(colorGrid: ColorGrid, x: number, z: number): ColorData {
@@ -1818,31 +1858,22 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
   };
 }
 
-function toInternalBuildMode(buildMode: BuildMode): InternalBuildMode {
-  return getCanonicalBuildMode(buildMode);
-}
-
-function getShapeCacheKey(
+function getShapeCacheKeyId(
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
   paletteSeed: number,
   waterFillerOffset: boolean,
-): ShapeCacheKey {
-  return { buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset };
-}
-
-function getShapeCacheKeyId(key: ShapeCacheKey): ShapeCacheKeyId {
-  let id: string = key.buildMode;
-  if (buildModeUsesLayerGap(key.buildMode)) id += `|gap:${key.layerGap}`;
-  if (buildModeUsesMixSteps(key.buildMode) && key.mixSteps) id += "|mixsteps:1";
-  if (buildModeUsesPaletteSeed(key.buildMode)) id += `|seed:${key.paletteSeed}`;
-  if (isStaircaseBuildMode(key.buildMode) && key.waterFillerOffset) id += "|wateroffset:1";
+): ShapeCacheKeyId {
+  let id: string = buildMode;
+  if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
+  if (buildModeUsesMixSteps(buildMode) && mixSteps) id += "|mixsteps:1";
+  if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
+  if (isStaircaseBuildMode(buildMode) && waterFillerOffset) id += "|wateroffset:1";
   return id as ShapeCacheKeyId;
 }
 
-function getCachedRawParts(cache: GridShapeCache, key: ShapeCacheKey, build: () => RawShapePart[]): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(key);
+function getCachedRawParts(cache: GridShapeCache, keyId: ShapeCacheKeyId, build: () => RawShapePart[]): RawShapePart[] {
   const cached = cache.rawParts.get(keyId);
   if (cached) return cached;
   const parts = build();
@@ -1866,8 +1897,8 @@ function getCachedStaircaseParts(
   paletteSeed: number,
   waterFillerOffset: boolean,
 ): RawShapePart[] {
-  const modeKey = getShapeCacheKey(buildMode, 0, false, paletteSeed, waterFillerOffset);
-  return getCachedRawParts(cache, modeKey, () => {
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, paletteSeed, waterFillerOffset);
+  return getCachedRawParts(cache, keyId, () => {
     const blocks = cloneShapeBlocks(getCachedStaircaseBaseBlocks(colorGrid, cache, waterFillerOffset));
     switch (buildMode) {
       case BuildMode.StaircaseNorthline:
@@ -1903,8 +1934,8 @@ function getCachedSuppressSplitParts(
   cache: GridShapeCache,
   buildMode: BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker,
 ): RawShapePart[] {
-  const key = getShapeCacheKey(buildMode, 0, false, 0, false);
-  return getCachedRawParts(cache, key, () =>
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, false);
+  return getCachedRawParts(cache, keyId, () =>
     buildMode === BuildMode.SuppressSplitRow
       ? buildSuppressSplitRowBlockSets(colorGrid).map(blocks => buildShapePart(blocks))
       : buildSuppressSplitCheckerBlockSets(colorGrid).map(blocks => buildShapePart(blocks)),
@@ -1917,8 +1948,8 @@ function getCachedSuppressStepParts(
   buildMode: StepwiseBuildMode,
   mixSteps: boolean,
 ): RawShapePart[] {
-  const key = getShapeCacheKey(buildMode, 0, mixSteps, 0, false);
-  return getCachedRawParts(cache, key, () => buildStepVariantParts(colorGrid, buildMode, mixSteps, cache));
+  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, 0, false);
+  return getCachedRawParts(cache, keyId, () => buildStepVariantParts(colorGrid, buildMode, mixSteps, cache));
 }
 
 function getCachedSuppress2LayerParts(
@@ -1927,8 +1958,8 @@ function getCachedSuppress2LayerParts(
   layerGap: number,
   buildMode: TwoLayerSuppressBuildMode,
 ): RawShapePart[] {
-  const key = getShapeCacheKey(buildMode, layerGap, false, 0, false);
-  return getCachedRawParts(cache, key, () => [buildShapePart(buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode))]);
+  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, 0, false);
+  return getCachedRawParts(cache, keyId, () => [buildShapePart(buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode))]);
 }
 
 function buildGeneratedShapeParts(
@@ -1961,15 +1992,14 @@ function buildGeneratedShapeParts(
 
 function getGeneratedShape(
   colorGrid: ColorGrid,
-  cache: GridShapeCache,
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
   paletteSeed: number,
   waterFillerOffset: boolean,
-): GeneratedShape {
-  const cacheKey = getShapeCacheKey(buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset);
-  const cacheKeyId = getShapeCacheKeyId(cacheKey);
+): CachedGeneratedShape {
+  const cache = getGridShapeCache(colorGrid);
+  const cacheKeyId = getShapeCacheKeyId(buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset);
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
@@ -1989,8 +2019,12 @@ function getGeneratedShape(
         : ShapePartType.SingleColumn,
     splitExportNames,
   };
-  cache.shapes.set(cacheKeyId, shape);
-  return shape;
+  const generatedShape = {
+    shape,
+    signatureId: getGeneratedShapeSignatureId(shape),
+  };
+  cache.shapes.set(cacheKeyId, generatedShape);
+  return generatedShape;
 }
 
 // Callers:
@@ -2000,7 +2034,6 @@ export function generateShapeMap(
   options: { layerGap: number; mixSteps?: boolean; paletteSeed?: number; waterFillerOffset?: boolean },
   modeStats?: ShapeGenerationStats,
 ): Partial<Record<BuildMode, GeneratedShape>> {
-  const cache = getGridShapeCache(colorGrid);
   const mixSteps = options.mixSteps ?? false;
   const paletteSeed = options.paletteSeed ?? 0;
   const waterFillerOffset = options.waterFillerOffset ?? false;
@@ -2013,35 +2046,24 @@ export function generateShapeMap(
   const suppressVisibleModes: BuildMode[] = twoLayerHasLateVoidNeed
     ? [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]
     : [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2Layer];
-  const visibleModes = new Set<BuildMode>([...staircaseVisibleModes, ...suppressVisibleModes]);
+  const orderedVisibleModes = [...staircaseVisibleModes, ...suppressVisibleModes];
+  const seenShapeSignatures = new Set<GeneratedShapeSignatureId>();
+  const shapes: Partial<Record<BuildMode, GeneratedShape>> = {};
 
-  const shapes = new Proxy({} as Partial<Record<BuildMode, GeneratedShape>>, {
-    get(target, prop, receiver) {
-      if (typeof prop !== "string") return Reflect.get(target, prop, receiver);
-      if (!ALL_VISIBLE_BUILD_MODE_SET.has(prop as BuildMode)) return Reflect.get(target, prop, receiver);
-      if (!visibleModes.has(prop as BuildMode)) return undefined;
-      let shape = target[prop as BuildMode];
-      if (!shape) {
-        shape = getGeneratedShape(colorGrid, cache, toInternalBuildMode(prop as BuildMode), options.layerGap, mixSteps, paletteSeed, waterFillerOffset);
-        target[prop as BuildMode] = shape;
-      }
-      return shape;
-    },
-    ownKeys() {
-      return [...visibleModes];
-    },
-    getOwnPropertyDescriptor(target, prop) {
-      if (typeof prop === "string" && visibleModes.has(prop as BuildMode)) {
-        return {
-          enumerable: true,
-          configurable: true,
-          value: target[prop as BuildMode],
-          writable: false,
-        };
-      }
-      return Reflect.getOwnPropertyDescriptor(target, prop);
-    },
-  });
+  for (const buildMode of orderedVisibleModes) {
+    const internalBuildMode = getCanonicalBuildMode(buildMode);
+    const { shape, signatureId } = getGeneratedShape(
+      colorGrid,
+      internalBuildMode,
+      options.layerGap,
+      mixSteps,
+      paletteSeed,
+      waterFillerOffset,
+    );
+    if (seenShapeSignatures.has(signatureId)) continue;
+    seenShapeSignatures.add(signatureId);
+    shapes[buildMode] = shape;
+  }
 
   return shapes;
 }

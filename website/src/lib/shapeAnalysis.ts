@@ -3,7 +3,6 @@
  * - analyzeFillerNeeds()
  * - northRowIsSingleLine()
  * - hasColorHeightVariance()
- * - computeExportShapeSignature()
  * - analyzeMaterialNeeds()
  *
  * Callers:
@@ -11,12 +10,9 @@
  */
 import { type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
 import { FillerRole, type CustomColor, type FillerAssignment } from "./conversionTypes";
-import { canonicalizeBlockEntry } from "./blockId";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
-import type { BlockEntry } from "./nbtWriter";
-import { materializeShapeParts, normalizeAndMeasure, type SubstitutionOptions } from "./shapeSubstitution";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart, ShapePartType } from "./shapeTypes";
 import { isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
@@ -48,8 +44,6 @@ interface PartMaterialNeedStats {
   usedShadesByBase: Map<number, Set<number>>;
   fillerRoleCounts: Map<FillerRole, number>;
 }
-
-type HashState = [number, number, number, number];
 
 function addCount(map: Record<string, number>, key: string, amount = 1): void {
   map[key] = (map[key] || 0) + amount;
@@ -138,31 +132,6 @@ function analyzePartMaterialNeeds(
   return { blockCounts, baseColorCounts, visibleColorKeys, usedShadesByBase, fillerRoleCounts };
 }
 
-function createHashState(): HashState {
-  return [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];
-}
-
-function mixUint32(state: HashState, value: number): void {
-  const v = value >>> 0;
-  state[0] = Math.imul((state[0] ^ v) >>> 0, 0x01000193) >>> 0;
-  state[1] = Math.imul((state[1] + v + 0x7f4a7c15) >>> 0, 0x27d4eb2d) >>> 0;
-  state[2] = Math.imul((state[2] ^ ((v << 16) | (v >>> 16))) >>> 0, 0x165667b1) >>> 0;
-  state[3] = Math.imul((state[3] + (v ^ 0x9e3779b9)) >>> 0, 0x85ebca77) >>> 0;
-}
-
-function mixString(state: HashState, value: string): void {
-  for (let i = 0; i < value.length; ++i) mixUint32(state, value.charCodeAt(i));
-  // Terminate each string so ["ab","c"] hashes differently from ["a","bc"].
-  mixUint32(state, 0xff);
-}
-
-function mixBlockEntry(state: HashState, block: BlockEntry): void {
-  mixUint32(state, block.x);
-  mixUint32(state, block.y);
-  mixUint32(state, block.z);
-  mixString(state, canonicalizeBlockEntry(block.blockName));
-}
-
 // Callers:
 // - src/Index.tsx
 export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
@@ -208,38 +177,6 @@ export function hasColorHeightVariance(shape: GeneratedShape): boolean {
     }
   }
   return false;
-}
-
-// Callers:
-// - src/Index.tsx
-export function computeExportShapeSignature(
-  shape: GeneratedShape,
-  options: Pick<SubstitutionOptions, "blockMapping" | "fillerAssignments" | "assumeFloor" | "forceZ129" | "customColors">,
-): string {
-  const state = createHashState();
-  mixString(state, shape.partType);
-  mixString(state, shape.splitExportNames?.[0] ?? "");
-  mixString(state, shape.splitExportNames?.[1] ?? "");
-
-  const parts = materializeShapeParts(shape, options);
-  mixUint32(state, parts.length);
-  for (const partBlocks of parts) {
-    const normalizedBlocks = partBlocks.map(block => ({ ...block }));
-    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(normalizedBlocks, options.forceZ129 === true);
-    mixUint32(state, sizeX);
-    mixUint32(state, sizeY);
-    mixUint32(state, sizeZ);
-    mixUint32(state, normalizedBlocks.length);
-    normalizedBlocks.sort((a, b) =>
-      a.x - b.x ||
-      a.y - b.y ||
-      a.z - b.z ||
-      canonicalizeBlockEntry(a.blockName).localeCompare(canonicalizeBlockEntry(b.blockName)),
-    );
-    for (const block of normalizedBlocks) mixBlockEntry(state, block);
-  }
-
-  return state.map(part => part.toString(16).padStart(8, "0")).join("");
 }
 
 // Callers:
