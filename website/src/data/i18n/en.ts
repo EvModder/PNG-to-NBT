@@ -89,6 +89,9 @@ export const enCatalog = {
     suppressGroupLabel: "Suppress",
     layerGapLabel: "Layer gap:",
     layerGapTooltip: "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.",
+    mixStepsLabel: "Mix Steps:",
+    mixStepsTooltip:
+      "Sequential steps are able to reusable (recessive) color blocks from prior steps as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
     paletteSeedLabel: "Palette Seed:",
     optionLabels: {
       [BuildMode.Flat]: "Flat",
@@ -124,9 +127,9 @@ export const enCatalog = {
       [BuildMode.SuppressSplitRow]: "Split-row; available for compatibility, but generally not useful",
       [BuildMode.SuppressSplitChecker]: "Split NBT generations for dominant/recessive placements",
       [BuildMode.SuppressCheckerEW]:
-        "Stepwise E→W checker handling: 4 columns per step (2 dominant east, 2 recessive west), overlapping by 2 columns",
+        "Like Suppress (2-Layer), but encoded as vertically separated E→W phases instead of upper/lower layers. Each step handles 4 columns: 2 farther dominant columns and 2 nearer recessive columns. Build/update one step, then rebuild the next step farther away so the dominant columns remap without remapping the nearer recessive ones.",
       [BuildMode.SuppressPairsEW]:
-        "Split into East-West pairs in a interlacing 'brick' pattern; currently only supports updating from E→W",
+        "Stepwise E→W suppress in interlaced pairs. Each step updates one farther dominant pixel and one nearer recessive pixel from adjacent columns, then the next step is rebuilt farther away so the dominant pixel can be remapped without remapping the recessive one.",
       [BuildMode.Suppress2Layer]:
         "Steps:\n1) Build everything\n2) Update the full map\n3) Remove the upper layer, 1-2 columns at a time\n4) Carefully update *just* the dominate pixels for the target column(s)\n5) Repeat, column-by-column, for the entire map\n\nLayer gap controls vertical spacing between lower and upper suppress layers.",
       [BuildMode.Suppress2LayerLateFillers]:

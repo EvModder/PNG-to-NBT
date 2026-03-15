@@ -142,6 +142,8 @@ export const messages = {
     suppressGroupLabel: catalog.buildMode.suppressGroupLabel,
     layerGapLabel: catalog.buildMode.layerGapLabel,
     layerGapTooltip: catalog.buildMode.layerGapTooltip,
+    mixStepsLabel: catalog.buildMode.mixStepsLabel,
+    mixStepsTooltip: catalog.buildMode.mixStepsTooltip,
     paletteSeedLabel: catalog.buildMode.paletteSeedLabel,
     optionLabel(mode: BuildMode | string): string {
       return getLookupValue(catalog.buildMode.optionLabels, mode, mode);

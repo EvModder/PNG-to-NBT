@@ -25,6 +25,7 @@ import {
   type FillerAssignment,
   FillerRole,
   buildModeUsesLayerGap,
+  buildModeUsesMixSteps,
   buildModeUsesPaletteSeed,
   getBuildModeRangeMax,
   isStaircaseBuildMode,
@@ -48,6 +49,32 @@ function loadCached<T>(key: string, fallback: T): T {
     /* ignore */
   }
   return fallback;
+}
+
+function getClipboardImageFile(clipboardData: DataTransfer | null): File | null {
+  if (!clipboardData) return null;
+
+  const toNamedImageFile = (file: File): File => {
+    if (file.name) return file;
+    const subtype = file.type.split("/")[1]?.split("+")[0] || "png";
+    const extension = subtype === "jpeg" ? "jpg" : subtype;
+    return new File([file], `pasted-image.${extension}`, {
+      type: file.type,
+      lastModified: Date.now(),
+    });
+  };
+
+  for (const item of clipboardData.items) {
+    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+    const file = item.getAsFile();
+    if (file) return toNamedImageFile(file);
+  }
+
+  for (const file of clipboardData.files) {
+    if (file.type.startsWith("image/")) return toNamedImageFile(file);
+  }
+
+  return null;
 }
 
 const toBlockIconKey = (raw: string): string =>
@@ -203,7 +230,7 @@ function formatStacks(count: number): string {
 function encodePreset(
   preset: Preset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
@@ -225,6 +252,7 @@ function encodePreset(
     proPaletteSeed ? "1" : "0",
     canonicalizeBlockEntry(dominateVoidFillerBlock),
     canonicalizeBlockEntry(recessiveVoidFillerBlock),
+    mixSteps ? "1" : "0",
   ].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
@@ -232,7 +260,7 @@ function encodePreset(
 function decodePreset(encoded: string): {
   preset: Preset; supportFiller?: string; shadeFiller?: string; supportMode?: SupportMode;
   buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
-  suppress2LayerLateFillerBlock?: string; proPaletteSeed?: boolean;
+  suppress2LayerLateFillerBlock?: string; proPaletteSeed?: boolean; mixSteps?: boolean;
   dominateVoidFillerBlock?: string; recessiveVoidFillerBlock?: string;
 } | null {
   try {
@@ -269,13 +297,14 @@ function decodePreset(encoded: string): {
     const proPaletteSeed = sections[9] === "1" ? true : sections[9] === "0" ? false : undefined;
     const dominateVoidFillerBlock = sections[10] || undefined;
     const recessiveVoidFillerBlock = sections[11] || undefined;
+    const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
 
     return {
       preset: { name: sections[0], blocks },
       supportFiller: sections[2] ? canonicalizeBlockEntry(sections[2]) : undefined,
       shadeFiller: sections[3] ? canonicalizeBlockEntry(sections[3]) : undefined,
       supportMode, buildMode: sections[5] ? normalizeStoredBuildMode(sections[5]) : undefined,
-      customColors, convertUnsupported, proPaletteSeed,
+      customColors, convertUnsupported, proPaletteSeed, mixSteps,
       suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock ? canonicalizeBlockEntry(suppress2LayerLateFillerBlock) : undefined,
       dominateVoidFillerBlock: dominateVoidFillerBlock ? canonicalizeBlockEntry(dominateVoidFillerBlock) : undefined,
       recessiveVoidFillerBlock: recessiveVoidFillerBlock ? canonicalizeBlockEntry(recessiveVoidFillerBlock) : undefined,
@@ -301,6 +330,7 @@ const LS_KEYS = {
   sortKey: "mapart_sortKey",
   sortDir: "mapart_sortDir",
   layerGap: "mapart_layerGap",
+  mixSteps: "mapart_mix_steps",
   suppress2LayerLateFiller: "mapart_suppress2layer_late_filler",
   paletteSeed: "mapart_palette_seed",
   dominateVoidFiller: "mapart_dominate_void_filler",
@@ -369,6 +399,8 @@ const Index = () => {
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
   const calcLayerGap = useDeferredValue(layerGap);
+  const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, false));
+  const calcMixSteps = useDeferredValue(mixSteps);
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
   const [colStart, setColStart] = useState(0);
   const [colEnd, setColEnd] = useState(127);
@@ -528,6 +560,7 @@ const Index = () => {
       [LS_KEYS.sortKey]: sortKey,
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
+      [LS_KEYS.mixSteps]: mixSteps,
       [LS_KEYS.suppress2LayerLateFiller]: suppress2LayerLateFillerBlock,
       [LS_KEYS.paletteSeed]: proPaletteSeed,
       [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
@@ -556,6 +589,7 @@ const Index = () => {
       sortKey,
       sortDir,
       layerGap,
+      mixSteps,
       suppress2LayerLateFillerBlock,
       proPaletteSeed,
       dominateVoidFillerBlock,
@@ -580,6 +614,7 @@ const Index = () => {
   }, [persistedSettings]);
 
   const showPaletteSeedToggle = useMemo(() => buildModeUsesPaletteSeed(buildMode), [buildMode]);
+  const buildModeSupportsMixSteps = useMemo(() => buildModeUsesMixSteps(buildMode), [buildMode]);
   const paletteSeedOffset = useMemo(
     () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(preset.blocks) : 0),
     [showPaletteSeedToggle, calcProPaletteSeed, preset.blocks],
@@ -600,10 +635,15 @@ const Index = () => {
     () => imageHasNonLightWater && usesBelowOnlyWaterSupport,
     [imageHasNonLightWater, usesBelowOnlyWaterSupport],
   );
+  const showMixStepsToggle = useMemo(
+    () => buildModeSupportsMixSteps && !!imageStats?.hasStepMixOpportunity,
+    [buildModeSupportsMixSteps, imageStats],
+  );
   const shapeMap = useMemo(
     () => imageColorGrid && imageValid
       ? generateShapeMap(imageColorGrid, {
           layerGap: calcLayerGap,
+          mixSteps: showMixStepsToggle && calcMixSteps,
           paletteSeed: paletteSeedOffset,
           waterFillerOffset,
         }, imageStats ? {
@@ -613,7 +653,7 @@ const Index = () => {
           hasTwoLayerLateVoidNeed: imageStats.voidShadowStats.dominant > 0,
         } : undefined)
       : null,
-    [imageColorGrid, imageValid, calcLayerGap, paletteSeedOffset, waterFillerOffset, imageStats],
+    [imageColorGrid, imageValid, calcLayerGap, showMixStepsToggle, calcMixSteps, paletteSeedOffset, waterFillerOffset, imageStats],
   );
   const hasNonFlatShades = imageStats?.hasNonFlatShades ?? false;
   const hasSuppressPattern = imageStats?.hasSuppressPattern ?? false;
@@ -930,6 +970,7 @@ const Index = () => {
       setSuppress2LayerLateFillerBlock(decoded.suppress2LayerLateFillerBlock);
     }
     if (decoded.proPaletteSeed !== undefined) setProPaletteSeed(decoded.proPaletteSeed);
+    if (decoded.mixSteps !== undefined) setMixSteps(decoded.mixSteps);
     if (decoded.dominateVoidFillerBlock) setDominateVoidFillerBlock(decoded.dominateVoidFillerBlock);
     if (decoded.recessiveVoidFillerBlock) setRecessiveVoidFillerBlock(decoded.recessiveVoidFillerBlock);
     // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
@@ -1111,6 +1152,7 @@ const Index = () => {
       convertUnsupported,
       suppress2LayerLateFillerBlock,
       proPaletteSeed,
+      mixSteps,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
     )}`;
@@ -1194,6 +1236,18 @@ const Index = () => {
     },
     [customColors, convertUnsupported, getLossyImageFormatLabel, isLikelyLossyImageFile, preset.blocks],
   );
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const file = getClipboardImageFile(event.clipboardData);
+      if (!file) return;
+      event.preventDefault();
+      handleFile(file);
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [handleFile]);
 
   const handleConvertAndDownload = async () => {
     if (!effectiveShape) return;
@@ -2216,6 +2270,21 @@ const Index = () => {
                         className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
                       />
                     </>
+                  )}
+                  {showMixStepsToggle && (
+                    <label
+                      className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
+                      title={messages.buildMode.mixStepsTooltip}
+                    >
+                      <span title={messages.buildMode.mixStepsTooltip}>{messages.buildMode.mixStepsLabel}</span>
+                      <input
+                        type="checkbox"
+                        checked={mixSteps}
+                        onChange={e => setMixSteps(e.target.checked)}
+                        title={messages.buildMode.mixStepsTooltip}
+                        className="h-3.5 w-3.5 accent-primary"
+                      />
+                    </label>
                   )}
                   {showPaletteSeedToggle && (
                     <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
