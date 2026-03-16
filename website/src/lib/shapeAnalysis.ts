@@ -1,8 +1,8 @@
 /**
  * Public API:
  * - analyzeFillerNeeds()
- * - northRowIsSingleLine()
- * - hasColorHeightVariance()
+ * - nooblineIsSingleY()
+ * - hasNonWaterColorHeightVariance()
  * - analyzeMaterialNeeds()
  *
  * Callers:
@@ -15,7 +15,7 @@ import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssigne
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart, ShapePartType } from "./shapeTypes";
-import { getActiveAssumedFloorYs, isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
+import { isWithinShapeBounds, NO_SUPPORT_FLOORS, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
 interface FillerNeedStats {
   roleCounts: Map<FillerRole, number>;
@@ -33,9 +33,9 @@ type MaterialAnalysisOptions = {
   blockMapping: Record<number, string>;
   customColors: CustomColor[];
   fillerAssignments: FillerAssignment[];
-  assumeFloor: boolean;
-  columnRange?: [number, number];
-  stepRange?: [number, number];
+  applySupportFloorYs: boolean;
+  xColumnRange?: [number, number];
+  phaseRange?: [number, number];
 };
 
 interface PartMaterialNeedStats {
@@ -87,16 +87,16 @@ function analyzePartMaterialNeeds(
   fillerAssignments: Map<FillerRole, string>,
   options: MaterialAnalysisOptions,
   applyColumnRange: boolean,
+  supportFloorYs: ReadonlySet<number>,
 ): PartMaterialNeedStats {
   const blockCounts: Record<string, number> = {};
   const baseColorCounts: Record<number, number> = {};
   const visibleColorKeys = new Set<string>();
   const usedShadesByBase = new Map<number, Set<number>>();
   const fillerRoleCounts = new Map<FillerRole, number>();
-  const assumedFloorYs = getActiveAssumedFloorYs(part, options.assumeFloor);
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
-    if (applyColumnRange && options.columnRange && (x < options.columnRange[0] || x > options.columnRange[1])) continue;
+    if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
 
     if (isShapeColorCell(cell)) {
       if (!cell.isCustom && cell.id === 0) continue;
@@ -115,7 +115,7 @@ function analyzePartMaterialNeeds(
 
     const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
     if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options)) continue;
-    if (!isWithinShapeBounds({ x, y, z }, part.bounds, assumedFloorYs)) continue;
+    if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
     if (
       assignedRole &&
       (
@@ -153,7 +153,7 @@ export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
 
 // Callers:
 // - src/Index.tsx
-export function northRowIsSingleLine(shape: GeneratedShape): boolean {
+export function nooblineIsSingleY(shape: GeneratedShape): boolean {
   let northY: number | undefined;
   for (const part of shape.parts) {
     for (const [coord, cell] of part.cells) {
@@ -168,7 +168,7 @@ export function northRowIsSingleLine(shape: GeneratedShape): boolean {
 
 // Callers:
 // - src/Index.tsx
-export function hasColorHeightVariance(shape: GeneratedShape): boolean {
+export function hasNonWaterColorHeightVariance(shape: GeneratedShape): boolean {
   let firstY: number | undefined;
   for (const part of shape.parts) {
     for (const [coord, cell] of part.cells) {
@@ -191,8 +191,8 @@ export function analyzeMaterialNeeds(
 ): MaterialNeedStats {
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
 
-  if (shape.partType === ShapePartType.SuppressStepColumns) {
-    const [start, end] = options.stepRange ?? [0, shape.parts.length - 1];
+  if (shape.partType === ShapePartType.SuppressStepPhases) {
+    const [start, end] = options.phaseRange ?? [0, shape.parts.length - 1];
     const blockCounts: Record<string, number> = {};
     const baseColorCounts: Record<number, number> = {};
     const visibleColorKeys = new Set<string>();
@@ -200,7 +200,16 @@ export function analyzeMaterialNeeds(
     const fillerRoleCounts = new Map<FillerRole, number>();
 
     for (let i = start; i <= end && i < shape.parts.length; ++i) {
-      const step = analyzePartMaterialNeeds(colorGrid, shape.parts[i], fillerAssignments, options, false);
+      const part = shape.parts[i];
+      const supportFloorYs = options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+      const step = analyzePartMaterialNeeds(
+        colorGrid,
+        part,
+        fillerAssignments,
+        options,
+        false,
+        supportFloorYs,
+      );
       maximizeCounts(blockCounts, step.blockCounts);
       for (const [key, count] of Object.entries(step.baseColorCounts)) {
         baseColorCounts[Number(key)] = Math.max(baseColorCounts[Number(key)] || 0, count);
@@ -228,7 +237,15 @@ export function analyzeMaterialNeeds(
   const fillerRoleCounts = new Map<FillerRole, number>();
 
   for (const part of shape.parts) {
-    const stats = analyzePartMaterialNeeds(colorGrid, part, fillerAssignments, options, true);
+    const supportFloorYs = options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+    const stats = analyzePartMaterialNeeds(
+      colorGrid,
+      part,
+      fillerAssignments,
+      options,
+      true,
+      supportFloorYs,
+    );
     for (const [key, count] of Object.entries(stats.blockCounts)) addCount(blockCounts, key, count);
     for (const [key, count] of Object.entries(stats.baseColorCounts)) {
       baseColorCounts[Number(key)] = (baseColorCounts[Number(key)] || 0) + count;

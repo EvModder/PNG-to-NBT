@@ -86,13 +86,14 @@ export const esCatalog = {
     mixStepsLabel: "Mezclar pasos:",
     mixStepsTooltip:
       "Permite que pasos adyacentes de supresión E→O compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
-    waterDropLabels: {
-      0: "Caída de agua oscura:",
-      1: "Caída de agua plana:",
-      2: "Caída de agua clara:",
+    waterShadeNames: {
+      0: "oscuro",
+      1: "medio",
+      2: "claro",
     } as const,
-    waterDropTooltip:
-      "Agua bajo la plataforma: 0 coloca el bloque de agua de este tono en la Y del piso no acuoso. Cada incremento lo baja 1 bloque más. Los tonos de agua usados deben tener valores de caída distintos.",
+    waterLevelTooltip:
+      "Agua de tono {shadeName}: 0 coloca el bloque de agua de este tono en la Y del piso no acuoso. Cada incremento lo baja 1 bloque más. Los tonos de agua usados deben tener valores distintos.",
+    waterLevelAriaLabel: "Nivel de agua para el tono {shadeName}",
     paletteSeedLabel: "Semilla de paleta:",
     optionLabels: {
       [BuildMode.Flat]: "Plano",
@@ -106,8 +107,8 @@ export const esCatalog = {
       [BuildMode.StaircaseParty]: "Escalera (Party)",
       [BuildMode.SuppressSplitRow]: "Supresión (división por filas)",
       [BuildMode.SuppressSplitChecker]: "Supresión (división ajedrezada)",
-      [BuildMode.SuppressCheckerEW]: "Supresión (ajedrez, E→O)",
       [BuildMode.SuppressPairsEW]: "Supresión (pares, E→O)",
+      [BuildMode.SuppressCheckerEW]: "Supresión (ajedrez, E→O)",
       [BuildMode.Suppress2Layer]: "Supresión (2 capas)",
       [BuildMode.Suppress2LayerLateFillers]: "Supresión (2 capas, rellenos tardíos)",
       [BuildMode.Suppress2LayerLatePairs]: "Supresión (2 capas, pares tardíos)",
@@ -128,10 +129,10 @@ export const esCatalog = {
       [BuildMode.StaircaseParty]: "El mismo MapArt, pero hace el proceso de construcción más divertido y emocionante.",
       [BuildMode.SuppressSplitRow]: "División por filas; se mantiene por compatibilidad, pero en general no es útil",
       [BuildMode.SuppressSplitChecker]: "Divide las generaciones NBT para colocaciones dominantes/recesivas",
-      [BuildMode.SuppressCheckerEW]:
-        "Como Supresión (2 capas), pero codificada como fases E→O separadas verticalmente en vez de capas superior/inferior. Cada paso maneja 4 columnas: 2 columnas dominantes más lejanas y 2 columnas recesivas más cercanas. Construye y actualiza un paso, luego reconstruye el siguiente más lejos para remapear las columnas dominantes sin remapear las recesivas cercanas.",
       [BuildMode.SuppressPairsEW]:
         "Supresión E→O por pasos en pares entrelazados. Cada paso actualiza un píxel dominante más lejano y un píxel recesivo más cercano de columnas adyacentes; luego se reconstruye el siguiente paso más lejos para remapear el dominante sin remapear el recesivo.",
+      [BuildMode.SuppressCheckerEW]:
+        "Como Supresión (2 capas), pero codificada como fases E→O separadas verticalmente en vez de capas superior/inferior. Cada paso maneja 4 columnas: 2 columnas dominantes más lejanas y 2 columnas recesivas más cercanas. Construye y actualiza un paso, luego reconstruye el siguiente más lejos para remapear las columnas dominantes sin remapear las recesivas cercanas.",
       [BuildMode.Suppress2Layer]:
         "Pasos:\n1) Construye todo\n2) Actualiza el mapa completo\n3) Retira la capa superior, 1-2 columnas cada vez\n4) Actualiza con cuidado *solo* los píxeles dominantes de la(s) columna(s) objetivo\n5) Repite, columna por columna, para todo el mapa\n\nLa separación de capas controla el espacio vertical entre las capas de supresión inferior y superior.",
       [BuildMode.Suppress2LayerLateFillers]:

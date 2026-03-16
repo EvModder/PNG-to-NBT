@@ -14,26 +14,24 @@ import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRul
 import { resolveShapeColorBlockName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart } from "./shapeTypes";
-import { getActiveAssumedFloorYs, isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
+import { isWithinShapeBounds, NO_SUPPORT_FLOORS, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
 // Callers:
 // - src/lib/nbtExport.ts
 export interface SubstitutionOptions {
   blockMapping: Record<number, string>;
   fillerAssignments: FillerAssignment[];
-  assumeFloor: boolean;
+  applySupportFloorYs: boolean;
   forceZ129?: boolean;
   customColors: CustomColor[];
-  columnRange?: [number, number];
-  stepRange?: [number, number];
+  xColumnRange?: [number, number];
+  phaseRange?: [number, number];
 }
 
-function materializePart(part: ShapePart, options: SubstitutionOptions): BlockEntry[] {
+function materializePart(part: ShapePart, options: SubstitutionOptions, supportFloorYs: ReadonlySet<number>): BlockEntry[] {
   const resolved: BlockEntry[] = [];
   const occupied = new Set<number>();
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
-  const assumedFloorYs = getActiveAssumedFloorYs(part, options.assumeFloor);
-
   for (const [coord, cell] of part.cells) {
     if (!isShapeColorCell(cell)) continue;
     const [x, y, z] = parseShapeCoordKey(coord);
@@ -52,7 +50,7 @@ function materializePart(part: ShapePart, options: SubstitutionOptions): BlockEn
       if (!isShapeFillerCell(cell) || !cell.includes(assignment.role)) continue;
       const [x, y, z] = parseShapeCoordKey(coord);
       if (!shouldIncludeFragileSupportCell(part, coord, cell, assignment.role, options)) continue;
-      if (!isWithinShapeBounds({ x, y, z }, part.bounds, assumedFloorYs)) continue;
+      if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
       if (occupied.has(coord)) continue;
       resolved.push({ x, y, z, blockName: fillerName });
       occupied.add(coord);
@@ -95,5 +93,7 @@ export function normalizeAndMeasure(blocks: BlockEntry[], forceZ129 = false): { 
 // Callers:
 // - src/lib/nbtExport.ts
 export function materializeShapeParts(shape: GeneratedShape, options: SubstitutionOptions): BlockEntry[][] {
-  return shape.parts.map(part => materializePart(part, options));
+  return shape.parts.map(part =>
+    materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
+  );
 }

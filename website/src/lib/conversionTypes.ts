@@ -53,8 +53,8 @@ export enum BuildMode {
   StaircaseParty = "staircase_party",
   SuppressSplitRow = "suppress_split_row",
   SuppressSplitChecker = "suppress_split_checker",
-  SuppressCheckerEW = "suppress_checker_ew",
   SuppressPairsEW = "suppress_pairs_ew",
+  SuppressCheckerEW = "suppress_checker_ew",
   Suppress2Layer = "suppress_2layer",
   Suppress2LayerLateFillers = "suppress_2layer_late_fillers",
   Suppress2LayerLatePairs = "suppress_2layer_late_pairs",
@@ -129,8 +129,8 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesMixSteps(buildMode: BuildMode): boolean {
   switch (buildMode) {
-    case BuildMode.SuppressCheckerEW:
     case BuildMode.SuppressPairsEW:
+    case BuildMode.SuppressCheckerEW:
       return true;
     default:
       return false;
@@ -148,10 +148,10 @@ export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
 // - src/Index.tsx
 export function getBuildModeRangeMax(buildMode: BuildMode): number {
   switch (buildMode) {
-    case BuildMode.SuppressCheckerEW:
-      return 64;
     case BuildMode.SuppressPairsEW:
       return 128;
+    case BuildMode.SuppressCheckerEW:
+      return 64;
     default:
       return 127;
   }

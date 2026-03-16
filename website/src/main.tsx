@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import Index from "./Index.tsx";
+import { primePreviewImageRoute } from "@/lib/previewImageStore";
 import "./index.css";
 
 const readStoredTheme = (): "light" | "dark" | null => {
@@ -47,5 +48,6 @@ function canonicalizeTrailingSlash(): boolean {
 }
 
 if (!canonicalizeTrailingSlash()) {
+  primePreviewImageRoute();
   createRoot(document.getElementById("root")!).render(<App />);
 }

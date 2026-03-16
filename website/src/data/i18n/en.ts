@@ -92,13 +92,14 @@ export const enCatalog = {
     mixStepsLabel: "Mix Steps:",
     mixStepsTooltip:
       "Sequential steps are able to reusable (recessive) color blocks from prior steps as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
-    waterDropLabels: {
-      0: "Dark Water Drop:",
-      1: "Flat Water Drop:",
-      2: "Light Water Drop:",
+    waterShadeNames: {
+      0: "dark",
+      1: "medium",
+      2: "light",
     } as const,
-    waterDropTooltip:
-      "Below-platform water: 0 places this shade's water block at the non-water floor Y. Each increment moves it 1 block lower. Used water shades must have distinct drop values.",
+    waterLevelTooltip:
+      "{shadeName} water shade: 0 places this shade's water block at the non-water floor Y. Each increment lowers it by 1 block. Used water shades must have distinct values.",
+    waterLevelAriaLabel: "{shadeName} water shade level",
     paletteSeedLabel: "Palette Seed:",
     optionLabels: {
       [BuildMode.Flat]: "Flat",
@@ -112,8 +113,8 @@ export const enCatalog = {
       [BuildMode.StaircaseParty]: "Staircase (Party)",
       [BuildMode.SuppressSplitRow]: "Suppress (Row-split)",
       [BuildMode.SuppressSplitChecker]: "Suppress (Checker-split)",
-      [BuildMode.SuppressCheckerEW]: "Suppress (Checker, E→W)",
       [BuildMode.SuppressPairsEW]: "Suppress (Pairs, E→W)",
+      [BuildMode.SuppressCheckerEW]: "Suppress (Checker, E→W)",
       [BuildMode.Suppress2Layer]: "Suppress (2-Layer)",
       [BuildMode.Suppress2LayerLateFillers]: "Suppress (2-Layer, Late-Fillers)",
       [BuildMode.Suppress2LayerLatePairs]: "Suppress (2-Layer, Late-Pairs)",
@@ -133,10 +134,10 @@ export const enCatalog = {
       [BuildMode.StaircaseParty]: "Same MapArt, but makes the build process more fun and exciting!",
       [BuildMode.SuppressSplitRow]: "Split-row; available for compatibility, but generally not useful",
       [BuildMode.SuppressSplitChecker]: "Split NBT generations for dominant/recessive placements",
-      [BuildMode.SuppressCheckerEW]:
-        "Like Suppress (2-Layer), but encoded as vertically separated E→W phases instead of upper/lower layers. Each step handles 4 columns: 2 farther dominant columns and 2 nearer recessive columns. Build/update one step, then rebuild the next step farther away so the dominant columns remap without remapping the nearer recessive ones.",
       [BuildMode.SuppressPairsEW]:
         "Stepwise E→W suppress in interlaced pairs. Each step updates one farther dominant pixel and one nearer recessive pixel from adjacent columns, then the next step is rebuilt farther away so the dominant pixel can be remapped without remapping the recessive one.",
+      [BuildMode.SuppressCheckerEW]:
+        "Like Suppress (2-Layer), but encoded as vertically separated E→W phases instead of upper/lower layers. Each step handles 4 columns: 2 farther dominant columns and 2 nearer recessive columns. Build/update one step, then rebuild the next step farther away so the dominant columns remap without remapping the nearer recessive ones.",
       [BuildMode.Suppress2Layer]:
         "Steps:\n1) Build everything\n2) Update the full map\n3) Remove the upper layer, 1-2 columns at a time\n4) Carefully update *just* the dominate pixels for the target column(s)\n5) Repeat, column-by-column, for the entire map\n\nLayer gap controls vertical spacing between lower and upper suppress layers.",
       [BuildMode.Suppress2LayerLateFillers]:

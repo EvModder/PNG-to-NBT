@@ -25,7 +25,7 @@ import { FillerRole } from "./conversionTypes";
 // - src/lib/shapeGeneration.ts
 export enum ShapePartType {
   SingleColumn = "single_column",
-  SuppressStepColumns = "suppress_step_columns",
+  SuppressStepPhases = "suppress_step_phases",
 }
 
 // Callers:
@@ -100,5 +100,5 @@ export interface ShapePart {
     minZ: number;
     maxZ: number;
   };
-  assumedFloorYs: ReadonlySet<number>;
+  supportFloorYs: ReadonlySet<number>;
 }

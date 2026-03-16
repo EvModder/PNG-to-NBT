@@ -3,7 +3,7 @@
  * - PixelParity
  * - UniformNonFlatDirection
  * - getPixelParity()
- * - stepMixCanAffectShape()
+ * - hasStepMixOpportunity()
  * - computeColorGridStats()
  *
  * Callers:
@@ -39,7 +39,7 @@ interface ColorGridStats {
     dominant: number;
     recessive: number;
   };
-  imageInfo: { uniqueShadeCount: number; uniqueBaseColorCount: number };
+  paletteUsageInfo: { uniqueShadeCount: number; uniqueBaseColorCount: number };
   usedShadesByBase: Map<number, Set<number>>;
 }
 
@@ -53,20 +53,9 @@ function isDarkShade(shade: number): boolean {
   return shade === 0 || shade === 3;
 }
 
-function getWaterDrop(shade: number, waterDrops: Readonly<Record<0 | 1 | 2, number>>): number {
-  switch (shade) {
-    case 2:
-      return waterDrops[2];
-    case 1:
-      return waterDrops[1];
-    default:
-      return waterDrops[0];
-  }
-}
-
 // Callers:
 // - src/Index.tsx
-export function stepMixCanAffectShape(
+export function hasStepMixOpportunity(
   colorGrid: ColorGrid,
   options: { belowPlatformWater: boolean; waterDrops: Readonly<Record<0 | 1 | 2, number>> },
 ): boolean {
@@ -82,7 +71,9 @@ export function stepMixCanAffectShape(
       if (color.shade === 1 && !isWaterColor(north)) return true;
       if (!isWaterColor(north)) continue;
       if (options.belowPlatformWater) {
-        if (color.shade === 1 && getWaterDrop(north.shade, options.waterDrops) === 0) return true;
+        const northWaterDrop = options.waterDrops[north.shade as 0 | 1 | 2];
+        if (northWaterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${north.shade}`);
+        if (color.shade === 1 && northWaterDrop === 0) return true;
         continue;
       }
       if (color.shade === 1 && north.shade === 2) return true;
@@ -135,7 +126,7 @@ function analyzeVoidShadows(colorGrid: ColorGrid) {
   return stats;
 }
 
-function computeImageInfo(colorGrid: ColorGrid) {
+function computePaletteUsageInfo(colorGrid: ColorGrid) {
   const usedBaseColors = new Set<number>();
   const usedShades = new Set<string>();
   for (let x = 0; x < MAP_SIZE; ++x) {
@@ -247,7 +238,7 @@ export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
     uniformNonFlatDirection: detectUniformNonFlatDirection(colorGrid),
     usedBaseColors: computeUsedBaseColors(colorGrid),
     voidShadowStats,
-    imageInfo: computeImageInfo(colorGrid),
+    paletteUsageInfo: computePaletteUsageInfo(colorGrid),
     usedShadesByBase: computeUsedShadesByBase(colorGrid),
   };
 }

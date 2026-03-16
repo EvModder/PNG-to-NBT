@@ -1,24 +1,25 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
-import { Moon, Sun, Plus, Minus, Glasses } from "lucide-react";
+import { Moon, Sun, Plus, Minus, Glasses, Droplets, ArrowDown } from "lucide-react";
 import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb, type Shade } from "@/data/mapColors";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";
-import { computeColorGridStats, stepMixCanAffectShape } from "@/lib/colorGridAnalysis";
+import { computeColorGridStats, hasStepMixOpportunity } from "@/lib/colorGridAnalysis";
 import {
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
-  hasColorHeightVariance as generatedShapeHasColorHeightVariance,
-  northRowIsSingleLine as generatedShapeNorthRowIsSingleLine,
+  hasNonWaterColorHeightVariance as generatedShapeHasNonWaterColorHeightVariance,
+  nooblineIsSingleY as generatedShapeNooblineIsSingleY,
 } from "@/lib/shapeAnalysis";
 import { canonicalizeBlockEntry, normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
 import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
+import { storePreviewImage } from "@/lib/previewImageStore";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
-import { getActiveAssumedFloorYs, getSupportedColorAbove, isWithinShapeBounds } from "@/lib/shapeCellRules";
+import { getSupportedColorAbove, isWithinShapeBounds, NO_SUPPORT_FLOORS } from "@/lib/shapeCellRules";
 import {
   BuildMode,
   type FillerAssignment,
@@ -75,7 +76,6 @@ function getClipboardImageFile(clipboardData: DataTransfer | null): File | null 
 
   return null;
 }
-
 const toBlockIconKey = (raw: string): string =>
   stripBlockNamespace(raw)
     .replace(/__/g, "__us__")
@@ -224,8 +224,8 @@ const LAYOUT_GAP_PX = 8;
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: BuildMode.SuppressSplitRow, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitRow), muted: true },
   { value: BuildMode.SuppressSplitChecker, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitChecker) },
-  { value: BuildMode.SuppressCheckerEW, label: messages.buildMode.optionLabel(BuildMode.SuppressCheckerEW) },
   { value: BuildMode.SuppressPairsEW, label: messages.buildMode.optionLabel(BuildMode.SuppressPairsEW) },
+  { value: BuildMode.SuppressCheckerEW, label: messages.buildMode.optionLabel(BuildMode.SuppressCheckerEW) },
   { value: BuildMode.Suppress2Layer, label: messages.buildMode.optionLabel(BuildMode.Suppress2Layer) },
   { value: BuildMode.Suppress2LayerLateFillers, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLateFillers) },
   { value: BuildMode.Suppress2LayerLatePairs, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLatePairs) },
@@ -452,6 +452,7 @@ const Index = () => {
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
   const [imageData, setImageData] = useState<ImageData | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [imageName, setImageName] = useState("");
   const [imageValid, setImageValid] = useState(false);
   const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
@@ -473,7 +474,7 @@ const Index = () => {
   const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, false));
   const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, false));
   const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, false));
-  const [assumeFloor, setAssumeFloor] = useState(() => loadCached(LS_KEYS.assumeFloor, true));
+  const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.assumeFloor, true));
   const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, false));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, true));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, true));
@@ -515,6 +516,71 @@ const Index = () => {
     const base = import.meta.env.BASE_URL || "/";
     link.href = `${base}${imageData ? "favicon-active.png" : "favicon.png"}`;
   }, [imageData]);
+  useEffect(() => {
+    if (!imageData) {
+      setPreviewImageUrl(null);
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = imageData.width;
+    canvas.height = imageData.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setPreviewImageUrl(null);
+      return;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    let removeControllerChangeListener: (() => void) | null = null;
+
+    const updatePreviewUrl = (nextUrl: string) => {
+      if (cancelled) {
+        if (nextUrl.startsWith("blob:")) URL.revokeObjectURL(nextUrl);
+        return;
+      }
+      setPreviewImageUrl(prevUrl => {
+        if (prevUrl?.startsWith("blob:")) URL.revokeObjectURL(prevUrl);
+        return nextUrl;
+      });
+    };
+
+    canvas.toBlob(blob => {
+      if (!blob) return;
+
+      objectUrl = URL.createObjectURL(blob);
+      updatePreviewUrl(objectUrl);
+      if (!imageColorGrid) return;
+
+      void (async () => {
+        const nextUrl = await storePreviewImage(imageColorGrid, blob);
+        if (!nextUrl || cancelled) return;
+        if (!("serviceWorker" in navigator) || navigator.serviceWorker.controller) {
+          updatePreviewUrl(nextUrl);
+          return;
+        }
+
+        const onControllerChange = () => {
+          removeControllerChangeListener?.();
+          removeControllerChangeListener = null;
+          if (!cancelled && navigator.serviceWorker.controller) updatePreviewUrl(nextUrl);
+        };
+        navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+        removeControllerChangeListener = () => {
+          navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+        };
+        if (navigator.serviceWorker.controller) onControllerChange();
+      })();
+    }, "image/png");
+
+    return () => {
+      cancelled = true;
+      removeControllerChangeListener?.();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [imageData, imageColorGrid]);
   useEffect(() => {
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = (e: MediaQueryListEvent) => { if (!getStoredTheme()) setIsDark(e.matches); };
@@ -610,7 +676,7 @@ const Index = () => {
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
       [LS_KEYS.forceZ129]: forceZ129,
-      [LS_KEYS.assumeFloor]: assumeFloor,
+      [LS_KEYS.assumeFloor]: applySupportFloorYs,
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
@@ -643,7 +709,7 @@ const Index = () => {
       showTransparentRow,
       showExcludedBlocks,
       forceZ129,
-      assumeFloor,
+      applySupportFloorYs,
       belowPlatformWater,
       showVsFillerWarnings,
       showAlignmentReminder,
@@ -705,7 +771,7 @@ const Index = () => {
       buildModeSupportsMixSteps &&
       !!imageColorGrid &&
       imageValid &&
-      stepMixCanAffectShape(imageColorGrid, {
+      hasStepMixOpportunity(imageColorGrid, {
         belowPlatformWater,
         waterDrops,
       }),
@@ -744,7 +810,7 @@ const Index = () => {
   const hasSuppressPattern = imageStats?.hasSuppressPattern ?? false;
   const northlineShape = shapeMap?.[BuildMode.StaircaseNorthline] ?? null;
   const isFlatShape = useMemo(
-    () => !!northlineShape && !generatedShapeHasColorHeightVariance(northlineShape),
+    () => !!northlineShape && !generatedShapeHasNonWaterColorHeightVariance(northlineShape),
     [northlineShape],
   );
   const usedBaseColors = imageStats?.usedBaseColors ?? new Set<number>();
@@ -756,6 +822,21 @@ const Index = () => {
     showLightWaterDropControl ||
     showFlatWaterDropControl ||
     showDarkWaterDropControl;
+  const visibleWaterLevelControls = useMemo(
+    () => [
+      { shade: 2 as const, visible: showLightWaterDropControl, value: lightWaterDrop },
+      { shade: 1 as const, visible: showFlatWaterDropControl, value: flatWaterDrop },
+      { shade: 0 as const, visible: showDarkWaterDropControl, value: darkWaterDrop },
+    ].filter(control => control.visible),
+    [
+      showLightWaterDropControl,
+      showFlatWaterDropControl,
+      showDarkWaterDropControl,
+      lightWaterDrop,
+      flatWaterDrop,
+      darkWaterDrop,
+    ],
+  );
 
   useEffect(() => {
     if (!belowPlatformWater) return;
@@ -840,7 +921,7 @@ const Index = () => {
     return [...usedBaseColors].filter(idx => idx > 0 && !preset.blocks[idx]);
   }, [imageValid, usedBaseColors, preset.blocks]);
 
-  const imageInfo = imageStats?.imageInfo ?? null;
+  const paletteUsageInfo = imageStats?.paletteUsageInfo ?? null;
 
   const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
   const isStepRangeMode = effectiveBuildMode === BuildMode.SuppressPairsEW || effectiveBuildMode === BuildMode.SuppressCheckerEW;
@@ -857,9 +938,10 @@ const Index = () => {
   );
   const candidateVisibleInPart = useCallback(
     (part: NonNullable<typeof supportShape>["parts"][number], candidate: { x: number; y: number; z: number }) => {
-      return isWithinShapeBounds(candidate, part.bounds, getActiveAssumedFloorYs(part, assumeFloor));
+      const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+      return isWithinShapeBounds(candidate, part.bounds, supportFloorYs);
     },
-    [assumeFloor],
+    [applySupportFloorYs],
   );
   const enableStepsSupportOption = !imageData || !!supportShape?.parts.some(part =>
       [...part.cells.entries()].some(([coord, cell]) => {
@@ -915,11 +997,11 @@ const Index = () => {
     (fillerAssignments: FillerAssignment[]) => ({
       blockMapping: preset.blocks,
       fillerAssignments,
-      assumeFloor,
+      applySupportFloorYs,
       customColors,
-      ...(colRangeEnabled ? (isStepRangeMode ? { stepRange: [colStart, colEnd] as [number, number] } : { columnRange: [colStart, colEnd] as [number, number] }) : {}),
+      ...(colRangeEnabled ? (isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] }) : {}),
     }),
-    [preset.blocks, assumeFloor, customColors, colRangeEnabled, isStepRangeMode, colStart, colEnd],
+    [preset.blocks, applySupportFloorYs, customColors, colRangeEnabled, isStepRangeMode, colStart, colEnd],
   );
 
   const materialNeedStats = useMemo(() => {
@@ -1002,8 +1084,8 @@ const Index = () => {
   );
   const materialCounts = useMemo(() => materialNeedStats?.blockCounts ?? null, [materialNeedStats]);
   const numUniqueColorShadesForPart = useMemo(
-    () => materialNeedStats?.numUniqueColorShadesForPart ?? (imageInfo?.uniqueShadeCount ?? 0),
-    [materialNeedStats, imageInfo],
+    () => materialNeedStats?.numUniqueColorShadesForPart ?? (paletteUsageInfo?.uniqueShadeCount ?? 0),
+    [materialNeedStats, paletteUsageInfo],
   );
   const usedShadesByBase = useMemo(
     () => materialNeedStats?.usedShadesByBase ?? fullImageUsedShadesByBase,
@@ -1346,7 +1428,7 @@ const Index = () => {
       const result = await convertToNbt(effectiveShape, {
         blockMapping: preset.blocks,
         fillerAssignments: uiFillerAssignments,
-        assumeFloor,
+        applySupportFloorYs,
         forceZ129,
         customColors,
         baseName,
@@ -1363,8 +1445,8 @@ const Index = () => {
         [BuildMode.StaircaseParty]: "-party",
         [BuildMode.SuppressSplitRow]: "-split_row",
         [BuildMode.SuppressSplitChecker]: "-split_checker",
-        [BuildMode.SuppressCheckerEW]: "-suppress_checker_EW",
         [BuildMode.SuppressPairsEW]: "-suppress_pairs_EW",
+        [BuildMode.SuppressCheckerEW]: "-suppress_checker_EW",
         [BuildMode.Suppress2Layer]: "-suppress_2layer",
         [BuildMode.Suppress2LayerLateFillers]: "-suppress_2layer",
         [BuildMode.Suppress2LayerLatePairs]: "-suppress_2layer",
@@ -1412,7 +1494,7 @@ const Index = () => {
     [effectiveShape],
   );
   const northRowSingleLine = useMemo(
-    () => effectiveShape ? generatedShapeNorthRowIsSingleLine(effectiveShape) : true,
+    () => effectiveShape ? generatedShapeNooblineIsSingleY(effectiveShape) : true,
     [effectiveShape],
   );
 
@@ -2283,35 +2365,38 @@ const Index = () => {
                 )}
               </div>
               {showSupportModeSelector && (
-                <div className="inline-flex items-center gap-1">
-                  <span className="text-xs font-semibold text-accent whitespace-nowrap">{messages.supportMode.label}</span>
-                  <select
-                    className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
-                    value={supportMode}
-                    onChange={e => setSupportMode(e.target.value as SupportMode)}
-                    title={supportModeTooltip}
-                  >
-                    <option value={SupportMode.All} disabled={!enableAllSupportOption} title={messages.supportMode.tooltip(SupportMode.All)}>
-                      {messages.supportMode.optionLabel(SupportMode.All)}
-                    </option>
-                    <option value={SupportMode.None} title={messages.supportMode.tooltip(SupportMode.None)}>
-                      {messages.supportMode.optionLabel(SupportMode.None)}
-                    </option>
-                    <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={messages.supportMode.tooltip(SupportMode.Steps)}>
-                      {messages.supportMode.optionLabel(SupportMode.Steps)}
-                    </option>
-                    <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={messages.supportMode.tooltip(SupportMode.Water)}>
-                      {messages.supportMode.optionLabel(SupportMode.Water)}
-                    </option>
-                    <option
-                      value={SupportMode.Fragile}
-                      disabled={supportFillerIsFragile || !enableFragileSupportOption}
-                      title={messages.supportMode.tooltip(SupportMode.Fragile)}
+                <>
+                  <span className="h-4 border-l border-border/70" />
+                  <div className="inline-flex items-center gap-1">
+                    <span className="text-xs font-semibold text-accent whitespace-nowrap">{messages.supportMode.label}</span>
+                    <select
+                      className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
+                      value={supportMode}
+                      onChange={e => setSupportMode(e.target.value as SupportMode)}
+                      title={supportModeTooltip}
                     >
-                      {messages.supportMode.optionLabel(SupportMode.Fragile)}
-                    </option>
-                  </select>
-                </div>
+                      <option value={SupportMode.All} disabled={!enableAllSupportOption} title={messages.supportMode.tooltip(SupportMode.All)}>
+                        {messages.supportMode.optionLabel(SupportMode.All)}
+                      </option>
+                      <option value={SupportMode.None} title={messages.supportMode.tooltip(SupportMode.None)}>
+                        {messages.supportMode.optionLabel(SupportMode.None)}
+                      </option>
+                      <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={messages.supportMode.tooltip(SupportMode.Steps)}>
+                        {messages.supportMode.optionLabel(SupportMode.Steps)}
+                      </option>
+                      <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={messages.supportMode.tooltip(SupportMode.Water)}>
+                        {messages.supportMode.optionLabel(SupportMode.Water)}
+                      </option>
+                      <option
+                        value={SupportMode.Fragile}
+                        disabled={supportFillerIsFragile || !enableFragileSupportOption}
+                        title={messages.supportMode.tooltip(SupportMode.Fragile)}
+                      >
+                        {messages.supportMode.optionLabel(SupportMode.Fragile)}
+                      </option>
+                    </select>
+                  </div>
+                </>
               )}
               {!isBuiltinUnedited && (
                 <button
@@ -2338,62 +2423,39 @@ const Index = () => {
               </button>
               {imageData && (!isFlatShape || showAnyWaterDropControl) && (
                 <div className="ml-auto flex items-center gap-1">
-                  {showLightWaterDropControl && (
-                    <>
-                      <span
-                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                        title={messages.buildMode.waterDropTooltip(2)}
+                  {visibleWaterLevelControls.map(({ shade, value }) => {
+                    const tooltip = messages.buildMode.waterLevelTooltip(shade);
+                    const ariaLabel = messages.buildMode.waterLevelAriaLabel(shade);
+                    return (
+                      <label
+                        key={shade}
+                        className="inline-flex items-center gap-1 cursor-help"
+                        title={tooltip}
                       >
-                        {messages.buildMode.waterDropLabel(2)}
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={lightWaterDrop}
-                        onChange={e => setNormalizedWaterDrop(2, parseInt(e.target.value) || 0)}
-                        title={messages.buildMode.waterDropTooltip(2)}
-                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
-                      />
-                    </>
-                  )}
-                  {showFlatWaterDropControl && (
-                    <>
-                      <span
-                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                        title={messages.buildMode.waterDropTooltip(1)}
-                      >
-                        {messages.buildMode.waterDropLabel(1)}
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={flatWaterDrop}
-                        onChange={e => setNormalizedWaterDrop(1, parseInt(e.target.value) || 0)}
-                        title={messages.buildMode.waterDropTooltip(1)}
-                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
-                      />
-                    </>
-                  )}
-                  {showDarkWaterDropControl && (
-                    <>
-                      <span
-                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                        title={messages.buildMode.waterDropTooltip(0)}
-                      >
-                        {messages.buildMode.waterDropLabel(0)}
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={darkWaterDrop}
-                        onChange={e => setNormalizedWaterDrop(0, parseInt(e.target.value) || 0)}
-                        title={messages.buildMode.waterDropTooltip(0)}
-                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
-                      />
-                    </>
-                  )}
+                        <span
+                          aria-hidden="true"
+                          className="text-xs font-semibold text-accent whitespace-nowrap inline-flex items-center gap-0.5"
+                        >
+                          <Droplets className="h-3 w-3" />
+                          <span>{shade}</span>
+                          <ArrowDown className="h-3 w-3" />
+                        </span>
+                        <span className="sr-only">{ariaLabel}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={value}
+                          onChange={e => setNormalizedWaterDrop(shade, parseInt(e.target.value) || 0)}
+                          title={tooltip}
+                          aria-label={ariaLabel}
+                          className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                        />
+                      </label>
+                    );
+                  })}
                   {!isFlatShape && buildModeUsesLayerGap(buildMode) && (
                     <>
+                      <span className="h-4 border-l border-border/70" />
                       <span
                         className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
                         title={messages.buildMode.layerGapTooltip}
@@ -2439,6 +2501,7 @@ const Index = () => {
                   )}
                   {!isFlatShape && (
                     <>
+                      {(showMixStepsToggle || buildModeUsesLayerGap(buildMode)) && <span className="h-4 border-l border-border/70" />}
                       <span className="text-xs font-semibold text-accent whitespace-nowrap">
                         {messages.buildMode.label}
                       </span>
@@ -2716,7 +2779,7 @@ const Index = () => {
                   {messages.table.blockDisplayMode(blockDisplayMode)}
                 </button>
               </div>
-              {imageInfo && imageValid && (
+              {paletteUsageInfo && imageValid && (
                 <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
                   <span className="font-semibold text-accent">{messages.table.mcUnitsLabel}</span>
                   <input
@@ -2970,17 +3033,12 @@ const Index = () => {
                   if (f) handleFile(f);
                 }}
               >
-                {imageData ? (
-                  <canvas
+                {imageData && previewImageUrl ? (
+                  <img
+                    src={previewImageUrl}
+                    alt={imageName || messages.upload.title}
                     className="w-full h-full"
                     style={{ imageRendering: "pixelated" }}
-                    ref={el => {
-                      if (el && imageData) {
-                        el.width = imageData.width;
-                        el.height = imageData.height;
-                        el.getContext("2d")?.putImageData(imageData, 0, 0);
-                      }
-                    }}
                   />
                 ) : (
                   <p className="text-sm text-muted-foreground text-center px-2">{messages.upload.placeholder}</p>
@@ -3098,7 +3156,7 @@ const Index = () => {
               </div>
             )}
 
-            {imageInfo && imageValid && (
+            {paletteUsageInfo && imageValid && (
               <div className="mt-2 space-y-1">
                 <div className="flex gap-3 text-[11px] text-muted-foreground flex-wrap items-center">
                   {numUniqueColorShadesForPart > numColorBlockTypesForPart && (
@@ -3285,8 +3343,8 @@ const Index = () => {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={assumeFloor}
-                  onChange={e => setAssumeFloor(e.target.checked)}
+                  checked={applySupportFloorYs}
+                  onChange={e => setApplySupportFloorYs(e.target.checked)}
                   className="h-3.5 w-3.5"
                 />
                 <span>{messages.dialogs.options.assumeFloor}</span>
