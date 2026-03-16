@@ -3,6 +3,7 @@
  * - PixelParity
  * - UniformNonFlatDirection
  * - getPixelParity()
+ * - stepMixCanAffectShape()
  * - computeColorGridStats()
  *
  * Callers:
@@ -29,7 +30,6 @@ export enum UniformNonFlatDirection {
 interface ColorGridStats {
   hasNonFlatShades: boolean;
   hasSuppressPattern: boolean;
-  hasStepMixOpportunity: boolean;
   hasTransparency: boolean;
   hasWater: boolean;
   hasNonLightWater: boolean;
@@ -47,6 +47,49 @@ interface ColorGridStats {
 // - src/lib/shapeGeneration.ts
 export function getPixelParity(x: number, z: number): PixelParity {
   return ((x + z) & 1) === 0 ? PixelParity.Recessive : PixelParity.Dominant;
+}
+
+function isDarkShade(shade: number): boolean {
+  return shade === 0 || shade === 3;
+}
+
+function getWaterDrop(shade: number, waterDrops: Readonly<Record<0 | 1 | 2, number>>): number {
+  switch (shade) {
+    case 2:
+      return waterDrops[2];
+    case 1:
+      return waterDrops[1];
+    default:
+      return waterDrops[0];
+  }
+}
+
+// Callers:
+// - src/Index.tsx
+export function stepMixCanAffectShape(
+  colorGrid: ColorGrid,
+  options: { belowPlatformWater: boolean; waterDrops: Readonly<Record<0 | 1 | 2, number>> },
+): boolean {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 1; z < MAP_SIZE; ++z) {
+      const color = colorGrid[x][z];
+      const north = colorGrid[x][z - 1];
+      if (isTransparentColor(color) || isTransparentColor(north)) continue;
+      if (isWaterColor(color)) {
+        if (!options.belowPlatformWater) return true;
+        continue;
+      }
+      if (color.shade === 1 && !isWaterColor(north)) return true;
+      if (!isWaterColor(north)) continue;
+      if (options.belowPlatformWater) {
+        if (color.shade === 1 && getWaterDrop(north.shade, options.waterDrops) === 0) return true;
+        continue;
+      }
+      if (color.shade === 1 && north.shade === 2) return true;
+      if (isDarkShade(color.shade) && north.shade !== 2) return true;
+    }
+  }
+  return false;
 }
 
 function imageHasNonFlatShades(colorGrid: ColorGrid): boolean {
@@ -70,19 +113,6 @@ function scanSuppressedPixels(colorGrid: ColorGrid): boolean {
         if (south.shade === 0 || south.shade === 3) return true;
         break;
       }
-    }
-  }
-  return false;
-}
-
-function scanStepMixOpportunities(colorGrid: ColorGrid): boolean {
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 1; z < MAP_SIZE; ++z) {
-      const color = colorGrid[x][z];
-      if (isTransparentColor(color) || isWaterColor(color) || color.shade !== 1) continue;
-      const north = colorGrid[x][z-1];
-      if (isTransparentColor(north) || isWaterColor(north)) continue;
-      return true;
     }
   }
   return false;
@@ -211,7 +241,6 @@ export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
   return {
     hasNonFlatShades: imageHasNonFlatShades(colorGrid),
     hasSuppressPattern: scanSuppressedPixels(colorGrid),
-    hasStepMixOpportunity: scanStepMixOpportunities(colorGrid),
     hasTransparency: colorGridHasTransparency(colorGrid),
     hasWater: colorGridHasWater(colorGrid),
     hasNonLightWater: colorGridHasNonLightWater(colorGrid),

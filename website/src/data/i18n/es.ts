@@ -86,6 +86,13 @@ export const esCatalog = {
     mixStepsLabel: "Mezclar pasos:",
     mixStepsTooltip:
       "Permite que pasos adyacentes de supresión E→O compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
+    waterDropLabels: {
+      0: "Caída de agua oscura:",
+      1: "Caída de agua plana:",
+      2: "Caída de agua clara:",
+    } as const,
+    waterDropTooltip:
+      "Agua bajo la plataforma: 0 coloca el bloque de agua de este tono en la Y del piso no acuoso. Cada incremento lo baja 1 bloque más. Los tonos de agua usados deben tener valores de caída distintos.",
     paletteSeedLabel: "Semilla de paleta:",
     optionLabels: {
       [BuildMode.Flat]: "Plano",
@@ -152,13 +159,13 @@ export const esCatalog = {
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Relleno-1",
     dominateVoidTooltip:
-      "Se usa cuando un píxel dominante transparente es sobrescrito por un bloque de relleno para sombrear el bloque situado directamente al sur. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
+      "Se usa cuando la celda norte de un píxel dominante no aporta de forma natural la altura de sombreado necesaria (por ejemplo, por transparencia o por agua bajada bajo la plataforma), así que un relleno temporal debe sobrescribir esa celda norte. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
     dominateVoidPlaceholder: "slime_block",
     dominateVoidRequiredTooltip: "Colocaciones requeridas de VS-Relleno-1 para el rango de salida actual.",
     recessiveVoidLabel: "VS-2:",
     recessiveVoidWarningLabel: "VS-Relleno-2",
     recessiveVoidTooltip:
-      "Se usa cuando un píxel recesivo transparente es sobrescrito por un bloque de relleno para sombrear el bloque situado directamente al sur. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
+      "Se usa cuando la celda norte de un píxel recesivo no aporta de forma natural la altura de sombreado necesaria (por ejemplo, por transparencia o por agua bajada bajo la plataforma), así que un relleno temporal debe sobrescribir esa celda norte. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
     recessiveVoidPlaceholder: "honey_block",
     recessiveVoidRequiredTooltip: "Colocaciones requeridas de VS-Relleno-2 para el rango de salida actual.",
     voidFillersWarningLabel: "VS-Rellenos",
@@ -238,8 +245,8 @@ export const esCatalog = {
     waterSideSupportNotColorIdZero:
       "El relleno de soporte no es color_id=0 ({value}).\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán.",
     vsFillerInvalid: {
-      one: "{label} no es válido ({value}).\nHabrá {count} píxel noob.",
-      other: "{label} no es válido ({value}).\nHabrá {count} píxeles noob.",
+      one: "{label} no es válido ({value}).\nHabrá {count} píxel de escalera con sombreado incorrecto.",
+      other: "{label} no es válido ({value}).\nHabrá {count} píxeles de escalera con sombreado incorrecto.",
     } as PluralForms,
     vsFillerRequiredSingularLabel: {
       one: "{label} es obligatorio para esta imagen.\n{count} punto necesitará supresión manual del color.",
@@ -250,9 +257,9 @@ export const esCatalog = {
       other: "{label} son obligatorios para esta imagen.\n{count} puntos necesitarán supresión manual del color.",
     } as PluralForms,
     vsFillersInvalid: {
-      one: "Los VS-Rellenos no son válidos ({first}, {second}). Habrá {count} píxel noob (sur de un transparente con sombreado incorrecto).",
+      one: "Los VS-Rellenos no son válidos ({first}, {second}). Habrá {count} píxel de escalera con sombreado incorrecto.",
       other:
-        "Los VS-Rellenos no son válidos ({first}, {second}). Habrá {count} píxeles noob (sur de un transparente con sombreado incorrecto).",
+        "Los VS-Rellenos no son válidos ({first}, {second}). Habrá {count} píxeles de escalera con sombreado incorrecto.",
     } as PluralForms,
     lateFillerInvalid: {
       one: "El relleno tardío no es válido ({value}).\n{count} punto tardío de supresión requiere sombreado.",
@@ -267,8 +274,8 @@ export const esCatalog = {
       other: "{count} tipos de bloque",
     } as PluralForms,
     voidShadowCount: {
-      one: "{count} sombra de vacío",
-      other: "{count} sombras de vacío",
+      one: "{count} punto de VS-Relleno",
+      other: "{count} puntos de VS-Relleno",
     } as PluralForms,
     stepRangeButton: "Rango de pasos",
     columnRangeButton: "Rango de columnas",
@@ -290,6 +297,7 @@ export const esCatalog = {
       showExcludedBlocks: "Mostrar bloques excluidos",
       forceZ129: "Ancho Z siempre 129",
       assumeFloor: "Suponer suelo",
+      belowPlatformWater: "Agua bajo la plataforma",
       showAlignmentReminder: "Mostrar recordatorio de alineación",
       showNooblineWarnings: "Mostrar advertencias para nooblines",
       showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",

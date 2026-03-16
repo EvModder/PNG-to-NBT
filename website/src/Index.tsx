@@ -6,7 +6,7 @@ import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";
-import { computeColorGridStats } from "@/lib/colorGridAnalysis";
+import { computeColorGridStats, stepMixCanAffectShape } from "@/lib/colorGridAnalysis";
 import {
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
@@ -18,7 +18,7 @@ import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid 
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
-import { getSupportedColorAbove, isWithinShapeBounds } from "@/lib/shapeCellRules";
+import { getActiveAssumedFloorYs, getSupportedColorAbove, isWithinShapeBounds } from "@/lib/shapeCellRules";
 import {
   BuildMode,
   type FillerAssignment,
@@ -84,6 +84,34 @@ const toBlockIconKey = (raw: string): string =>
     .replace(/=/g, "__eq__")
     .replace(/,/g, "__cm__")
     .replace(/:/g, "__cl__");
+
+const WATER_DROP_INPUT_ORDER = [2, 1, 0] as const;
+
+function normalizeUsedWaterDrops(
+  rawDrops: Record<0 | 1 | 2, number>,
+  usedWaterShades: ReadonlySet<number>,
+  preferredFirstShade?: 0 | 1 | 2,
+): Record<0 | 1 | 2, number> {
+  const next: Record<0 | 1 | 2, number> = {
+    0: Math.max(0, rawDrops[0] || 0),
+    1: Math.max(0, rawDrops[1] || 0),
+    2: Math.max(0, rawDrops[2] || 0),
+  };
+  const usedValues = new Set<number>();
+  const orderedShades = preferredFirstShade === undefined
+    ? WATER_DROP_INPUT_ORDER
+    : [preferredFirstShade, ...WATER_DROP_INPUT_ORDER.filter(shade => shade !== preferredFirstShade)];
+
+  for (const shade of orderedShades) {
+    if (!usedWaterShades.has(shade)) continue;
+    let value = next[shade];
+    while (usedValues.has(value)) ++value;
+    next[shade] = value;
+    usedValues.add(value);
+  }
+
+  return next;
+}
 
 type ShapeWarning = {
   text: string;
@@ -335,10 +363,14 @@ const LS_KEYS = {
   dominateVoidFiller: "mapart_dominate_void_filler",
   recessiveVoidFiller: "mapart_recessive_void_filler",
   columnOrder: "mapart_columnOrder",
+  lightWaterDrop: "mapart_light_water_drop",
+  flatWaterDrop: "mapart_flat_water_drop",
+  darkWaterDrop: "mapart_dark_water_drop",
   showTransparentRow: "mapart_secret_showTransparentRow",
   showExcludedBlocks: "mapart_secret_showExcludedBlocks",
   forceZ129: "mapart_secret_forceZ129",
   assumeFloor: "mapart_secret_assumeFloor",
+  belowPlatformWater: "mapart_secret_belowPlatformWater",
   showVsFillerWarnings: "mapart_secret_showVsFillerWarnings",
   showAlignmentReminder: "mapart_secret_showAlignmentReminder",
   showNooblineWarnings: "mapart_secret_showNooblineWarnings",
@@ -400,6 +432,12 @@ const Index = () => {
   const calcLayerGap = useDeferredValue(layerGap);
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, false));
   const calcMixSteps = useDeferredValue(mixSteps);
+  const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, 0));
+  const calcLightWaterDrop = useDeferredValue(lightWaterDrop);
+  const [flatWaterDrop, setFlatWaterDrop] = useState(() => loadCached(LS_KEYS.flatWaterDrop, 0));
+  const calcFlatWaterDrop = useDeferredValue(flatWaterDrop);
+  const [darkWaterDrop, setDarkWaterDrop] = useState(() => loadCached(LS_KEYS.darkWaterDrop, 0));
+  const calcDarkWaterDrop = useDeferredValue(darkWaterDrop);
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
   const [colStart, setColStart] = useState(0);
   const [colEnd, setColEnd] = useState(127);
@@ -436,6 +474,7 @@ const Index = () => {
   const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, false));
   const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, false));
   const [assumeFloor, setAssumeFloor] = useState(() => loadCached(LS_KEYS.assumeFloor, true));
+  const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, false));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, true));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, true));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, false));
@@ -560,6 +599,9 @@ const Index = () => {
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.mixSteps]: mixSteps,
+      [LS_KEYS.lightWaterDrop]: lightWaterDrop,
+      [LS_KEYS.flatWaterDrop]: flatWaterDrop,
+      [LS_KEYS.darkWaterDrop]: darkWaterDrop,
       [LS_KEYS.suppress2LayerLateFiller]: suppress2LayerLateFillerBlock,
       [LS_KEYS.paletteSeed]: proPaletteSeed,
       [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
@@ -569,6 +611,7 @@ const Index = () => {
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
       [LS_KEYS.forceZ129]: forceZ129,
       [LS_KEYS.assumeFloor]: assumeFloor,
+      [LS_KEYS.belowPlatformWater]: belowPlatformWater,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
@@ -589,6 +632,9 @@ const Index = () => {
       sortDir,
       layerGap,
       mixSteps,
+      lightWaterDrop,
+      flatWaterDrop,
+      darkWaterDrop,
       suppress2LayerLateFillerBlock,
       proPaletteSeed,
       dominateVoidFillerBlock,
@@ -598,6 +644,7 @@ const Index = () => {
       showExcludedBlocks,
       forceZ129,
       assumeFloor,
+      belowPlatformWater,
       showVsFillerWarnings,
       showAlignmentReminder,
       showNooblineWarnings,
@@ -622,21 +669,47 @@ const Index = () => {
     () => (imageColorGrid && imageValid ? computeColorGridStats(imageColorGrid) : null),
     [imageColorGrid, imageValid],
   );
+  const fullImageUsedShadesByBase = imageStats?.usedShadesByBase ?? new Map<number, Set<number>>();
+  const usedWaterShades = fullImageUsedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>();
   const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
   const imageHasNonLightWater = imageStats?.hasNonLightWater ?? false;
+  const normalizedImmediateWaterDrops = useMemo(
+    () => normalizeUsedWaterDrops({
+      0: darkWaterDrop,
+      1: flatWaterDrop,
+      2: lightWaterDrop,
+    }, usedWaterShades),
+    [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades],
+  );
+  const normalizedDeferredWaterDrops = useMemo(
+    () => normalizeUsedWaterDrops({
+      0: calcDarkWaterDrop || 0,
+      1: calcFlatWaterDrop || 0,
+      2: calcLightWaterDrop || 0,
+    }, usedWaterShades),
+    [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
+  );
+  const waterDrops = normalizedDeferredWaterDrops;
   const usesBelowOnlyWaterSupport = useMemo(
     () => (supportMode === SupportMode.Water && !usesWaterForWater) || (supportMode !== SupportMode.None && usesIceForWater),
     [supportMode, usesWaterForWater, usesIceForWater],
   );
   const waterFillerOffset = useMemo(
-    () => imageHasNonLightWater && usesBelowOnlyWaterSupport,
-    [imageHasNonLightWater, usesBelowOnlyWaterSupport],
+    () => !belowPlatformWater && imageHasNonLightWater && usesBelowOnlyWaterSupport,
+    [belowPlatformWater, imageHasNonLightWater, usesBelowOnlyWaterSupport],
   );
   const showMixStepsToggle = useMemo(
-    () => buildModeSupportsMixSteps && !!imageStats?.hasStepMixOpportunity,
-    [buildModeSupportsMixSteps, imageStats],
+    () =>
+      buildModeSupportsMixSteps &&
+      !!imageColorGrid &&
+      imageValid &&
+      stepMixCanAffectShape(imageColorGrid, {
+        belowPlatformWater,
+        waterDrops,
+      }),
+    [buildModeSupportsMixSteps, imageColorGrid, imageValid, belowPlatformWater, waterDrops],
   );
   const shapeMap = useMemo(
     () => imageColorGrid && imageValid
@@ -645,6 +718,8 @@ const Index = () => {
           mixSteps: showMixStepsToggle && calcMixSteps,
           paletteSeed: paletteSeedOffset,
           waterFillerOffset,
+          belowPlatformWater,
+          waterDrops,
         }, imageStats ? {
           hasWater: imageStats.hasWater,
           hasTransparency: imageStats.hasTransparency,
@@ -652,7 +727,18 @@ const Index = () => {
           hasTwoLayerLateVoidNeed: imageStats.voidShadowStats.dominant > 0,
         } : undefined)
       : null,
-    [imageColorGrid, imageValid, calcLayerGap, showMixStepsToggle, calcMixSteps, paletteSeedOffset, waterFillerOffset, imageStats],
+    [
+      imageColorGrid,
+      imageValid,
+      calcLayerGap,
+      showMixStepsToggle,
+      calcMixSteps,
+      paletteSeedOffset,
+      waterFillerOffset,
+      belowPlatformWater,
+      waterDrops,
+      imageStats,
+    ],
   );
   const hasNonFlatShades = imageStats?.hasNonFlatShades ?? false;
   const hasSuppressPattern = imageStats?.hasSuppressPattern ?? false;
@@ -661,12 +747,41 @@ const Index = () => {
     () => !!northlineShape && !generatedShapeHasColorHeightVariance(northlineShape),
     [northlineShape],
   );
-  const fullImageUsedShadesByBase = imageStats?.usedShadesByBase ?? new Map<number, Set<number>>();
   const usedBaseColors = imageStats?.usedBaseColors ?? new Set<number>();
-  const voidShadowStats = imageStats?.voidShadowStats ?? { dominant: 0, recessive: 0 };
-  const voidShadowCount = voidShadowStats.dominant + voidShadowStats.recessive;
-
   const imageHasWater = imageStats?.hasWater ?? false;
+  const showLightWaterDropControl = imageValid && belowPlatformWater && usedWaterShades.has(2);
+  const showFlatWaterDropControl = imageValid && belowPlatformWater && usedWaterShades.has(1);
+  const showDarkWaterDropControl = imageValid && belowPlatformWater && usedWaterShades.has(0);
+  const showAnyWaterDropControl =
+    showLightWaterDropControl ||
+    showFlatWaterDropControl ||
+    showDarkWaterDropControl;
+
+  useEffect(() => {
+    if (!belowPlatformWater) return;
+    if (lightWaterDrop !== normalizedImmediateWaterDrops[2]) setLightWaterDrop(normalizedImmediateWaterDrops[2]);
+    if (flatWaterDrop !== normalizedImmediateWaterDrops[1]) setFlatWaterDrop(normalizedImmediateWaterDrops[1]);
+    if (darkWaterDrop !== normalizedImmediateWaterDrops[0]) setDarkWaterDrop(normalizedImmediateWaterDrops[0]);
+  }, [
+    belowPlatformWater,
+    lightWaterDrop,
+    flatWaterDrop,
+    darkWaterDrop,
+    normalizedImmediateWaterDrops,
+  ]);
+
+  const setNormalizedWaterDrop = useCallback((shade: 0 | 1 | 2, rawValue: number) => {
+    const normalizedValue = Math.max(0, Math.trunc(rawValue) || 0);
+    const nextDrops = normalizeUsedWaterDrops({
+      0: shade === 0 ? normalizedValue : darkWaterDrop,
+      1: shade === 1 ? normalizedValue : flatWaterDrop,
+      2: shade === 2 ? normalizedValue : lightWaterDrop,
+    }, usedWaterShades, shade);
+
+    setLightWaterDrop(nextDrops[2]);
+    setFlatWaterDrop(nextDrops[1]);
+    setDarkWaterDrop(nextDrops[0]);
+  }, [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades]);
 
   const supportFillerBlockId = useMemo(
     () => normalizeBlockId(supportFillerBlock),
@@ -729,7 +844,10 @@ const Index = () => {
 
   const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
   const isStepRangeMode = effectiveBuildMode === BuildMode.SuppressPairsEW || effectiveBuildMode === BuildMode.SuppressCheckerEW;
-  const maxRangeIndex = useMemo(() => getBuildModeRangeMax(effectiveBuildMode), [effectiveBuildMode]);
+  const maxRangeIndex = useMemo(
+    () => getBuildModeRangeMax(effectiveBuildMode) + (isStepRangeMode && belowPlatformWater && (imageStats?.hasWater ?? false) ? 1 : 0),
+    [effectiveBuildMode, isStepRangeMode, belowPlatformWater, imageStats],
+  );
   const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
   const supportShape = useMemo(
     () => effectiveBuildMode === BuildMode.Flat
@@ -738,8 +856,9 @@ const Index = () => {
     [shapeMap, effectiveBuildMode, northlineShape],
   );
   const candidateVisibleInPart = useCallback(
-    (part: NonNullable<typeof supportShape>["parts"][number], candidate: { x: number; y: number; z: number }) =>
-      isWithinShapeBounds(candidate, part.bounds, assumeFloor, part.assumedFloorYs),
+    (part: NonNullable<typeof supportShape>["parts"][number], candidate: { x: number; y: number; z: number }) => {
+      return isWithinShapeBounds(candidate, part.bounds, getActiveAssumedFloorYs(part, assumeFloor));
+    },
     [assumeFloor],
   );
   const enableStepsSupportOption = !imageData || !!supportShape?.parts.some(part =>
@@ -1313,6 +1432,7 @@ const Index = () => {
   const lateFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
   const dominateVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
   const recessiveVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidRecessive);
+  const vsFillerSpotCount = dominateVoidFillerRequiredCount + recessiveVoidFillerRequiredCount;
   const showWaterSideSupportWarning =
     imageValid &&
     (supportMode === SupportMode.All || supportMode === SupportMode.Water) &&
@@ -1372,13 +1492,9 @@ const Index = () => {
   const shadeFillerRequiredTooltip = messages.fillers.shadeRequiredTooltip(shadeFillerIsNorthRowOnly);
   const showDominateVoidFillerInput =
     !!imageData &&
-    isStaircaseBuildMode(effectiveBuildMode) &&
-    effectiveBuildMode !== BuildMode.Flat &&
     dominateVoidFillerRequiredCount > 0;
   const showRecessiveVoidFillerInput =
     !!imageData &&
-    isStaircaseBuildMode(effectiveBuildMode) &&
-    effectiveBuildMode !== BuildMode.Flat &&
     recessiveVoidFillerRequiredCount > 0;
   const hasAnyFillerInput =
     showSupportFillerInput ||
@@ -1450,13 +1566,13 @@ const Index = () => {
       showDominateVoidFillerInput,
       messages.fillers.dominateVoidWarningLabel,
       dominateVoidFillerBlock,
-      voidShadowStats.dominant,
+      dominateVoidFillerRequiredCount,
     );
     const recessive = makeEntry(
       showRecessiveVoidFillerInput,
       messages.fillers.recessiveVoidWarningLabel,
       recessiveVoidFillerBlock,
-      voidShadowStats.recessive,
+      recessiveVoidFillerRequiredCount,
     );
 
     if (!dominant && !recessive) return null;
@@ -1488,8 +1604,8 @@ const Index = () => {
     showDominateVoidFillerInput,
     showRecessiveVoidFillerInput,
     showVsFillerWarnings,
-    voidShadowStats.dominant,
-    voidShadowStats.recessive,
+    dominateVoidFillerRequiredCount,
+    recessiveVoidFillerRequiredCount,
   ]);
   const lateFillerWarning = useMemo<ShapeWarning | null>(() => {
     if (!showLateFillerInput || lateFillerRequiredCount <= 0 || !lateFillerShadingDisabled) return null;
@@ -2220,9 +2336,63 @@ const Index = () => {
               >
                 +
               </button>
-              {imageData && !isFlatShape && (
+              {imageData && (!isFlatShape || showAnyWaterDropControl) && (
                 <div className="ml-auto flex items-center gap-1">
-                  {buildModeUsesLayerGap(buildMode) && (
+                  {showLightWaterDropControl && (
+                    <>
+                      <span
+                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                        title={messages.buildMode.waterDropTooltip(2)}
+                      >
+                        {messages.buildMode.waterDropLabel(2)}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={lightWaterDrop}
+                        onChange={e => setNormalizedWaterDrop(2, parseInt(e.target.value) || 0)}
+                        title={messages.buildMode.waterDropTooltip(2)}
+                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                      />
+                    </>
+                  )}
+                  {showFlatWaterDropControl && (
+                    <>
+                      <span
+                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                        title={messages.buildMode.waterDropTooltip(1)}
+                      >
+                        {messages.buildMode.waterDropLabel(1)}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={flatWaterDrop}
+                        onChange={e => setNormalizedWaterDrop(1, parseInt(e.target.value) || 0)}
+                        title={messages.buildMode.waterDropTooltip(1)}
+                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                      />
+                    </>
+                  )}
+                  {showDarkWaterDropControl && (
+                    <>
+                      <span
+                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+                        title={messages.buildMode.waterDropTooltip(0)}
+                      >
+                        {messages.buildMode.waterDropLabel(0)}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={darkWaterDrop}
+                        onChange={e => setNormalizedWaterDrop(0, parseInt(e.target.value) || 0)}
+                        title={messages.buildMode.waterDropTooltip(0)}
+                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                      />
+                    </>
+                  )}
+                  {!isFlatShape && buildModeUsesLayerGap(buildMode) && (
                     <>
                       <span
                         className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
@@ -2241,7 +2411,7 @@ const Index = () => {
                       />
                     </>
                   )}
-                  {showMixStepsToggle && (
+                  {!isFlatShape && showMixStepsToggle && (
                     <label
                       className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
                       title={messages.buildMode.mixStepsTooltip}
@@ -2256,7 +2426,7 @@ const Index = () => {
                       />
                     </label>
                   )}
-                  {showPaletteSeedToggle && (
+                  {!isFlatShape && showPaletteSeedToggle && (
                     <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
                       <span>{messages.buildMode.paletteSeedLabel}</span>
                       <input
@@ -2267,39 +2437,43 @@ const Index = () => {
                       />
                     </label>
                   )}
-                  <span className="text-xs font-semibold text-accent whitespace-nowrap">
-                    {messages.buildMode.label}
-                  </span>
-                  <select
-                    className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
-                      buildMode === BuildMode.SuppressSplitRow ? "text-muted-foreground" : "text-foreground"
-                    }`}
-                    value={buildMode}
-                    onChange={e => setBuildMode(e.target.value as BuildMode)}
-                    title={shadingMethodTooltip}
-                  >
-                    <optgroup label={messages.buildMode.staircaseGroupLabel}>
-                      {staircaseModeOptions.map(opt => (
-                        <option key={opt.value} value={opt.value} title={messages.buildMode.tooltip(opt.value)}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label={messages.buildMode.suppressGroupLabel}>
-                      {suppressModeOptions.map(opt => (
-                        <option
-                          key={opt.value}
-                          value={opt.value}
-                          disabled={opt.disabled}
-                          data-muted={opt.muted ? "true" : undefined}
-                          style={opt.muted ? { color: "var(--muted-foreground)", fontStyle: "italic" } : undefined}
-                          title={messages.buildMode.tooltip(opt.value)}
-                        >
-                          {opt.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  {!isFlatShape && (
+                    <>
+                      <span className="text-xs font-semibold text-accent whitespace-nowrap">
+                        {messages.buildMode.label}
+                      </span>
+                      <select
+                        className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
+                          buildMode === BuildMode.SuppressSplitRow ? "text-muted-foreground" : "text-foreground"
+                        }`}
+                        value={buildMode}
+                        onChange={e => setBuildMode(e.target.value as BuildMode)}
+                        title={shadingMethodTooltip}
+                      >
+                        <optgroup label={messages.buildMode.staircaseGroupLabel}>
+                          {staircaseModeOptions.map(opt => (
+                            <option key={opt.value} value={opt.value} title={messages.buildMode.tooltip(opt.value)}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label={messages.buildMode.suppressGroupLabel}>
+                          {suppressModeOptions.map(opt => (
+                            <option
+                              key={opt.value}
+                              value={opt.value}
+                              disabled={opt.disabled}
+                              data-muted={opt.muted ? "true" : undefined}
+                              style={opt.muted ? { color: "var(--muted-foreground)", fontStyle: "italic" } : undefined}
+                              title={messages.buildMode.tooltip(opt.value)}
+                            >
+                              {opt.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -2935,9 +3109,9 @@ const Index = () => {
                   <span>
                     <strong className="text-foreground">{messages.preview.blockTypeCount(numColorBlockTypesForPart)}</strong>
                   </span>
-                  {voidShadowCount > 0 && (
+                  {vsFillerSpotCount > 0 && (
                     <span>
-                      <strong className="text-foreground">{messages.preview.voidShadowCount(voidShadowCount)}</strong>
+                      <strong className="text-foreground">{messages.preview.voidShadowCount(vsFillerSpotCount)}</strong>
                     </span>
                   )}
                 </div>
@@ -3116,6 +3290,15 @@ const Index = () => {
                   className="h-3.5 w-3.5"
                 />
                 <span>{messages.dialogs.options.assumeFloor}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={belowPlatformWater}
+                  onChange={e => setBelowPlatformWater(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>{messages.dialogs.options.belowPlatformWater}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input

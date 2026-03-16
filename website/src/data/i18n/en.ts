@@ -92,6 +92,13 @@ export const enCatalog = {
     mixStepsLabel: "Mix Steps:",
     mixStepsTooltip:
       "Sequential steps are able to reusable (recessive) color blocks from prior steps as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
+    waterDropLabels: {
+      0: "Dark Water Drop:",
+      1: "Flat Water Drop:",
+      2: "Light Water Drop:",
+    } as const,
+    waterDropTooltip:
+      "Below-platform water: 0 places this shade's water block at the non-water floor Y. Each increment moves it 1 block lower. Used water shades must have distinct drop values.",
     paletteSeedLabel: "Palette Seed:",
     optionLabels: {
       [BuildMode.Flat]: "Flat",
@@ -156,13 +163,13 @@ export const enCatalog = {
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Filler-1",
     dominateVoidTooltip:
-      "Used when a dominate transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT.",
+      "Used when the north cell for a dominant pixel does not naturally provide the needed shading height (for example transparent or dropped-below water), so a temporary filler must overwrite that north cell. This filler will need to be manually suppressed after building the NBT.",
     dominateVoidPlaceholder: "slime_block",
     dominateVoidRequiredTooltip: "Required VS-Filler-1 placements for the current output range.",
     recessiveVoidLabel: "VS-2:",
     recessiveVoidWarningLabel: "VS-Filler-2",
     recessiveVoidTooltip:
-      "Used when a recessive transparent pixel is overwritten by a filler block to shade the block directly south. This filler will need to be manually suppressed after building the NBT.",
+      "Used when the north cell for a recessive pixel does not naturally provide the needed shading height (for example transparent or dropped-below water), so a temporary filler must overwrite that north cell. This filler will need to be manually suppressed after building the NBT.",
     recessiveVoidPlaceholder: "honey_block",
     recessiveVoidRequiredTooltip: "Required VS-Filler-2 placements for the current output range.",
     voidFillersWarningLabel: "VS-Fillers",
@@ -242,8 +249,8 @@ export const enCatalog = {
     waterSideSupportNotColorIdZero:
       "Support filler is not color_id=0 ({value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.",
     vsFillerInvalid: {
-      one: "{label} is invalid ({value}).\nThere will be {count} noob pixel.",
-      other: "{label} is invalid ({value}).\nThere will be {count} noob pixels.",
+      one: "{label} is invalid ({value}).\nThere will be {count} staircase pixel with incorrect shading.",
+      other: "{label} is invalid ({value}).\nThere will be {count} staircase pixels with incorrect shading.",
     } as PluralForms,
     vsFillerRequiredSingularLabel: {
       one: "{label} is required for this image.\n{count} spot will need manual color-suppression.",
@@ -254,9 +261,9 @@ export const enCatalog = {
       other: "{label} are required for this image.\n{count} spots will need manual color-suppression.",
     } as PluralForms,
     vsFillersInvalid: {
-      one: "VS-Fillers are invalid ({first}, {second}). There will be {count} noob pixel (south-of-transparent with incorrect shading).",
+      one: "VS-Fillers are invalid ({first}, {second}). There will be {count} staircase pixel with incorrect shading.",
       other:
-        "VS-Fillers are invalid ({first}, {second}). There will be {count} noob pixels (south-of-transparent with incorrect shading).",
+        "VS-Fillers are invalid ({first}, {second}). There will be {count} staircase pixels with incorrect shading.",
     } as PluralForms,
     lateFillerInvalid: {
       one: "Late-Filler is invalid ({value}).\n{count} late suppress spot requires shading.",
@@ -271,8 +278,8 @@ export const enCatalog = {
       other: "{count} block types",
     } as PluralForms,
     voidShadowCount: {
-      one: "{count} void shadow",
-      other: "{count} void shadows",
+      one: "{count} VS-filler spot",
+      other: "{count} VS-filler spots",
     } as PluralForms,
     stepRangeButton: "Step range",
     columnRangeButton: "Column range",
@@ -294,6 +301,7 @@ export const enCatalog = {
       showExcludedBlocks: "Show excluded blocks",
       forceZ129: "Z-width always 129",
       assumeFloor: "Assume floor",
+      belowPlatformWater: "Below-platform water",
       showAlignmentReminder: "Show alignment reminder",
       showNooblineWarnings: "Show warnings for nooblines",
       showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",

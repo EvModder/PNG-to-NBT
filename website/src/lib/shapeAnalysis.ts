@@ -8,13 +8,14 @@
  * Callers:
  * - src/Index.tsx
  */
+import { WATER_BASE_INDEX } from "../data/mapColors";
 import { type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
 import { FillerRole, type CustomColor, type FillerAssignment } from "./conversionTypes";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart, ShapePartType } from "./shapeTypes";
-import { isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
+import { getActiveAssumedFloorYs, isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
 interface FillerNeedStats {
   roleCounts: Map<FillerRole, number>;
@@ -92,6 +93,7 @@ function analyzePartMaterialNeeds(
   const visibleColorKeys = new Set<string>();
   const usedShadesByBase = new Map<number, Set<number>>();
   const fillerRoleCounts = new Map<FillerRole, number>();
+  const assumedFloorYs = getActiveAssumedFloorYs(part, options.assumeFloor);
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
     if (applyColumnRange && options.columnRange && (x < options.columnRange[0] || x > options.columnRange[1])) continue;
@@ -113,7 +115,7 @@ function analyzePartMaterialNeeds(
 
     const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
     if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options)) continue;
-    if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor, part.assumedFloorYs)) continue;
+    if (!isWithinShapeBounds({ x, y, z }, part.bounds, assumedFloorYs)) continue;
     if (
       assignedRole &&
       (
@@ -171,6 +173,7 @@ export function hasColorHeightVariance(shape: GeneratedShape): boolean {
   for (const part of shape.parts) {
     for (const [coord, cell] of part.cells) {
       if (!isShapeColorCell(cell)) continue;
+      if (!cell.isCustom && cell.id === WATER_BASE_INDEX) continue;
       const [, y] = parseShapeCoordKey(coord);
       if (firstY === undefined) firstY = y;
       else if (firstY !== y) return true;

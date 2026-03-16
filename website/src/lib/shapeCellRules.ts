@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - getSupportedColorAbove()
+ * - getActiveAssumedFloorYs()
  * - isWithinShapeBounds()
  * - shouldIncludeFragileSupportCell()
  *
@@ -37,19 +38,29 @@ export function getSupportedColorAbove(part: ShapePart, coord: number): ShapeCol
 }
 
 // Callers:
+const NO_ASSUMED_FLOORS: ReadonlySet<number> = new Set<number>();
+
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeSubstitution.ts
+export function getActiveAssumedFloorYs(part: ShapePart, assumeFloor: boolean): ReadonlySet<number> {
+  return assumeFloor ? part.assumedFloorYs : NO_ASSUMED_FLOORS;
+}
+
+// Callers:
 // - src/Index.tsx
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeSubstitution.ts
 export function isWithinShapeBounds(
   candidate: { x: number; y: number; z: number },
   bounds: ShapePart["bounds"],
-  assumeFloor: boolean,
-  assumedFloorYs?: ReadonlySet<number>,
+  assumedFloorYs: ReadonlySet<number> = NO_ASSUMED_FLOORS,
 ): boolean {
   if (candidate.x < 0 || candidate.x >= MAP_SIZE) return false;
+  // Shape generation already constrains z to [-1, MAP_SIZE); use the part-local footprint here.
   if (candidate.z < bounds.minZ || candidate.z > bounds.maxZ) return false;
-  if (assumeFloor && !assumedFloorYs && candidate.y < bounds.minY) return false;
-  if (assumeFloor && assumedFloorYs?.has(candidate.y)) return false;
+  if (assumedFloorYs.has(candidate.y)) return false;
   return true;
 }
 

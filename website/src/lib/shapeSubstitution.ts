@@ -14,7 +14,7 @@ import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRul
 import { resolveShapeColorBlockName } from "./materialRules";
 import type { GeneratedShape } from "./shapeGeneration";
 import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart } from "./shapeTypes";
-import { isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
+import { getActiveAssumedFloorYs, isWithinShapeBounds, shouldIncludeFragileSupportCell } from "./shapeCellRules";
 
 // Callers:
 // - src/lib/nbtExport.ts
@@ -32,6 +32,7 @@ function materializePart(part: ShapePart, options: SubstitutionOptions): BlockEn
   const resolved: BlockEntry[] = [];
   const occupied = new Set<number>();
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
+  const assumedFloorYs = getActiveAssumedFloorYs(part, options.assumeFloor);
 
   for (const [coord, cell] of part.cells) {
     if (!isShapeColorCell(cell)) continue;
@@ -51,7 +52,7 @@ function materializePart(part: ShapePart, options: SubstitutionOptions): BlockEn
       if (!isShapeFillerCell(cell) || !cell.includes(assignment.role)) continue;
       const [x, y, z] = parseShapeCoordKey(coord);
       if (!shouldIncludeFragileSupportCell(part, coord, cell, assignment.role, options)) continue;
-      if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor, part.assumedFloorYs)) continue;
+      if (!isWithinShapeBounds({ x, y, z }, part.bounds, assumedFloorYs)) continue;
       if (occupied.has(coord)) continue;
       resolved.push({ x, y, z, blockName: fillerName });
       occupied.add(coord);

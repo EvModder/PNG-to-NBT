@@ -46,11 +46,18 @@ type StepVariantSpec = {
   cols: number[];
   includeAt: (x: number, z: number) => boolean;
 };
+type WaterShade = 0 | 1 | 2;
+type WaterDropByShade = Readonly<Record<WaterShade, number>>;
+type ShapeBlockSet = {
+  blocks: ShapeBlock[];
+  droppedWaterBlocks: ShapeBlock[];
+};
 interface RawShapePart {
   blocks: ShapeBlock[];
+  droppedWaterBlocks: ShapeBlock[];
   fillerCandidates: FillerCandidate[];
   bounds: ShapeBounds;
-  assumedFloorYs?: ReadonlySet<number>;
+  assumedFloorYs: ReadonlySet<number>;
 }
 interface ShapeGenerationStats {
   hasWater: boolean;
@@ -83,6 +90,7 @@ type CachedGeneratedShape = {
 type StaircaseBaseBlocksCache = { // Shared northline-style staircase block layouts before per-mode reshaping.
   base?: ShapeBlock[];
   waterOffset?: ShapeBlock[];
+  belowPlatform?: ShapeBlock[];
 };
 // Alias build modes are canonicalized before staircase-mode dispatch.
 type StaircaseInternalBuildMode =
@@ -143,11 +151,15 @@ function parseColumnCoordKey(key: ColumnCoordKey): [number, number] {
 interface GridShapeCache {
   shapes: Map<ShapeCacheKeyId, CachedGeneratedShape>;
   rawParts: Map<ShapeCacheKeyId, RawShapePart[]>;
-   // Per-X non-transparent source-pixel lookup used by staircase transforms.
+  // Per-X non-transparent source-pixel lookup used by staircase transforms.
   columnPixelInfo: Map<number, Map<number, ColumnPixelCell>>;
+  // Water-filtered variant of the same lookup, for below-platform staircase shaping.
+  columnNonWaterPixelInfo: Map<number, Map<number, ColumnPixelCell>>;
   staircaseBaseBlocks: StaircaseBaseBlocksCache;
+  // Per-mode staircase platform layouts before fixed below-platform water is emitted.
+  belowPlatformStaircaseBlocks: Map<string, ShapeBlock[]>;
   // Cached vertical spacing between suppress step parts for this image.
-  stepVariantYOffset?: number;
+  stepVariantYOffsets: Map<string, number>;
 }
 
 const SHAPE_CACHE = new WeakMap<ColorGrid, GridShapeCache>();
@@ -159,7 +171,10 @@ function getGridShapeCache(colorGrid: ColorGrid): GridShapeCache {
     shapes: new Map(),
     rawParts: new Map(),
     columnPixelInfo: new Map(),
+    columnNonWaterPixelInfo: new Map(),
     staircaseBaseBlocks: {},
+    belowPlatformStaircaseBlocks: new Map(),
+    stepVariantYOffsets: new Map(),
   };
   SHAPE_CACHE.set(colorGrid, cache);
   return cache;
@@ -196,6 +211,9 @@ function getGeneratedShapeSignatureId(shape: GeneratedShape): GeneratedShapeSign
     mixUint32(state, part.bounds.maxY);
     mixUint32(state, part.bounds.minZ);
     mixUint32(state, part.bounds.maxZ);
+    const floorYs = [...part.assumedFloorYs].sort((a, b) => a - b);
+    mixUint32(state, floorYs.length);
+    for (const floorY of floorYs) mixUint32(state, floorY);
 
     const cells = [...part.cells.entries()].sort(([coordA], [coordB]) => coordA - coordB);
     mixUint32(state, cells.length);
@@ -222,15 +240,23 @@ function getPixelColor(colorGrid: ColorGrid, x: number, z: number): ColorData {
   return getColorCell(colorGrid, x, z);
 }
 
-function getCachedColumnPixelInfo(colorGrid: ColorGrid, cache: GridShapeCache, x: number): Map<number, ColumnPixelCell> {
-  const cached = cache.columnPixelInfo.get(x);
+function getCachedColumnPixelInfo(
+  colorGrid: ColorGrid,
+  cache: GridShapeCache,
+  x: number,
+  excludeWater = false,
+): Map<number, ColumnPixelCell> {
+  const targetCache = excludeWater ? cache.columnNonWaterPixelInfo : cache.columnPixelInfo;
+  const cached = targetCache.get(x);
   if (cached) return cached;
   const info = new Map<number, { shade: number; isWater: boolean }>();
   for (let z = 0; z < MAP_SIZE; ++z) {
     const color = getPixelColor(colorGrid, x, z);
-    if (!isTransparentColor(color)) info.set(z, { shade: color.shade, isWater: isWaterColor(color) });
+    if (isTransparentColor(color)) continue;
+    if (excludeWater && isWaterColor(color)) continue;
+    info.set(z, { shade: color.shade, isWater: isWaterColor(color) });
   }
-  cache.columnPixelInfo.set(x, info);
+  targetCache.set(x, info);
   return info;
 }
 
@@ -239,6 +265,10 @@ function toColorRef(color: ColorData): ShapeRef {
 }
 
 function makeColorBlock(x: number, y: number, z: number, color: ColorData): ShapeBlock {
+  return { x, y, z, ref: toColorRef(color) };
+}
+
+function makeBelowPlatformWaterBlock(x: number, y: number, z: number, color: ColorData): ShapeBlock {
   return { x, y, z, ref: toColorRef(color) };
 }
 
@@ -305,6 +335,8 @@ function getWaterDepth(shade: number, x: number, z: number): number {
   }
 }
 
+const DEFAULT_WATER_DROPS: WaterDropByShade = { 0: 0, 1: 0, 2: 0 };
+
 function isDarkShade(shade: number): boolean {
   return shade === 0 || shade === 3;
 }
@@ -313,9 +345,10 @@ function isWaterBlock(block: ShapeBlock): boolean {
   return block.ref.kind === "color" && isWaterColor(block.ref.color);
 }
 
-function buildFillerCandidates(blocks: ShapeBlock[]): FillerCandidate[] {
+function buildFillerCandidates(blocks: ShapeBlock[], occupiedExtraBlocks: ShapeBlock[] = []): FillerCandidate[] {
   const occupied = new Set<ShapeCoordKey>();
   for (const block of blocks) occupied.add(toShapeCoordKey(block.x, block.y, block.z));
+  for (const block of occupiedExtraBlocks) occupied.add(toShapeCoordKey(block.x, block.y, block.z));
 
   const byCoord = new Map<ShapeCoordKey, FillerCandidate>();
   const ensureCandidate = (x: number, y: number, z: number) => {
@@ -395,7 +428,7 @@ function buildFillerCandidates(blocks: ShapeBlock[]): FillerCandidate[] {
   return [...byCoord.values()];
 }
 
-function buildBelowOnlyWaterFillerCandidates(blocks: ShapeBlock[]): FillerCandidate[] {
+function buildBelowOnlyWaterFillerCandidates(blocks: ShapeBlock[], occupiedExtraBlocks: ShapeBlock[] = []): FillerCandidate[] {
   const occupied = new Set<ShapeCoordKey>();
   const waterBottoms = new Map<ColumnCoordKey, PositionedEntry>();
 
@@ -406,6 +439,7 @@ function buildBelowOnlyWaterFillerCandidates(blocks: ShapeBlock[]): FillerCandid
     const current = waterBottoms.get(coord);
     if (!current || block.y < current.y) waterBottoms.set(coord, { x: block.x, y: block.y, z: block.z });
   }
+  for (const block of occupiedExtraBlocks) occupied.add(toShapeCoordKey(block.x, block.y, block.z));
 
   const candidates: FillerCandidate[] = [];
   for (const bottom of waterBottoms.values()) {
@@ -416,17 +450,19 @@ function buildBelowOnlyWaterFillerCandidates(blocks: ShapeBlock[]): FillerCandid
   return candidates;
 }
 
-function measureShapeBounds(blocks: ShapeBlock[]): ShapeBounds {
+function measureShapeBounds(blocks: ShapeBlock[], droppedWaterBlocks: ShapeBlock[] = []): ShapeBounds {
   let minY = Infinity;
   let maxY = -Infinity;
   let minZ = Infinity;
   let maxZ = -Infinity;
 
-  for (const block of blocks) {
-    if (block.y < minY) minY = block.y;
-    if (block.y > maxY) maxY = block.y;
-    if (block.z < minZ) minZ = block.z;
-    if (block.z > maxZ) maxZ = block.z;
+  for (const blockList of [blocks, droppedWaterBlocks]) {
+    for (const block of blockList) {
+      if (block.y < minY) minY = block.y;
+      if (block.y > maxY) maxY = block.y;
+      if (block.z < minZ) minZ = block.z;
+      if (block.z > maxZ) maxZ = block.z;
+    }
   }
 
   return {
@@ -450,16 +486,20 @@ function buildShapePart(
   extraFillerCandidates: FillerCandidate[] = [],
   includeDefaultFillerCandidates = true,
   assumedFloorYs?: ReadonlySet<number>,
+  droppedWaterBlocks: ShapeBlock[] = [],
 ): RawShapePart {
   assertShapeBlockZRange(blocks);
+  assertShapeBlockZRange(droppedWaterBlocks);
+  const bounds = measureShapeBounds(blocks, droppedWaterBlocks);
   const fillerCandidates = includeDefaultFillerCandidates
-    ? [...buildFillerCandidates(blocks), ...buildBelowOnlyWaterFillerCandidates(blocks), ...extraFillerCandidates]
+    ? [...buildFillerCandidates(blocks, droppedWaterBlocks), ...buildBelowOnlyWaterFillerCandidates(blocks, droppedWaterBlocks), ...extraFillerCandidates]
     : extraFillerCandidates;
   return {
     blocks,
+    droppedWaterBlocks,
     fillerCandidates,
-    bounds: measureShapeBounds(blocks),
-    assumedFloorYs,
+    bounds,
+    assumedFloorYs: assumedFloorYs ?? new Set<number>([bounds.minY - 1]),
   };
 }
 
@@ -477,8 +517,24 @@ function makeVoidAwareShadeFiller(x: number, y: number, z: number): ShapeBlock {
   );
 }
 
-function appendSuppressPixelBlocks(blocks: ShapeBlock[], x: number, baseY: number, z: number, color: ColorData): number {
+function appendSuppressPixelBlocks(
+  blocks: ShapeBlock[],
+  droppedWaterBlocks: ShapeBlock[],
+  x: number,
+  baseY: number,
+  z: number,
+  color: ColorData,
+  belowPlatformWater = false,
+  waterDrops: WaterDropByShade = DEFAULT_WATER_DROPS,
+): number {
   if (isWaterColor(color)) {
+    if (belowPlatformWater) {
+      const waterDrop = waterDrops[color.shade as WaterShade];
+      if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${color.shade}`);
+      const waterY = baseY - waterDrop;
+      droppedWaterBlocks.push(makeBelowPlatformWaterBlock(x, waterY, z, color));
+      return waterY;
+    }
     const depth = getWaterDepth(color.shade, x, z);
     for (let d = 0; d < depth; ++d) blocks.push(makeColorBlock(x, baseY + d, z, color));
     return baseY + depth - 1;
@@ -496,25 +552,37 @@ function appendSuppressPixelBlocks(blocks: ShapeBlock[], x: number, baseY: numbe
   return baseY;
 }
 
-function getStepVariantYOffset(colorGrid: ColorGrid, cache?: GridShapeCache): number {
-  if (cache?.stepVariantYOffset !== undefined) return cache.stepVariantYOffset;
+function getStepVariantYOffset(
+  colorGrid: ColorGrid,
+  cache?: GridShapeCache,
+  belowPlatformWater = false,
+): number {
+  const cacheKey = belowPlatformWater ? "below" : "default";
+  const cached = cache?.stepVariantYOffsets.get(cacheKey);
+  if (cached !== undefined) return cached;
   let yOffset = 1;
+  let hasDarkNonWater = false;
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
       const color = getPixelColor(colorGrid, x, z);
       if (isTransparentColor(color)) continue;
       if (isWaterColor(color)) {
+        if (belowPlatformWater) continue;
         if (color.shade !== 2) yOffset = Math.max(yOffset, getWaterDepth(color.shade, x, z));
         continue;
       }
-      if (isDarkShade(color.shade)) yOffset = Math.max(yOffset, 2);
+      if (isDarkShade(color.shade)) {
+        if (belowPlatformWater) hasDarkNonWater = true;
+        else yOffset = Math.max(yOffset, 2);
+      }
     }
   }
-  if (cache) cache.stepVariantYOffset = yOffset;
+  if (belowPlatformWater) yOffset = Math.max(yOffset, hasDarkNonWater ? 2 : 1);
+  if (cache) cache.stepVariantYOffsets.set(cacheKey, yOffset);
   return yOffset;
 }
 
-function buildStaircaseBlocks(colorGrid: ColorGrid, waterFillerOffset: boolean): ShapeBlock[] {
+function buildStaircaseBlocks(colorGrid: ColorGrid, waterFillerOffset: boolean, omitWater = false): ShapeBlock[] {
   const blocks: ShapeBlock[] = [];
   const baseY = 64;
 
@@ -541,6 +609,10 @@ function buildStaircaseBlocks(colorGrid: ColorGrid, waterFillerOffset: boolean):
 
       const colorRef = toColorRef(color);
       if (isWaterColor(color)) {
+        if (omitWater) {
+          north = { y: north.y, transparent: true };
+          continue;
+        }
         const depth = getWaterDepth(color.shade, x, z);
         let bottom = north.waterBottom !== undefined ? north.waterBottom : north.y;
         if (waterFillerOffset && color.shade !== 2 && north.waterBottom === undefined) ++bottom;
@@ -551,6 +623,7 @@ function buildStaircaseBlocks(colorGrid: ColorGrid, waterFillerOffset: boolean):
       }
 
       if (north.transparent) {
+        let colorY = north.y;
         switch (color.shade) {
           case 1:
             addVoidShadowFiller(x, north.y, z - 1);
@@ -558,15 +631,16 @@ function buildStaircaseBlocks(colorGrid: ColorGrid, waterFillerOffset: boolean):
           case 2:
             break;
           case 0:
-            addVoidShadowFiller(x, north.y + 1, z - 1);
+            addVoidShadowFiller(x, north.y + (z === 0 ? 0 : 1), z - 1);
+            if (z === 0) colorY = north.y - 1;
             break;
           // case 3:
           //   break; // Unreachable: the darkest shade should never survive color conversion.
           default:
             throw new Error(`Unexpected staircase shade: ${color.shade}`);
         }
-        addBlock(x, north.y, z, colorRef);
-        north = { y: north.y, transparent: false };
+        addBlock(x, colorY, z, colorRef);
+        north = { y: colorY, transparent: false };
         continue;
       }
 
@@ -693,7 +767,61 @@ function addStaircaseWaterConvenienceFillers(
   return fillerCandidates;
 }
 
-function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, cache: GridShapeCache) {
+function buildBelowPlatformWaterBlocks(
+  blocks: ShapeBlock[],
+  colorGrid: ColorGrid,
+  waterDrops: WaterDropByShade,
+): { droppedWaterBlocks: ShapeBlock[]; assumedFloorYs: ReadonlySet<number> } {
+  let floorY = Infinity;
+  for (const block of blocks) {
+    if (block.ref.kind === "color" && !isWaterColor(block.ref.color) && block.y < floorY) floorY = block.y;
+  }
+  if (floorY === Infinity) floorY = 0;
+
+  const byCoord = new Map<ShapeCoordKey, number>();
+  for (let i = 0; i < blocks.length; ++i) {
+    byCoord.set(toShapeCoordKey(blocks[i].x, blocks[i].y, blocks[i].z), i);
+  }
+  const removedIndexes = new Set<number>();
+  const droppedWaterBlocks: ShapeBlock[] = [];
+
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      const color = getPixelColor(colorGrid, x, z);
+      if (!isWaterColor(color)) continue;
+      const waterDrop = waterDrops[color.shade as WaterShade];
+      if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${color.shade}`);
+      const waterY = floorY - waterDrop;
+      const coord = toShapeCoordKey(x, waterY, z);
+      const existingIndex = byCoord.get(coord);
+      if (existingIndex !== undefined) {
+        const existingBlock = blocks[existingIndex];
+        if (existingBlock.ref.kind !== "filler") continue;
+        removedIndexes.add(existingIndex);
+        byCoord.delete(coord);
+      }
+      droppedWaterBlocks.push(makeBelowPlatformWaterBlock(x, waterY, z, color));
+    }
+  }
+
+  if (removedIndexes.size > 0) {
+    const keptBlocks = blocks.filter((_, index) => !removedIndexes.has(index));
+    blocks.length = 0;
+    blocks.push(...keptBlocks);
+  }
+
+  return {
+    droppedWaterBlocks,
+    assumedFloorYs: new Set<number>([floorY - 1]),
+  };
+}
+
+function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(
+  blocks: T[],
+  colorGrid: ColorGrid,
+  cache: GridShapeCache,
+  excludeWater = false,
+) {
   const rowKey = (x: number, z: number) => toColumnCoordKey(x, z);
   type PixelInfo = { shade: number; isWater: boolean };
   interface RowRecord {
@@ -717,7 +845,7 @@ function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(bloc
 
   const pixelByColumn = new Map<number, Map<number, PixelInfo>>();
   for (let x = 0; x < MAP_SIZE; ++x) {
-    const zInfo = getCachedColumnPixelInfo(colorGrid, cache, x);
+    const zInfo = getCachedColumnPixelInfo(colorGrid, cache, x, excludeWater);
     if (zInfo.size > 0) pixelByColumn.set(x, zInfo);
   }
 
@@ -1016,14 +1144,15 @@ function applyStaircaseVariantValley<T extends PositionedEntry>(
   blocks: T[],
   colorGrid: ColorGrid,
   cache?: GridShapeCache,
+  excludeWater = false,
 ) {
   const columns = groupBlocksByColumn(blocks);
   for (let x = 0; x < MAP_SIZE; ++x) {
     const colBlocks = columns[x];
     if (colBlocks.length === 0) continue;
     const pixelShade = cache
-      ? getCachedColumnPixelInfo(colorGrid, cache, x)
-      : getCachedColumnPixelInfo(colorGrid, getGridShapeCache(colorGrid), x);
+      ? getCachedColumnPixelInfo(colorGrid, cache, x, excludeWater)
+      : getCachedColumnPixelInfo(colorGrid, getGridShapeCache(colorGrid), x, excludeWater);
     const { rowBlocks, rowMinY, rowMaxY, zValues } = buildColumnBlockRows(colBlocks);
     const waterZ = new Uint8Array(MAP_SIZE);
     const primaryPresent = new Uint8Array(MAP_SIZE);
@@ -1166,7 +1295,13 @@ function applyStaircaseVariantValley<T extends PositionedEntry>(
   }
 }
 
-function applyStaircaseVariantParty<T extends PositionedEntry>(blocks: T[], colorGrid: ColorGrid, paletteSeed = 0, cache?: GridShapeCache) {
+function applyStaircaseVariantParty<T extends PositionedEntry>(
+  blocks: T[],
+  colorGrid: ColorGrid,
+  paletteSeed = 0,
+  cache?: GridShapeCache,
+  excludeWater = false,
+) {
   const seedBase = (42 ^ paletteSeed) >>> 0;
   const mulberry32 = (seed: number) => () => {
     let t = (seed += 0x6d2b79f5);
@@ -1193,7 +1328,9 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(blocks: T[], colo
       return pool.slice(0, count).sort((a, b) => a - b);
     };
 
-    const pixelInfo = cache ? getCachedColumnPixelInfo(colorGrid, cache, x) : getCachedColumnPixelInfo(colorGrid, getGridShapeCache(colorGrid), x);
+    const pixelInfo = cache
+      ? getCachedColumnPixelInfo(colorGrid, cache, x, excludeWater)
+      : getCachedColumnPixelInfo(colorGrid, getGridShapeCache(colorGrid), x, excludeWater);
 
     const zToBlocks = new Map<number, T[]>();
     for (const block of colBlocks) {
@@ -1496,26 +1633,36 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(blocks: T[], colo
   }
 }
 
-function buildSuppressSplitRowBlockSets(colorGrid: ColorGrid): ShapeBlock[][] {
-  const buildHalf = (startRow: 0 | 1): ShapeBlock[] => {
+function buildSuppressSplitRowBlockSets(
+  colorGrid: ColorGrid,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
+): ShapeBlockSet[] {
+  const buildHalf = (startRow: 0 | 1): ShapeBlockSet => {
     const blocks: ShapeBlock[] = [];
+    const droppedWaterBlocks: ShapeBlock[] = [];
     for (let x = 0; x < MAP_SIZE; ++x) {
       for (let z = 0; z < MAP_SIZE; ++z) {
         if (z % 2 !== startRow) continue;
         const color = getPixelColor(colorGrid, x, z);
         if (isTransparentColor(color)) continue;
-        appendSuppressPixelBlocks(blocks, x, 0, z, color);
+        appendSuppressPixelBlocks(blocks, droppedWaterBlocks, x, 0, z, color, belowPlatformWater, waterDrops);
       }
     }
-    return blocks;
+    return { blocks, droppedWaterBlocks };
   };
 
   return [buildHalf(0), buildHalf(1)];
 }
 
-function buildSuppressSplitCheckerBlockSets(colorGrid: ColorGrid): ShapeBlock[][] {
-  const buildHalf = (useDominant: boolean): ShapeBlock[] => {
+function buildSuppressSplitCheckerBlockSets(
+  colorGrid: ColorGrid,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
+): ShapeBlockSet[] {
+  const buildHalf = (useDominant: boolean): ShapeBlockSet => {
     const blocks: ShapeBlock[] = [];
+    const droppedWaterBlocks: ShapeBlock[] = [];
     for (let x = 0; x < MAP_SIZE; ++x) {
       for (let z = 0; z < MAP_SIZE; ++z) {
         const isDominant = getPixelParity(x, z) === PixelParity.Dominant;
@@ -1523,14 +1670,20 @@ function buildSuppressSplitCheckerBlockSets(colorGrid: ColorGrid): ShapeBlock[][
         const color = getPixelColor(colorGrid, x, z);
         if (isTransparentColor(color)) continue;
         if (isWaterColor(color)) {
+          if (belowPlatformWater) {
+            const waterDrop = waterDrops[color.shade as WaterShade];
+            if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${color.shade}`);
+            droppedWaterBlocks.push(makeBelowPlatformWaterBlock(x, -waterDrop, z, color));
+            continue;
+          }
           const depth = getWaterDepth(color.shade, x, z);
           for (let d = 0; d < depth; ++d) blocks.push(makeColorBlock(x, -1 - d, z, color));
           continue;
         }
-        appendSuppressPixelBlocks(blocks, x, 0, z, color);
+        appendSuppressPixelBlocks(blocks, droppedWaterBlocks, x, 0, z, color, belowPlatformWater, waterDrops);
       }
     }
-    return blocks;
+    return { blocks, droppedWaterBlocks };
   };
 
   return [buildHalf(true), buildHalf(false)];
@@ -1540,9 +1693,12 @@ function buildSuppressDualLayerBlocks(
   colorGrid: ColorGrid,
   layerGap: number | undefined,
   buildMode: TwoLayerSuppressBuildMode,
-): { blocks: ShapeBlock[]; assumedFloorYs: ReadonlySet<number> } {
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
+): { blocks: ShapeBlock[]; droppedWaterBlocks: ShapeBlock[]; assumedFloorYs: ReadonlySet<number> } {
   const topYGrid: (number | undefined)[][] = Array.from({ length: MAP_SIZE }, () => new Array<number | undefined>(MAP_SIZE).fill(undefined));
   const blocks: ShapeBlock[] = [];
+  const droppedWaterBlocks: ShapeBlock[] = [];
   const occupied = new Set<ShapeCoordKey>();
   const lowerY = 0;
   const upperY = Math.max(1, layerGap ?? 5);
@@ -1616,6 +1772,15 @@ function buildSuppressDualLayerBlocks(
       const color = getPixelColor(colorGrid, x, z);
       if (isTransparentColor(color)) continue;
       if (isWaterColor(color)) {
+        if (belowPlatformWater) {
+          const waterDrop = waterDrops[color.shade as WaterShade];
+          if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${color.shade}`);
+          const waterY = lowerY - waterDrop;
+          droppedWaterBlocks.push(makeBelowPlatformWaterBlock(x, waterY, z, color));
+          occupied.add(toShapeCoordKey(x, waterY, z));
+          topYGrid[x][z] = waterY;
+          continue;
+        }
         const south = getPixelColor(colorGrid, x, z + 1);
         const southTopY = z < MAP_SIZE - 1 ? topYGrid[x][z + 1] : undefined;
         let topY = lowerY - 1;
@@ -1694,7 +1859,7 @@ function buildSuppressDualLayerBlocks(
     assumedFloorYs.add(block.y - 1);
   }
 
-  return { blocks, assumedFloorYs };
+  return { blocks, droppedWaterBlocks, assumedFloorYs };
 }
 
 function buildStepVariantSpecs(buildMode: StepwiseBuildMode): StepVariantSpec[] {
@@ -1743,26 +1908,65 @@ function buildStepVariantSpecs(buildMode: StepwiseBuildMode): StepVariantSpec[] 
   return specs;
 }
 
+function buildBelowPlatformWaterPreviewBlocks(
+  colorGrid: ColorGrid,
+  baseY: number,
+  waterDrops: WaterDropByShade,
+): ShapeBlock[] {
+  const blocks: ShapeBlock[] = [];
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      const color = getPixelColor(colorGrid, x, z);
+      if (!isWaterColor(color)) continue;
+      const waterDrop = waterDrops[color.shade as WaterShade];
+      if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${color.shade}`);
+      blocks.push(makeBelowPlatformWaterBlock(x, baseY - waterDrop, z, color));
+    }
+  }
+  return blocks;
+}
+
 function buildStepVariantBlocks(
   colorGrid: ColorGrid,
   currentSpec: StepVariantSpec,
   currentBaseY: number,
   previousSpec?: StepVariantSpec,
   nextSpec?: StepVariantSpec,
-): ShapeBlock[] {
+  allowMixStepReuse = false,
+  belowPlatformWater = false,
+  waterDrops: WaterDropByShade = DEFAULT_WATER_DROPS,
+): ShapeBlockSet {
   const stepBlocks: ShapeBlock[] = [];
+  const droppedWaterBlocks: ShapeBlock[] = [];
+  const occupied = new Set<ShapeCoordKey>();
   const repeatedNorthShaderColumns = new Set<ColumnCoordKey>();
   const repeatedNorthSharedColumns = new Set<ColumnCoordKey>();
+  const repeatedBelowPlatformWaterColumns = new Set<ColumnCoordKey>();
   const shadedByRepeatedNorth = new Set<ColumnCoordKey>();
   const cellKey = (x: number, z: number) => toColumnCoordKey(x, z);
+  const pushUnique = (block: ShapeBlock) => {
+    const coord = toShapeCoordKey(block.x, block.y, block.z);
+    if (occupied.has(coord)) return;
+    stepBlocks.push(block);
+    occupied.add(coord);
+  };
+  const pushUniqueDroppedWater = (block: ShapeBlock) => {
+    const coord = toShapeCoordKey(block.x, block.y, block.z);
+    if (occupied.has(coord)) return;
+    droppedWaterBlocks.push(block);
+    occupied.add(coord);
+  };
   const canReuseNorthColumnAsShader = (shadedColor: ColorData, northColor: ColorData): boolean => {
     if (isTransparentColor(shadedColor) || isWaterColor(shadedColor)) return false;
     if (isTransparentColor(northColor)) return false;
-    if (shadedColor.shade === 1) {
-      return !isWaterColor(northColor) || northColor.shade === 2;
+    if (isWaterColor(northColor)) {
+      if (belowPlatformWater) return false;
+      if (shadedColor.shade === 1) return northColor.shade === 2;
+      if (isDarkShade(shadedColor.shade)) return northColor.shade !== 2;
+      return false;
     }
-    if (isDarkShade(shadedColor.shade)) {
-      return isWaterColor(northColor) && northColor.shade !== 2;
+    if (shadedColor.shade === 1) {
+      return true;
     }
     return false;
   };
@@ -1793,6 +1997,7 @@ function buildStepVariantBlocks(
     northParity: PixelParity,
     adjacentSpec: StepVariantSpec | undefined,
   ) => {
+    if (belowPlatformWater) return;
     if (!adjacentSpec) return;
     for (const x of currentSpec.cols) {
       if (x < 0 || x >= MAP_SIZE) continue;
@@ -1809,10 +2014,40 @@ function buildStepVariantBlocks(
     }
   };
 
+  const collectBelowPlatformWaterColumns = () => {
+    if (!belowPlatformWater || !allowMixStepReuse) return;
+    for (const x of currentSpec.cols) {
+      if (x < 0 || x >= MAP_SIZE) continue;
+      let repeatSouthWater = false;
+      for (let z = MAP_SIZE - 2; z >= 0; --z) {
+        const north = getPixelColor(colorGrid, x, z);
+        if (!isWaterColor(north)) {
+          repeatSouthWater = false;
+          continue;
+        }
+        const northWaterDrop = waterDrops[north.shade as WaterShade];
+        if (northWaterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${north.shade}`);
+        const southZ = z + 1;
+        const south = getPixelColor(colorGrid, x, southZ);
+        const currentSouthNeedsFlatWater =
+          currentSpec.includeAt(x, southZ) &&
+          !isTransparentColor(south) &&
+          !isWaterColor(south) &&
+          south.shade === 1 &&
+          northWaterDrop === 0;
+        if (currentSouthNeedsFlatWater) shadedByRepeatedNorth.add(cellKey(x, southZ));
+        const shouldRepeat = currentSouthNeedsFlatWater || (repeatSouthWater && isWaterColor(south));
+        if (shouldRepeat) repeatedBelowPlatformWaterColumns.add(cellKey(x, z));
+        repeatSouthWater = shouldRepeat;
+      }
+    }
+  };
+
   collectRepeatedNorthBlocks(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
   collectRepeatedNorthBlocks(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
   collectSharedNorthColumnsForWater(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
   collectSharedNorthColumnsForWater(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
+  collectBelowPlatformWaterColumns();
 
   for (const x of currentSpec.cols) {
     if (x < 0 || x >= MAP_SIZE) continue;
@@ -1820,11 +2055,16 @@ function buildStepVariantBlocks(
       if (!currentSpec.includeAt(x, z)) continue;
       const color = getPixelColor(colorGrid, x, z);
       if (isTransparentColor(color)) continue;
+      if (belowPlatformWater && isWaterColor(color)) continue;
       if (shadedByRepeatedNorth.has(cellKey(x, z))) {
-        stepBlocks.push(makeColorBlock(x, currentBaseY, z, color));
+        pushUnique(makeColorBlock(x, currentBaseY, z, color));
         continue;
       }
-      appendSuppressPixelBlocks(stepBlocks, x, currentBaseY, z, color);
+      const heightBefore = stepBlocks.length;
+      appendSuppressPixelBlocks(stepBlocks, droppedWaterBlocks, x, currentBaseY, z, color, belowPlatformWater, waterDrops);
+      for (let i = heightBefore; i < stepBlocks.length; ++i) {
+        occupied.add(toShapeCoordKey(stepBlocks[i].x, stepBlocks[i].y, stepBlocks[i].z));
+      }
     }
   }
 
@@ -1836,30 +2076,60 @@ function buildStepVariantBlocks(
     const [x, z] = parseColumnCoordKey(key);
     const color = getPixelColor(colorGrid, x, z);
     if (isWaterColor(color)) {
-      appendSuppressPixelBlocks(stepBlocks, x, currentBaseY, z, color);
+      const heightBefore = stepBlocks.length;
+      appendSuppressPixelBlocks(stepBlocks, droppedWaterBlocks, x, currentBaseY, z, color, belowPlatformWater, waterDrops);
+      for (let i = heightBefore; i < stepBlocks.length; ++i) {
+        occupied.add(toShapeCoordKey(stepBlocks[i].x, stepBlocks[i].y, stepBlocks[i].z));
+      }
       continue;
     }
-    stepBlocks.push(makeColorBlock(x, currentBaseY, z, color));
+    pushUnique(makeColorBlock(x, currentBaseY, z, color));
   }
 
-  return stepBlocks;
+  for (const key of repeatedBelowPlatformWaterColumns) {
+    const [x, z] = parseColumnCoordKey(key);
+    const color = getPixelColor(colorGrid, x, z);
+    if (!isWaterColor(color)) continue;
+    const waterDrop = waterDrops[color.shade as WaterShade];
+    if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${color.shade}`);
+    pushUniqueDroppedWater(makeBelowPlatformWaterBlock(x, currentBaseY - waterDrop, z, color));
+  }
+
+  return { blocks: stepBlocks, droppedWaterBlocks };
 }
 
-function buildStepVariantParts(colorGrid: ColorGrid, buildMode: StepwiseBuildMode, mixSteps: boolean, cache?: GridShapeCache): RawShapePart[] {
+function buildStepVariantParts(
+  colorGrid: ColorGrid,
+  buildMode: StepwiseBuildMode,
+  mixSteps: boolean,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
+  cache?: GridShapeCache,
+): RawShapePart[] {
   const specs = buildStepVariantSpecs(buildMode);
   const steps: RawShapePart[] = [];
-  const yOffset = getStepVariantYOffset(colorGrid, cache);
+  const yOffset = getStepVariantYOffset(colorGrid, cache, belowPlatformWater);
+  const previewWaterBlocks = belowPlatformWater
+    ? buildBelowPlatformWaterPreviewBlocks(colorGrid, 0, waterDrops)
+    : [];
+
+  if (previewWaterBlocks.length > 0) {
+    steps.push(buildShapePart([], [], true, new Set<number>(), previewWaterBlocks));
+  }
 
   for (let stepIndex = 0; stepIndex < specs.length; ++stepIndex) {
-    const baseY = stepIndex * yOffset;
-    const blocks = buildStepVariantBlocks(
+    const baseY = (stepIndex + (previewWaterBlocks.length > 0 ? 1 : 0)) * yOffset;
+    const { blocks, droppedWaterBlocks } = buildStepVariantBlocks(
       colorGrid,
       specs[stepIndex],
       baseY,
       mixSteps ? specs[stepIndex - 1] : undefined,
       mixSteps ? specs[stepIndex + 1] : undefined,
+      mixSteps,
+      belowPlatformWater,
+      waterDrops,
     );
-    steps.push(buildShapePart(blocks));
+    steps.push(buildShapePart(blocks, [], true, new Set<number>([baseY - 1]), droppedWaterBlocks));
   }
 
   return steps;
@@ -1879,6 +2149,11 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
         ? toShapeColor(block.ref.color)
         : [block.ref.role],
     );
+  }
+  for (const block of part.droppedWaterBlocks) {
+    if (block.ref.kind !== "color") continue;
+    const key = toShapeCoordKey(block.x, block.y, block.z);
+    cells.set(key, toShapeColor(block.ref.color));
   }
   for (const candidate of part.fillerCandidates) {
     const key = toShapeCoordKey(candidate.x, candidate.y, candidate.z);
@@ -1905,12 +2180,15 @@ function getShapeCacheKeyId(
   mixSteps: boolean,
   paletteSeed: number,
   waterFillerOffset: boolean,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
 ): ShapeCacheKeyId {
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
   if (buildModeUsesMixSteps(buildMode) && mixSteps) id += "|mixsteps:1";
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (isStaircaseBuildMode(buildMode) && waterFillerOffset) id += "|wateroffset:1";
+  if (belowPlatformWater) id += `|waterdrop:${waterDrops[2]},${waterDrops[1]},${waterDrops[0]}`;
   return id as ShapeCacheKeyId;
 }
 
@@ -1931,16 +2209,74 @@ function getCachedStaircaseBaseBlocks(colorGrid: ColorGrid, cache: GridShapeCach
   return blocks;
 }
 
+function getCachedBelowPlatformStaircaseBaseBlocks(colorGrid: ColorGrid, cache: GridShapeCache): ShapeBlock[] {
+  const cached = cache.staircaseBaseBlocks.belowPlatform;
+  if (cached) return cached;
+  const blocks = buildStaircaseBlocks(colorGrid, false, true);
+  cache.staircaseBaseBlocks.belowPlatform = blocks;
+  return blocks;
+}
+
+function getBelowPlatformStaircaseCacheKey(buildMode: StaircaseInternalBuildMode, paletteSeed: number): string {
+  return buildModeUsesPaletteSeed(buildMode) ? `${buildMode}|seed:${paletteSeed}` : buildMode;
+}
+
+function getCachedBelowPlatformStaircasePlatformBlocks(
+  colorGrid: ColorGrid,
+  cache: GridShapeCache,
+  buildMode: StaircaseInternalBuildMode,
+  paletteSeed: number,
+): ShapeBlock[] {
+  const key = getBelowPlatformStaircaseCacheKey(buildMode, paletteSeed);
+  const cached = cache.belowPlatformStaircaseBlocks.get(key);
+  if (cached) return cached;
+
+  const blocks = cloneShapeBlocks(getCachedBelowPlatformStaircaseBaseBlocks(colorGrid, cache));
+  switch (buildMode) {
+    case BuildMode.StaircaseNorthline:
+      break;
+    case BuildMode.StaircaseSouthline:
+      applyStaircaseVariantSouthline(blocks);
+      break;
+    case BuildMode.StaircaseClassic:
+      applyStaircaseVariantClassic(blocks);
+      break;
+    case BuildMode.StaircaseValley:
+      applyStaircaseVariantValley(blocks, colorGrid, cache, true);
+      break;
+    case BuildMode.StaircaseGrouped:
+      applyStaircaseVariantValley(blocks, colorGrid, cache, true);
+      applyStaircaseVariantGroupedPostProcess(blocks, colorGrid, cache, true);
+      break;
+    case BuildMode.StaircaseParty:
+      applyStaircaseVariantParty(blocks, colorGrid, paletteSeed, cache, true);
+      break;
+    default:
+      assertUnhandledBuildMode(buildMode, "getCachedBelowPlatformStaircasePlatformBlocks");
+  }
+
+  cache.belowPlatformStaircaseBlocks.set(key, blocks);
+  return blocks;
+}
+
 function getCachedStaircaseParts(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
   buildMode: StaircaseInternalBuildMode,
   paletteSeed: number,
   waterFillerOffset: boolean,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, paletteSeed, waterFillerOffset);
+  const effectiveWaterFillerOffset = !belowPlatformWater && waterFillerOffset;
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, paletteSeed, effectiveWaterFillerOffset, belowPlatformWater, waterDrops);
   return getCachedRawParts(cache, keyId, () => {
-    const blocks = cloneShapeBlocks(getCachedStaircaseBaseBlocks(colorGrid, cache, waterFillerOffset));
+    if (belowPlatformWater) {
+      const blocks = cloneShapeBlocks(getCachedBelowPlatformStaircasePlatformBlocks(colorGrid, cache, buildMode, paletteSeed));
+      const { droppedWaterBlocks, assumedFloorYs } = buildBelowPlatformWaterBlocks(blocks, colorGrid, waterDrops);
+      return [buildShapePart(blocks, [], true, assumedFloorYs, droppedWaterBlocks)];
+    }
+    const blocks = cloneShapeBlocks(getCachedStaircaseBaseBlocks(colorGrid, cache, effectiveWaterFillerOffset));
     switch (buildMode) {
       case BuildMode.StaircaseNorthline:
         // No special handling.
@@ -1957,6 +2293,7 @@ function getCachedStaircaseParts(
         break;
       case BuildMode.StaircaseGrouped:
         applyStaircaseVariantValley(blocks, colorGrid, cache);
+        applyStaircaseVariantGroupedPostProcess(blocks, colorGrid, cache);
         break;
       case BuildMode.StaircaseParty:
         applyStaircaseVariantParty(blocks, colorGrid, paletteSeed, cache);
@@ -1964,8 +2301,7 @@ function getCachedStaircaseParts(
       default:
         assertUnhandledBuildMode(buildMode, "getCachedStaircaseParts");
     }
-    const waterConvenienceFillerCandidates = addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache, waterFillerOffset);
-    if (buildMode == BuildMode.StaircaseGrouped) applyStaircaseVariantGroupedPostProcess(blocks, colorGrid, cache);
+    const waterConvenienceFillerCandidates = addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache, effectiveWaterFillerOffset);
     return [buildShapePart(blocks, waterConvenienceFillerCandidates)];
   });
 }
@@ -1974,12 +2310,14 @@ function getCachedSuppressSplitParts(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
   buildMode: BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, false);
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, false, belowPlatformWater, waterDrops);
   return getCachedRawParts(cache, keyId, () =>
     buildMode === BuildMode.SuppressSplitRow
-      ? buildSuppressSplitRowBlockSets(colorGrid).map(blocks => buildShapePart(blocks))
-      : buildSuppressSplitCheckerBlockSets(colorGrid).map(blocks => buildShapePart(blocks)),
+      ? buildSuppressSplitRowBlockSets(colorGrid, belowPlatformWater, waterDrops).map(({ blocks, droppedWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), droppedWaterBlocks))
+      : buildSuppressSplitCheckerBlockSets(colorGrid, belowPlatformWater, waterDrops).map(({ blocks, droppedWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), droppedWaterBlocks)),
   );
 }
 
@@ -1988,9 +2326,11 @@ function getCachedSuppressStepParts(
   cache: GridShapeCache,
   buildMode: StepwiseBuildMode,
   mixSteps: boolean,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, 0, false);
-  return getCachedRawParts(cache, keyId, () => buildStepVariantParts(colorGrid, buildMode, mixSteps, cache));
+  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, 0, false, belowPlatformWater, waterDrops);
+  return getCachedRawParts(cache, keyId, () => buildStepVariantParts(colorGrid, buildMode, mixSteps, belowPlatformWater, waterDrops, cache));
 }
 
 function getCachedSuppress2LayerParts(
@@ -1998,11 +2338,13 @@ function getCachedSuppress2LayerParts(
   cache: GridShapeCache,
   layerGap: number,
   buildMode: TwoLayerSuppressBuildMode,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, 0, false);
+  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, 0, false, belowPlatformWater, waterDrops);
   return getCachedRawParts(cache, keyId, () => {
-    const { blocks, assumedFloorYs } = buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode);
-    return [buildShapePart(blocks, [], true, assumedFloorYs)];
+    const { blocks, droppedWaterBlocks, assumedFloorYs } = buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode, belowPlatformWater, waterDrops);
+    return [buildShapePart(blocks, [], true, assumedFloorYs, droppedWaterBlocks)];
   });
 }
 
@@ -2014,22 +2356,24 @@ function buildGeneratedShapeParts(
   mixSteps: boolean,
   paletteSeed: number,
   waterFillerOffset: boolean,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
-      return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitRow);
+      return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitRow, belowPlatformWater, waterDrops);
     case BuildMode.SuppressSplitChecker:
-      return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker);
+      return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker, belowPlatformWater, waterDrops);
     case BuildMode.SuppressPairsEW:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressPairsEW, mixSteps);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressPairsEW, mixSteps, belowPlatformWater, waterDrops);
     case BuildMode.SuppressCheckerEW:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressCheckerEW, mixSteps);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressCheckerEW, mixSteps, belowPlatformWater, waterDrops);
     case BuildMode.Suppress2LayerLateFillers:
-      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLateFillers);
+      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLateFillers, belowPlatformWater, waterDrops);
     case BuildMode.Suppress2LayerLatePairs:
-      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs);
+      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs, belowPlatformWater, waterDrops);
     default: {
-      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterFillerOffset);
+      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterFillerOffset, belowPlatformWater, waterDrops);
     }
   }
 }
@@ -2041,13 +2385,15 @@ function getGeneratedShape(
   mixSteps: boolean,
   paletteSeed: number,
   waterFillerOffset: boolean,
+  belowPlatformWater: boolean,
+  waterDrops: WaterDropByShade,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
-  const cacheKeyId = getShapeCacheKeyId(buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset);
+  const cacheKeyId = getShapeCacheKeyId(buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset, belowPlatformWater, waterDrops);
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
-  const rawParts = buildGeneratedShapeParts(colorGrid, cache, buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset);
+  const rawParts = buildGeneratedShapeParts(colorGrid, cache, buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset, belowPlatformWater, waterDrops);
   const parts = rawParts.map(finalizeShapePart);
   const splitExportNames =
     buildMode === BuildMode.SuppressSplitRow
@@ -2075,12 +2421,25 @@ function getGeneratedShape(
 // - src/Index.tsx
 export function generateShapeMap(
   colorGrid: ColorGrid,
-  options: { layerGap: number; mixSteps?: boolean; paletteSeed?: number; waterFillerOffset?: boolean },
+  options: {
+    layerGap: number;
+    mixSteps?: boolean;
+    paletteSeed?: number;
+    waterFillerOffset?: boolean;
+    belowPlatformWater?: boolean;
+    waterDrops?: Partial<Record<WaterShade, number>>;
+  },
   modeStats?: ShapeGenerationStats,
 ): Partial<Record<BuildMode, GeneratedShape>> {
   const mixSteps = options.mixSteps ?? false;
   const paletteSeed = options.paletteSeed ?? 0;
   const waterFillerOffset = options.waterFillerOffset ?? false;
+  const belowPlatformWater = options.belowPlatformWater ?? false;
+  const waterDrops: WaterDropByShade = {
+    0: Math.max(0, options.waterDrops?.[0] ?? 0),
+    1: Math.max(0, options.waterDrops?.[1] ?? 0),
+    2: Math.max(0, options.waterDrops?.[2] ?? 0),
+  };
   const twoLayerHasLateVoidNeed = modeStats?.hasTwoLayerLateVoidNeed ?? false;
   const staircaseVisibleModes: BuildMode[] =
     modeStats && !modeStats.hasTransparency && !modeStats.hasWater &&
@@ -2103,6 +2462,8 @@ export function generateShapeMap(
       mixSteps,
       paletteSeed,
       waterFillerOffset,
+      belowPlatformWater,
+      waterDrops,
     );
     if (seenShapeSignatures.has(signatureId)) continue;
     seenShapeSignatures.add(signatureId);

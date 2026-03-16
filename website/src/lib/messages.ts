@@ -144,6 +144,12 @@ export const messages = {
     layerGapTooltip: catalog.buildMode.layerGapTooltip,
     mixStepsLabel: catalog.buildMode.mixStepsLabel,
     mixStepsTooltip: catalog.buildMode.mixStepsTooltip,
+    waterDropLabel(shade: 0 | 1 | 2): string {
+      return catalog.buildMode.waterDropLabels[shade];
+    },
+    waterDropTooltip(_shade: 0 | 1 | 2): string {
+      return catalog.buildMode.waterDropTooltip;
+    },
     paletteSeedLabel: catalog.buildMode.paletteSeedLabel,
     optionLabel(mode: BuildMode | string): string {
       return getLookupValue(catalog.buildMode.optionLabels, mode, mode);

@@ -100,5 +100,5 @@ export interface ShapePart {
     minZ: number;
     maxZ: number;
   };
-  assumedFloorYs?: ReadonlySet<number>;
+  assumedFloorYs: ReadonlySet<number>;
 }
