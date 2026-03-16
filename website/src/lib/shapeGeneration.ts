@@ -50,6 +50,7 @@ interface RawShapePart {
   blocks: ShapeBlock[];
   fillerCandidates: FillerCandidate[];
   bounds: ShapeBounds;
+  assumedFloorYs?: ReadonlySet<number>;
 }
 interface ShapeGenerationStats {
   hasWater: boolean;
@@ -444,7 +445,12 @@ function assertShapeBlockZRange(blocks: ShapeBlock[]): void {
   }
 }
 
-function buildShapePart(blocks: ShapeBlock[], extraFillerCandidates: FillerCandidate[] = [], includeDefaultFillerCandidates = true): RawShapePart {
+function buildShapePart(
+  blocks: ShapeBlock[],
+  extraFillerCandidates: FillerCandidate[] = [],
+  includeDefaultFillerCandidates = true,
+  assumedFloorYs?: ReadonlySet<number>,
+): RawShapePart {
   assertShapeBlockZRange(blocks);
   const fillerCandidates = includeDefaultFillerCandidates
     ? [...buildFillerCandidates(blocks), ...buildBelowOnlyWaterFillerCandidates(blocks), ...extraFillerCandidates]
@@ -453,6 +459,7 @@ function buildShapePart(blocks: ShapeBlock[], extraFillerCandidates: FillerCandi
     blocks,
     fillerCandidates,
     bounds: measureShapeBounds(blocks),
+    assumedFloorYs,
   };
 }
 
@@ -1533,7 +1540,7 @@ function buildSuppressDualLayerBlocks(
   colorGrid: ColorGrid,
   layerGap: number | undefined,
   buildMode: TwoLayerSuppressBuildMode,
-): ShapeBlock[] {
+): { blocks: ShapeBlock[]; assumedFloorYs: ReadonlySet<number> } {
   const topYGrid: (number | undefined)[][] = Array.from({ length: MAP_SIZE }, () => new Array<number | undefined>(MAP_SIZE).fill(undefined));
   const blocks: ShapeBlock[] = [];
   const occupied = new Set<ShapeCoordKey>();
@@ -1680,7 +1687,14 @@ function buildSuppressDualLayerBlocks(
     occupied.add(coord);
   }
 
-  return blocks;
+  const assumedFloorYs = new Set<number>();
+  for (const block of blocks) {
+    if (isWaterBlock(block)) continue;
+    if (block.y !== lowerY && block.y !== upperY && block.y !== lateY) continue;
+    assumedFloorYs.add(block.y - 1);
+  }
+
+  return { blocks, assumedFloorYs };
 }
 
 function buildStepVariantSpecs(buildMode: StepwiseBuildMode): StepVariantSpec[] {
@@ -1731,35 +1745,27 @@ function buildStepVariantSpecs(buildMode: StepwiseBuildMode): StepVariantSpec[] 
 
 function buildStepVariantBlocks(
   colorGrid: ColorGrid,
-  spec: StepVariantSpec,
-  baseY: number,
-): ShapeBlock[] {
-  const stepBlocks: ShapeBlock[] = [];
-
-  for (const x of spec.cols) {
-    if (x < 0 || x >= MAP_SIZE) continue;
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      if (!spec.includeAt(x, z)) continue;
-      const color = getPixelColor(colorGrid, x, z);
-      if (isTransparentColor(color)) continue;
-      appendSuppressPixelBlocks(stepBlocks, x, baseY, z, color);
-    }
-  }
-
-  return stepBlocks;
-}
-
-function buildMixedStepVariantBlocks(
-  colorGrid: ColorGrid,
   currentSpec: StepVariantSpec,
-  previousSpec: StepVariantSpec | undefined,
-  nextSpec: StepVariantSpec | undefined,
   currentBaseY: number,
+  previousSpec?: StepVariantSpec,
+  nextSpec?: StepVariantSpec,
 ): ShapeBlock[] {
   const stepBlocks: ShapeBlock[] = [];
-  const repeatedNorthBlocks = new Set<ColumnCoordKey>();
+  const repeatedNorthShaderColumns = new Set<ColumnCoordKey>();
+  const repeatedNorthSharedColumns = new Set<ColumnCoordKey>();
   const shadedByRepeatedNorth = new Set<ColumnCoordKey>();
   const cellKey = (x: number, z: number) => toColumnCoordKey(x, z);
+  const canReuseNorthColumnAsShader = (shadedColor: ColorData, northColor: ColorData): boolean => {
+    if (isTransparentColor(shadedColor) || isWaterColor(shadedColor)) return false;
+    if (isTransparentColor(northColor)) return false;
+    if (shadedColor.shade === 1) {
+      return !isWaterColor(northColor) || northColor.shade === 2;
+    }
+    if (isDarkShade(shadedColor.shade)) {
+      return isWaterColor(northColor) && northColor.shade !== 2;
+    }
+    return false;
+  };
 
   const collectRepeatedNorthBlocks = (
     shadedParity: PixelParity,
@@ -1772,19 +1778,41 @@ function buildMixedStepVariantBlocks(
       for (let z = 1; z < MAP_SIZE; ++z) {
         if (!currentSpec.includeAt(x, z) || getPixelParity(x, z) !== shadedParity) continue;
         const color = getPixelColor(colorGrid, x, z);
-        if (isTransparentColor(color) || isWaterColor(color) || color.shade !== 1) continue;
         const northZ = z - 1;
         if (!adjacentSpec.includeAt(x, northZ) || getPixelParity(x, northZ) !== northParity) continue;
         const north = getPixelColor(colorGrid, x, northZ);
-        if (isTransparentColor(north) || isWaterColor(north)) continue;
+        if (!canReuseNorthColumnAsShader(color, north)) continue;
         shadedByRepeatedNorth.add(cellKey(x, z));
-        repeatedNorthBlocks.add(cellKey(x, northZ));
+        repeatedNorthShaderColumns.add(cellKey(x, northZ));
+      }
+    }
+  };
+
+  const collectSharedNorthColumnsForWater = (
+    waterParity: PixelParity,
+    northParity: PixelParity,
+    adjacentSpec: StepVariantSpec | undefined,
+  ) => {
+    if (!adjacentSpec) return;
+    for (const x of currentSpec.cols) {
+      if (x < 0 || x >= MAP_SIZE) continue;
+      for (let z = 1; z < MAP_SIZE; ++z) {
+        if (!currentSpec.includeAt(x, z) || getPixelParity(x, z) !== waterParity) continue;
+        const color = getPixelColor(colorGrid, x, z);
+        if (!isWaterColor(color)) continue;
+        const northZ = z - 1;
+        if (!adjacentSpec.includeAt(x, northZ) || getPixelParity(x, northZ) !== northParity) continue;
+        const north = getPixelColor(colorGrid, x, northZ);
+        if (isTransparentColor(north)) continue;
+        repeatedNorthSharedColumns.add(cellKey(x, northZ));
       }
     }
   };
 
   collectRepeatedNorthBlocks(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
   collectRepeatedNorthBlocks(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
+  collectSharedNorthColumnsForWater(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
+  collectSharedNorthColumnsForWater(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
 
   for (const x of currentSpec.cols) {
     if (x < 0 || x >= MAP_SIZE) continue;
@@ -1800,9 +1828,18 @@ function buildMixedStepVariantBlocks(
     }
   }
 
+  const repeatedNorthBlocks = new Set<ColumnCoordKey>([
+    ...repeatedNorthShaderColumns,
+    ...repeatedNorthSharedColumns,
+  ]);
   for (const key of repeatedNorthBlocks) {
     const [x, z] = parseColumnCoordKey(key);
-    stepBlocks.push(makeColorBlock(x, currentBaseY, z, getPixelColor(colorGrid, x, z)));
+    const color = getPixelColor(colorGrid, x, z);
+    if (isWaterColor(color)) {
+      appendSuppressPixelBlocks(stepBlocks, x, currentBaseY, z, color);
+      continue;
+    }
+    stepBlocks.push(makeColorBlock(x, currentBaseY, z, color));
   }
 
   return stepBlocks;
@@ -1815,10 +1852,13 @@ function buildStepVariantParts(colorGrid: ColorGrid, buildMode: StepwiseBuildMod
 
   for (let stepIndex = 0; stepIndex < specs.length; ++stepIndex) {
     const baseY = stepIndex * yOffset;
-    const blocks =
-      mixSteps && (stepIndex > 0 || stepIndex + 1 < specs.length)
-        ? buildMixedStepVariantBlocks(colorGrid, specs[stepIndex], specs[stepIndex - 1], specs[stepIndex + 1], baseY)
-        : buildStepVariantBlocks(colorGrid, specs[stepIndex], baseY);
+    const blocks = buildStepVariantBlocks(
+      colorGrid,
+      specs[stepIndex],
+      baseY,
+      mixSteps ? specs[stepIndex - 1] : undefined,
+      mixSteps ? specs[stepIndex + 1] : undefined,
+    );
     steps.push(buildShapePart(blocks));
   }
 
@@ -1855,6 +1895,7 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
   return {
     cells,
     bounds: part.bounds,
+    assumedFloorYs: part.assumedFloorYs,
   };
 }
 
@@ -1959,7 +2000,10 @@ function getCachedSuppress2LayerParts(
   buildMode: TwoLayerSuppressBuildMode,
 ): RawShapePart[] {
   const keyId = getShapeCacheKeyId(buildMode, layerGap, false, 0, false);
-  return getCachedRawParts(cache, keyId, () => [buildShapePart(buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode))]);
+  return getCachedRawParts(cache, keyId, () => {
+    const { blocks, assumedFloorYs } = buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode);
+    return [buildShapePart(blocks, [], true, assumedFloorYs)];
+  });
 }
 
 function buildGeneratedShapeParts(

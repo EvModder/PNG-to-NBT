@@ -113,7 +113,7 @@ function analyzePartMaterialNeeds(
 
     const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
     if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options)) continue;
-    if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor)) continue;
+    if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor, part.assumedFloorYs)) continue;
     if (
       assignedRole &&
       (

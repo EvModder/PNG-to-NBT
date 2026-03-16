@@ -739,7 +739,7 @@ const Index = () => {
   );
   const candidateVisibleInPart = useCallback(
     (part: NonNullable<typeof supportShape>["parts"][number], candidate: { x: number; y: number; z: number }) =>
-      isWithinShapeBounds(candidate, part.bounds, assumeFloor),
+      isWithinShapeBounds(candidate, part.bounds, assumeFloor, part.assumedFloorYs),
     [assumeFloor],
   );
   const enableStepsSupportOption = !imageData || !!supportShape?.parts.some(part =>

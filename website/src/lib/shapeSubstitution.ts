@@ -51,7 +51,7 @@ function materializePart(part: ShapePart, options: SubstitutionOptions): BlockEn
       if (!isShapeFillerCell(cell) || !cell.includes(assignment.role)) continue;
       const [x, y, z] = parseShapeCoordKey(coord);
       if (!shouldIncludeFragileSupportCell(part, coord, cell, assignment.role, options)) continue;
-      if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor)) continue;
+      if (!isWithinShapeBounds({ x, y, z }, part.bounds, options.assumeFloor, part.assumedFloorYs)) continue;
       if (occupied.has(coord)) continue;
       resolved.push({ x, y, z, blockName: fillerName });
       occupied.add(coord);

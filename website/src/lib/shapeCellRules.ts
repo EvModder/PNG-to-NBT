@@ -44,10 +44,12 @@ export function isWithinShapeBounds(
   candidate: { x: number; y: number; z: number },
   bounds: ShapePart["bounds"],
   assumeFloor: boolean,
+  assumedFloorYs?: ReadonlySet<number>,
 ): boolean {
   if (candidate.x < 0 || candidate.x >= MAP_SIZE) return false;
   if (candidate.z < bounds.minZ || candidate.z > bounds.maxZ) return false;
-  if (assumeFloor && candidate.y < bounds.minY) return false;
+  if (assumeFloor && !assumedFloorYs && candidate.y < bounds.minY) return false;
+  if (assumeFloor && assumedFloorYs?.has(candidate.y)) return false;
   return true;
 }
 
