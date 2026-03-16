@@ -16,7 +16,7 @@ import {
 import { canonicalizeBlockEntry, normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
 import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
-import { storePreviewImage } from "@/lib/previewImageStore";
+import { startPreviewImageSession } from "@/lib/previewImageStore";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
 import { getSupportedColorAbove, isWithinShapeBounds, NO_SUPPORT_FLOORS } from "@/lib/shapeCellRules";
@@ -521,65 +521,11 @@ const Index = () => {
       setPreviewImageUrl(null);
       return;
     }
-
-    const canvas = document.createElement("canvas");
-    canvas.width = imageData.width;
-    canvas.height = imageData.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      setPreviewImageUrl(null);
-      return;
-    }
-    ctx.putImageData(imageData, 0, 0);
-
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    let removeControllerChangeListener: (() => void) | null = null;
-
-    const updatePreviewUrl = (nextUrl: string) => {
-      if (cancelled) {
-        if (nextUrl.startsWith("blob:")) URL.revokeObjectURL(nextUrl);
-        return;
-      }
-      setPreviewImageUrl(prevUrl => {
-        if (prevUrl?.startsWith("blob:")) URL.revokeObjectURL(prevUrl);
-        return nextUrl;
-      });
-    };
-
-    canvas.toBlob(blob => {
-      if (!blob) return;
-
-      objectUrl = URL.createObjectURL(blob);
-      updatePreviewUrl(objectUrl);
-      if (!imageColorGrid) return;
-
-      void (async () => {
-        const nextUrl = await storePreviewImage(imageColorGrid, blob);
-        if (!nextUrl || cancelled) return;
-        if (!("serviceWorker" in navigator) || navigator.serviceWorker.controller) {
-          updatePreviewUrl(nextUrl);
-          return;
-        }
-
-        const onControllerChange = () => {
-          removeControllerChangeListener?.();
-          removeControllerChangeListener = null;
-          if (!cancelled && navigator.serviceWorker.controller) updatePreviewUrl(nextUrl);
-        };
-        navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
-        removeControllerChangeListener = () => {
-          navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
-        };
-        if (navigator.serviceWorker.controller) onControllerChange();
-      })();
-    }, "image/png");
-
-    return () => {
-      cancelled = true;
-      removeControllerChangeListener?.();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
+    return startPreviewImageSession({
+      imageData,
+      colorGrid: imageColorGrid,
+      onPreviewUrl: setPreviewImageUrl,
+    });
   }, [imageData, imageColorGrid]);
   useEffect(() => {
     const mql = window.matchMedia("(prefers-color-scheme: dark)");

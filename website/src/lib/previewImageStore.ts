@@ -1,7 +1,7 @@
 /**
  * Public API:
- * - storePreviewImage()
  * - primePreviewImageRoute()
+ * - startPreviewImageSession()
  *
  * Callers:
  * - src/Index.tsx
@@ -14,6 +14,12 @@ import { MAP_SIZE, type ColorGrid } from "./colorGridTypes";
 
 const PREVIEW_IMAGE_CACHE_NAME = "mapart-preview-images-v1";
 const PREVIEW_SW_RELOAD_KEY = "mapart_preview_sw_reload_once";
+
+type PreviewImageSessionOptions = {
+  imageData: ImageData;
+  colorGrid: ColorGrid | null;
+  onPreviewUrl: (url: string | null) => void;
+};
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
@@ -120,4 +126,77 @@ export async function storePreviewImage(
   });
   await cache.put(previewUrl, new Response(pngBlob, { headers }));
   return previewUrl;
+}
+
+function createPreviewCanvas(imageData: ImageData): HTMLCanvasElement | null {
+  const canvas = document.createElement("canvas");
+  canvas.width = imageData.width;
+  canvas.height = imageData.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+function waitForPreviewImageRouteControl(onReady: () => void): () => void {
+  if (!("serviceWorker" in navigator) || navigator.serviceWorker.controller) {
+    onReady();
+    return () => {};
+  }
+
+  const onControllerChange = () => {
+    if (!navigator.serviceWorker.controller) return;
+    navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+    onReady();
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+  return () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+}
+
+export function startPreviewImageSession(
+  { imageData, colorGrid, onPreviewUrl }: PreviewImageSessionOptions,
+): () => void {
+  const canvas = createPreviewCanvas(imageData);
+  if (!canvas) {
+    onPreviewUrl(null);
+    return () => {};
+  }
+
+  let cancelled = false;
+  let currentUrl: string | null = null;
+  let removeControllerChangeListener: (() => void) | null = null;
+
+  const updatePreviewUrl = (nextUrl: string | null) => {
+    if (cancelled) {
+      if (nextUrl?.startsWith("blob:")) URL.revokeObjectURL(nextUrl);
+      return;
+    }
+    if (currentUrl?.startsWith("blob:")) URL.revokeObjectURL(currentUrl);
+    currentUrl = nextUrl;
+    onPreviewUrl(nextUrl);
+  };
+
+  canvas.toBlob(blob => {
+    if (!blob) return;
+
+    updatePreviewUrl(URL.createObjectURL(blob));
+    if (!colorGrid) return;
+
+    void (async () => {
+      const nextUrl = await storePreviewImage(colorGrid, blob);
+      if (!nextUrl || cancelled) return;
+
+      removeControllerChangeListener = waitForPreviewImageRouteControl(() => {
+        removeControllerChangeListener = null;
+        if (!cancelled) updatePreviewUrl(nextUrl);
+      });
+    })();
+  }, "image/png");
+
+  return () => {
+    cancelled = true;
+    removeControllerChangeListener?.();
+    if (currentUrl?.startsWith("blob:")) URL.revokeObjectURL(currentUrl);
+  };
 }
