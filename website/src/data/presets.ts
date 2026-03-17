@@ -11,6 +11,7 @@
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import { canonicalizeBlockEntry } from "@/lib/blockId";
+import { STORAGE_KEYS } from "@/lib/storageKeys";
 
 // Callers:
 // - src/Index.tsx
@@ -196,7 +197,7 @@ export const isAutoCustomPresetName = (name: string): boolean => /^Custom(?: \d+
 export function loadPresets(): Preset[] {
   const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => canonicalizePreset(BUILTIN_BUILDERS[n]()));
   try {
-    const raw = localStorage.getItem("mapart_presets");
+    const raw = localStorage.getItem(STORAGE_KEYS.presets);
     if (raw) {
       const parsed: Preset[] = JSON.parse(raw);
       return [

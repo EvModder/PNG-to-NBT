@@ -12,10 +12,10 @@
 import { useEffect, useState } from "react";
 import { md5 } from "./md5";
 import { MAP_SIZE, type ColorGrid } from "./colorGridTypes";
+import { STORAGE_KEYS } from "./storageKeys";
 import type { PreviewPixelReplacement } from "./previewImageEdits";
 
 const PREVIEW_IMAGE_CACHE_NAME = "mapart-preview-images-v1";
-const PREVIEW_SW_RELOAD_KEY = "mapart_preview_sw_reload_once";
 
 type PreviewImageSessionOptions = {
   imageData: ImageData;
@@ -118,11 +118,11 @@ export function primePreviewImageRoute(): void {
     const registration = await ensurePreviewServiceWorkerReady();
     if (!registration) return;
     if (navigator.serviceWorker.controller) {
-      sessionStorage.removeItem(PREVIEW_SW_RELOAD_KEY);
+      sessionStorage.removeItem(STORAGE_KEYS.previewSwReloadOnce);
       return;
     }
-    if (sessionStorage.getItem(PREVIEW_SW_RELOAD_KEY) === "1") return;
-    sessionStorage.setItem(PREVIEW_SW_RELOAD_KEY, "1");
+    if (sessionStorage.getItem(STORAGE_KEYS.previewSwReloadOnce) === "1") return;
+    sessionStorage.setItem(STORAGE_KEYS.previewSwReloadOnce, "1");
     window.location.reload();
   })();
 }

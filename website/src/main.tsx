@@ -2,18 +2,12 @@ import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import Index from "./Index.tsx";
 import { primePreviewImageRoute } from "@/lib/previewImageStore";
+import { STORAGE_KEYS } from "@/lib/storageKeys";
 import "./index.css";
 
 const readStoredTheme = (): "light" | "dark" | null => {
-  const raw = localStorage.getItem("mapart_theme");
-  if (raw === "light" || raw === "dark") return raw;
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed === "light" || parsed === "dark" ? parsed : null;
-  } catch {
-    return null;
-  }
+  const raw = localStorage.getItem(STORAGE_KEYS.theme);
+  return raw === "light" || raw === "dark" ? raw : null;
 };
 
 function applyTheme() {
