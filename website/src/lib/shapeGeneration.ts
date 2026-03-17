@@ -592,6 +592,13 @@ function buildStaircaseBlocks(colorGrid: ColorGrid, baseKind: StaircaseBaseKind)
   const baseY = 64;
   const waterFillerOffset = baseKind === StaircaseBaseKind.WaterOffset;
   const omitWater = baseKind === StaircaseBaseKind.WaterOmitted;
+  const topRowHasNorthlineFiller = (() => {
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      const color = getPixelColor(colorGrid, x, 0);
+      if (!isTransparentColor(color) && !isWaterColor(color) && color.shade !== 2) return true;
+    }
+    return false;
+  })();
 
   interface ColState {
     y: number;
@@ -636,7 +643,7 @@ function buildStaircaseBlocks(colorGrid: ColorGrid, baseKind: StaircaseBaseKind)
             addVoidShadowFiller(x, north.y, z - 1);
             break;
           case 2:
-            if (z === 0) colorY = north.y + 1;
+            if (z === 0 && topRowHasNorthlineFiller) colorY = north.y + 1;
             break;
           case 0:
             addVoidShadowFiller(x, north.y + (z === 0 ? 0 : 1), z - 1);
@@ -2248,8 +2255,11 @@ function getCachedStaircaseVariantBlocks(
   const cached = cache.staircaseVariantBlocks.get(key);
   if (cached) return cached;
 
-  const blocks = cloneShapeBlocks(getCachedStaircaseBaseBlocks(colorGrid, cache, baseKind));
   const excludeWater = baseKind === StaircaseBaseKind.WaterOmitted;
+  const baseBlocks = buildMode === BuildMode.StaircaseGrouped
+    ? getCachedStaircaseVariantBlocks(colorGrid, cache, BuildMode.StaircaseValley, paletteSeed, baseKind)
+    : getCachedStaircaseBaseBlocks(colorGrid, cache, baseKind);
+  const blocks = cloneShapeBlocks(baseBlocks);
   switch (buildMode) {
     case BuildMode.StaircaseNorthline:
       break;
@@ -2263,7 +2273,6 @@ function getCachedStaircaseVariantBlocks(
       applyStaircaseVariantValley(blocks, colorGrid, cache, excludeWater);
       break;
     case BuildMode.StaircaseGrouped:
-      applyStaircaseVariantValley(blocks, colorGrid, cache, excludeWater);
       applyStaircaseVariantGroupedPostProcess(blocks, colorGrid, cache, excludeWater);
       break;
     case BuildMode.StaircaseParty:
@@ -2422,6 +2431,7 @@ export function generateShapeMap(
     waterFillerOffset?: boolean;
     belowPlatformWater?: boolean;
     waterDrops?: Partial<Record<WaterShade, number>>;
+    selectedMode?: BuildMode | null;
   },
   modeStats?: ShapeGenerationStats,
 ): Partial<Record<BuildMode, GeneratedShape>> {
@@ -2443,11 +2453,10 @@ export function generateShapeMap(
   const suppressVisibleModes: BuildMode[] = twoLayerHasLateVoidNeed
     ? [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]
     : [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2Layer];
-  const orderedVisibleModes = [...staircaseVisibleModes, ...suppressVisibleModes];
   const seenShapeSignatures = new Set<GeneratedShapeSignatureId>();
   const shapes: Partial<Record<BuildMode, GeneratedShape>> = {};
 
-  for (const buildMode of orderedVisibleModes) {
+  for (const buildMode of staircaseVisibleModes) {
     const internalBuildMode = getCanonicalBuildMode(buildMode);
     const { shape, signatureId } = getGeneratedShape(
       colorGrid,
@@ -2462,6 +2471,24 @@ export function generateShapeMap(
     if (seenShapeSignatures.has(signatureId)) continue;
     seenShapeSignatures.add(signatureId);
     shapes[buildMode] = shape;
+  }
+
+  const selectedMode = options.selectedMode ?? null;
+  if (selectedMode && suppressVisibleModes.includes(selectedMode)) {
+    const { shape, signatureId } = getGeneratedShape(
+      colorGrid,
+      getCanonicalBuildMode(selectedMode),
+      options.layerGap,
+      mixSteps,
+      paletteSeed,
+      waterFillerOffset,
+      belowPlatformWater,
+      waterDrops,
+    );
+    if (!seenShapeSignatures.has(signatureId)) {
+      seenShapeSignatures.add(signatureId);
+      shapes[selectedMode] = shape;
+    }
   }
 
   return shapes;

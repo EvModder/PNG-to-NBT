@@ -223,6 +223,8 @@ export const esCatalog = {
   upload: {
     title: "Vista previa de imagen",
     placeholder: "Haz clic o suelta una imagen de 128×128",
+    showVsFillersToggle: "Mostrar VS-Rellenos",
+    showVsFillersTooltip: "Superpone los puntos no transparentes de VS-Relleno sobre la vista previa de la imagen.",
     removeButton: "Quitar",
     convertButtonConverting: "Convirtiendo...",
     convertButtonNbt: "Generar .nbt",

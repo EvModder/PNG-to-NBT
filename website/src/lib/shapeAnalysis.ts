@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - analyzeFillerNeeds()
+ * - collectFillerRolePixels()
  * - nooblineIsSingleY()
  * - hasNonWaterColorHeightVariance()
  * - analyzeMaterialNeeds()
@@ -9,7 +10,7 @@
  * - src/Index.tsx
  */
 import { WATER_BASE_INDEX } from "../data/mapColors";
-import { type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
+import { MAP_SIZE, type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
 import { FillerRole, type CustomColor, type FillerAssignment } from "./conversionTypes";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
@@ -19,6 +20,12 @@ import { isWithinShapeBounds, NO_SUPPORT_FLOORS, shouldIncludeFragileSupportCell
 
 interface FillerNeedStats {
   roleCounts: Map<FillerRole, number>;
+}
+
+export interface FillerRolePixel {
+  x: number;
+  z: number;
+  role: FillerRole;
 }
 
 interface MaterialNeedStats {
@@ -149,6 +156,36 @@ export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
   }
 
   return { roleCounts };
+}
+
+// Callers:
+// - src/Index.tsx
+export function collectFillerRolePixels(
+  shape: GeneratedShape,
+  roles: readonly FillerRole[],
+  xColumnRange?: [number, number],
+): FillerRolePixel[] {
+  const roleSet = new Set<FillerRole>(roles);
+  const pixels = new Map<string, FillerRole>();
+
+  for (const part of shape.parts) {
+    for (const [coord, cell] of part.cells) {
+      if (!isShapeFillerCell(cell)) continue;
+      const role = cell.find(entry => roleSet.has(entry));
+      if (!role) continue;
+
+      const [x, , z] = parseShapeCoordKey(coord);
+      if (xColumnRange && (x < xColumnRange[0] || x > xColumnRange[1])) continue;
+      if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
+
+      pixels.set(`${x},${z}`, role);
+    }
+  }
+
+  return Array.from(pixels.entries(), ([key, role]) => {
+    const [x, z] = key.split(",").map(Number);
+    return { x, z, role };
+  });
 }
 
 // Callers:

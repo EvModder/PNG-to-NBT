@@ -227,6 +227,8 @@ export const enCatalog = {
   upload: {
     title: "Image Preview",
     placeholder: "Click or drop a 128×128 image",
+    showVsFillersToggle: "Show VS-Fillers",
+    showVsFillersTooltip: "Overlay non-transparent VS-Filler spots on the image preview.",
     removeButton: "Remove",
     convertButtonConverting: "Converting...",
     convertButtonNbt: "Generate .nbt",

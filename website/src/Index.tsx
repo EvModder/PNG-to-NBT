@@ -16,7 +16,8 @@ import {
 import { canonicalizeBlockEntry, normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
 import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
-import { startPreviewImageSession } from "@/lib/previewImageStore";
+import { useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
+import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
 import { getSupportedColorAbove, isWithinShapeBounds, NO_SUPPORT_FLOORS } from "@/lib/shapeCellRules";
@@ -30,6 +31,7 @@ import {
   getBuildModeRangeMax,
   isStaircaseBuildMode,
   isSuppressBuildMode,
+  getVisibleSuppressBuildModes,
   type CustomColor,
 } from "@/lib/conversionTypes";
 import { isFragileBlock } from "@/data/fragileBlocks";
@@ -362,6 +364,7 @@ const LS_KEYS = {
   paletteSeed: "mapart_palette_seed",
   dominateVoidFiller: "mapart_dominate_void_filler",
   recessiveVoidFiller: "mapart_recessive_void_filler",
+  showVsFillersInPreview: "mapart_show_vs_fillers_in_preview",
   columnOrder: "mapart_columnOrder",
   lightWaterDrop: "mapart_light_water_drop",
   flatWaterDrop: "mapart_flat_water_drop",
@@ -452,7 +455,7 @@ const Index = () => {
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
   const [imageData, setImageData] = useState<ImageData | null>(null);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [showVsFillersInPreview, setShowVsFillersInPreview] = useState(() => loadCached(LS_KEYS.showVsFillersInPreview, false));
   const [imageName, setImageName] = useState("");
   const [imageValid, setImageValid] = useState(false);
   const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
@@ -516,17 +519,6 @@ const Index = () => {
     const base = import.meta.env.BASE_URL || "/";
     link.href = `${base}${imageData ? "favicon-active.png" : "favicon.png"}`;
   }, [imageData]);
-  useEffect(() => {
-    if (!imageData) {
-      setPreviewImageUrl(null);
-      return;
-    }
-    return startPreviewImageSession({
-      imageData,
-      colorGrid: imageColorGrid,
-      onPreviewUrl: setPreviewImageUrl,
-    });
-  }, [imageData, imageColorGrid]);
   useEffect(() => {
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = (e: MediaQueryListEvent) => { if (!getStoredTheme()) setIsDark(e.matches); };
@@ -618,6 +610,7 @@ const Index = () => {
       [LS_KEYS.paletteSeed]: proPaletteSeed,
       [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
       [LS_KEYS.recessiveVoidFiller]: recessiveVoidFillerBlock,
+      [LS_KEYS.showVsFillersInPreview]: showVsFillersInPreview,
       [LS_KEYS.columnOrder]: columnOrder,
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
@@ -651,6 +644,7 @@ const Index = () => {
       proPaletteSeed,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
+      showVsFillersInPreview,
       columnOrder,
       showTransparentRow,
       showExcludedBlocks,
@@ -723,6 +717,7 @@ const Index = () => {
       }),
     [buildModeSupportsMixSteps, imageColorGrid, imageValid, belowPlatformWater, waterDrops],
   );
+  const twoLayerHasLateVoidNeed = (imageStats?.voidShadowStats.dominant ?? 0) > 0;
   const shapeMap = useMemo(
     () => imageColorGrid && imageValid
       ? generateShapeMap(imageColorGrid, {
@@ -732,11 +727,12 @@ const Index = () => {
           waterFillerOffset,
           belowPlatformWater,
           waterDrops,
+          selectedMode: buildMode,
         }, imageStats ? {
           hasWater: imageStats.hasWater,
           hasTransparency: imageStats.hasTransparency,
           uniformNonFlatDirection: imageStats.uniformNonFlatDirection,
-          hasTwoLayerLateVoidNeed: imageStats.voidShadowStats.dominant > 0,
+          hasTwoLayerLateVoidNeed: twoLayerHasLateVoidNeed,
         } : undefined)
       : null,
     [
@@ -749,7 +745,9 @@ const Index = () => {
       waterFillerOffset,
       belowPlatformWater,
       waterDrops,
+      buildMode,
       imageStats,
+      twoLayerHasLateVoidNeed,
     ],
   );
   const hasNonFlatShades = imageStats?.hasNonFlatShades ?? false;
@@ -924,16 +922,10 @@ const Index = () => {
     return DEFAULT_STAIRCASE_OPTIONS.filter(option => option.value !== BuildMode.Flat && !!shapeMap[option.value]);
   }, [shapeMap, imageValid, isFlatShape]);
 
-  const twoLayerHasLateVoidNeed = !!shapeMap?.[BuildMode.Suppress2LayerLatePairs];
-
   const suppressModeOptions = useMemo((): ModeOption[] => {
-    const suppressModes = BASE_SUPPRESS_OPTIONS
-      .map(option => option.value)
-      .filter(mode => !!shapeMap?.[mode]);
-    return suppressModes.map(mode => {
-      return BASE_SUPPRESS_OPTIONS.find(option => option.value === mode) || { value: mode, label: mode };
-    });
-  }, [shapeMap]);
+    const visibleModes = new Set(getVisibleSuppressBuildModes(twoLayerHasLateVoidNeed));
+    return BASE_SUPPRESS_OPTIONS.filter(option => visibleModes.has(option.value));
+  }, [twoLayerHasLateVoidNeed]);
 
   const shadingMethodTooltip = useMemo(() => messages.buildMode.tooltip(buildMode), [buildMode]);
   const supportModeTooltip = useMemo(() => messages.supportMode.tooltip(supportMode), [supportMode]);
@@ -1524,6 +1516,19 @@ const Index = () => {
   const showRecessiveVoidFillerInput =
     !!imageData &&
     recessiveVoidFillerRequiredCount > 0;
+  const previewVsFillerReplacements = useVsFillerPreviewReplacements({
+    shape: effectiveShape,
+    shadeFillerBlock,
+    dominateVoidFillerBlock,
+    recessiveVoidFillerBlock,
+    xColumnRange: colRangeEnabled && !isStepRangeMode ? [colStart, colEnd] : undefined,
+  });
+  const showVsFillersInPreviewToggle = previewVsFillerReplacements.length > 0;
+  const previewImageUrl = usePreviewImageUrl({
+    imageData,
+    colorGrid: imageColorGrid,
+    pixelReplacements: showVsFillersInPreview ? previewVsFillerReplacements : undefined,
+  });
   const hasAnyFillerInput =
     showSupportFillerInput ||
     showShadeFillerInput ||
@@ -2955,7 +2960,23 @@ const Index = () => {
         >
           <div className={isStackedLayout ? "order-2" : ""}>
             <section className="bg-card border border-border rounded-md p-3">
-            <h2 className="text-sm font-semibold text-accent mb-2">{messages.upload.title}</h2>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-accent">{messages.upload.title}</h2>
+              {showVsFillersInPreviewToggle && (
+                <label
+                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none"
+                  title={messages.upload.showVsFillersTooltip}
+                >
+                  <input
+                    type="checkbox"
+                    checked={showVsFillersInPreview}
+                    onChange={e => setShowVsFillersInPreview(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span>{messages.upload.showVsFillersToggle}</span>
+                </label>
+              )}
+            </div>
             {/* Unsupported-color conversion toggle intentionally hidden; conversion is always on. */}
             <input
               ref={fileRef}

@@ -1,7 +1,7 @@
 /**
  * Public API:
  * - primePreviewImageRoute()
- * - startPreviewImageSession()
+ * - usePreviewImageUrl()
  *
  * Callers:
  * - src/Index.tsx
@@ -9,8 +9,10 @@
  *
  * Stores generated preview PNGs under same-origin hash-based URLs so browsers can open/save them as normal images.
  */
+import { useEffect, useState } from "react";
 import { md5 } from "./md5";
 import { MAP_SIZE, type ColorGrid } from "./colorGridTypes";
+import type { PreviewPixelReplacement } from "./previewImageEdits";
 
 const PREVIEW_IMAGE_CACHE_NAME = "mapart-preview-images-v1";
 const PREVIEW_SW_RELOAD_KEY = "mapart_preview_sw_reload_once";
@@ -18,7 +20,14 @@ const PREVIEW_SW_RELOAD_KEY = "mapart_preview_sw_reload_once";
 type PreviewImageSessionOptions = {
   imageData: ImageData;
   colorGrid: ColorGrid | null;
+  pixelReplacements?: readonly PreviewPixelReplacement[];
   onPreviewUrl: (url: string | null) => void;
+};
+
+type UsePreviewImageUrlOptions = {
+  imageData: ImageData | null;
+  colorGrid: ColorGrid | null;
+  pixelReplacements?: readonly PreviewPixelReplacement[];
 };
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -74,8 +83,20 @@ function colorGridToHashBytes(colorGrid: ColorGrid): Uint8Array {
   return bytes;
 }
 
-function getPreviewImageUrl(uuid: string): string {
-  return new URL(`${uuid}.png`, window.location.href).toString();
+function computePreviewVariantKey(pixelReplacements: readonly PreviewPixelReplacement[]): string | null {
+  if (pixelReplacements.length === 0) return null;
+  const serialized = pixelReplacements
+    .slice()
+    .sort((a, b) => a.z - b.z || a.x - b.x || a.r - b.r || a.g - b.g || a.b - b.b)
+    .map(({ x, z, r, g, b }) => `${x},${z},${r},${g},${b}`)
+    .join("|");
+  return bytesToHex(md5(new TextEncoder().encode(serialized)));
+}
+
+function getPreviewImageUrl(uuid: string, previewVariantKey?: string | null): string {
+  const url = new URL(`${uuid}.png`, window.location.href);
+  if (previewVariantKey) url.searchParams.set("preview", previewVariantKey);
+  return url.toString();
 }
 
 let serviceWorkerReadyPromise: Promise<ServiceWorkerRegistration | null> | null = null;
@@ -109,9 +130,10 @@ export function primePreviewImageRoute(): void {
 export async function storePreviewImage(
   colorGrid: ColorGrid,
   pngBlob: Blob,
+  previewVariantKey?: string | null,
 ): Promise<string | null> {
   const uuid = nameUuidFromBytes(colorGridToHashBytes(colorGrid));
-  const previewUrl = getPreviewImageUrl(uuid);
+  const previewUrl = getPreviewImageUrl(uuid, previewVariantKey);
 
   const registration = await ensurePreviewServiceWorkerReady();
   if (!registration || !("caches" in window)) {
@@ -128,13 +150,25 @@ export async function storePreviewImage(
   return previewUrl;
 }
 
-function createPreviewCanvas(imageData: ImageData): HTMLCanvasElement | null {
+function createPreviewCanvas(
+  imageData: ImageData,
+  pixelReplacements: readonly PreviewPixelReplacement[] = [],
+): HTMLCanvasElement | null {
   const canvas = document.createElement("canvas");
   canvas.width = imageData.width;
   canvas.height = imageData.height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  ctx.putImageData(imageData, 0, 0);
+  const previewImageData = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
+  for (const { x, z, r, g, b } of pixelReplacements) {
+    if (x < 0 || x >= previewImageData.width || z < 0 || z >= previewImageData.height) continue;
+    const offset = (z * previewImageData.width + x) * 4;
+    previewImageData.data[offset] = r;
+    previewImageData.data[offset + 1] = g;
+    previewImageData.data[offset + 2] = b;
+    previewImageData.data[offset + 3] = 255;
+  }
+  ctx.putImageData(previewImageData, 0, 0);
   return canvas;
 }
 
@@ -154,10 +188,10 @@ function waitForPreviewImageRouteControl(onReady: () => void): () => void {
   return () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
 }
 
-export function startPreviewImageSession(
-  { imageData, colorGrid, onPreviewUrl }: PreviewImageSessionOptions,
+function startPreviewImageSession(
+  { imageData, colorGrid, pixelReplacements, onPreviewUrl }: PreviewImageSessionOptions,
 ): () => void {
-  const canvas = createPreviewCanvas(imageData);
+  const canvas = createPreviewCanvas(imageData, pixelReplacements);
   if (!canvas) {
     onPreviewUrl(null);
     return () => {};
@@ -182,9 +216,10 @@ export function startPreviewImageSession(
 
     updatePreviewUrl(URL.createObjectURL(blob));
     if (!colorGrid) return;
+    const previewVariantKey = computePreviewVariantKey(pixelReplacements ?? []);
 
     void (async () => {
-      const nextUrl = await storePreviewImage(colorGrid, blob);
+      const nextUrl = await storePreviewImage(colorGrid, blob, previewVariantKey);
       if (!nextUrl || cancelled) return;
 
       removeControllerChangeListener = waitForPreviewImageRouteControl(() => {
@@ -199,4 +234,25 @@ export function startPreviewImageSession(
     removeControllerChangeListener?.();
     if (currentUrl?.startsWith("blob:")) URL.revokeObjectURL(currentUrl);
   };
+}
+
+export function usePreviewImageUrl(
+  { imageData, colorGrid, pixelReplacements }: UsePreviewImageUrlOptions,
+): string | null {
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!imageData) {
+      setPreviewImageUrl(null);
+      return;
+    }
+    return startPreviewImageSession({
+      imageData,
+      colorGrid,
+      pixelReplacements,
+      onPreviewUrl: setPreviewImageUrl,
+    });
+  }, [imageData, colorGrid, pixelReplacements]);
+
+  return previewImageUrl;
 }

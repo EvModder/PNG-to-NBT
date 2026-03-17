@@ -236,6 +236,8 @@ export const messages = {
   upload: {
     title: catalog.upload.title,
     placeholder: catalog.upload.placeholder,
+    showVsFillersToggle: catalog.upload.showVsFillersToggle,
+    showVsFillersTooltip: catalog.upload.showVsFillersTooltip,
     removeButton: catalog.upload.removeButton,
     convertButton(isConverting: boolean, isZip: boolean): string {
       if (isConverting) return catalog.upload.convertButtonConverting;

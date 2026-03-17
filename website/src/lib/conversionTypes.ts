@@ -9,6 +9,7 @@
  * - buildModeUsesMixSteps()
  * - buildModeUsesPaletteSeed()
  * - getBuildModeRangeMax()
+ * - getVisibleSuppressBuildModes()
  * - FillerAssignment
  *
  * Callers:
@@ -155,6 +156,27 @@ export function getBuildModeRangeMax(buildMode: BuildMode): number {
     default:
       return 127;
   }
+}
+
+// Callers:
+// - src/Index.tsx
+export function getVisibleSuppressBuildModes(hasTwoLayerLateVoidNeed: boolean): BuildMode[] {
+  return hasTwoLayerLateVoidNeed
+    ? [
+        BuildMode.SuppressSplitRow,
+        BuildMode.SuppressSplitChecker,
+        BuildMode.SuppressPairsEW,
+        BuildMode.SuppressCheckerEW,
+        BuildMode.Suppress2LayerLateFillers,
+        BuildMode.Suppress2LayerLatePairs,
+      ]
+    : [
+        BuildMode.SuppressSplitRow,
+        BuildMode.SuppressSplitChecker,
+        BuildMode.SuppressPairsEW,
+        BuildMode.SuppressCheckerEW,
+        BuildMode.Suppress2Layer,
+      ];
 }
 
 // Callers:
