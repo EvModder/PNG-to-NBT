@@ -1,6 +1,6 @@
 /**
  * Public API:
- * - Preset
+ * - BlockPreset
  * - BUILTIN_PRESET_NAMES
  * - getBuiltinPreset
  * - isAutoCustomPresetName
@@ -8,23 +8,20 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/presetCodec.ts
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import { canonicalizeBlockEntry } from "@/lib/blockId";
 import { STORAGE_KEYS } from "@/lib/storageKeys";
 
-// Callers:
-// - src/Index.tsx
-export interface Preset {
+export interface BlockPreset {
   name: string;
   blocks: Record<number, string>;
 }
 
-// Callers:
-// - src/Index.tsx
 export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear"] as const;
 
-function buildPistonClearPreset(): Preset {
+function buildPistonClearPreset(): BlockPreset {
   return {
     name: "PistonClear",
     blocks: {
@@ -93,7 +90,7 @@ function buildPistonClearPreset(): Preset {
   };
 }
 
-function buildCarpetsPreset(): Preset {
+function buildCarpetsPreset(): BlockPreset {
   const blocks: Record<number, string> = {};
   for (let i = 1; i < BASE_COLORS.length; ++i) {
     const carpet = BASE_COLORS[i].blocks.find(b => b.endsWith("_carpet"));
@@ -102,7 +99,7 @@ function buildCarpetsPreset(): Preset {
   return { name: "Carpets", blocks };
 }
 
-function buildFullblockPreset(): Preset {
+function buildFullblockPreset(): BlockPreset {
   return {
     name: "Fullblock",
     blocks: {
@@ -172,34 +169,28 @@ function buildFullblockPreset(): Preset {
   };
 }
 
-const BUILTIN_BUILDERS: Record<string, () => Preset> = {
+const BUILTIN_BUILDERS: Record<string, () => BlockPreset> = {
   PistonClear: buildPistonClearPreset,
   Carpets: buildCarpetsPreset,
   Fullblock: buildFullblockPreset,
 };
 
-function canonicalizePreset(preset: Preset): Preset {
+function canonicalizePreset(preset: BlockPreset): BlockPreset {
   const blocks = Object.fromEntries(
     Object.entries(preset.blocks).map(([baseIndex, block]) => [Number(baseIndex), canonicalizeBlockEntry(block)]),
   ) as Record<number, string>;
   return { ...preset, blocks };
 }
 
-// Callers:
-// - src/Index.tsx
-export const getBuiltinPreset = (name: string): Preset | null => BUILTIN_BUILDERS[name]?.() ?? null;
-// Callers:
-// - src/Index.tsx
+export const getBuiltinPreset = (name: string): BlockPreset | null => BUILTIN_BUILDERS[name]?.() ?? null;
 export const isAutoCustomPresetName = (name: string): boolean => /^Custom(?: \d+)?$/.test(name);
 
-// Callers:
-// - src/Index.tsx
-export function loadPresets(): Preset[] {
+export function loadPresets(): BlockPreset[] {
   const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => canonicalizePreset(BUILTIN_BUILDERS[n]()));
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.presets);
     if (raw) {
-      const parsed: Preset[] = JSON.parse(raw);
+      const parsed: BlockPreset[] = JSON.parse(raw);
       return [
         ...builtins,
         ...parsed

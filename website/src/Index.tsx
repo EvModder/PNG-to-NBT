@@ -16,6 +16,7 @@ import {
 import { canonicalizeBlockEntry, normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
 import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
+import { decodeFullPreset, encodeFullPreset } from "@/lib/presetCodec";
 import { useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { STORAGE_KEYS as LS_KEYS } from "@/lib/storageKeys";
@@ -25,7 +26,7 @@ import { getSupportedColorAbove, isWithinShapeBounds, NO_SUPPORT_FLOORS } from "
 import {
   BuildMode,
   SuppressStepDirection,
-  getSuppressStepDirectionSuffix,
+  getBuildModeDownloadSuffix,
   getSuppressStepDirectionRotationDegrees,
   type FillerAssignment,
   FillerRole,
@@ -46,7 +47,7 @@ import {
   getBuiltinPreset,
   isAutoCustomPresetName,
   loadPresets,
-  type Preset,
+  type BlockPreset,
 } from "@/data/presets";
 
 function loadCached<T>(key: string, fallback: T): T {
@@ -179,10 +180,6 @@ function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirec
 
 const ALL_COLUMNS: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 
-function isBuildMode(raw: unknown): raw is BuildMode {
-  return Object.values(BuildMode).includes(raw as BuildMode);
-}
-
 function createFillerAssignments(
   supportFillerBlock: string,
   shadeFillerBlock: string,
@@ -239,10 +236,6 @@ function createFillerAssignments(
   return assignments;
 }
 
-function isStaircaseLikeMode(mode: BuildMode): boolean {
-  return mode === BuildMode.Flat || isStaircaseBuildMode(mode);
-}
-
 const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: BuildMode.Flat, label: messages.buildMode.optionLabel(BuildMode.Flat) },
   { value: BuildMode.InclineUp, label: messages.buildMode.optionLabel(BuildMode.InclineUp) },
@@ -256,6 +249,7 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
 ];
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
+const AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS = true;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: BuildMode.SuppressSplitRow, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitRow), disabled: true, muted: true },
@@ -290,98 +284,6 @@ function formatStacks(count: number): string {
   return [sb && `${sb}sb`, st && `${st}st`, items && String(items)].filter(Boolean).join(" ") || "0";
 }
 
-function encodePreset(
-  preset: Preset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, suppressStepDirection: SuppressStepDirection,
-  dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
-): string {
-  const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
-    const block = canonicalizeBlockEntry(preset.blocks[i + 1] || "");
-    const idx = BASE_COLORS[i + 1].blocks.indexOf(block);
-    return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
-  });
-  const ccStr = customColors.length > 0 ? customColors.map(cc => `${cc.r},${cc.g},${cc.b}:${canonicalizeBlockEntry(cc.block)}`).join(";") : "";
-  const s = [
-    preset.name,
-    parts.join(","),
-    canonicalizeBlockEntry(supportFillerBlock),
-    canonicalizeBlockEntry(shadeFillerBlock),
-    supportMode,
-    buildMode,
-    ccStr,
-    convertUnsupported ? "1" : "0",
-    canonicalizeBlockEntry(suppress2LayerLateFillerBlock),
-    proPaletteSeed ? "1" : "0",
-    canonicalizeBlockEntry(dominateVoidFillerBlock),
-    canonicalizeBlockEntry(recessiveVoidFillerBlock),
-    mixSteps ? "1" : "0",
-    suppressStepDirection,
-  ].join("|");
-  return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
-}
-
-function decodePreset(encoded: string): {
-  preset: Preset; supportFiller?: string; shadeFiller?: string; supportMode?: SupportMode;
-  buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
-  suppress2LayerLateFillerBlock?: string; proPaletteSeed?: boolean; mixSteps?: boolean; suppressStepDirection?: SuppressStepDirection;
-  dominateVoidFillerBlock?: string; recessiveVoidFillerBlock?: string;
-} | null {
-  try {
-    let s = encoded.replace(/-/g, "+").replace(/_/g, "/");
-    while (s.length % 4) s += "=";
-    const sections = atob(s).split("|");
-    if (sections.length < 2) return null;
-
-    const supportRaw = sections[4] || SupportMode.None;
-    const supportMode: SupportMode =
-      supportRaw === "1" ? SupportMode.Steps : supportRaw === "0" ? SupportMode.None : (supportRaw as SupportMode);
-
-    const blocks: Record<number, string> = {};
-    for (const [i, p] of sections[1].split(",").entries()) {
-      if (i >= BASE_COLORS.length - 1) break;
-      const baseIdx = i + 1;
-      blocks[baseIdx] =
-        p === "-" || p === "" ? "" : p.startsWith("=") ? canonicalizeBlockEntry(p.slice(1)) : BASE_COLORS[baseIdx].blocks[parseInt(p)] || "";
-    }
-
-    const customColors = sections[6]
-      ? sections[6]
-          .split(";")
-          .map(entry => {
-            const [rgb, block] = entry.split(":");
-            const [r, g, b] = rgb.split(",").map(Number);
-            return { r, g, b, block: canonicalizeBlockEntry(block || "") };
-          })
-          .filter(cc => !isNaN(cc.r) && cc.block)
-      : undefined;
-
-    const convertUnsupported = sections[7] === "1" ? true : sections[7] === "0" ? false : undefined;
-    const suppress2LayerLateFillerBlock = sections[8] || undefined;
-    const proPaletteSeed = sections[9] === "1" ? true : sections[9] === "0" ? false : undefined;
-    const dominateVoidFillerBlock = sections[10] || undefined;
-    const recessiveVoidFillerBlock = sections[11] || undefined;
-    const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
-    const suppressStepDirection =
-      sections[13] && isSuppressStepDirection(sections[13])
-        ? sections[13]
-        : undefined;
-
-    return {
-      preset: { name: sections[0], blocks },
-      supportFiller: sections[2] ? canonicalizeBlockEntry(sections[2]) : undefined,
-      shadeFiller: sections[3] ? canonicalizeBlockEntry(sections[3]) : undefined,
-      supportMode, buildMode: isBuildMode(sections[5]) ? sections[5] : undefined,
-      customColors, convertUnsupported, proPaletteSeed, mixSteps, suppressStepDirection,
-      suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock ? canonicalizeBlockEntry(suppress2LayerLateFillerBlock) : undefined,
-      dominateVoidFillerBlock: dominateVoidFillerBlock ? canonicalizeBlockEntry(dominateVoidFillerBlock) : undefined,
-      recessiveVoidFillerBlock: recessiveVoidFillerBlock ? canonicalizeBlockEntry(recessiveVoidFillerBlock) : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
 const getStoredTheme = (): "light" | "dark" | null => {
   const raw = localStorage.getItem(LS_KEYS.theme);
   return raw === "light" || raw === "dark" ? raw : null;
@@ -394,7 +296,7 @@ const resolveDarkTheme = () => {
 
 // ── Component ──
 const Index = () => {
-  const [presets, setPresets] = useState<Preset[]>(loadPresets);
+  const [presets, setPresets] = useState<BlockPreset[]>(loadPresets);
   const [activeIdx, setActiveIdx] = useState(() => {
     try {
       const name = JSON.parse(localStorage.getItem(LS_KEYS.activePreset) || '""');
@@ -424,7 +326,7 @@ const Index = () => {
   );
   const [buildMode, setBuildMode] = useState<BuildMode>(() => {
     const storedBuildMode = loadCached(LS_KEYS.buildMode, BuildMode.StaircaseClassic);
-    return isBuildMode(storedBuildMode) ? storedBuildMode : BuildMode.StaircaseClassic;
+    return Object.values(BuildMode).includes(storedBuildMode as BuildMode) ? storedBuildMode : BuildMode.StaircaseClassic;
   });
   const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.paletteSeed, false));
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
@@ -755,7 +657,7 @@ const Index = () => {
     ],
   );
   const hasNonFlatShades = imageStats?.hasNonFlatShades ?? false;
-  const hasSuppressPattern = imageStats?.hasSuppressPattern ?? false;
+  const hasVoidShadow = ((imageStats?.voidShadowStats.dominant ?? 0) + (imageStats?.voidShadowStats.recessive ?? 0)) > 0;
   const northlineShape = shapeMap?.[BuildMode.StaircaseNorthline] ?? null;
   const isFlatShape = useMemo(
     () => !!northlineShape && !generatedShapeHasNonWaterColorHeightVariance(northlineShape),
@@ -1082,18 +984,18 @@ const Index = () => {
   useEffect(() => {
     const encoded = new URLSearchParams(window.location.search).get("preset");
     if (!encoded) return;
-    const decoded = decodePreset(encoded);
+    const decoded = decodeFullPreset(encoded);
     if (!decoded) return;
     setPresets(prev => {
-      const exists = prev.findIndex(p => p.name === decoded.preset.name);
+      const exists = prev.findIndex(p => p.name === decoded.blockPreset.name);
       if (exists >= 0) {
         const n = [...prev];
-        n[exists] = decoded.preset;
+        n[exists] = decoded.blockPreset;
         setActiveIdx(exists);
         return n;
       }
       setActiveIdx(prev.length);
-      return [...prev, decoded.preset];
+      return [...prev, decoded.blockPreset];
     });
     if (decoded.supportFiller) setSupportFillerBlock(decoded.supportFiller);
     if (decoded.shadeFiller) setShadeFillerBlock(decoded.shadeFiller);
@@ -1117,10 +1019,14 @@ const Index = () => {
   useEffect(() => {
     if (!imageData) return;
     if (isFlatShape) setBuildMode(BuildMode.Flat);
-    else if (hasSuppressPattern)
-      setBuildMode(prev => isStaircaseLikeMode(prev) ? (twoLayerHasLateVoidNeed ? BuildMode.Suppress2LayerLatePairs : BuildMode.Suppress2Layer) : prev);
+    else if (AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS && hasVoidShadow) {
+      setBuildMode(prev => isStaircaseBuildMode(prev) ? BuildMode.SuppressStepChecker : prev);
+      if (isStaircaseBuildMode(buildMode)) {
+        setSuppressStepDirection(SuppressStepDirection.EastToWest);
+      }
+    }
     else setBuildMode(prev => prev === BuildMode.Flat ? BuildMode.StaircaseClassic : prev);
-  }, [imageData, isFlatShape, hasSuppressPattern, twoLayerHasLateVoidNeed]);
+  }, [imageData, isFlatShape, hasVoidShadow, buildMode]);
 
   useEffect(() => {
     if (!imageData || isFlatShape) return;
@@ -1279,7 +1185,7 @@ const Index = () => {
 
   const sharePreset = () => {
     markSavedImmediate();
-    const url = `${location.origin}${location.pathname}?preset=${encodePreset(
+    const url = `${location.origin}${location.pathname}?preset=${encodeFullPreset(
       preset,
       supportFillerBlock,
       shadeFillerBlock,
@@ -1400,25 +1306,7 @@ const Index = () => {
         customColors,
         baseName,
       });
-      const suffixMap: Record<BuildMode, string> = {
-        [BuildMode.Flat]: "",
-        [BuildMode.InclineUp]: "-incline_up",
-        [BuildMode.InclineDown]: "-incline_down",
-        [BuildMode.StaircaseNorthline]: "-northline",
-        [BuildMode.StaircaseSouthline]: "-southline",
-        [BuildMode.StaircaseClassic]: "-classic",
-        [BuildMode.StaircaseValley]: "-valley",
-        [BuildMode.StaircaseGrouped]: "-grouped",
-        [BuildMode.StaircaseParty]: "-party",
-        [BuildMode.SuppressSplitRow]: "-split_row",
-        [BuildMode.SuppressSplitChecker]: "-split_checker",
-        [BuildMode.SuppressStepPairs]: `-suppress_step_pairs_${getSuppressStepDirectionSuffix(suppressStepDirection)}`,
-        [BuildMode.SuppressStepChecker]: `-suppress_step_checker_${getSuppressStepDirectionSuffix(suppressStepDirection)}`,
-        [BuildMode.Suppress2Layer]: "-suppress_2layer",
-        [BuildMode.Suppress2LayerLateFillers]: "-suppress_2layer",
-        [BuildMode.Suppress2LayerLatePairs]: "-suppress_2layer",
-      };
-      const suffix = suffixMap[buildMode] ?? `-${buildMode}`;
+      const suffix = getBuildModeDownloadSuffix(buildMode, suppressStepDirection);
       const ext = result.isZip ? "zip" : "nbt";
       const mime = result.isZip ? "application/zip" : "application/octet-stream";
       const a = Object.assign(document.createElement("a"), {

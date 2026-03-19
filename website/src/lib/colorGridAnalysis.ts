@@ -29,7 +29,6 @@ export enum UniformNonFlatDirection {
 
 interface ColorGridStats {
   hasNonFlatShades: boolean;
-  hasSuppressPattern: boolean;
   hasTransparency: boolean;
   hasWater: boolean;
   hasNonLightWater: boolean;
@@ -88,22 +87,6 @@ function imageHasNonFlatShades(colorGrid: ColorGrid): boolean {
     for (let z = 0; z < MAP_SIZE; ++z) {
       const color = colorGrid[x][z];
       if (!isTransparentColor(color) && color.shade !== 1) return true;
-    }
-  }
-  return false;
-}
-
-function scanSuppressedPixels(colorGrid: ColorGrid): boolean {
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      if (!isTransparentColor(colorGrid[x][z])) continue;
-      for (let southZ = z + 1; southZ < MAP_SIZE; ++southZ) {
-        const south = colorGrid[x][southZ];
-        if (isTransparentColor(south)) continue;
-        if (south.shade === 2) break;
-        if (south.shade === 0 || south.shade === 3) return true;
-        break;
-      }
     }
   }
   return false;
@@ -231,7 +214,6 @@ export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
   const voidShadowStats = analyzeVoidShadows(colorGrid);
   return {
     hasNonFlatShades: imageHasNonFlatShades(colorGrid),
-    hasSuppressPattern: scanSuppressedPixels(colorGrid),
     hasTransparency: colorGridHasTransparency(colorGrid),
     hasWater: colorGridHasWater(colorGrid),
     hasNonLightWater: colorGridHasNonLightWater(colorGrid),

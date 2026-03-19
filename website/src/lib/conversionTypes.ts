@@ -11,6 +11,7 @@
  * - getVisibleSuppressBuildModes()
  * - SuppressStepDirection
  * - isSuppressStepDirection()
+ * - getBuildModeDownloadSuffix()
  * - getSuppressStepDirectionRotationDegrees()
  * - cycleSuppressStepDirection()
  * - FillerAssignment
@@ -88,9 +89,7 @@ export function isSuppressStepDirection(raw: unknown): raw is SuppressStepDirect
   return Object.values(SuppressStepDirection).includes(raw as SuppressStepDirection);
 }
 
-// Callers:
-// - src/Index.tsx
-export function getSuppressStepDirectionSuffix(direction: SuppressStepDirection): string {
+function getDirectionSuffix(direction: SuppressStepDirection): string {
   switch (direction) {
     case SuppressStepDirection.EastToWest:
       return "EW";
@@ -100,6 +99,46 @@ export function getSuppressStepDirectionSuffix(direction: SuppressStepDirection)
       return "NS";
     case SuppressStepDirection.SouthToNorth:
       return "SN";
+  }
+}
+
+// Callers:
+// - src/Index.tsx
+export function getBuildModeDownloadSuffix(
+  buildMode: BuildMode,
+  direction: SuppressStepDirection,
+): string {
+  switch (buildMode) {
+    case BuildMode.Flat:
+      return "";
+    case BuildMode.InclineUp:
+      return "-incline_up";
+    case BuildMode.InclineDown:
+      return "-incline_down";
+    case BuildMode.StaircaseNorthline:
+      return "-northline";
+    case BuildMode.StaircaseSouthline:
+      return "-southline";
+    case BuildMode.StaircaseClassic:
+      return "-classic";
+    case BuildMode.StaircaseValley:
+      return "-valley";
+    case BuildMode.StaircaseGrouped:
+      return "-grouped";
+    case BuildMode.StaircaseParty:
+      return "-party";
+    case BuildMode.SuppressSplitRow:
+      return "-split_row";
+    case BuildMode.SuppressSplitChecker:
+      return "-split_checker";
+    case BuildMode.SuppressStepPairs:
+      return `-suppress_step_pairs_${getDirectionSuffix(direction)}`;
+    case BuildMode.SuppressStepChecker:
+      return `-suppress_step_checker_${getDirectionSuffix(direction)}`;
+    case BuildMode.Suppress2Layer:
+    case BuildMode.Suppress2LayerLateFillers:
+    case BuildMode.Suppress2LayerLatePairs:
+      return "-suppress_2layer";
   }
 }
 
