@@ -6,12 +6,10 @@
  * - src/Index.tsx
  * - src/main.tsx
  * - src/data/presets.ts
- * - src/lib/previewImageStore.ts
  */
 export const STORAGE_KEYS = {
   presets: "mapart_presets",
   theme: "mapart_theme",
-  previewSwReloadOnce: "mapart_preview_sw_reload_once",
 
   supportFiller: "mapart_support_filler",
   shadeFiller: "mapart_shade_filler",

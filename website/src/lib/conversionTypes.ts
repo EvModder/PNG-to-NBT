@@ -17,11 +17,14 @@
  * - FillerAssignment
  *
  * Callers:
+ * - src/data/defaultSettings.ts
  * - src/Index.tsx
  * - src/data/i18n/*
  * - src/lib/fillerRules.ts
  * - src/lib/materialRules.ts
  * - src/lib/messages.ts
+ * - src/lib/presetCodec.ts
+ * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeCellRules.ts
  * - src/lib/shapeGeneration.ts
@@ -29,8 +32,10 @@
  * - src/lib/shapeTypes.ts
  */
 // Callers:
+// - src/data/defaultSettings.ts
 // - src/Index.tsx
 // - src/lib/materialRules.ts
+// - src/lib/presetCodec.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeCellRules.ts
 // - src/lib/shapeSubstitution.ts
@@ -42,9 +47,11 @@ export interface CustomColor {
 }
 
 // Callers:
+// - src/data/defaultSettings.ts
 // - src/Index.tsx
 // - src/data/i18n/*
 // - src/lib/messages.ts
+// - src/lib/presetCodec.ts
 // - src/lib/shapeGeneration.ts
 export enum BuildMode {
   Flat = "flat",
@@ -66,8 +73,10 @@ export enum BuildMode {
 }
 
 // Callers:
+// - src/data/defaultSettings.ts
 // - src/Index.tsx
 // - src/lib/messages.ts
+// - src/lib/presetCodec.ts
 // - src/lib/shapeGeneration.ts
 export enum SuppressStepDirection {
   EastToWest = "east_to_west",
@@ -85,6 +94,7 @@ const SUPPRESS_STEP_DIRECTIONS = [
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/presetCodec.ts
 export function isSuppressStepDirection(raw: unknown): raw is SuppressStepDirection {
   return Object.values(SuppressStepDirection).includes(raw as SuppressStepDirection);
 }
@@ -163,6 +173,7 @@ export function getSuppressStepDirectionRotationDegrees(direction: SuppressStepD
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeCellRules.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeTypes.ts
 export enum FillerRole {
   ShadeNorthRow = "shade_north_row",

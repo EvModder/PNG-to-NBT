@@ -51,7 +51,12 @@ import {
   nooblineIsSingleY as generatedShapeNooblineIsSingleY,
 } from "@/lib/shapeAnalysis";
 import { canonicalizeBlockEntry, normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
-import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid } from "@/lib/fillerRules";
+import {
+  createFillerAssignments,
+  isFillerDisabled,
+  isShadeFillerDisabled,
+  isWaterSideSupportFillerValid,
+} from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { decodeFullPreset, encodeFullPreset } from "@/lib/presetCodec";
 import { useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
@@ -213,62 +218,6 @@ function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirec
       </g>
     </svg>
   );
-}
-
-function createFillerAssignments(
-  supportFillerBlock: string,
-  shadeFillerBlock: string,
-  dominateVoidFillerBlock: string,
-  recessiveVoidFillerBlock: string,
-  suppress2LayerLateFillerBlock: string,
-  supportMode: SupportMode,
-  usesDirectWaterBlock: boolean,
-  usesIceWaterBlock: boolean,
-): FillerAssignment[] {
-  const assignments: FillerAssignment[] = [
-    { role: FillerRole.ShadeSuppress, block: shadeFillerBlock },
-    { role: FillerRole.ShadeNorthRow, block: shadeFillerBlock },
-    { role: FillerRole.ShadeVoidDominant, block: dominateVoidFillerBlock || shadeFillerBlock },
-    { role: FillerRole.ShadeVoidRecessive, block: recessiveVoidFillerBlock || shadeFillerBlock },
-    { role: FillerRole.ShadeSuppressLate, block: suppress2LayerLateFillerBlock || shadeFillerBlock },
-  ];
-  switch (supportMode) {
-    case SupportMode.Steps:
-      assignments.push({ role: FillerRole.StairStep, block: supportFillerBlock });
-      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
-      break;
-    case SupportMode.All:
-      assignments.push({ role: FillerRole.SupportAll, block: supportFillerBlock });
-      if (usesDirectWaterBlock) {
-        assignments.push({ role: FillerRole.SupportWaterSides, block: supportFillerBlock });
-        assignments.push({ role: FillerRole.SupportWaterSidesCovered, block: supportFillerBlock });
-      }
-      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
-      break;
-    case SupportMode.Fragile:
-      assignments.push({ role: FillerRole.SupportFragile, block: supportFillerBlock });
-      break;
-    case SupportMode.Water:
-      if (usesDirectWaterBlock) {
-        assignments.push({ role: FillerRole.SupportWaterSides, block: supportFillerBlock });
-        assignments.push({ role: FillerRole.SupportWaterSidesCovered, block: supportFillerBlock });
-      } else {
-        // Already handled by SupportWaterSidesCovered, so can be safely else-gated
-        assignments.push({ role: FillerRole.SupportWaterBase, block: supportFillerBlock });
-      }
-      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
-      break;
-    case SupportMode.None:
-      break;
-  }
-  if (
-    supportMode !== SupportMode.None &&
-    usesIceWaterBlock &&
-    !assignments.some(({ role }) => role === FillerRole.SupportWaterBase)
-  ) {
-    assignments.push({ role: FillerRole.SupportWaterBase, block: supportFillerBlock });
-  }
-  return assignments;
 }
 
 const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
@@ -869,13 +818,16 @@ const Index = () => {
     const visibleModes = new Set(getVisibleSuppressBuildModes(twoLayerHasLateVoidNeed));
     return BASE_SUPPRESS_OPTIONS.filter(option => visibleModes.has(option.value));
   }, [twoLayerHasLateVoidNeed]);
-  const showSuppressStepDirectionControl = isSuppressStepsBuildMode(buildMode);
+  const showSuppressStepDirectionControl =
+    !!imageData &&
+    imageValid &&
+    !isFlatShape &&
+    isSuppressStepsBuildMode(buildMode);
 
   const shadingMethodTooltip = useMemo(() => messages.buildMode.tooltip(buildMode), [buildMode]);
   const supportModeTooltip = useMemo(() => messages.supportMode.tooltip(supportMode), [supportMode]);
   const suppressStepNorthSouthWarning = useMemo(
     () =>
-      !!imageData && imageValid && !isFlatShape && 
       showSuppressStepDirectionControl &&
       isNorthSouthSuppressStepDirection
         ? messages.preview.suppressStepNorthSouthWarning(
@@ -1477,7 +1429,6 @@ const Index = () => {
   const showVsFillersInPreviewToggle = previewVsFillerReplacements.length > 0;
   const previewImageUrl = usePreviewImageUrl({
     imageData,
-    colorGrid: imageColorGrid,
     pixelReplacements: showVsFillersInPreview ? previewVsFillerReplacements : undefined,
   });
   const hasAnyFillerInput =

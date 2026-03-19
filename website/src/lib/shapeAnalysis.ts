@@ -8,6 +8,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/previewImageEdits.ts
  */
 import { WATER_BASE_INDEX } from "../data/mapColors";
 import { MAP_SIZE, type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
@@ -160,6 +161,7 @@ export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/previewImageEdits.ts
 export function collectFillerRolePixels(
   shape: GeneratedShape,
   roles: readonly FillerRole[],

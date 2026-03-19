@@ -73,9 +73,7 @@ export function decodeFullPreset(encoded: string): FullPreset | null {
     const sections = atob(serialized).split("|");
     if (sections.length < 2) return null;
 
-    const supportRaw = sections[4] || SupportMode.None;
-    const supportMode: SupportMode =
-      supportRaw === "1" ? SupportMode.Steps : supportRaw === "0" ? SupportMode.None : (supportRaw as SupportMode);
+    const supportMode = (sections[4] || SupportMode.None) as SupportMode;
 
     const blocks: Record<number, string> = {};
     for (const [i, part] of sections[1].split(",").entries()) {
