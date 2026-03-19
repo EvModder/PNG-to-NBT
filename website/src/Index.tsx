@@ -1,5 +1,42 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
 import { Moon, Sun, Plus, Minus, Glasses, Droplets, ArrowDown } from "lucide-react";
+import {
+  AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS,
+  DEFAULT_ACTIVE_PRESET_NAME,
+  DEFAULT_APPLY_SUPPORT_FLOOR_YS,
+  DEFAULT_BELOW_PLATFORM_WATER,
+  DEFAULT_BLOCK_COLUMN_EXPANDED,
+  DEFAULT_BLOCK_DISPLAY_MODE,
+  DEFAULT_BUILD_MODE,
+  DEFAULT_COLUMN_ORDER,
+  DEFAULT_CONVERT_UNSUPPORTED,
+  DEFAULT_DARK_WATER_DROP,
+  DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
+  DEFAULT_FLAT_WATER_DROP,
+  DEFAULT_FORCE_Z129,
+  DEFAULT_LAYER_GAP,
+  DEFAULT_LIGHT_WATER_DROP,
+  DEFAULT_MIX_STEPS,
+  DEFAULT_PALETTE_SEED,
+  DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
+  DEFAULT_SHADE_FILLER_BLOCK,
+  DEFAULT_SHOW_ALIGNMENT_REMINDER,
+  DEFAULT_SHOW_EXCLUDED_BLOCKS,
+  DEFAULT_SHOW_IDS,
+  DEFAULT_SHOW_NAMES,
+  DEFAULT_SHOW_NOOBLINE_WARNINGS,
+  DEFAULT_SHOW_OPTIONS,
+  DEFAULT_MC_UNITS,
+  DEFAULT_SHOW_TRANSPARENT_ROW,
+  DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW,
+  DEFAULT_SHOW_VS_FILLER_WARNINGS,
+  DEFAULT_SORT_DIR,
+  DEFAULT_SORT_KEY,
+  DEFAULT_SUPPORT_FILLER_BLOCK,
+  DEFAULT_SUPPORT_MODE,
+  DEFAULT_SUPPRESS_STEP_DIRECTION,
+  DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
+} from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb, type Shade } from "@/data/mapColors";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
@@ -178,8 +215,6 @@ function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirec
   );
 }
 
-const ALL_COLUMNS: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
-
 function createFillerAssignments(
   supportFillerBlock: string,
   shadeFillerBlock: string,
@@ -249,7 +284,6 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
 ];
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
-const AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS = true;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: BuildMode.SuppressSplitRow, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitRow), disabled: true, muted: true },
@@ -300,49 +334,49 @@ const Index = () => {
   const [activeIdx, setActiveIdx] = useState(() => {
     try {
       const name = JSON.parse(localStorage.getItem(LS_KEYS.activePreset) || '""');
-      if (name) {
-        const idx = loadPresets().findIndex(p => p.name === name);
-        if (idx >= 0) return idx;
-      }
+      const targetName = name || DEFAULT_ACTIVE_PRESET_NAME;
+      const idx = loadPresets().findIndex(p => p.name === targetName);
+      if (idx >= 0) return idx;
     } catch {
       /* ignore */
     }
-    return 0;
+    const idx = loadPresets().findIndex(p => p.name === DEFAULT_ACTIVE_PRESET_NAME);
+    return idx >= 0 ? idx : 0;
   });
   const [supportFillerBlock, setSupportFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.supportFiller, "resin_block")),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.supportFiller, DEFAULT_SUPPORT_FILLER_BLOCK)),
   );
   const [shadeFillerBlock, setShadeFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.shadeFiller, "resin_block")),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.shadeFiller, DEFAULT_SHADE_FILLER_BLOCK)),
   );
   const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.suppress2LayerLateFiller, "slime_block")),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.suppress2LayerLateFiller, DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK)),
   );
   const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.dominateVoidFiller, "slime_block")),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.dominateVoidFiller, DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK)),
   );
   const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.recessiveVoidFiller, "honey_block")),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.recessiveVoidFiller, DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK)),
   );
   const [buildMode, setBuildMode] = useState<BuildMode>(() => {
-    const storedBuildMode = loadCached(LS_KEYS.buildMode, BuildMode.StaircaseClassic);
-    return Object.values(BuildMode).includes(storedBuildMode as BuildMode) ? storedBuildMode : BuildMode.StaircaseClassic;
+    const storedBuildMode = loadCached(LS_KEYS.buildMode, DEFAULT_BUILD_MODE);
+    return Object.values(BuildMode).includes(storedBuildMode as BuildMode) ? storedBuildMode : DEFAULT_BUILD_MODE;
   });
-  const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.paletteSeed, false));
+  const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.paletteSeed, DEFAULT_PALETTE_SEED));
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
-  const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
+  const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, DEFAULT_LAYER_GAP));
   const calcLayerGap = useDeferredValue(layerGap);
-  const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, false));
+  const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
   const [suppressStepDirection, setSuppressStepDirection] = useState<SuppressStepDirection>(() => {
-    const storedDirection = loadCached(LS_KEYS.suppressStepDirection, SuppressStepDirection.EastToWest);
-    return isSuppressStepDirection(storedDirection) ? storedDirection : SuppressStepDirection.EastToWest;
+    const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
+    return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
   });
-  const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, 0));
+  const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, DEFAULT_LIGHT_WATER_DROP));
   const calcLightWaterDrop = useDeferredValue(lightWaterDrop);
-  const [flatWaterDrop, setFlatWaterDrop] = useState(() => loadCached(LS_KEYS.flatWaterDrop, 0));
+  const [flatWaterDrop, setFlatWaterDrop] = useState(() => loadCached(LS_KEYS.flatWaterDrop, DEFAULT_FLAT_WATER_DROP));
   const calcFlatWaterDrop = useDeferredValue(flatWaterDrop);
-  const [darkWaterDrop, setDarkWaterDrop] = useState(() => loadCached(LS_KEYS.darkWaterDrop, 0));
+  const [darkWaterDrop, setDarkWaterDrop] = useState(() => loadCached(LS_KEYS.darkWaterDrop, DEFAULT_DARK_WATER_DROP));
   const calcDarkWaterDrop = useDeferredValue(darkWaterDrop);
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
   const [colStart, setColStart] = useState(0);
@@ -352,39 +386,39 @@ const Index = () => {
   useEffect(() => { colStartRef.current = colStart; }, [colStart]);
   useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
-    loadCached(LS_KEYS.supportMode, SupportMode.None),
+    loadCached(LS_KEYS.supportMode, DEFAULT_SUPPORT_MODE),
   );
   const [customColors, setCustomColors] = useState<CustomColor[]>([]);
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
   const [imageData, setImageData] = useState<ImageData | null>(null);
-  const [showVsFillersInPreview, setShowVsFillersInPreview] = useState(() => loadCached(LS_KEYS.showVsFillersInPreview, false));
+  const [showVsFillersInPreview, setShowVsFillersInPreview] = useState(() => loadCached(LS_KEYS.showVsFillersInPreview, DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW));
   const [imageName, setImageName] = useState("");
   const [imageValid, setImageValid] = useState(false);
   const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
   const [converting, setConverting] = useState(false);
-  const [showNames, setShowNames] = useState(() => loadCached(LS_KEYS.showNames, false));
-  const [showIds, setShowIds] = useState(() => loadCached(LS_KEYS.showIds, false));
-  const [showOptions, setShowOptions] = useState(() => loadCached(LS_KEYS.showOptions, false));
+  const [showNames, setShowNames] = useState(() => loadCached(LS_KEYS.showNames, DEFAULT_SHOW_NAMES));
+  const [showIds, setShowIds] = useState(() => loadCached(LS_KEYS.showIds, DEFAULT_SHOW_IDS));
+  const [showOptions, setShowOptions] = useState(() => loadCached(LS_KEYS.showOptions, DEFAULT_SHOW_OPTIONS));
   const [blockDisplayMode, setBlockDisplayMode] = useState<BlockDisplayMode>(() =>
-    loadCached(LS_KEYS.blockDisplayMode, "textures" as BlockDisplayMode),
+    loadCached(LS_KEYS.blockDisplayMode, DEFAULT_BLOCK_DISPLAY_MODE),
   );
-  const [blockColExpanded, setBlockColExpanded] = useState(() => loadCached(LS_KEYS.blockColExpanded, true));
-  const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, "default" as SortKey));
-  const [sortDir, setSortDir] = useState<SortDir>(() => loadCached(LS_KEYS.sortDir, "asc" as SortDir));
+  const [blockColExpanded, setBlockColExpanded] = useState(() => loadCached(LS_KEYS.blockColExpanded, DEFAULT_BLOCK_COLUMN_EXPANDED));
+  const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, DEFAULT_SORT_KEY as SortKey));
+  const [sortDir, setSortDir] = useState<SortDir>(() => loadCached(LS_KEYS.sortDir, DEFAULT_SORT_DIR as SortDir));
   const [showUnusedColors, setShowUnusedColors] = useState(false);
-  const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, true));
+  const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, DEFAULT_MC_UNITS));
   const [isDark, setIsDark] = useState(resolveDarkTheme);
-  const [convertUnsupported, /* setConvertUnsupported */] = useState(true); // always on; checkbox commented out
-  const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, ALL_COLUMNS));
-  const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, false));
-  const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, false));
-  const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, false));
-  const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.assumeFloor, true));
-  const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, false));
-  const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, true));
-  const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, true));
-  const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, false));
+  const [convertUnsupported, /* setConvertUnsupported */] = useState(DEFAULT_CONVERT_UNSUPPORTED); // always on; checkbox commented out
+  const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, DEFAULT_COLUMN_ORDER));
+  const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, DEFAULT_SHOW_TRANSPARENT_ROW));
+  const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, DEFAULT_SHOW_EXCLUDED_BLOCKS));
+  const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, DEFAULT_FORCE_Z129));
+  const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.assumeFloor, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
+  const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, DEFAULT_BELOW_PLATFORM_WATER));
+  const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
+  const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
+  const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
   const parsedImage = useMemo(
     () => imageData ? convertImageToColorGrid(imageData, customColors, convertUnsupported) : null,
@@ -438,7 +472,7 @@ const Index = () => {
     [],
   );
 
-  const preset = presets[activeIdx] || getBuiltinPreset("PistonClear")!;
+  const preset = presets[activeIdx] || getBuiltinPreset(DEFAULT_ACTIVE_PRESET_NAME)!;
   const activePresetBuiltinTooltip = useMemo(
     () => (activeIdx < BUILTIN_PRESET_NAMES.length ? messages.presets.builtinTooltip(preset.name) : undefined),
     [activeIdx, preset.name],
