@@ -41,7 +41,7 @@ import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb, type Shade } from "@/data/
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { convertToNbt } from "@/lib/nbtExport";
-import { generateShapeMap } from "@/lib/shapeGeneration";
+import { StaircaseWaterHandling, generateShapeMap } from "@/lib/shapeGeneration";
 import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";
 import { computeColorGridStats, hasStepMixOpportunity } from "@/lib/colorGridAnalysis";
 import {
@@ -272,9 +272,11 @@ const getStoredTheme = (): "light" | "dark" | null => {
   return raw === "light" || raw === "dark" ? raw : null;
 };
 
+const getSystemPrefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
+
 const resolveDarkTheme = () => {
   const stored = getStoredTheme();
-  return stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return stored ? stored === "dark" : getSystemPrefersDark();
 };
 
 // ── Component ──
@@ -332,6 +334,7 @@ const Index = () => {
   const [colEnd, setColEnd] = useState(127);
   const colStartRef = useRef(0);
   const colEndRef = useRef(127);
+  const autoSelectedImageRef = useRef<ImageData | null>(null);
   useEffect(() => { colStartRef.current = colStart; }, [colStart]);
   useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
@@ -567,6 +570,7 @@ const Index = () => {
   const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
+  const supportFillerDisabled = useMemo(() => isFillerDisabled(supportFillerBlock), [supportFillerBlock]);
   const imageHasNonLightWater = imageStats?.hasNonLightWater ?? false;
   const normalizedImmediateWaterDrops = useMemo(
     () => normalizeUsedWaterDrops({
@@ -585,14 +589,22 @@ const Index = () => {
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
   const waterDrops = normalizedDeferredWaterDrops;
-  const usesBelowOnlyWaterSupport = useMemo(
-    () => (supportMode === SupportMode.Water && !usesWaterForWater) || (supportMode !== SupportMode.None && usesIceForWater),
-    [supportMode, usesWaterForWater, usesIceForWater],
+  const hasWaterSpecificSupport = useMemo(
+    () => !supportFillerDisabled && (
+      supportMode !== SupportMode.None && supportMode !== SupportMode.All &&
+      (usesIceForWater || supportMode === SupportMode.Water)
+    ),
+    [supportFillerDisabled, supportMode, usesIceForWater],
   );
   const waterFillerOffset = useMemo(
-    () => !belowPlatformWater && imageHasNonLightWater && usesBelowOnlyWaterSupport,
-    [belowPlatformWater, imageHasNonLightWater, usesBelowOnlyWaterSupport],
+    () => !belowPlatformWater && imageHasNonLightWater && hasWaterSpecificSupport,
+    [belowPlatformWater, imageHasNonLightWater, hasWaterSpecificSupport],
   );
+  const staircaseWaterHandling = belowPlatformWater
+    ? StaircaseWaterHandling.Dropped
+    : waterFillerOffset
+      ? StaircaseWaterHandling.Supported
+      : StaircaseWaterHandling.Standard;
   const showMixStepsToggle = useMemo(
     () =>
       isSuppressStepsBuildMode(buildMode) &&
@@ -611,8 +623,7 @@ const Index = () => {
           layerGap: calcLayerGap,
           mixSteps: showMixStepsToggle && calcMixSteps,
           paletteSeed: paletteSeedOffset,
-          waterFillerOffset,
-          belowPlatformWater,
+          staircaseWaterHandling,
           waterDrops,
           selectedMode: buildMode,
           selectedStepDirection: suppressStepDirection,
@@ -630,8 +641,7 @@ const Index = () => {
       showMixStepsToggle,
       calcMixSteps,
       paletteSeedOffset,
-      waterFillerOffset,
-      belowPlatformWater,
+      staircaseWaterHandling,
       waterDrops,
       buildMode,
       suppressStepDirection,
@@ -705,7 +715,6 @@ const Index = () => {
     () => supportFillerBlockId.length > 0 && isFragileBlock(supportFillerBlockId),
     [supportFillerBlockId],
   );
-  const supportFillerDisabled = useMemo(() => isFillerDisabled(supportFillerBlock), [supportFillerBlock]);
   const supportWaterSidesFillerValid = useMemo(
     () => isWaterSideSupportFillerValid(supportFillerBlock),
     [supportFillerBlock],
@@ -1003,7 +1012,12 @@ const Index = () => {
 
   // Auto-select mode when image changes
   useEffect(() => {
-    if (!imageData) return;
+    if (!imageData) {
+      autoSelectedImageRef.current = null;
+      return;
+    }
+    if (!imageValid || autoSelectedImageRef.current === imageData) return;
+    autoSelectedImageRef.current = imageData;
     if (isFlatShape) setBuildMode(BuildMode.Flat);
     else if (AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS && hasVoidShadow) {
       setBuildMode(prev => isStaircaseBuildMode(prev) ? BuildMode.SuppressStepChecker : prev);
@@ -1012,7 +1026,7 @@ const Index = () => {
       }
     }
     else setBuildMode(prev => prev === BuildMode.Flat ? BuildMode.StaircaseClassic : prev);
-  }, [imageData, isFlatShape, hasVoidShadow, buildMode]);
+  }, [imageData, imageValid, isFlatShape, hasVoidShadow, buildMode]);
 
   useEffect(() => {
     if (!imageData || isFlatShape) return;
@@ -1325,7 +1339,9 @@ const Index = () => {
 
   const toggleTheme = () => {
     const next = isDark ? "light" : "dark";
-    localStorage.setItem(LS_KEYS.theme, next);
+    const systemTheme = getSystemPrefersDark() ? "dark" : "light";
+    if (next === systemTheme) localStorage.removeItem(LS_KEYS.theme);
+    else localStorage.setItem(LS_KEYS.theme, next);
     document.documentElement.classList.toggle("dark", next === "dark");
     setIsDark(next === "dark");
   };
@@ -1831,7 +1847,7 @@ const Index = () => {
   const colWidthMap: Record<ColumnId, string> = {
     clr: "24px", id: "24px", name: "135px",
     block: blockColExpanded ? `minmax(${effectiveBlockColWidthPx}px,1fr)` : `${effectiveBlockColWidthPx}px`,
-    options: "46px",
+    options: "48px",
     required: `${requiredColWidth}px`
   };
   const gridColsStyle: React.CSSProperties = {
@@ -2419,13 +2435,6 @@ const Index = () => {
               isStackedLayout ? "flex-wrap" : "flex-nowrap"
             }`}
           >
-            <span
-              className="text-[10px] font-bold uppercase tracking-wide text-primary whitespace-nowrap cursor-help inline-flex items-center px-1.5 h-6 rounded bg-muted border border-border"
-              title={messages.fillers.headingTooltip}
-            >
-              {messages.fillers.heading}
-            </span>
-            <span className="h-4 border-l border-border/70" />
             {showSupportFillerInput && (
               <div className="inline-flex items-center gap-1 shrink-0">
                 <span
@@ -2661,26 +2670,25 @@ const Index = () => {
               )}
             </div>
             <div key={`${showIds}-${showNames}-${showOptions}-${columnOrder.join(",")}`} className="relative">
-              <div className="relative overflow-hidden">
-                {hasRequiredCol && usedIndices.length > 0 && visibleColumns.includes("required") && (
-                  <div
-                    className="absolute inset-0 pointer-events-none grid gap-1"
-                    style={gridColsStyle}
-                  >
-                    {visibleColumns.map(col => (
-                      <div
-                        key={`required-outline-${col}`}
-                        className={col === "required" ? "border-2 border-primary/60 bg-primary/10 rounded" : ""}
-                      />
-                    ))}
-                  </div>
-                )}
+              {hasRequiredCol && usedIndices.length > 0 && visibleColumns.includes("required") && (
                 <div
-                  className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
+                  className="absolute inset-0 pointer-events-none grid gap-1"
                   style={gridColsStyle}
                 >
-                  {visibleColumns.map(col => {
-                    const headerMap: Record<ColumnId, React.ReactNode> = {
+                  {visibleColumns.map(col => (
+                    <div
+                      key={`required-outline-${col}`}
+                      className={col === "required" ? "border-2 border-primary/60 bg-primary/10 rounded" : ""}
+                    />
+                  ))}
+                </div>
+              )}
+              <div
+                className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
+                style={gridColsStyle}
+              >
+                {visibleColumns.map(col => {
+                  const headerMap: Record<ColumnId, React.ReactNode> = {
                     clr: (
                       <span
                         key="clr"
@@ -2741,12 +2749,13 @@ const Index = () => {
                     options: (
                       <span
                         key="options"
-                        className="cursor-pointer select-none whitespace-nowrap pr-1"
+                        className="cursor-pointer select-none whitespace-nowrap pl-0.5"
                         onClick={() => toggleSort("options")}
                         title={messages.table.columnSortTitle("options")}
                         {...colDragProps("options")}
                       >
-                        {messages.table.columnLabel("options")}{sortArrow("options")}
+                        {messages.table.columnLabel("options")}
+                        {sortKey === "options" ? sortArrow("options") : <span className="invisible"> ▲</span>}
                       </span>
                     ),
                     required: (
@@ -2761,11 +2770,10 @@ const Index = () => {
                       </span>
                     ),
                   };
-                    return headerMap[col];
-                  })}
-                </div>
-                <div>{usedIndices.map(renderColorRow)}</div>
+                  return headerMap[col];
+                })}
               </div>
+              <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>
 
               {imageValid && unusedIndices.length > 0 && (
                 <div>

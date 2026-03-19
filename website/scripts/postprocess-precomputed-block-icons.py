@@ -89,6 +89,7 @@ FOLIAGE_TINT_IDS = {
 }
 WATERLOGGED_SKIP_TINT_IDS = {
     "cherry_leaves",
+    "pale_oak_leaves",
     "azalea_leaves",
     "flowering_azalea_leaves",
 }

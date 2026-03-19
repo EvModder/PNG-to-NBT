@@ -6,7 +6,7 @@ import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS } from "./excluded-blocks.m
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
-const EXCLUDED_COLORS_PATH = path.join(ROOT, "src", "data", "excludedColors.ts");
+const EXCLUDED_COLORS_PATH = path.join(ROOT, "src", "data", "mapColorsExcluded.ts");
 const PUBLIC_ICON_ROOT = path.join(ROOT, "public", "block-icons");
 const SOURCE_ICON_ROOT = path.join(ROOT, "assets", "block-icons-source");
 const OUT_DIR = path.join(PUBLIC_ICON_ROOT, "precomputed");
@@ -77,6 +77,7 @@ const CUSTOM_SOURCES = {
   lightning_rod: "custom/lightning_rod_side.png",
   repeater: "custom/repeater_top.png",
   comparator: "custom/comparator_top.png",
+  decorated_pot: "custom/decorated_pot_item.png",
 };
 
 const TOP_FACE_BLOCKS = new Set([

@@ -22,8 +22,8 @@
 // - src/lib/presetCodec.ts
 export enum SupportMode {
   None = "none",
-  Steps = "steps",
   All = "all",
+  Steps = "steps",
   Fragile = "fragile",
   Water = "water",
 }
