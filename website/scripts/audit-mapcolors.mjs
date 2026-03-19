@@ -6,6 +6,7 @@ import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, isExcludedBlockPattern } f
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
+const MAP_COLORS_EXCLUDED_PATH = path.join(ROOT, "src", "data", "mapColorsExcluded.ts");
 const REPORT_DIR = path.join(ROOT, "reports", "mapcolors");
 
 const ASSET_HOST = "https://assets.mcasset.cloud";
@@ -21,6 +22,12 @@ function parseMapColors(tsText) {
     rows.push({ name, entries });
   }
   return rows;
+}
+
+function parseExplicitExcludedIds(tsText) {
+  const excludedByIdMatch = tsText.match(/const EXCLUDED_BY_ID:[\s\S]*?=\s*\{([\s\S]*?)\n\};/);
+  if (!excludedByIdMatch) return [];
+  return [...excludedByIdMatch[1].matchAll(/"([^"]+)"/g)].map(match => normalizeBlockEntry(match[1]));
 }
 
 function parseArgs(argv) {
@@ -90,6 +97,7 @@ async function writeReport(fileName, lines) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const mapColorsTs = await fs.readFile(MAP_COLORS_PATH, "utf8");
+  const excludedTs = await fs.readFile(MAP_COLORS_EXCLUDED_PATH, "utf8");
   const rows = parseMapColors(mapColorsTs);
 
   const dupWithin = findDuplicatesByRow(rows);
@@ -110,6 +118,10 @@ async function main() {
   const missingActionable = missingAll.filter(id => !isExcludedBlockPattern(id) && !EXCLUDED_BLOCK_IDS.has(id));
 
   const excludedPresentInMapColors = [...EXCLUDED_BLOCK_IDS].filter(id => mapBlockIds.has(id));
+  const explicitExcludedIds = [...new Set(parseExplicitExcludedIds(excludedTs).map(entry => mapLegacyBlockId(blockIdOnly(entry))))];
+  const uncategorizedExplicitExcluded = explicitExcludedIds
+    .filter(id => !isExcludedBlockPattern(id) && !EXCLUDED_BLOCK_IDS.has(id))
+    .sort();
 
   await writeReport("missing-all.txt", missingAll);
   await writeReport("missing-actionable.txt", missingActionable);
@@ -128,6 +140,10 @@ async function main() {
       : ["(none)"],
   );
   await writeReport(
+    "uncategorized-explicit-excluded.txt",
+    uncategorizedExplicitExcluded.length ? uncategorizedExplicitExcluded : ["(none)"],
+  );
+  await writeReport(
     "summary.txt",
     [
       `Minecraft version: ${latestVersion}`,
@@ -138,6 +154,8 @@ async function main() {
       `Missing (excluded by pattern): ${missingPatternExcluded.length}`,
       `Missing (excluded explicit): ${missingExplicitExcluded.length}`,
       `Missing (actionable): ${missingActionable.length}`,
+      `Explicit excluded IDs in data file: ${explicitExcludedIds.length}`,
+      `Explicit excluded IDs missing category: ${uncategorizedExplicitExcluded.length}`,
       `Duplicates within same row: ${dupWithin.length}`,
       `Duplicates across rows: ${dupAcross.length}`,
       `Explicit exclusions present in mapColors: ${excludedPresentInMapColors.length}`,
@@ -155,11 +173,12 @@ async function main() {
   console.log(`Registry block IDs: ${allBlockstateIds.length}`);
   console.log(`Missing (all): ${missingAll.length}`);
   console.log(`Missing (actionable): ${missingActionable.length}`);
+  console.log(`Explicit excluded IDs missing category: ${uncategorizedExplicitExcluded.length}`);
   console.log(`Duplicates within row: ${dupWithin.length}`);
   console.log(`Duplicates across rows: ${dupAcross.length}`);
   console.log(`Reports written to: ${path.relative(ROOT, REPORT_DIR)}`);
 
-  if (dupWithin.length > 0 || dupAcross.length > 0) process.exit(1);
+  if (dupWithin.length > 0 || dupAcross.length > 0 || uncategorizedExplicitExcluded.length > 0) process.exit(1);
   if (args.strictMissing && missingActionable.length > 0) process.exit(1);
 }
 

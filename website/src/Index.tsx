@@ -39,7 +39,7 @@ import {
 } from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb, type Shade } from "@/data/mapColors";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
-import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
+import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";

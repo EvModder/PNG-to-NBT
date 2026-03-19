@@ -1,6 +1,8 @@
 /**
  * Public API:
  * - EXCLUDED_BLOCK_PATTERNS
+ * - EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL
+ * - EXCLUDED_BLOCK_IDS_UNOBTAINABLE
  * - EXCLUDED_BLOCK_IDS
  * - isExcludedBlockPattern()
  *
@@ -25,11 +27,7 @@ export const EXCLUDED_BLOCK_PATTERNS = [
   /lightning_rod$/,
 ];
 
-// Callers:
-// - scripts/audit-mapcolors.mjs
-// - scripts/build-precomputed-block-icons.mjs
-export const EXCLUDED_BLOCK_IDS = new Set([
-  // Obtainable but intentionally excluded.
+export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "dragon_egg",
   "nether_portal",
   "hopper",
@@ -53,10 +51,34 @@ export const EXCLUDED_BLOCK_IDS = new Set([
   "dragon_wall_head",
   "piglin_head",
   "piglin_wall_head",
-  // Unobtainable/admin-only omissions.
+  "jukebox",
+  "furnace",
+  "smoker",
+  "blast_furnace",
+  "dispenser",
+  "dropper",
+  "observer",
+  "stonecutter",
+  "ender_chest",
+  "crafter",
+  "chest",
+  "trapped_chest",
+  "loom",
+  "lectern",
+  "smithing_table",
+  "fletching_table",
+  "cartography_table",
+  "chiseled_bookshelf",
+  "enchanting_table",
+  "respawn_anchor",
+  "creaking_heart",
+]);
+
+export const EXCLUDED_BLOCK_IDS_UNOBTAINABLE = new Set([
   "barrier",
   "structure_void",
   "light",
+  "bedrock",
   "jigsaw",
   "structure_block",
   "command_block",
@@ -75,6 +97,14 @@ export const EXCLUDED_BLOCK_IDS = new Set([
   "infested_cracked_stone_bricks",
   "infested_chiseled_stone_bricks",
   "infested_deepslate",
+]);
+
+// Callers:
+// - scripts/audit-mapcolors.mjs
+// - scripts/build-precomputed-block-icons.mjs
+export const EXCLUDED_BLOCK_IDS = new Set([
+  ...EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL,
+  ...EXCLUDED_BLOCK_IDS_UNOBTAINABLE,
 ]);
 
 // Callers:

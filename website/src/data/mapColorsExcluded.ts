@@ -7,6 +7,41 @@
  */
 import { BASE_COLORS } from "./mapColors";
 
+/* Exclusion documentation:
+ * - Pattern-excluded obtainable omissions:
+ *   - `.*_stairs`
+ *   - `.*_shulker_box`
+ *   - `.*_button`
+ *   - `.*_wall`
+ *   - `.*_fence`
+ *   - `.*_fence_gate`
+ *   - `.*_trapdoor`
+ *   - `.*_door`
+ *   - `.*_sign`
+ *   - `.*_stained_glass_pane`
+ *   - `.*lightning_rod`
+ * - Explicit unobtainable/admin-only exclusions:
+ *   - `barrier`, `structure_void`, `light`, `bedrock`
+ *   - `jigsaw`, `structure_block`
+ *   - `command_block`, `chain_command_block`, `repeating_command_block`
+ *   - `end_portal`, `reinforced_deepslate`
+ *   - `spawner`, `trial_spawner`, `vault`
+ *   - `budding_amethyst`
+ *   - `infested_*`
+ * - Explicit obtainable but intentionally omitted exclusions:
+ *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`
+ *   - `grindstone`, `brewing_stand`, `heavy_core`
+ *   - `player_head`, `zombie_head`, `skeleton_skull`, `wither_skeleton_skull`, `creeper_head`, `dragon_head`, `piglin_head`
+ *   - `jukebox`
+ *   - `furnace`, `smoker`, `blast_furnace`, `dispenser`, `dropper`, `observer`, `stonecutter`, `ender_chest`, `crafter`
+ *   - `chest`, `trapped_chest`, `loom`, `lectern`, `smithing_table`, `fletching_table`, `cartography_table`, `chiseled_bookshelf`
+ *   - `enchanting_table`, `respawn_anchor`, `creaking_heart`
+ *
+ * These categories are enforced by `scripts/excluded-blocks.mjs` and audited by
+ * `bun run audit:mapcolors`. When adding a new explicit block below, also add it
+ * to either the unobtainable or obtainable-intentional audit set there.
+ */
+
 // Excluded block options grouped by map color ID.
 const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   0: [

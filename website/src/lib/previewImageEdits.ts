@@ -10,7 +10,7 @@
  */
 import { useMemo } from "react";
 import { BASE_COLORS } from "@/data/mapColors";
-import { EXCLUDED_BLOCKS } from "@/data/excludedColors";
+import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { normalizeBlockId } from "@/lib/blockId";
 import { FillerRole } from "@/lib/conversionTypes";
 import { isShadeFillerDisabled } from "@/lib/fillerRules";

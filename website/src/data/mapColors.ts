@@ -13,7 +13,7 @@
  * - src/Index.tsx
  * - src/data/colorSortOrder.ts
  * - src/data/i18n/*
- * - src/data/excludedColors.ts
+ * - src/data/mapColorsExcluded.ts
  * - src/data/presets.ts
  * - src/lib/colorGridTypes.ts
  * - src/lib/colorGridParsing.ts
@@ -83,7 +83,7 @@ export const WATER_BASE_INDEX = 12;
 // Callers:
 // - src/Index.tsx
 // - src/data/colorSortOrder.ts
-// - src/data/excludedColors.ts
+// - src/data/mapColorsExcluded.ts
 // - src/data/presets.ts
 // - src/lib/colorGridParsing.ts
 // - src/lib/fillerRules.ts
