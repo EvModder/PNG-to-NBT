@@ -11,8 +11,9 @@
  */
 import {
   BuildMode,
+  SuppressStepDirection,
   buildModeUsesLayerGap,
-  buildModeUsesMixSteps,
+  isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
   isStaircaseBuildMode,
 } from "./conversionTypes";
@@ -43,7 +44,8 @@ type RecessivePlacementOverride = {
   fillerY?: number;
 };
 type StepPhaseSpec = {
-  cols: number[];
+  axis: "x" | "z";
+  lines: readonly number[];
   includeAt: (x: number, z: number) => boolean;
 };
 type WaterShade = 0 | 1 | 2;
@@ -66,7 +68,7 @@ interface ShapeGenerationStats {
   hasTwoLayerLateVoidNeed: boolean;
 }
 
-type StepwiseBuildMode = BuildMode.SuppressPairsEW | BuildMode.SuppressCheckerEW;
+type StepwiseBuildMode = BuildMode.SuppressStepPairs | BuildMode.SuppressStepChecker;
 type TwoLayerSuppressBuildMode = BuildMode.Suppress2LayerLateFillers | BuildMode.Suppress2LayerLatePairs;
 type InternalBuildMode =
   | BuildMode.StaircaseNorthline
@@ -77,8 +79,8 @@ type InternalBuildMode =
   | BuildMode.StaircaseParty
   | BuildMode.SuppressSplitRow
   | BuildMode.SuppressSplitChecker
-  | BuildMode.SuppressPairsEW
-  | BuildMode.SuppressCheckerEW
+  | BuildMode.SuppressStepPairs
+  | BuildMode.SuppressStepChecker
   | BuildMode.Suppress2LayerLateFillers
   | BuildMode.Suppress2LayerLatePairs;
 type ShapeCacheKeyId = string & { readonly __shapeCacheKeyId: unique symbol };
@@ -116,8 +118,8 @@ const DEFAULT_STAIRCASE_BUILD_MODES: InternalBuildMode[] = [
 const BASE_SUPPRESS_BUILD_MODES: InternalBuildMode[] = [
   BuildMode.SuppressSplitRow,
   BuildMode.SuppressSplitChecker,
-  BuildMode.SuppressPairsEW,
-  BuildMode.SuppressCheckerEW,
+  BuildMode.SuppressStepPairs,
+  BuildMode.SuppressStepChecker,
 ];
 
 const COLUMN_COORD_Z_OFFSET = 256;
@@ -1885,49 +1887,82 @@ function buildSuppressDualLayerBlocks(
   return { blocks, loweredWaterBlocks, supportFloorYs };
 }
 
-function buildStepPhaseSpecs(buildMode: StepwiseBuildMode): StepPhaseSpec[] {
-  const specs: StepPhaseSpec[] = [];
+function getOrderedStepLines(
+  direction: SuppressStepDirection,
+): { axis: "x" | "z"; lines: number[] } {
+  const axis = (
+    direction === SuppressStepDirection.NorthToSouth ||
+    direction === SuppressStepDirection.SouthToNorth
+  ) ? "z" : "x";
+  const ascending = (
+    direction === SuppressStepDirection.WestToEast ||
+    direction === SuppressStepDirection.NorthToSouth
+  );
+  const lines = Array.from({ length: MAP_SIZE }, (_, index) => ascending ? index : MAP_SIZE - 1 - index);
+  return { axis, lines };
+}
 
-  if (buildMode === BuildMode.SuppressPairsEW) {
-    let anchor = MAP_SIZE - 1;
-    let step = 0;
-    while (anchor >= 0) {
-      const stepIndex = step;
-      const cols = step === 0 ? [MAP_SIZE - 1] : [anchor + 1, anchor];
-      specs.push({
-        cols,
-        includeAt: (_x, z) => (stepIndex % 2 === 0 ? z % 2 === 1 : z % 2 === 0),
-      });
-      --anchor;
-      ++step;
-    }
-    const finalStepIndex = step;
-    specs.push({
-      cols: [0],
-      includeAt: (_x, z) => (finalStepIndex % 2 === 0 ? z % 2 === 1 : z % 2 === 0),
+function makeStepPhaseSpec(
+  axis: "x" | "z",
+  lines: readonly number[],
+  includeAt: (x: number, z: number) => boolean,
+): StepPhaseSpec {
+  return { axis, lines, includeAt };
+}
+
+function buildStepPhaseSpecsForDirection(
+  buildMode: StepwiseBuildMode,
+  direction: SuppressStepDirection,
+): StepPhaseSpec[] {
+  const specs: StepPhaseSpec[] = [];
+  const { axis, lines } = getOrderedStepLines(direction);
+  const getLine = (x: number, z: number) => axis === "x" ? x : z;
+  const makeSingleLineParitySpec = (line: number, parity: PixelParity) =>
+    makeStepPhaseSpec(axis, [line], (x, z) => getLine(x, z) === line && getPixelParity(x, z) === parity);
+  const makeDualParitySpec = (
+    dominantLines: readonly number[],
+    recessiveLines: readonly number[],
+  ) => {
+    const dominantSet = new Set(dominantLines);
+    const recessiveSet = new Set(recessiveLines);
+    return makeStepPhaseSpec(axis, [...dominantLines, ...recessiveLines], (x, z) => {
+      const line = getLine(x, z);
+      const parity = getPixelParity(x, z);
+      return (
+        (dominantSet.has(line) && parity === PixelParity.Dominant) ||
+        (recessiveSet.has(line) && parity === PixelParity.Recessive)
+      );
     });
+  };
+
+  if (buildMode === BuildMode.SuppressStepPairs) {
+    specs.push(makeSingleLineParitySpec(lines[0], PixelParity.Recessive));
+    for (let i = 1; i < lines.length; ++i) {
+      specs.push(makeDualParitySpec([lines[i - 1]], [lines[i]]));
+    }
+    specs.push(makeSingleLineParitySpec(lines[lines.length - 1], PixelParity.Dominant));
     return specs;
   }
 
-  specs.push({
-    cols: [MAP_SIZE - 1, MAP_SIZE - 2],
-    includeAt: (x, z) => getPixelParity(x, z) === PixelParity.Recessive,
-  });
-  for (let start = MAP_SIZE - 4; start >= 0; start -= 2) {
-    const dominantCols = new Set<number>([start + 3, start + 2]);
-    const recessiveCols = new Set<number>([start + 1, start]);
-    specs.push({
-      cols: [start + 3, start + 2, start + 1, start],
-      includeAt: (x, z) => {
-        const isDominant = getPixelParity(x, z) === PixelParity.Dominant;
-        return isDominant ? dominantCols.has(x) : recessiveCols.has(x);
-      },
-    });
+  const linePairs: number[][] = [];
+  for (let i = 0; i < lines.length; i += 2) {
+    const first = lines[i];
+    const second = lines[i + 1];
+    if (second === undefined) break;
+    linePairs.push([first, second]);
   }
-  specs.push({
-    cols: [1, 0],
-    includeAt: (x, z) => getPixelParity(x, z) === PixelParity.Dominant,
-  });
+  specs.push(makeStepPhaseSpec(axis, linePairs[0] ?? [], (x, z) => {
+    const line = getLine(x, z);
+    return (linePairs[0]?.includes(line) ?? false) && getPixelParity(x, z) === PixelParity.Recessive;
+  }));
+  for (let i = 1; i < linePairs.length; ++i) {
+    specs.push(makeDualParitySpec(linePairs[i - 1], linePairs[i]));
+  }
+  const lastPair = linePairs[linePairs.length - 1] ?? [];
+  specs.push(makeStepPhaseSpec(axis, lastPair, (x, z) => {
+    const line = getLine(x, z);
+    return lastPair.includes(line) && getPixelParity(x, z) === PixelParity.Dominant;
+  }));
   return specs;
 }
 
@@ -1966,7 +2001,12 @@ function buildStepPhaseBlocks(
   const repeatedNorthSharedColumns = new Set<ColumnCoordKey>();
   const repeatedBelowPlatformWaterColumns = new Set<ColumnCoordKey>();
   const shadedByRepeatedNorth = new Set<ColumnCoordKey>();
+  const shadedByCurrentNorth = new Set<ColumnCoordKey>();
+  const currentPhaseColorYOffsets = new Map<ColumnCoordKey, number>();
+  const repeatedPhaseColorYOffsets = new Map<ColumnCoordKey, number>();
   const cellKey = (x: number, z: number) => toColumnCoordKey(x, z);
+  const getCurrentPhaseBaseY = (x: number, z: number) => currentBaseY + (currentPhaseColorYOffsets.get(cellKey(x, z)) ?? 0);
+  const getRepeatedPhaseBaseY = (x: number, z: number) => currentBaseY + (repeatedPhaseColorYOffsets.get(cellKey(x, z)) ?? 0);
   const pushUnique = (block: ShapeBlock) => {
     const coord = toShapeCoordKey(block.x, block.y, block.z);
     if (occupied.has(coord)) return;
@@ -1993,6 +2033,10 @@ function buildStepPhaseBlocks(
     }
     return false;
   };
+  const canReuseCurrentPhaseNorthColumnAsShader = (shadedColor: ColorData, northColor: ColorData): boolean => {
+    if (canReuseNorthColumnAsShader(shadedColor, northColor)) return true;
+    return currentSpec.axis === "z" && !isWaterColor(northColor) && isDarkShade(shadedColor.shade);
+  };
 
   const collectRepeatedNorthBlocks = (
     shadedParity: PixelParity,
@@ -2000,7 +2044,8 @@ function buildStepPhaseBlocks(
     adjacentSpec: StepPhaseSpec | undefined,
   ) => {
     if (!adjacentSpec) return;
-    for (const x of currentSpec.cols) {
+    const scanX = currentSpec.axis === "x" ? currentSpec.lines : Array.from({ length: MAP_SIZE }, (_, index) => index);
+    for (const x of scanX) {
       if (x < 0 || x >= MAP_SIZE) continue;
       for (let z = 1; z < MAP_SIZE; ++z) {
         if (!currentSpec.includeAt(x, z) || getPixelParity(x, z) !== shadedParity) continue;
@@ -2022,7 +2067,8 @@ function buildStepPhaseBlocks(
   ) => {
     if (belowPlatformWater) return;
     if (!adjacentSpec) return;
-    for (const x of currentSpec.cols) {
+    const scanX = currentSpec.axis === "x" ? currentSpec.lines : Array.from({ length: MAP_SIZE }, (_, index) => index);
+    for (const x of scanX) {
       if (x < 0 || x >= MAP_SIZE) continue;
       for (let z = 1; z < MAP_SIZE; ++z) {
         if (!currentSpec.includeAt(x, z) || getPixelParity(x, z) !== waterParity) continue;
@@ -2037,9 +2083,52 @@ function buildStepPhaseBlocks(
     }
   };
 
+  const collectCurrentPhaseNorthReuse = () => {
+    const scanX = currentSpec.axis === "x" ? currentSpec.lines : Array.from({ length: MAP_SIZE }, (_, index) => index);
+    for (const x of scanX) {
+      if (x < 0 || x >= MAP_SIZE) continue;
+      for (let z = 1; z < MAP_SIZE; ++z) {
+        if (!currentSpec.includeAt(x, z) || !currentSpec.includeAt(x, z - 1)) continue;
+        const color = getPixelColor(colorGrid, x, z);
+        const north = getPixelColor(colorGrid, x, z - 1);
+        if (!canReuseCurrentPhaseNorthColumnAsShader(color, north)) continue;
+        shadedByCurrentNorth.add(cellKey(x, z));
+      }
+    }
+  };
+
+  const propagateCurrentPhaseYOffsets = () => {
+    if (currentSpec.axis !== "z") return;
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      for (let z = MAP_SIZE - 1; z >= 1; --z) {
+        if (!currentSpec.includeAt(x, z)) continue;
+        const color = getPixelColor(colorGrid, x, z);
+        if (isTransparentColor(color)) continue;
+        if (color.shade !== 1 && !isDarkShade(color.shade)) continue;
+        const southKey = cellKey(x, z);
+        const northKey = cellKey(x, z - 1);
+        const requiredNorthOffset = (currentPhaseColorYOffsets.get(southKey) ?? 0) + (isDarkShade(color.shade) ? 1 : 0);
+        if (shadedByCurrentNorth.has(southKey)) {
+          currentPhaseColorYOffsets.set(
+            northKey,
+            Math.max(currentPhaseColorYOffsets.get(northKey) ?? 0, requiredNorthOffset),
+          );
+          continue;
+        }
+        if (shadedByRepeatedNorth.has(southKey)) {
+          repeatedPhaseColorYOffsets.set(
+            northKey,
+            Math.max(repeatedPhaseColorYOffsets.get(northKey) ?? 0, requiredNorthOffset),
+          );
+        }
+      }
+    }
+  };
+
   const collectBelowPlatformWaterColumns = () => {
     if (!belowPlatformWater || !allowMixStepReuse) return;
-    for (const x of currentSpec.cols) {
+    const scanX = currentSpec.axis === "x" ? currentSpec.lines : Array.from({ length: MAP_SIZE }, (_, index) => index);
+    for (const x of scanX) {
       if (x < 0 || x >= MAP_SIZE) continue;
       let repeatSouthWater = false;
       for (let z = MAP_SIZE - 2; z >= 0; --z) {
@@ -2070,23 +2159,46 @@ function buildStepPhaseBlocks(
   collectRepeatedNorthBlocks(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
   collectSharedNorthColumnsForWater(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
   collectSharedNorthColumnsForWater(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
+  collectCurrentPhaseNorthReuse();
   collectBelowPlatformWaterColumns();
+  propagateCurrentPhaseYOffsets();
 
-  for (const x of currentSpec.cols) {
-    if (x < 0 || x >= MAP_SIZE) continue;
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      if (!currentSpec.includeAt(x, z)) continue;
-      const color = getPixelColor(colorGrid, x, z);
-      if (isTransparentColor(color)) continue;
-      if (belowPlatformWater && isWaterColor(color)) continue;
-      if (shadedByRepeatedNorth.has(cellKey(x, z))) {
-        pushUnique(makeColorBlock(x, currentBaseY, z, color));
-        continue;
+  if (currentSpec.axis === "x") {
+    for (const x of currentSpec.lines) {
+      if (x < 0 || x >= MAP_SIZE) continue;
+      for (let z = 0; z < MAP_SIZE; ++z) {
+        if (!currentSpec.includeAt(x, z)) continue;
+        const color = getPixelColor(colorGrid, x, z);
+        if (isTransparentColor(color)) continue;
+        if (belowPlatformWater && isWaterColor(color)) continue;
+        if (shadedByRepeatedNorth.has(cellKey(x, z)) || shadedByCurrentNorth.has(cellKey(x, z))) {
+          pushUnique(makeColorBlock(x, getCurrentPhaseBaseY(x, z), z, color));
+          continue;
+        }
+        const heightBefore = stepBlocks.length;
+        appendSuppressPixelBlocks(stepBlocks, loweredWaterBlocks, x, getCurrentPhaseBaseY(x, z), z, color, belowPlatformWater, waterDrops);
+        for (let i = heightBefore; i < stepBlocks.length; ++i) {
+          occupied.add(toShapeCoordKey(stepBlocks[i].x, stepBlocks[i].y, stepBlocks[i].z));
+        }
       }
-      const heightBefore = stepBlocks.length;
-      appendSuppressPixelBlocks(stepBlocks, loweredWaterBlocks, x, currentBaseY, z, color, belowPlatformWater, waterDrops);
-      for (let i = heightBefore; i < stepBlocks.length; ++i) {
-        occupied.add(toShapeCoordKey(stepBlocks[i].x, stepBlocks[i].y, stepBlocks[i].z));
+    }
+  } else {
+    for (const z of currentSpec.lines) {
+      if (z < 0 || z >= MAP_SIZE) continue;
+      for (let x = 0; x < MAP_SIZE; ++x) {
+        if (!currentSpec.includeAt(x, z)) continue;
+        const color = getPixelColor(colorGrid, x, z);
+        if (isTransparentColor(color)) continue;
+        if (belowPlatformWater && isWaterColor(color)) continue;
+        if (shadedByRepeatedNorth.has(cellKey(x, z)) || shadedByCurrentNorth.has(cellKey(x, z))) {
+          pushUnique(makeColorBlock(x, getCurrentPhaseBaseY(x, z), z, color));
+          continue;
+        }
+        const heightBefore = stepBlocks.length;
+        appendSuppressPixelBlocks(stepBlocks, loweredWaterBlocks, x, getCurrentPhaseBaseY(x, z), z, color, belowPlatformWater, waterDrops);
+        for (let i = heightBefore; i < stepBlocks.length; ++i) {
+          occupied.add(toShapeCoordKey(stepBlocks[i].x, stepBlocks[i].y, stepBlocks[i].z));
+        }
       }
     }
   }
@@ -2100,13 +2212,13 @@ function buildStepPhaseBlocks(
     const color = getPixelColor(colorGrid, x, z);
     if (isWaterColor(color)) {
       const heightBefore = stepBlocks.length;
-      appendSuppressPixelBlocks(stepBlocks, loweredWaterBlocks, x, currentBaseY, z, color, belowPlatformWater, waterDrops);
+      appendSuppressPixelBlocks(stepBlocks, loweredWaterBlocks, x, getRepeatedPhaseBaseY(x, z), z, color, belowPlatformWater, waterDrops);
       for (let i = heightBefore; i < stepBlocks.length; ++i) {
         occupied.add(toShapeCoordKey(stepBlocks[i].x, stepBlocks[i].y, stepBlocks[i].z));
       }
       continue;
     }
-    pushUnique(makeColorBlock(x, currentBaseY, z, color));
+    pushUnique(makeColorBlock(x, getRepeatedPhaseBaseY(x, z), z, color));
   }
 
   for (const key of repeatedBelowPlatformWaterColumns) {
@@ -2115,7 +2227,7 @@ function buildStepPhaseBlocks(
     if (!isWaterColor(color)) continue;
     const waterDrop = waterDrops[color.shade as WaterShade];
     if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${color.shade}`);
-    pushUniqueDroppedWater(makeBelowPlatformWaterBlock(x, currentBaseY - waterDrop, z, color));
+    pushUniqueDroppedWater(makeBelowPlatformWaterBlock(x, getRepeatedPhaseBaseY(x, z) - waterDrop, z, color));
   }
 
   return { blocks: stepBlocks, loweredWaterBlocks };
@@ -2124,12 +2236,13 @@ function buildStepPhaseBlocks(
 function buildStepPhaseParts(
   colorGrid: ColorGrid,
   buildMode: StepwiseBuildMode,
+  stepDirection: SuppressStepDirection,
   mixSteps: boolean,
   belowPlatformWater: boolean,
   waterDrops: WaterDropByShade,
   cache?: GridShapeCache,
 ): RawShapePart[] {
-  const specs = buildStepPhaseSpecs(buildMode);
+  const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
   const steps: RawShapePart[] = [];
   const yOffset = getStepPhaseYOffset(colorGrid, cache, belowPlatformWater);
   const previewWaterBlocks = belowPlatformWater
@@ -2201,6 +2314,7 @@ function getShapeCacheKeyId(
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
+  stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterFillerOffset: boolean,
   belowPlatformWater: boolean,
@@ -2208,7 +2322,8 @@ function getShapeCacheKeyId(
 ): ShapeCacheKeyId {
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
-  if (buildModeUsesMixSteps(buildMode) && mixSteps) id += "|mixsteps:1";
+  if (isSuppressStepsBuildMode(buildMode)) id += `|dir:${stepDirection}`;
+  if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (isStaircaseBuildMode(buildMode) && waterFillerOffset) id += "|wateroffset:1";
   if (belowPlatformWater) id += `|waterdrop:${waterDrops[2]},${waterDrops[1]},${waterDrops[0]}`;
@@ -2296,7 +2411,7 @@ function getCachedStaircaseParts(
   waterDrops: WaterDropByShade,
 ): RawShapePart[] {
   const effectiveWaterFillerOffset = !belowPlatformWater && waterFillerOffset;
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, paletteSeed, effectiveWaterFillerOffset, belowPlatformWater, waterDrops);
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, SuppressStepDirection.EastToWest, paletteSeed, effectiveWaterFillerOffset, belowPlatformWater, waterDrops);
   return getCachedRawParts(cache, keyId, () => {
     const baseKind = getStaircaseBaseKind(belowPlatformWater, effectiveWaterFillerOffset);
     const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, buildMode, paletteSeed, baseKind));
@@ -2316,7 +2431,7 @@ function getCachedSuppressSplitParts(
   belowPlatformWater: boolean,
   waterDrops: WaterDropByShade,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, false, belowPlatformWater, waterDrops);
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, SuppressStepDirection.EastToWest, 0, false, belowPlatformWater, waterDrops);
   return getCachedRawParts(cache, keyId, () =>
     buildMode === BuildMode.SuppressSplitRow
       ? buildSuppressSplitRowBlockSets(colorGrid, belowPlatformWater, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks))
@@ -2328,12 +2443,13 @@ function getCachedSuppressStepParts(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
   buildMode: StepwiseBuildMode,
+  stepDirection: SuppressStepDirection,
   mixSteps: boolean,
   belowPlatformWater: boolean,
   waterDrops: WaterDropByShade,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, 0, false, belowPlatformWater, waterDrops);
-  return getCachedRawParts(cache, keyId, () => buildStepPhaseParts(colorGrid, buildMode, mixSteps, belowPlatformWater, waterDrops, cache));
+  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, stepDirection, 0, false, belowPlatformWater, waterDrops);
+  return getCachedRawParts(cache, keyId, () => buildStepPhaseParts(colorGrid, buildMode, stepDirection, mixSteps, belowPlatformWater, waterDrops, cache));
 }
 
 function getCachedSuppress2LayerParts(
@@ -2344,7 +2460,7 @@ function getCachedSuppress2LayerParts(
   belowPlatformWater: boolean,
   waterDrops: WaterDropByShade,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, 0, false, belowPlatformWater, waterDrops);
+  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, SuppressStepDirection.EastToWest, 0, false, belowPlatformWater, waterDrops);
   return getCachedRawParts(cache, keyId, () => {
     const { blocks, loweredWaterBlocks, supportFloorYs } = buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode, belowPlatformWater, waterDrops);
     return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
@@ -2357,6 +2473,7 @@ function buildRawShapeParts(
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
+  stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterFillerOffset: boolean,
   belowPlatformWater: boolean,
@@ -2367,10 +2484,10 @@ function buildRawShapeParts(
       return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitRow, belowPlatformWater, waterDrops);
     case BuildMode.SuppressSplitChecker:
       return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker, belowPlatformWater, waterDrops);
-    case BuildMode.SuppressPairsEW:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressPairsEW, mixSteps, belowPlatformWater, waterDrops);
-    case BuildMode.SuppressCheckerEW:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressCheckerEW, mixSteps, belowPlatformWater, waterDrops);
+    case BuildMode.SuppressStepPairs:
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, mixSteps, belowPlatformWater, waterDrops);
+    case BuildMode.SuppressStepChecker:
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, mixSteps, belowPlatformWater, waterDrops);
     case BuildMode.Suppress2LayerLateFillers:
       return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLateFillers, belowPlatformWater, waterDrops);
     case BuildMode.Suppress2LayerLatePairs:
@@ -2386,17 +2503,18 @@ function getGeneratedShape(
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
+  stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterFillerOffset: boolean,
   belowPlatformWater: boolean,
   waterDrops: WaterDropByShade,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
-  const cacheKeyId = getShapeCacheKeyId(buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset, belowPlatformWater, waterDrops);
+  const cacheKeyId = getShapeCacheKeyId(buildMode, layerGap, mixSteps, stepDirection, paletteSeed, waterFillerOffset, belowPlatformWater, waterDrops);
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
-  const rawParts = buildRawShapeParts(colorGrid, cache, buildMode, layerGap, mixSteps, paletteSeed, waterFillerOffset, belowPlatformWater, waterDrops);
+  const rawParts = buildRawShapeParts(colorGrid, cache, buildMode, layerGap, mixSteps, stepDirection, paletteSeed, waterFillerOffset, belowPlatformWater, waterDrops);
   const parts = rawParts.map(finalizeShapePart);
   const splitExportNames =
     buildMode === BuildMode.SuppressSplitRow
@@ -2407,7 +2525,7 @@ function getGeneratedShape(
   const shape = {
     parts,
     partType:
-      buildMode === BuildMode.SuppressPairsEW || buildMode === BuildMode.SuppressCheckerEW
+      buildMode === BuildMode.SuppressStepPairs || buildMode === BuildMode.SuppressStepChecker
         ? ShapePartType.SuppressStepPhases
         : ShapePartType.SingleColumn,
     splitExportNames,
@@ -2432,10 +2550,12 @@ export function generateShapeMap(
     belowPlatformWater?: boolean;
     waterDrops?: Partial<Record<WaterShade, number>>;
     selectedMode?: BuildMode | null;
+    selectedStepDirection: SuppressStepDirection;
   },
   modeStats?: ShapeGenerationStats,
 ): Partial<Record<BuildMode, GeneratedShape>> {
   const mixSteps = options.mixSteps ?? false;
+  const stepDirection = options.selectedStepDirection;
   const paletteSeed = options.paletteSeed ?? 0;
   const waterFillerOffset = options.waterFillerOffset ?? false;
   const belowPlatformWater = options.belowPlatformWater ?? false;
@@ -2463,6 +2583,7 @@ export function generateShapeMap(
       internalBuildMode,
       options.layerGap,
       mixSteps,
+      stepDirection,
       paletteSeed,
       waterFillerOffset,
       belowPlatformWater,
@@ -2480,6 +2601,7 @@ export function generateShapeMap(
       getCanonicalBuildMode(selectedMode),
       options.layerGap,
       mixSteps,
+      stepDirection,
       paletteSeed,
       waterFillerOffset,
       belowPlatformWater,

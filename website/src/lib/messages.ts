@@ -15,7 +15,7 @@
 import { unpackRgb, type Shade } from "@/data/mapColors";
 import { enCatalog, type MessageCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
-import { BuildMode } from "@/lib/conversionTypes";
+import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
 
 type TemplateValues = Record<string, string | number>;
@@ -157,6 +157,19 @@ export const messages = {
       });
     },
     paletteSeedLabel: catalog.buildMode.paletteSeedLabel,
+    stepDirectionLabel(direction: SuppressStepDirection): string {
+      return catalog.buildMode.stepDirectionLabels[direction];
+    },
+    stepDirectionTooltip(direction: SuppressStepDirection): string {
+      return formatTemplate(catalog.buildMode.stepDirectionTooltip, {
+        directionLabel: catalog.buildMode.stepDirectionLabels[direction],
+      });
+    },
+    stepDirectionAriaLabel(direction: SuppressStepDirection): string {
+      return formatTemplate(catalog.buildMode.stepDirectionAriaLabel, {
+        directionLabel: catalog.buildMode.stepDirectionLabels[direction],
+      });
+    },
     optionLabel(mode: BuildMode | string): string {
       return getLookupValue(catalog.buildMode.optionLabels, mode, mode);
     },
@@ -289,6 +302,12 @@ export const messages = {
     lateFillerInvalid(value: string, count: number): string {
       return formatPlural(catalog.preview.lateFillerInvalid, count, {
         value,
+      });
+    },
+    suppressStepNorthSouthWarning(modeLabel: string, directionLabel: string): string {
+      return formatTemplate(catalog.preview.suppressStepNorthSouthWarning, {
+        modeLabel,
+        directionLabel,
       });
     },
     uniqueColorCount(count: number): string {

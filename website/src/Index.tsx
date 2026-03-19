@@ -18,17 +18,23 @@ import { isFillerDisabled, isShadeFillerDisabled, isWaterSideSupportFillerValid 
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
+import { STORAGE_KEYS as LS_KEYS } from "@/lib/storageKeys";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
 import { getSupportedColorAbove, isWithinShapeBounds, NO_SUPPORT_FLOORS } from "@/lib/shapeCellRules";
 import {
   BuildMode,
+  SuppressStepDirection,
+  getSuppressStepDirectionSuffix,
+  getSuppressStepDirectionRotationDegrees,
   type FillerAssignment,
   FillerRole,
   buildModeUsesLayerGap,
-  buildModeUsesMixSteps,
+  isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
+  cycleSuppressStepDirection,
   getBuildModeRangeMax,
+  isSuppressStepDirection,
   isStaircaseBuildMode,
   isSuppressBuildMode,
   getVisibleSuppressBuildModes,
@@ -143,10 +149,38 @@ type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 type SortDir = "asc" | "desc";
 type ModeOption = { value: BuildMode; label: string; disabled?: boolean; muted?: boolean };
 
+function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirection }) {
+  const rotation = getSuppressStepDirectionRotationDegrees(direction);
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <g
+        className="fill-current"
+        style={{
+          color: "hsl(var(--accent))",
+          fontFamily: "'JetBrains Mono', monospace",
+          paintOrder: "stroke fill",
+          stroke: "hsl(var(--input))",
+          strokeWidth: 1.25,
+        }}
+      >
+        <text x="12" y="3.3" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">N</text>
+        <text x="21.0" y="12" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">E</text>
+        <text x="12" y="21.8" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">S</text>
+        <text x="3.0" y="12" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">W</text>
+      </g>
+      <g transform={`rotate(${rotation} 12 12)`} className="stroke-current fill-none">
+        <path d="M12 16.6 L12 9.6" strokeWidth="2.1" strokeLinecap="round" />
+        <path d="M12 7.8 L9.8 10.2" strokeWidth="2.1" strokeLinecap="round" />
+        <path d="M12 7.8 L14.2 10.2" strokeWidth="2.1" strokeLinecap="round" />
+      </g>
+    </svg>
+  );
+}
+
 const ALL_COLUMNS: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 
-function normalizeStoredBuildMode(raw: unknown): BuildMode {
-  return Object.values(BuildMode).includes(raw as BuildMode) ? (raw as BuildMode) : BuildMode.StaircaseClassic;
+function isBuildMode(raw: unknown): raw is BuildMode {
+  return Object.values(BuildMode).includes(raw as BuildMode);
 }
 
 function createFillerAssignments(
@@ -224,10 +258,10 @@ const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
-  { value: BuildMode.SuppressSplitRow, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitRow), muted: true },
-  { value: BuildMode.SuppressSplitChecker, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitChecker) },
-  { value: BuildMode.SuppressPairsEW, label: messages.buildMode.optionLabel(BuildMode.SuppressPairsEW) },
-  { value: BuildMode.SuppressCheckerEW, label: messages.buildMode.optionLabel(BuildMode.SuppressCheckerEW) },
+  { value: BuildMode.SuppressSplitRow, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitRow), disabled: true, muted: true },
+  { value: BuildMode.SuppressSplitChecker, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitChecker), disabled: true, muted: true },
+  { value: BuildMode.SuppressStepPairs, label: messages.buildMode.optionLabel(BuildMode.SuppressStepPairs) },
+  { value: BuildMode.SuppressStepChecker, label: messages.buildMode.optionLabel(BuildMode.SuppressStepChecker) },
   { value: BuildMode.Suppress2Layer, label: messages.buildMode.optionLabel(BuildMode.Suppress2Layer) },
   { value: BuildMode.Suppress2LayerLateFillers, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLateFillers) },
   { value: BuildMode.Suppress2LayerLatePairs, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLatePairs) },
@@ -259,7 +293,7 @@ function formatStacks(count: number): string {
 function encodePreset(
   preset: Preset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
@@ -282,6 +316,7 @@ function encodePreset(
     canonicalizeBlockEntry(dominateVoidFillerBlock),
     canonicalizeBlockEntry(recessiveVoidFillerBlock),
     mixSteps ? "1" : "0",
+    suppressStepDirection,
   ].join("|");
   return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
@@ -289,7 +324,7 @@ function encodePreset(
 function decodePreset(encoded: string): {
   preset: Preset; supportFiller?: string; shadeFiller?: string; supportMode?: SupportMode;
   buildMode?: BuildMode; customColors?: CustomColor[]; convertUnsupported?: boolean;
-  suppress2LayerLateFillerBlock?: string; proPaletteSeed?: boolean; mixSteps?: boolean;
+  suppress2LayerLateFillerBlock?: string; proPaletteSeed?: boolean; mixSteps?: boolean; suppressStepDirection?: SuppressStepDirection;
   dominateVoidFillerBlock?: string; recessiveVoidFillerBlock?: string;
 } | null {
   try {
@@ -327,13 +362,17 @@ function decodePreset(encoded: string): {
     const dominateVoidFillerBlock = sections[10] || undefined;
     const recessiveVoidFillerBlock = sections[11] || undefined;
     const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
+    const suppressStepDirection =
+      sections[13] && isSuppressStepDirection(sections[13])
+        ? sections[13]
+        : undefined;
 
     return {
       preset: { name: sections[0], blocks },
       supportFiller: sections[2] ? canonicalizeBlockEntry(sections[2]) : undefined,
       shadeFiller: sections[3] ? canonicalizeBlockEntry(sections[3]) : undefined,
-      supportMode, buildMode: sections[5] ? normalizeStoredBuildMode(sections[5]) : undefined,
-      customColors, convertUnsupported, proPaletteSeed, mixSteps,
+      supportMode, buildMode: isBuildMode(sections[5]) ? sections[5] : undefined,
+      customColors, convertUnsupported, proPaletteSeed, mixSteps, suppressStepDirection,
       suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock ? canonicalizeBlockEntry(suppress2LayerLateFillerBlock) : undefined,
       dominateVoidFillerBlock: dominateVoidFillerBlock ? canonicalizeBlockEntry(dominateVoidFillerBlock) : undefined,
       recessiveVoidFillerBlock: recessiveVoidFillerBlock ? canonicalizeBlockEntry(recessiveVoidFillerBlock) : undefined,
@@ -343,52 +382,9 @@ function decodePreset(encoded: string): {
   }
 }
 
-// ── Cached localStorage keys ──
-const LS_KEYS = {
-  supportFiller: "mapart_support_filler",
-  shadeFiller: "mapart_shade_filler",
-  buildMode: "mapart_buildMode",
-  supportMode: "mapart_supportMode",
-  showStacks: "mapart_showStacks",
-  showIds: "mapart_showIds",
-  showNames: "mapart_showNames",
-  showOptions: "mapart_showOptions",
-  blockDisplayMode: "mapart_blockDisplayMode",
-  blockColExpanded: "mapart_blockColExpanded",
-  activePreset: "mapart_activePreset",
-  sortKey: "mapart_sortKey",
-  sortDir: "mapart_sortDir",
-  layerGap: "mapart_layerGap",
-  mixSteps: "mapart_mix_steps",
-  suppress2LayerLateFiller: "mapart_suppress2layer_late_filler",
-  paletteSeed: "mapart_palette_seed",
-  dominateVoidFiller: "mapart_dominate_void_filler",
-  recessiveVoidFiller: "mapart_recessive_void_filler",
-  showVsFillersInPreview: "mapart_show_vs_fillers_in_preview",
-  columnOrder: "mapart_columnOrder",
-  lightWaterDrop: "mapart_light_water_drop",
-  flatWaterDrop: "mapart_flat_water_drop",
-  darkWaterDrop: "mapart_dark_water_drop",
-  showTransparentRow: "mapart_secret_showTransparentRow",
-  showExcludedBlocks: "mapart_secret_showExcludedBlocks",
-  forceZ129: "mapart_secret_forceZ129",
-  assumeFloor: "mapart_secret_assumeFloor",
-  belowPlatformWater: "mapart_secret_belowPlatformWater",
-  showVsFillerWarnings: "mapart_secret_showVsFillerWarnings",
-  showAlignmentReminder: "mapart_secret_showAlignmentReminder",
-  showNooblineWarnings: "mapart_secret_showNooblineWarnings",
-} as const;
-
 const getStoredTheme = (): "light" | "dark" | null => {
-  const raw = localStorage.getItem("mapart_theme");
-  if (raw === "light" || raw === "dark") return raw;
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed === "light" || parsed === "dark" ? parsed : null;
-  } catch {
-    return null;
-  }
+  const raw = localStorage.getItem(LS_KEYS.theme);
+  return raw === "light" || raw === "dark" ? raw : null;
 };
 
 const resolveDarkTheme = () => {
@@ -412,10 +408,10 @@ const Index = () => {
     return 0;
   });
   const [supportFillerBlock, setSupportFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.supportFiller, loadCached("mapart_filler", "resin_block"))),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.supportFiller, "resin_block")),
   );
   const [shadeFillerBlock, setShadeFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.shadeFiller, loadCached("mapart_filler", "resin_block"))),
+    canonicalizeBlockEntry(loadCached(LS_KEYS.shadeFiller, "resin_block")),
   );
   const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() =>
     canonicalizeBlockEntry(loadCached(LS_KEYS.suppress2LayerLateFiller, "slime_block")),
@@ -426,15 +422,20 @@ const Index = () => {
   const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() =>
     canonicalizeBlockEntry(loadCached(LS_KEYS.recessiveVoidFiller, "honey_block")),
   );
-  const [buildMode, setBuildMode] = useState<BuildMode>(() =>
-    normalizeStoredBuildMode(loadCached(LS_KEYS.buildMode, BuildMode.StaircaseClassic)),
-  );
+  const [buildMode, setBuildMode] = useState<BuildMode>(() => {
+    const storedBuildMode = loadCached(LS_KEYS.buildMode, BuildMode.StaircaseClassic);
+    return isBuildMode(storedBuildMode) ? storedBuildMode : BuildMode.StaircaseClassic;
+  });
   const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.paletteSeed, false));
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, 5));
   const calcLayerGap = useDeferredValue(layerGap);
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, false));
   const calcMixSteps = useDeferredValue(mixSteps);
+  const [suppressStepDirection, setSuppressStepDirection] = useState<SuppressStepDirection>(() => {
+    const storedDirection = loadCached(LS_KEYS.suppressStepDirection, SuppressStepDirection.EastToWest);
+    return isSuppressStepDirection(storedDirection) ? storedDirection : SuppressStepDirection.EastToWest;
+  });
   const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, 0));
   const calcLightWaterDrop = useDeferredValue(lightWaterDrop);
   const [flatWaterDrop, setFlatWaterDrop] = useState(() => loadCached(LS_KEYS.flatWaterDrop, 0));
@@ -584,7 +585,7 @@ const Index = () => {
       // Reuse yellow-dot logic: active auto-Custom with unsaved changes is discarded.
       return !presetDirty;
     });
-    localStorage.setItem("mapart_presets", JSON.stringify(persistedPresets));
+    localStorage.setItem(LS_KEYS.presets, JSON.stringify(persistedPresets));
   }, [presets, activeIdx, presetDirty]);
   const persistedSettings = useMemo(
     () => ({
@@ -603,6 +604,7 @@ const Index = () => {
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.mixSteps]: mixSteps,
+      [LS_KEYS.suppressStepDirection]: suppressStepDirection,
       [LS_KEYS.lightWaterDrop]: lightWaterDrop,
       [LS_KEYS.flatWaterDrop]: flatWaterDrop,
       [LS_KEYS.darkWaterDrop]: darkWaterDrop,
@@ -637,6 +639,7 @@ const Index = () => {
       sortDir,
       layerGap,
       mixSteps,
+      suppressStepDirection,
       lightWaterDrop,
       flatWaterDrop,
       darkWaterDrop,
@@ -666,7 +669,6 @@ const Index = () => {
   }, [persistedSettings]);
 
   const showPaletteSeedToggle = useMemo(() => buildModeUsesPaletteSeed(buildMode), [buildMode]);
-  const buildModeSupportsMixSteps = useMemo(() => buildModeUsesMixSteps(buildMode), [buildMode]);
   const paletteSeedOffset = useMemo(
     () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(preset.blocks) : 0),
     [showPaletteSeedToggle, calcProPaletteSeed, preset.blocks],
@@ -708,14 +710,14 @@ const Index = () => {
   );
   const showMixStepsToggle = useMemo(
     () =>
-      buildModeSupportsMixSteps &&
+      isSuppressStepsBuildMode(buildMode) &&
       !!imageColorGrid &&
       imageValid &&
       hasStepMixOpportunity(imageColorGrid, {
         belowPlatformWater,
         waterDrops,
       }),
-    [buildModeSupportsMixSteps, imageColorGrid, imageValid, belowPlatformWater, waterDrops],
+    [buildMode, imageColorGrid, imageValid, belowPlatformWater, waterDrops],
   );
   const twoLayerHasLateVoidNeed = (imageStats?.voidShadowStats.dominant ?? 0) > 0;
   const shapeMap = useMemo(
@@ -728,6 +730,7 @@ const Index = () => {
           belowPlatformWater,
           waterDrops,
           selectedMode: buildMode,
+          selectedStepDirection: suppressStepDirection,
         }, imageStats ? {
           hasWater: imageStats.hasWater,
           hasTransparency: imageStats.hasTransparency,
@@ -746,6 +749,7 @@ const Index = () => {
       belowPlatformWater,
       waterDrops,
       buildMode,
+      suppressStepDirection,
       imageStats,
       twoLayerHasLateVoidNeed,
     ],
@@ -868,7 +872,10 @@ const Index = () => {
   const paletteUsageInfo = imageStats?.paletteUsageInfo ?? null;
 
   const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
-  const isStepRangeMode = effectiveBuildMode === BuildMode.SuppressPairsEW || effectiveBuildMode === BuildMode.SuppressCheckerEW;
+  const isStepRangeMode = isSuppressStepsBuildMode(effectiveBuildMode);
+  const isNorthSouthSuppressStepDirection =
+    suppressStepDirection === SuppressStepDirection.NorthToSouth ||
+    suppressStepDirection === SuppressStepDirection.SouthToNorth;
   const maxRangeIndex = useMemo(
     () => getBuildModeRangeMax(effectiveBuildMode) + (isStepRangeMode && belowPlatformWater && (imageStats?.hasWater ?? false) ? 1 : 0),
     [effectiveBuildMode, isStepRangeMode, belowPlatformWater, imageStats],
@@ -926,9 +933,27 @@ const Index = () => {
     const visibleModes = new Set(getVisibleSuppressBuildModes(twoLayerHasLateVoidNeed));
     return BASE_SUPPRESS_OPTIONS.filter(option => visibleModes.has(option.value));
   }, [twoLayerHasLateVoidNeed]);
+  const showSuppressStepDirectionControl = isSuppressStepsBuildMode(buildMode);
 
   const shadingMethodTooltip = useMemo(() => messages.buildMode.tooltip(buildMode), [buildMode]);
   const supportModeTooltip = useMemo(() => messages.supportMode.tooltip(supportMode), [supportMode]);
+  const suppressStepNorthSouthWarning = useMemo(
+    () =>
+      !!imageData && imageValid && !isFlatShape && 
+      showSuppressStepDirectionControl &&
+      isNorthSouthSuppressStepDirection
+        ? messages.preview.suppressStepNorthSouthWarning(
+            messages.buildMode.optionLabel(buildMode),
+            messages.buildMode.stepDirectionLabel(suppressStepDirection),
+          )
+        : null,
+    [
+      buildMode,
+      showSuppressStepDirectionControl,
+      isNorthSouthSuppressStepDirection,
+      suppressStepDirection,
+    ],
+  );
 
   const effectiveShape = supportShape;
   const buildMaterialAnalysisOptions = useCallback(
@@ -1080,6 +1105,9 @@ const Index = () => {
     }
     if (decoded.proPaletteSeed !== undefined) setProPaletteSeed(decoded.proPaletteSeed);
     if (decoded.mixSteps !== undefined) setMixSteps(decoded.mixSteps);
+    if (decoded.suppressStepDirection !== undefined && isSuppressStepDirection(decoded.suppressStepDirection)) {
+      setSuppressStepDirection(decoded.suppressStepDirection);
+    }
     if (decoded.dominateVoidFillerBlock) setDominateVoidFillerBlock(decoded.dominateVoidFillerBlock);
     if (decoded.recessiveVoidFillerBlock) setRecessiveVoidFillerBlock(decoded.recessiveVoidFillerBlock);
     // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
@@ -1262,6 +1290,7 @@ const Index = () => {
       suppress2LayerLateFillerBlock,
       proPaletteSeed,
       mixSteps,
+      suppressStepDirection,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
     )}`;
@@ -1383,8 +1412,8 @@ const Index = () => {
         [BuildMode.StaircaseParty]: "-party",
         [BuildMode.SuppressSplitRow]: "-split_row",
         [BuildMode.SuppressSplitChecker]: "-split_checker",
-        [BuildMode.SuppressPairsEW]: "-suppress_pairs_EW",
-        [BuildMode.SuppressCheckerEW]: "-suppress_checker_EW",
+        [BuildMode.SuppressStepPairs]: `-suppress_step_pairs_${getSuppressStepDirectionSuffix(suppressStepDirection)}`,
+        [BuildMode.SuppressStepChecker]: `-suppress_step_checker_${getSuppressStepDirectionSuffix(suppressStepDirection)}`,
         [BuildMode.Suppress2Layer]: "-suppress_2layer",
         [BuildMode.Suppress2LayerLateFillers]: "-suppress_2layer",
         [BuildMode.Suppress2LayerLatePairs]: "-suppress_2layer",
@@ -1422,7 +1451,7 @@ const Index = () => {
 
   const toggleTheme = () => {
     const next = isDark ? "light" : "dark";
-    localStorage.setItem("mapart_theme", next);
+    localStorage.setItem(LS_KEYS.theme, next);
     document.documentElement.classList.toggle("dark", next === "dark");
     setIsDark(next === "dark");
   };
@@ -2452,7 +2481,23 @@ const Index = () => {
                   )}
                   {!isFlatShape && (
                     <>
-                      {(showMixStepsToggle || buildModeUsesLayerGap(buildMode)) && <span className="h-4 border-l border-border/70" />}
+                      {(showMixStepsToggle || buildModeUsesLayerGap(buildMode) || showSuppressStepDirectionControl) && <span className="h-4 border-l border-border/70" />}
+                      {showSuppressStepDirectionControl && (
+                        <>
+                          <button
+                            type="button"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-border bg-input text-foreground hover:border-primary/60"
+                            title={messages.buildMode.stepDirectionTooltip(suppressStepDirection)}
+                            aria-label={messages.buildMode.stepDirectionAriaLabel(suppressStepDirection)}
+                            onClick={() => setSuppressStepDirection(
+                              cycleSuppressStepDirection(suppressStepDirection),
+                            )}
+                          >
+                            <SuppressStepDirectionIcon direction={suppressStepDirection} />
+                          </button>
+                          <span className="h-4 border-l border-border/70" />
+                        </>
+                      )}
                       <span className="text-xs font-semibold text-accent whitespace-nowrap">
                         {messages.buildMode.label}
                       </span>
@@ -3054,6 +3099,14 @@ const Index = () => {
               <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
                 <p className="text-xs text-warning font-medium whitespace-pre-line">
                   {noFillerWarning}
+                </p>
+              </div>
+            )}
+
+            {suppressStepNorthSouthWarning && (
+              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
+                <p className="text-xs text-warning font-medium whitespace-pre-line">
+                  {suppressStepNorthSouthWarning}
                 </p>
               </div>
             )}

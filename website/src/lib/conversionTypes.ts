@@ -6,10 +6,13 @@
  * - isStaircaseBuildMode()
  * - isSuppressBuildMode()
  * - buildModeUsesLayerGap()
- * - buildModeUsesMixSteps()
  * - buildModeUsesPaletteSeed()
  * - getBuildModeRangeMax()
  * - getVisibleSuppressBuildModes()
+ * - SuppressStepDirection
+ * - isSuppressStepDirection()
+ * - getSuppressStepDirectionRotationDegrees()
+ * - cycleSuppressStepDirection()
  * - FillerAssignment
  *
  * Callers:
@@ -54,11 +57,65 @@ export enum BuildMode {
   StaircaseParty = "staircase_party",
   SuppressSplitRow = "suppress_split_row",
   SuppressSplitChecker = "suppress_split_checker",
-  SuppressPairsEW = "suppress_pairs_ew",
-  SuppressCheckerEW = "suppress_checker_ew",
+  SuppressStepPairs = "suppress_step_pairs",
+  SuppressStepChecker = "suppress_step_checker",
   Suppress2Layer = "suppress_2layer",
   Suppress2LayerLateFillers = "suppress_2layer_late_fillers",
   Suppress2LayerLatePairs = "suppress_2layer_late_pairs",
+}
+
+// Callers:
+// - src/Index.tsx
+// - src/lib/messages.ts
+// - src/lib/shapeGeneration.ts
+export enum SuppressStepDirection {
+  EastToWest = "east_to_west",
+  WestToEast = "west_to_east",
+  NorthToSouth = "north_to_south",
+  SouthToNorth = "south_to_north",
+}
+
+const SUPPRESS_STEP_DIRECTIONS = [
+  SuppressStepDirection.WestToEast,
+  SuppressStepDirection.NorthToSouth,
+  SuppressStepDirection.EastToWest,
+  SuppressStepDirection.SouthToNorth,
+] as const satisfies readonly SuppressStepDirection[];
+
+// Callers:
+// - src/Index.tsx
+export function isSuppressStepDirection(raw: unknown): raw is SuppressStepDirection {
+  return Object.values(SuppressStepDirection).includes(raw as SuppressStepDirection);
+}
+
+// Callers:
+// - src/Index.tsx
+export function getSuppressStepDirectionSuffix(direction: SuppressStepDirection): string {
+  switch (direction) {
+    case SuppressStepDirection.EastToWest:
+      return "EW";
+    case SuppressStepDirection.WestToEast:
+      return "WE";
+    case SuppressStepDirection.NorthToSouth:
+      return "NS";
+    case SuppressStepDirection.SouthToNorth:
+      return "SN";
+  }
+}
+
+// Callers:
+// - src/Index.tsx
+export function getSuppressStepDirectionRotationDegrees(direction: SuppressStepDirection): number {
+  switch (direction) {
+    case SuppressStepDirection.SouthToNorth:
+      return 0;
+    case SuppressStepDirection.WestToEast:
+      return 90;
+    case SuppressStepDirection.NorthToSouth:
+      return 180;
+    case SuppressStepDirection.EastToWest:
+      return 270;
+  }
 }
 
 // Callers:
@@ -114,11 +171,10 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
-export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
+export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
-    case BuildMode.Suppress2Layer:
-    case BuildMode.Suppress2LayerLateFillers:
-    case BuildMode.Suppress2LayerLatePairs:
+    case BuildMode.SuppressStepPairs:
+    case BuildMode.SuppressStepChecker:
       return true;
     default:
       return false;
@@ -128,10 +184,11 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
-export function buildModeUsesMixSteps(buildMode: BuildMode): boolean {
+export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {
-    case BuildMode.SuppressPairsEW:
-    case BuildMode.SuppressCheckerEW:
+    case BuildMode.Suppress2Layer:
+    case BuildMode.Suppress2LayerLateFillers:
+    case BuildMode.Suppress2LayerLatePairs:
       return true;
     default:
       return false;
@@ -149,9 +206,9 @@ export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
 // - src/Index.tsx
 export function getBuildModeRangeMax(buildMode: BuildMode): number {
   switch (buildMode) {
-    case BuildMode.SuppressPairsEW:
+    case BuildMode.SuppressStepPairs:
       return 128;
-    case BuildMode.SuppressCheckerEW:
+    case BuildMode.SuppressStepChecker:
       return 64;
     default:
       return 127;
@@ -165,18 +222,28 @@ export function getVisibleSuppressBuildModes(hasTwoLayerLateVoidNeed: boolean): 
     ? [
         BuildMode.SuppressSplitRow,
         BuildMode.SuppressSplitChecker,
-        BuildMode.SuppressPairsEW,
-        BuildMode.SuppressCheckerEW,
+        BuildMode.SuppressStepPairs,
+        BuildMode.SuppressStepChecker,
         BuildMode.Suppress2LayerLateFillers,
         BuildMode.Suppress2LayerLatePairs,
       ]
     : [
         BuildMode.SuppressSplitRow,
         BuildMode.SuppressSplitChecker,
-        BuildMode.SuppressPairsEW,
-        BuildMode.SuppressCheckerEW,
+        BuildMode.SuppressStepPairs,
+        BuildMode.SuppressStepChecker,
         BuildMode.Suppress2Layer,
       ];
+}
+
+// Callers:
+// - src/Index.tsx
+export function cycleSuppressStepDirection(
+  stepDirection: SuppressStepDirection,
+): SuppressStepDirection {
+  const index = SUPPRESS_STEP_DIRECTIONS.indexOf(stepDirection);
+  if (index < 0) return SUPPRESS_STEP_DIRECTIONS[0];
+  return SUPPRESS_STEP_DIRECTIONS[(index + 1) % SUPPRESS_STEP_DIRECTIONS.length];
 }
 
 // Callers:

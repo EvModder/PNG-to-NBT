@@ -8,7 +8,7 @@
  * - src/lib/messages.ts
  */
 import { type Shade } from "@/data/mapColors";
-import { BuildMode } from "@/lib/conversionTypes";
+import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
 
 type PluralForms = {
@@ -89,9 +89,9 @@ export const enCatalog = {
     suppressGroupLabel: "Suppress",
     layerGapLabel: "Layer gap:",
     layerGapTooltip: "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.",
-    mixStepsLabel: "Mix Steps:",
+    mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
-      "Sequential steps are able to reusable (recessive) color blocks from prior steps as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
+      "Adjacent suppress steps can reuse prior-step recessive color blocks as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
     waterShadeNames: {
       0: "dark",
       1: "medium",
@@ -101,6 +101,14 @@ export const enCatalog = {
       "{shadeName} water shade: 0 places this shade's water block at the non-water floor Y. Each increment lowers it by 1 block. Used water shades must have distinct values.",
     waterLevelAriaLabel: "{shadeName} water shade level",
     paletteSeedLabel: "Palette Seed:",
+    stepDirectionLabels: {
+      [SuppressStepDirection.EastToWest]: "E→W",
+      [SuppressStepDirection.WestToEast]: "W→E",
+      [SuppressStepDirection.NorthToSouth]: "N→S",
+      [SuppressStepDirection.SouthToNorth]: "S→N",
+    } as const satisfies Record<SuppressStepDirection, string>,
+    stepDirectionTooltip: "Suppress step direction: {directionLabel}. Click to cycle.",
+    stepDirectionAriaLabel: "Suppress step direction {directionLabel}",
     optionLabels: {
       [BuildMode.Flat]: "Flat",
       [BuildMode.InclineUp]: "Incline (Up)",
@@ -111,10 +119,10 @@ export const enCatalog = {
       [BuildMode.StaircaseValley]: "Staircase (Valley)",
       [BuildMode.StaircaseGrouped]: "Staircase (Grouped)",
       [BuildMode.StaircaseParty]: "Staircase (Party)",
-      [BuildMode.SuppressSplitRow]: "Suppress (Row-split)",
-      [BuildMode.SuppressSplitChecker]: "Suppress (Checker-split)",
-      [BuildMode.SuppressPairsEW]: "Suppress (Pairs, E→W)",
-      [BuildMode.SuppressCheckerEW]: "Suppress (Checker, E→W)",
+      [BuildMode.SuppressSplitRow]: "Suppress (Split: Rows)",
+      [BuildMode.SuppressSplitChecker]: "Suppress (Split: Checker)",
+      [BuildMode.SuppressStepPairs]: "Suppress (Steps: Pairs)",
+      [BuildMode.SuppressStepChecker]: "Suppress (Steps: Checker)",
       [BuildMode.Suppress2Layer]: "Suppress (2-Layer)",
       [BuildMode.Suppress2LayerLateFillers]: "Suppress (2-Layer, Late-Fillers)",
       [BuildMode.Suppress2LayerLatePairs]: "Suppress (2-Layer, Late-Pairs)",
@@ -134,10 +142,10 @@ export const enCatalog = {
       [BuildMode.StaircaseParty]: "Same MapArt, but makes the build process more fun and exciting!",
       [BuildMode.SuppressSplitRow]: "Split-row; available for compatibility, but generally not useful",
       [BuildMode.SuppressSplitChecker]: "Split NBT generations for dominant/recessive placements",
-      [BuildMode.SuppressPairsEW]:
-        "Stepwise E→W suppress in interlaced pairs. Each step updates one farther dominant pixel and one nearer recessive pixel from adjacent columns, then the next step is rebuilt farther away so the dominant pixel can be remapped without remapping the recessive one.",
-      [BuildMode.SuppressCheckerEW]:
-        "Like Suppress (2-Layer), but encoded as vertically separated E→W phases instead of upper/lower layers. Each step handles 4 columns: 2 farther dominant columns and 2 nearer recessive columns. Build/update one step, then rebuild the next step farther away so the dominant columns remap without remapping the nearer recessive ones.",
+      [BuildMode.SuppressStepPairs]:
+        "Stepwise suppress in interlaced pairs. The current direction is selected separately. Each step updates one farther dominant pixel and one nearer recessive pixel from adjacent lines, then the next step is rebuilt farther away so the dominant pixel can be remapped without remapping the recessive one.",
+      [BuildMode.SuppressStepChecker]:
+        "Like Suppress (2-Layer), but encoded as vertically separated phases instead of upper/lower layers. The current direction is selected separately. Each step handles 4 lines: 2 farther dominant lines and 2 nearer recessive lines.",
       [BuildMode.Suppress2Layer]:
         "Steps:\n1) Build everything\n2) Update the full map\n3) Remove the upper layer, 1-2 columns at a time\n4) Carefully update *just* the dominate pixels for the target column(s)\n5) Repeat, column-by-column, for the entire map\n\nLayer gap controls vertical spacing between lower and upper suppress layers.",
       [BuildMode.Suppress2LayerLateFillers]:
@@ -272,6 +280,8 @@ export const enCatalog = {
       one: "Late-Filler is invalid ({value}).\n{count} late suppress spot requires shading.",
       other: "Late-Filler is invalid ({value}).\n{count} late suppress spots require shading.",
     } as PluralForms,
+    suppressStepNorthSouthWarning:
+      "Warning: {modeLabel} N→S / S→N places north/south blocks in the same phase.\nTo preserve shading, this causes some blocks to be lifted by 1 Y, making the overall build less intuitive and compact.",
     uniqueColorCount: {
       one: "{count} unique color",
       other: "{count} unique colors",
