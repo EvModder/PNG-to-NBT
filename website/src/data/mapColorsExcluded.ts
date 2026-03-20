@@ -36,6 +36,9 @@ import { BASE_COLORS } from "./mapColors";
  *   - `furnace`, `smoker`, `blast_furnace`, `dispenser`, `dropper`, `observer`, `stonecutter`, `ender_chest`, `crafter`
  *   - `chest`, `trapped_chest`, `loom`, `lectern`, `smithing_table`, `fletching_table`, `cartography_table`, `chiseled_bookshelf`
  *   - `enchanting_table`, `respawn_anchor`, `creaking_heart`
+ *   - `copper_block`, `cut_copper`, `cut_copper_slab`
+ *   - `exposed_copper`, `exposed_cut_copper`, `exposed_cut_copper_slab`
+ *   - `weathered_copper`, `weathered_cut_copper`, `weathered_cut_copper_slab`
  *
  * These categories are enforced by `scripts/excluded-blocks.mjs` and audited by
  * `bun run audit:mapcolors`. When adding a new explicit block below, also add it
@@ -194,6 +197,9 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "acacia_sign",
     "acacia_stairs",
     "acacia_trapdoor",
+    "copper_block",
+    "cut_copper",
+    "cut_copper_slab",
     "acacia_wall_hanging_sign",
     "acacia_wall_sign",
     "cut_copper_stairs",
@@ -225,7 +231,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   37: ["resin_brick_stairs", "resin_brick_wall"],
   42: ["cherry_hanging_sign", "cherry_wall_hanging_sign"],
   43: ["polished_tuff_stairs", "polished_tuff_wall", "tuff_brick_stairs", "tuff_brick_wall", "tuff_stairs", "tuff_wall"],
-  44: ["exposed_copper_trapdoor", "exposed_cut_copper_stairs", "exposed_lightning_rod", "mud_brick_stairs", "mud_brick_wall", "waxed_exposed_cut_copper_stairs"],
+  44: ["exposed_copper", "exposed_cut_copper", "exposed_cut_copper_slab", "exposed_copper_trapdoor", "exposed_cut_copper_stairs", "exposed_lightning_rod", "mud_brick_stairs", "mud_brick_wall", "waxed_exposed_cut_copper_stairs"],
   53: ["crimson_door", "crimson_fence", "crimson_fence_gate", "crimson_hanging_sign", "crimson_sign", "crimson_stairs", "crimson_trapdoor", "crimson_wall_hanging_sign"],
   55: ["oxidized_copper_trapdoor", "oxidized_cut_copper_stairs", "oxidized_lightning_rod", "waxed_oxidized_cut_copper_stairs"],
   56: [
@@ -237,6 +243,9 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "warped_stairs",
     "warped_trapdoor",
     "warped_wall_hanging_sign",
+    "weathered_copper",
+    "weathered_cut_copper",
+    "weathered_cut_copper_slab",
     "waxed_weathered_cut_copper_stairs",
     "weathered_cut_copper_stairs",
     "weathered_lightning_rod",

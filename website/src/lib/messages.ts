@@ -338,6 +338,10 @@ export const messages = {
     rebaneRole(name: string): string {
       return formatTemplate(catalog.credits.rebaneRole, { name });
     },
+    rebaneRoleParts(): [string, string] {
+      const [before = "", after = ""] = catalog.credits.rebaneRole.split("{name}");
+      return [before, after];
+    },
   },
   parsing: {
     unableToCreateImageCanvas: catalog.parsing.unableToCreateImageCanvas,

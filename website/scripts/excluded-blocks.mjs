@@ -72,6 +72,15 @@ export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "enchanting_table",
   "respawn_anchor",
   "creaking_heart",
+  "copper_block",
+  "cut_copper",
+  "cut_copper_slab",
+  "exposed_copper",
+  "exposed_cut_copper",
+  "exposed_cut_copper_slab",
+  "weathered_copper",
+  "weathered_cut_copper",
+  "weathered_cut_copper_slab",
 ]);
 
 export const EXCLUDED_BLOCK_IDS_UNOBTAINABLE = new Set([

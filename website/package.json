@@ -13,9 +13,10 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "test:fixtures": "bun run tests/run.mts",
     "audit:mapcolors": "node scripts/audit-mapcolors.mjs",
     "audit:mapcolors:strict": "node scripts/audit-mapcolors.mjs --strict-missing",
-    "build:block-icons": "python3 scripts/generate-stateful-icon-overrides.py && node scripts/build-precomputed-block-icons.mjs && python3 scripts/postprocess-precomputed-block-icons.py"
+    "build:block-icons": "python3 scripts/generate-stateful-icon-overrides.py && node scripts/build-precomputed-block-icons.mjs && python3 scripts/postprocess-precomputed-block-icons.py && python3 scripts/build-icon-atlases.py"
   },
   "dependencies": {
     "@types/utif": "^3.0.6",

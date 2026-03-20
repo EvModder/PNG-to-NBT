@@ -61,6 +61,7 @@ import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages"
 import { decodeFullPreset, encodeFullPreset } from "@/lib/presetCodec";
 import { useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
+import { getBlockIconAtlasEntry } from "@/lib/blockIconAtlas";
 import { STORAGE_KEYS as LS_KEYS } from "@/lib/storageKeys";
 import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
@@ -85,7 +86,9 @@ import {
 } from "@/lib/conversionTypes";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import {
+  arePresetBlocksEqual,
   BUILTIN_PRESET_NAMES,
+  findMatchingBuiltinPresetName,
   getBuiltinPreset,
   isAutoCustomPresetName,
   loadPresets,
@@ -174,6 +177,47 @@ const KNOWN_PRIMARY_ICON_BLOCKS = new Set(
 );
 const KNOWN_EXCLUDED_ICON_BLOCKS = new Set(EXCLUDED_BLOCKS.flat());
 const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set([...KNOWN_PRIMARY_ICON_BLOCKS, ...KNOWN_EXCLUDED_ICON_BLOCKS]);
+
+type PackedBlockIconProps = {
+  atlasKey: string;
+  atlasName: "primary" | "unused";
+  fallbackSrc: string;
+  alt: string;
+  className?: string;
+};
+
+function PackedBlockIcon({ atlasKey, atlasName, fallbackSrc, alt, className }: PackedBlockIconProps) {
+  const atlasEntry = getBlockIconAtlasEntry(atlasName, atlasKey);
+  if (!atlasEntry) {
+    return (
+      <img
+        src={fallbackSrc}
+        alt={alt}
+        className={className}
+        decoding="async"
+        style={{ imageRendering: "pixelated" }}
+      />
+    );
+  }
+
+  return (
+    <span className={`relative block overflow-hidden ${className ?? ""}`}>
+      <img
+        src={`${import.meta.env.BASE_URL}${atlasEntry.atlasSrc}`}
+        alt={alt}
+        decoding="async"
+        className="absolute max-w-none block"
+        style={{
+          left: `${-atlasEntry.col * 100}%`,
+          top: `${-atlasEntry.row * 100}%`,
+          width: `${atlasEntry.columns * 100}%`,
+          height: `${atlasEntry.rows * 100}%`,
+          imageRendering: "pixelated",
+        }}
+      />
+    </span>
+  );
+}
 
 function getHue(r: number, g: number, b: number): number {
   const [rn, gn, bn] = [r / 255, g / 255, b / 255];
@@ -959,6 +1003,10 @@ const Index = () => {
   const colorRequiredMap = useMemo(() => {
     return materialNeedStats?.baseColorCounts ?? ({} as Record<number, number>);
   }, [materialNeedStats]);
+  const [rebaneRolePrefix, rebaneRoleSuffix] = useMemo(
+    () => messages.credits.rebaneRoleParts(),
+    [],
+  );
   const numColorBlockTypesForPart = useMemo(
     () => Object.values(colorRequiredMap).filter(count => count > 0).length,
     [colorRequiredMap],
@@ -966,7 +1014,7 @@ const Index = () => {
 
   const isBuiltinUnedited = useMemo(() => {
     const builtin = getBuiltinPreset(preset.name);
-    return builtin ? JSON.stringify(builtin.blocks) === JSON.stringify(preset.blocks) : false;
+    return builtin ? arePresetBlocksEqual(builtin.blocks, preset.blocks) : false;
   }, [preset]);
 
   useEffect(() => {
@@ -1113,12 +1161,16 @@ const Index = () => {
 
   const updateBlock = (baseIndex: number, block: string) => {
     const nextBlock = canonicalizeBlockEntry(block);
+    const currentBlock = preset.blocks[baseIndex] ?? "";
+    if (nextBlock === currentBlock) return;
+
     const isBuiltin = activeIdx < BUILTIN_PRESET_NAMES.length;
+    const nextBlocks = { ...preset.blocks, [baseIndex]: nextBlock };
+    const matchingBuiltinName = findMatchingBuiltinPresetName(nextBlocks);
+
     if (isBuiltin) {
       // Spawn a new "Custom" preset instead of mutating the builtin
-      const originalBlocks = preset.blocks;
-      setSavedBlocks({ ...originalBlocks });
-      const newBlocks = { ...originalBlocks, [baseIndex]: nextBlock };
+      setSavedBlocks({ ...preset.blocks });
       setPresets(prev => {
         let customName: string = messages.presets.customGroupLabel;
         const existingNames = new Set(prev.map(p => p.name));
@@ -1126,16 +1178,25 @@ const Index = () => {
         while (existingNames.has(customName)) {
           customName = `Custom ${suffix++}`;
         }
-        return [...prev, { name: customName, blocks: newBlocks }];
+        return [...prev, { name: customName, blocks: nextBlocks }];
       });
       setActiveIdx(presets.length);
-    } else {
-      setPresets(prev => {
-        const n = [...prev];
-        n[activeIdx] = { ...n[activeIdx], blocks: { ...n[activeIdx].blocks, [baseIndex]: nextBlock } };
-        return n;
-      });
+      return;
     }
+
+    if (matchingBuiltinName) {
+      const matchingBuiltinIdx = BUILTIN_PRESET_NAMES.findIndex(name => name === matchingBuiltinName);
+      setPresets(prev => prev.filter((_, idx) => idx !== activeIdx));
+      setActiveIdx(matchingBuiltinIdx);
+      markSavedDeferred();
+      return;
+    }
+
+    setPresets(prev => {
+      const n = [...prev];
+      n[activeIdx] = { ...n[activeIdx], blocks: nextBlocks };
+      return n;
+    });
   };
 
   const selectPreset = (idx: number) => {
@@ -1927,6 +1988,24 @@ const Index = () => {
     },
     [],
   );
+  const getBlockIconAsset = useCallback(
+    (block: string) => {
+      const atlasKey = toBlockIconKey(block);
+      if (KNOWN_EXCLUDED_ICON_BLOCKS.has(block)) {
+        return {
+          atlasKey,
+          atlasName: "unused" as const,
+          fallbackSrc: `${import.meta.env.BASE_URL}block-icons/precomputed/unused/${atlasKey}.png`,
+        };
+      }
+      return {
+        atlasKey,
+        atlasName: "primary" as const,
+        fallbackSrc: getBlockIconSrc(block),
+      };
+    },
+    [getBlockIconSrc],
+  );
 
   const getShadeTooltip = (idx: number, shade: Shade): string => {
     const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
@@ -2005,11 +2084,12 @@ const Index = () => {
             }
             onMouseLeave={() => queueSwatchTooltip(null)}
           >
-            <img
-              src={`${import.meta.env.BASE_URL}block-icons/precomputed/world_border.png`}
+            <PackedBlockIcon
+              atlasKey="world_border"
+              atlasName="primary"
+              fallbackSrc={`${import.meta.env.BASE_URL}block-icons/precomputed/world_border.png`}
               alt={messages.swatches.transparent}
-              className="w-full h-full object-cover"
-              style={{ imageRendering: "pixelated" }}
+              className="w-full h-full"
             />
           </div>
         ) : (
@@ -2102,6 +2182,7 @@ const Index = () => {
                 const selected = selectedBlock === b;
                 const isIceWaterOption = idx === WATER_BASE_INDEX && normalizeBlockId(b) === "ice";
                 const hasIcon = KNOWN_PRECOMPUTED_ICON_BLOCKS.has(b);
+                const iconAsset = getBlockIconAsset(b);
                 return (
                   <button
                     key={b}
@@ -2121,13 +2202,12 @@ const Index = () => {
                     onClick={() => updateBlock(idx, b)}
                   >
                     {hasIcon ? (
-                      <img
-                        src={getBlockIconSrc(b)}
+                      <PackedBlockIcon
+                        atlasKey={iconAsset.atlasKey}
+                        atlasName={iconAsset.atlasName}
+                        fallbackSrc={iconAsset.fallbackSrc}
                         alt={b}
-                        loading="eager"
-                        decoding="sync"
-                        className="block w-full h-full object-cover"
-                        style={{ imageRendering: "pixelated" }}
+                        className="w-full h-full"
                       />
                     ) : (
                       <span className="text-[9px] text-muted-foreground">{messages.common.missingTextureSymbol}</span>
@@ -3169,15 +3249,16 @@ const Index = () => {
               >
                 {messages.credits.rebaneName}
               </a>{" "}
-              —{" "}
+              — {rebaneRolePrefix}
               <a
                 href={messages.credits.mapArtCraftUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline hover:text-foreground"
               >
-                {messages.credits.rebaneRole(messages.credits.mapArtCraftName)}
+                {messages.credits.mapArtCraftName}
               </a>
+              {rebaneRoleSuffix}
             </p>
             <p>
               <a

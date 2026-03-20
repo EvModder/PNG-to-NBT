@@ -2,6 +2,8 @@
  * Public API:
  * - BlockPreset
  * - BUILTIN_PRESET_NAMES
+ * - arePresetBlocksEqual
+ * - findMatchingBuiltinPresetName
  * - getBuiltinPreset
  * - isAutoCustomPresetName
  * - loadPresets()
@@ -182,8 +184,27 @@ function canonicalizePreset(preset: BlockPreset): BlockPreset {
   return { ...preset, blocks };
 }
 
+export function arePresetBlocksEqual(
+  left: Record<number, string>,
+  right: Record<number, string>,
+): boolean {
+  for (let baseIndex = 0; baseIndex < BASE_COLORS.length; ++baseIndex) {
+    const leftBlock = canonicalizeBlockEntry(left[baseIndex] ?? "");
+    const rightBlock = canonicalizeBlockEntry(right[baseIndex] ?? "");
+    if (leftBlock !== rightBlock) return false;
+  }
+  return true;
+}
+
 export const getBuiltinPreset = (name: string): BlockPreset | null => BUILTIN_BUILDERS[name]?.() ?? null;
 export const isAutoCustomPresetName = (name: string): boolean => /^Custom(?: \d+)?$/.test(name);
+export function findMatchingBuiltinPresetName(blocks: Record<number, string>): string | null {
+  for (const name of BUILTIN_PRESET_NAMES) {
+    const builtin = BUILTIN_BUILDERS[name]();
+    if (arePresetBlocksEqual(blocks, builtin.blocks)) return name;
+  }
+  return null;
+}
 
 export function loadPresets(): BlockPreset[] {
   const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => canonicalizePreset(BUILTIN_BUILDERS[n]()));

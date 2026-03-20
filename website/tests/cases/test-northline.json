@@ -1,0 +1,30 @@
+{
+  "input": "img4.png",
+  "output": "img4-northline.nbt",
+  "settings": {
+    "convertUnsupported": true,
+    "preset": "Fullblock",
+    "presetOverrides": {
+      "1": "slime_block",
+      "12": "oak_leaves[waterlogged=true]"
+    },
+    "buildMode": "staircase_northline",
+    "supportMode": "steps",
+    "supportFillerBlock": "glass",
+    "shadeFillerBlock": "bedrock",
+    "suppress2LayerLateFillerBlock": "slime_block",
+    "dominateVoidFillerBlock": "slime_block",
+    "recessiveVoidFillerBlock": "honey_block",
+    "suppressStepDirection": "east_to_west",
+    "proPaletteSeed": false,
+    "layerGap": 5,
+    "mixSteps": false,
+    "belowPlatformWater": false,
+    "lightWaterDrop": 4,
+    "flatWaterDrop": 2,
+    "darkWaterDrop": 0,
+    "applySupportFloorYs": true,
+    "forceZ129": true,
+    "customColors": []
+  }
+}
