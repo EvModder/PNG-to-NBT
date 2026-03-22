@@ -7,7 +7,7 @@
  * - src/data/i18n/*
  * - src/lib/messages.ts
  */
-import { type Shade } from "@/data/mapColors";
+import { Shade } from "@/data/mapColors";
 import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
 
@@ -93,9 +93,9 @@ export const enCatalog = {
     mixStepsTooltip:
       "Adjacent suppress steps can reuse prior-step recessive color blocks as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
     waterShadeNames: {
-      0: "dark",
-      1: "medium",
-      2: "light",
+      [Shade.Dark]: "dark",
+      [Shade.Flat]: "medium",
+      [Shade.Light]: "light",
     } as const,
     waterLevelTooltip:
       "{shadeName} water shade: 0 places this shade's water block at the non-water floor Y. Each increment lowers it by 1 block. Used water shades must have distinct values.",
@@ -251,6 +251,8 @@ export const enCatalog = {
       "Note: Align 128x128 color area to the map grid.\nExpect 1 extra top north row (NBT is 128x129).",
     iceConversionInfo:
       "Note: Ice has been selected for water-color.\nConvert it to water in-game for colors to be accurate.",
+    iceConversionWarning:
+      "Warning: Ice has been selected for water-color.\nThis build contains floating ice pillars.\nIce cannot convert to water unless the pillar has support beneath it.",
     noFillerNorthRowLine: "North-row shading requires filler placements.",
     noFillerSuppressLine: "Suppress-shading requires filler placements.",
     noFillerInGridLine: "Some shading-critical fillers are required inside the 128x128 grid.",
@@ -300,10 +302,10 @@ export const enCatalog = {
   swatches: {
     transparent: "Transparent",
     shadeLabels: {
-      0: "dark",
-      1: "flat",
-      2: "light",
-      3: "darkest (unobtainable)",
+      [Shade.Dark]: "dark",
+      [Shade.Flat]: "flat",
+      [Shade.Light]: "light",
+      [Shade.Darkest]: "darkest (unobtainable)",
     } as const satisfies Record<Shade, string>,
     shadeTooltip: "{hex} - Click to copy ({shade})",
   },
@@ -333,7 +335,7 @@ export const enCatalog = {
     gu2t4vName: "Gu2t4v",
     gu2t4vUrl: "https://youtube.com/@gust4v_",
     gu2t4vRole: "Suppression expert, inventor of 2-Layer method",
-    gptNote: "Note: GPT was used for parts of this site",
+    gptNote: "Note: ChatGPT was used for parts of this site",
   },
   parsing: {
     unableToCreateImageCanvas: "Unable to create image canvas.",

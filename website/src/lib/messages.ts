@@ -12,7 +12,7 @@
  * - Selects the active locale catalog and applies interpolation/plural formatting at runtime.
  * - Locale catalogs live under `src/data/i18n/` and are intended to remain pure data only.
  */
-import { unpackRgb, type Shade } from "@/data/mapColors";
+import { Shade, type Shade as ShadeType, unpackRgb } from "@/data/mapColors";
 import { enCatalog, type MessageCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
 import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
@@ -144,13 +144,13 @@ export const messages = {
     layerGapTooltip: catalog.buildMode.layerGapTooltip,
     mixStepsLabel: catalog.buildMode.mixStepsLabel,
     mixStepsTooltip: catalog.buildMode.mixStepsTooltip,
-    waterLevelTooltip(shade: 0 | 1 | 2): string {
+    waterLevelTooltip(shade: Shade.Dark | Shade.Flat | Shade.Light): string {
       return formatTemplate(catalog.buildMode.waterLevelTooltip, {
         shade,
         shadeName: catalog.buildMode.waterShadeNames[shade],
       });
     },
-    waterLevelAriaLabel(shade: 0 | 1 | 2): string {
+    waterLevelAriaLabel(shade: Shade.Dark | Shade.Flat | Shade.Light): string {
       return formatTemplate(catalog.buildMode.waterLevelAriaLabel, {
         shade,
         shadeName: catalog.buildMode.waterShadeNames[shade],
@@ -263,6 +263,7 @@ export const messages = {
     },
     northRowAlignmentInfo: catalog.preview.northRowAlignmentInfo,
     iceConversionInfo: catalog.preview.iceConversionInfo,
+    iceConversionWarning: catalog.preview.iceConversionWarning,
     noFillerNorthRowLine: catalog.preview.noFillerNorthRowLine,
     noFillerSuppressLine: catalog.preview.noFillerSuppressLine,
     noFillerInGridLine: catalog.preview.noFillerInGridLine,
@@ -325,7 +326,7 @@ export const messages = {
   },
   swatches: {
     transparent: catalog.swatches.transparent,
-    shadeTooltip(hex: string, shade: Shade): string {
+    shadeTooltip(hex: string, shade: ShadeType): string {
       return formatTemplate(catalog.swatches.shadeTooltip, {
         hex,
         shade: catalog.swatches.shadeLabels[shade],

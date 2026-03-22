@@ -13,7 +13,6 @@
  * - src/lib/presetCodec.ts
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import { canonicalizeBlockEntry } from "@/lib/blockId";
 import { STORAGE_KEYS } from "@/lib/storageKeys";
 
 export interface BlockPreset {
@@ -177,20 +176,13 @@ const BUILTIN_BUILDERS: Record<string, () => BlockPreset> = {
   Fullblock: buildFullblockPreset,
 };
 
-function canonicalizePreset(preset: BlockPreset): BlockPreset {
-  const blocks = Object.fromEntries(
-    Object.entries(preset.blocks).map(([baseIndex, block]) => [Number(baseIndex), canonicalizeBlockEntry(block)]),
-  ) as Record<number, string>;
-  return { ...preset, blocks };
-}
-
 export function arePresetBlocksEqual(
   left: Record<number, string>,
   right: Record<number, string>,
 ): boolean {
   for (let baseIndex = 0; baseIndex < BASE_COLORS.length; ++baseIndex) {
-    const leftBlock = canonicalizeBlockEntry(left[baseIndex] ?? "");
-    const rightBlock = canonicalizeBlockEntry(right[baseIndex] ?? "");
+    const leftBlock = left[baseIndex] ?? "";
+    const rightBlock = right[baseIndex] ?? "";
     if (leftBlock !== rightBlock) return false;
   }
   return true;
@@ -207,16 +199,14 @@ export function findMatchingBuiltinPresetName(blocks: Record<number, string>): s
 }
 
 export function loadPresets(): BlockPreset[] {
-  const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => canonicalizePreset(BUILTIN_BUILDERS[n]()));
+  const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => BUILTIN_BUILDERS[n]());
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.presets);
     if (raw) {
       const parsed: BlockPreset[] = JSON.parse(raw);
       return [
         ...builtins,
-        ...parsed
-          .filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number]))
-          .map(canonicalizePreset),
+        ...parsed.filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number])),
       ];
     }
   } catch {

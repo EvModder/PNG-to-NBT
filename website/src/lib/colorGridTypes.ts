@@ -17,7 +17,7 @@
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeSubstitution.ts
  */
-import { WATER_BASE_INDEX, type Shade } from "@/data/mapColors";
+import { Shade, WATER_BASE_INDEX, type Shade as ShadeType } from "@/data/mapColors";
 
 // Callers:
 // - src/lib/colorGridAnalysis.ts
@@ -33,7 +33,7 @@ export const MAP_SIZE = 128;
 export interface ColorData {
   isCustom: boolean;
   id: number;
-  shade: Shade;
+  shade: ShadeType;
 }
 
 // Indexed as [x][z], with East-West/X on the outer axis and North-South/Z on the inner axis.
@@ -46,12 +46,9 @@ export interface ColorData {
 export type ColorGrid = ColorData[][];
 // Callers:
 // - src/lib/colorGridParsing.ts
-export const TRANSPARENT_COLOR: ColorData = Object.freeze({ isCustom: false, id: 0, shade: 0 });
+export const TRANSPARENT_COLOR: ColorData = Object.freeze({ isCustom: false, id: 0, shade: Shade.Dark });
 
-// Callers:
-// - src/lib/colorGridAnalysis.ts
-// - src/lib/shapeAnalysis.ts
-// - src/lib/shapeGeneration.ts
+// Backward-compatible helper for call sites that still prefer explicit bounds fallback.
 export function getColorCell(grid: ColorGrid, x: number, z: number): ColorData {
   if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) return TRANSPARENT_COLOR;
   return grid[x]?.[z] ?? TRANSPARENT_COLOR;

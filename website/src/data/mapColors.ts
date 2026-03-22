@@ -59,7 +59,12 @@
 // - src/lib/colorGridTypes.ts
 // - src/lib/messages.ts
 // Index 0=dark, 1=flat, 2=light, 3=darkest (not obtainable)
-export type Shade = 0 | 1 | 2 | 3;
+export enum Shade {
+  Dark = 0,
+  Flat = 1,
+  Light = 2,
+  Darkest = 3,
+}
 
 // Callers:
 // - src/lib/colorGridParsing.ts

@@ -5,7 +5,7 @@
  * Callers:
  * - src/lib/messages.ts
  */
-import { type Shade } from "@/data/mapColors";
+import { Shade } from "@/data/mapColors";
 import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
 import { type MessageCatalog } from "@/data/i18n/en";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
@@ -87,9 +87,9 @@ export const esCatalog = {
     mixStepsTooltip:
       "Permite que pasos adyacentes de supresión compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
     waterShadeNames: {
-      0: "oscuro",
-      1: "medio",
-      2: "claro",
+      [Shade.Dark]: "oscuro",
+      [Shade.Flat]: "medio",
+      [Shade.Light]: "claro",
     } as const,
     waterLevelTooltip:
       "Agua de tono {shadeName}: 0 coloca el bloque de agua de este tono en la Y del piso no acuoso. Cada incremento lo baja 1 bloque más. Los tonos de agua usados deben tener valores distintos.",
@@ -247,6 +247,8 @@ export const esCatalog = {
       "Nota: Alinea el área de color 128x128 con la cuadrícula del mapa.\nEspera 1 fila norte adicional arriba (el NBT es 128x129).",
     iceConversionInfo:
       "Nota: Se ha seleccionado hielo para el color del agua.\nConviértelo en agua dentro del juego para que los colores sean correctos.",
+    iceConversionWarning:
+      "Advertencia: Se ha seleccionado hielo para el color del agua.\nEsta construcción contiene pilares de hielo flotantes.\nEl hielo no puede convertirse en agua si el pilar no tiene soporte debajo.",
     noFillerNorthRowLine: "El sombreado de la fila norte requiere colocaciones de relleno.",
     noFillerSuppressLine: "El sombreado de supresión requiere colocaciones de relleno.",
     noFillerInGridLine: "Se requieren algunos rellenos críticos de sombreado dentro de la cuadrícula de 128x128.",
@@ -296,10 +298,10 @@ export const esCatalog = {
   swatches: {
     transparent: "Transparente",
     shadeLabels: {
-      0: "oscuro",
-      1: "plano",
-      2: "claro",
-      3: "más oscuro (inobtenible)",
+      [Shade.Dark]: "oscuro",
+      [Shade.Flat]: "plano",
+      [Shade.Light]: "claro",
+      [Shade.Darkest]: "más oscuro (inobtenible)",
     } as const satisfies Record<Shade, string>,
     shadeTooltip: "{hex} - Haz clic para copiar ({shade})",
   },

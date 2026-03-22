@@ -7,7 +7,7 @@
  * - src/Index.tsx
  */
 import * as UTIF from "utif";
-import { BASE_COLORS, type ColorShade, SHADE_MULTIPLIERS, packRgb, unpackRgb } from "@/data/mapColors";
+import { BASE_COLORS, Shade, type ColorShade, SHADE_MULTIPLIERS, packRgb, unpackRgb } from "@/data/mapColors";
 import { messages, type PaletteNotice } from "@/lib/messages";
 import { type ColorData, type ColorGrid, MAP_SIZE, TRANSPARENT_COLOR } from "./colorGridTypes";
 
@@ -32,7 +32,7 @@ function getBaseColorLookup(): Map<number, ColorShade> {
   baseColorLookup = new Map();
   for (let i = 1; i < BASE_COLORS.length; ++i) {
     const { r, g, b } = BASE_COLORS[i];
-    for (const shade of [0, 1, 2] as const) {
+    for (const shade of [Shade.Dark, Shade.Flat, Shade.Light] as const) {
       const mr = Math.floor((r * SHADE_MULTIPLIERS[shade]) / 255);
       const mg = Math.floor((g * SHADE_MULTIPLIERS[shade]) / 255);
       const mb = Math.floor((b * SHADE_MULTIPLIERS[shade]) / 255);
@@ -50,7 +50,7 @@ function buildCustomShadeLookup(customColors: CustomColorLike[]): Map<number, Co
   const lookup = new Map<number, ColorData>();
   for (const [customIndex, color] of customColors.entries()) {
     if (!color.block?.trim()) continue;
-    for (const shade of [0, 1, 2] as const) {
+    for (const shade of [Shade.Dark, Shade.Flat, Shade.Light] as const) {
       const r = Math.floor((color.r * SHADE_MULTIPLIERS[shade]) / 255);
       const g = Math.floor((color.g * SHADE_MULTIPLIERS[shade]) / 255);
       const b = Math.floor((color.b * SHADE_MULTIPLIERS[shade]) / 255);
@@ -73,7 +73,7 @@ function scanImageToColorGrid(
     for (let z = 0; z < MAP_SIZE; ++z) {
       const idx = (z * MAP_SIZE + x) * 4;
       if (imageData.data[idx + 3] === 0) {
-        colorGrid[x][z] = TRANSPARENT_COLOR;
+        // colorGrid[x][z] = TRANSPARENT_COLOR; // Already default-initialized
         continue;
       }
 

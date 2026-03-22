@@ -9,7 +9,6 @@
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import { type BlockPreset } from "@/data/presets";
-import { canonicalizeBlockEntry } from "@/lib/blockId";
 import { BuildMode, SuppressStepDirection, type CustomColor, isSuppressStepDirection } from "@/lib/conversionTypes";
 import { SupportMode } from "@/lib/uiTypes";
 
@@ -29,10 +28,6 @@ export interface FullPreset {
   recessiveVoidFillerBlock?: string;
 }
 
-function isBuildMode(raw: unknown): raw is BuildMode {
-  return Object.values(BuildMode).includes(raw as BuildMode);
-}
-
 export function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
@@ -40,26 +35,26 @@ export function encodeFullPreset(
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
-    const block = canonicalizeBlockEntry(preset.blocks[i + 1] || "");
+    const block = preset.blocks[i + 1] || "";
     const idx = BASE_COLORS[i + 1].blocks.indexOf(block);
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
   const customColorString = customColors.length > 0
-    ? customColors.map(color => `${color.r},${color.g},${color.b}:${canonicalizeBlockEntry(color.block)}`).join(";")
+    ? customColors.map(color => `${color.r},${color.g},${color.b}:${color.block}`).join(";")
     : "";
   const serialized = [
     preset.name,
     parts.join(","),
-    canonicalizeBlockEntry(supportFillerBlock),
-    canonicalizeBlockEntry(shadeFillerBlock),
+    supportFillerBlock,
+    shadeFillerBlock,
     supportMode,
     buildMode,
     customColorString,
     convertUnsupported ? "1" : "0",
-    canonicalizeBlockEntry(suppress2LayerLateFillerBlock),
+    suppress2LayerLateFillerBlock,
     proPaletteSeed ? "1" : "0",
-    canonicalizeBlockEntry(dominateVoidFillerBlock),
-    canonicalizeBlockEntry(recessiveVoidFillerBlock),
+    dominateVoidFillerBlock,
+    recessiveVoidFillerBlock,
     mixSteps ? "1" : "0",
     suppressStepDirection,
   ].join("|");
@@ -83,7 +78,7 @@ export function decodeFullPreset(encoded: string): FullPreset | null {
         part === "-" || part === ""
           ? ""
           : part.startsWith("=")
-            ? canonicalizeBlockEntry(part.slice(1))
+            ? part.slice(1)
             : BASE_COLORS[baseIndex].blocks[parseInt(part)] || "";
     }
 
@@ -93,7 +88,7 @@ export function decodeFullPreset(encoded: string): FullPreset | null {
           .map(entry => {
             const [rgb, block] = entry.split(":");
             const [r, g, b] = rgb.split(",").map(Number);
-            return { r, g, b, block: canonicalizeBlockEntry(block || "") };
+            return { r, g, b, block: block || "" };
           })
           .filter(color => !isNaN(color.r) && color.block)
       : undefined;
@@ -111,18 +106,18 @@ export function decodeFullPreset(encoded: string): FullPreset | null {
 
     return {
       blockPreset: { name: sections[0], blocks },
-      supportFiller: sections[2] ? canonicalizeBlockEntry(sections[2]) : undefined,
-      shadeFiller: sections[3] ? canonicalizeBlockEntry(sections[3]) : undefined,
+      supportFiller: sections[2] || undefined,
+      shadeFiller: sections[3] || undefined,
       supportMode,
-      buildMode: isBuildMode(sections[5]) ? sections[5] : undefined,
+      buildMode: Object.values(BuildMode).includes(sections[5] as BuildMode) ? sections[5] as BuildMode : undefined,
       customColors,
       convertUnsupported,
       proPaletteSeed,
       mixSteps,
       suppressStepDirection,
-      suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock ? canonicalizeBlockEntry(suppress2LayerLateFillerBlock) : undefined,
-      dominateVoidFillerBlock: dominateVoidFillerBlock ? canonicalizeBlockEntry(dominateVoidFillerBlock) : undefined,
-      recessiveVoidFillerBlock: recessiveVoidFillerBlock ? canonicalizeBlockEntry(recessiveVoidFillerBlock) : undefined,
+      suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock || undefined,
+      dominateVoidFillerBlock: dominateVoidFillerBlock || undefined,
+      recessiveVoidFillerBlock: recessiveVoidFillerBlock || undefined,
     };
   } catch {
     return null;
