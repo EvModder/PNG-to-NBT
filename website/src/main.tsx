@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
+import { STORAGE_KEYS } from "@/data/storageKeys";
 import Index from "./Index.tsx";
-import { STORAGE_KEYS } from "@/lib/storageKeys";
 import "./index.css";
 
 const readStoredTheme = (): "light" | "dark" | null => {

@@ -9,14 +9,16 @@
  * - src/lib/previewImageStore.ts
  */
 import { useMemo } from "react";
-import { BASE_COLORS } from "@/data/mapColors";
+import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
-import { normalizeBlockId } from "@/lib/blockId";
-import { FillerRole } from "@/lib/conversionTypes";
+import { normalizeBlockId } from "@/utils/blockId";
+import { FillerRole } from "@/types/conversion";
+import type { GeneratedShape } from "@/types/shape";
 import { isShadeFillerDisabled } from "@/lib/fillerRules";
 import { collectFillerRolePixels } from "@/lib/shapeAnalysis";
-import type { GeneratedShape } from "@/lib/shapeGeneration";
 
+// Callers:
+// - src/lib/previewImageStore.ts
 export interface PreviewPixelReplacement {
   x: number;
   z: number;
@@ -36,7 +38,7 @@ const BLOCK_BASE_COLOR_INDEX = new Map<string, number>(
 
 function getBlockLightShadeReplacement(block: string): readonly [number, number, number] | null {
   const baseIndex = BLOCK_BASE_COLOR_INDEX.get(normalizeBlockId(block));
-  if (baseIndex === undefined || baseIndex === 0) return null;
+  if (baseIndex === undefined || baseIndex === TRANSPARENCY_BASE_INDEX) return null;
   const { r, g, b } = BASE_COLORS[baseIndex];
   return [r, g, b];
 }
@@ -49,6 +51,8 @@ type CollectVsFillerPreviewReplacementOptions = {
   xColumnRange?: [number, number];
 };
 
+// Callers:
+// - src/lib/previewImageStore.ts
 export function collectVsFillerPreviewReplacements(
   {
     shape,
@@ -79,6 +83,8 @@ export function collectVsFillerPreviewReplacements(
   });
 }
 
+// Callers:
+// - src/Index.tsx
 export function useVsFillerPreviewReplacements(
   options: CollectVsFillerPreviewReplacementOptions,
 ): PreviewPixelReplacement[] {

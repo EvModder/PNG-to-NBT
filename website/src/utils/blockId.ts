@@ -1,29 +1,25 @@
 /**
  * Public API:
- * - stripBlockNamespace()
  * - normalizeBlockId()
- * - canonicalizeBlockEntry()
  * - sanitizeUserBlockEntry()
  *
  * Callers:
  * - src/Index.tsx
  * - src/lib/fillerRules.ts
- * - src/lib/nbtWriter.ts
- * - src/data/presets.ts
+ * - src/lib/previewImageEdits.ts
  * - src/lib/presetCodec.ts
- * - src/lib/shapeCellRules.ts
+ * - src/lib/shapeModel.ts
  * - tests/run.mts
  */
-// Callers:
-// - src/Index.tsx
-export function stripBlockNamespace(raw: string): string {
+function stripBlockNamespace(raw: string): string {
   return raw.trim().replace(/^minecraft:/i, "");
 }
 
 // Callers:
 // - src/Index.tsx
 // - src/lib/fillerRules.ts
-// - src/lib/shapeCellRules.ts
+// - src/lib/previewImageEdits.ts
+// - src/lib/shapeModel.ts
 export function normalizeBlockId(raw: string): string {
   return stripBlockNamespace(raw).toLowerCase().split("[")[0];
 }
@@ -55,9 +51,4 @@ export function sanitizeUserBlockEntry(raw: string): string {
     .filter(part => part.toLowerCase() !== "axis=y");
 
   return filteredProps.length > 0 ? `${name}[${filteredProps.join(",")}]` : name;
-}
-
-// Backward-compatible alias for non-input paths that still use the older name.
-export function canonicalizeBlockEntry(raw: string): string {
-  return sanitizeUserBlockEntry(raw);
 }

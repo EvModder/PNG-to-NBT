@@ -12,11 +12,12 @@
  * - Selects the active locale catalog and applies interpolation/plural formatting at runtime.
  * - Locale catalogs live under `src/data/i18n/` and are intended to remain pure data only.
  */
-import { Shade, type Shade as ShadeType, unpackRgb } from "@/data/mapColors";
+import { unpackRgb } from "@/utils/color";
 import { enCatalog, type MessageCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
-import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
+import { Shade } from "@/types/color";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
 
 type TemplateValues = Record<string, string | number>;
 
@@ -326,7 +327,7 @@ export const messages = {
   },
   swatches: {
     transparent: catalog.swatches.transparent,
-    shadeTooltip(hex: string, shade: ShadeType): string {
+    shadeTooltip(hex: string, shade: Shade): string {
       return formatTemplate(catalog.swatches.shadeTooltip, {
         hex,
         shade: catalog.swatches.shadeLabels[shade],

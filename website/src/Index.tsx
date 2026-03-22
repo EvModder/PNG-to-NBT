@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
-import { Moon, Sun, Plus, Minus, Glasses, Droplets, ArrowDown } from "lucide-react";
+import { Moon, Sun, Plus, Minus, Glasses, Droplets, ArrowDownToLine } from "lucide-react";
 import {
   AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS,
   DEFAULT_ACTIVE_PRESET_NAME,
@@ -37,22 +37,26 @@ import {
   DEFAULT_SUPPRESS_STEP_DIRECTION,
   DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
 } from "@/data/defaultSettings";
-import { BASE_COLORS, WATER_BASE_INDEX, getShadedRgb, type Shade } from "@/data/mapColors";
+import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
+import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
 import { convertToNbt } from "@/lib/nbtExport";
-import { StaircaseWaterHandling, generateShapeMap } from "@/lib/shapeGeneration";
+import { generateShapeMap } from "@/lib/shapeGeneration";
 import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";
-import { computeColorGridStats, hasStepMixOpportunity } from "@/lib/colorGridAnalysis";
+import { computeColorGridStats, hasStepMixOpportunity, type ColorGridStats } from "@/lib/colorGridAnalysis";
+import { getHue, getShadedRgb } from "@/utils/color";
+import type { ColorRgbCustom } from "@/types/color";
 import {
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
   hasNonWaterColorHeightVariance as generatedShapeHasNonWaterColorHeightVariance,
   nooblineIsSingleY as generatedShapeNooblineIsSingleY,
 } from "@/lib/shapeAnalysis";
-import { canonicalizeBlockEntry, normalizeBlockId, stripBlockNamespace } from "@/lib/blockId";
+import { sanitizeUserBlockEntry, normalizeBlockId } from "@/utils/blockId";
 import {
   createFillerAssignments,
+  getSupportModeFillerRoles,
   isFillerDisabled,
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
@@ -61,18 +65,12 @@ import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages"
 import { decodeFullPreset, encodeFullPreset } from "@/lib/presetCodec";
 import { useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
-import { getBlockIconAtlasEntry } from "@/lib/blockIconAtlas";
-import { STORAGE_KEYS as LS_KEYS } from "@/lib/storageKeys";
-import { isShapeFillerCell, parseShapeCoordKey } from "@/lib/shapeTypes";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
-import { getSupportedColorAbove, isWithinShapeBounds, NO_SUPPORT_FLOORS } from "@/lib/shapeCellRules";
+import { getBlockIconAtlasEntry, toBlockIconKey } from "@/lib/blockIconAtlas";
+import { getSupportedColorAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
+import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
 import {
-  BuildMode,
-  SuppressStepDirection,
   getBuildModeDownloadSuffix,
   getSuppressStepDirectionRotationDegrees,
-  type FillerAssignment,
-  FillerRole,
   buildModeUsesLayerGap,
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
@@ -82,8 +80,11 @@ import {
   isStaircaseBuildMode,
   isSuppressBuildMode,
   getVisibleSuppressBuildModes,
-  type CustomColor,
-} from "@/lib/conversionTypes";
+} from "@/utils/conversion";
+import { getClipboardImageFile } from "@/utils/imageInput";
+import { formatStacks } from "@/utils/minecraft";
+import { BuildMode, SuppressStepDirection, type FillerAssignment, FillerRole } from "@/types/conversion";
+import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import {
   arePresetBlocksEqual,
@@ -105,52 +106,31 @@ function loadCached<T>(key: string, fallback: T): T {
   return fallback;
 }
 
-function getClipboardImageFile(clipboardData: DataTransfer | null): File | null {
-  if (!clipboardData) return null;
-
-  const toNamedImageFile = (file: File): File => {
-    if (file.name) return file;
-    const subtype = file.type.split("/")[1]?.split("+")[0] || "png";
-    const extension = subtype === "jpeg" ? "jpg" : subtype;
-    return new File([file], `pasted-image.${extension}`, {
-      type: file.type,
-      lastModified: Date.now(),
-    });
+const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
+type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
+type DerivedImageStats = {
+  allSameShade?: Shade;
+  hasTransparency: boolean;
+  imageHasWater: boolean;
+  paletteUsageInfo: {
+    uniqueShadeCount: number;
+    uniqueBaseColorCount: number;
   };
-
-  for (const item of clipboardData.items) {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-    const file = item.getAsFile();
-    if (file) return toNamedImageFile(file);
-  }
-
-  for (const file of clipboardData.files) {
-    if (file.type.startsWith("image/")) return toNamedImageFile(file);
-  }
-
-  return null;
-}
-const toBlockIconKey = (raw: string): string =>
-  stripBlockNamespace(raw)
-    .replace(/__/g, "__us__")
-    .replace(/\[/g, "__lb__")
-    .replace(/\]/g, "__rb__")
-    .replace(/=/g, "__eq__")
-    .replace(/,/g, "__cm__")
-    .replace(/:/g, "__cl__");
-
-const WATER_DROP_INPUT_ORDER = [2, 1, 0] as const;
+  usedBaseColors: Set<number>;
+  usedShadesByBase: Map<number, Set<Shade>>;
+  usedWaterShades: Set<Shade>;
+};
 
 function normalizeUsedWaterDrops(
-  rawDrops: Record<0 | 1 | 2, number>,
-  usedWaterShades: ReadonlySet<number>,
-  preferredFirstShade?: 0 | 1 | 2,
-): Record<0 | 1 | 2, number> {
-  const next: Record<0 | 1 | 2, number> = {
-    0: Math.max(0, rawDrops[0] || 0),
-    1: Math.max(0, rawDrops[1] || 0),
-    2: Math.max(0, rawDrops[2] || 0),
-  };
+  rawDrops: Record<WaterDropShade, number>,
+  usedWaterShades: ReadonlySet<Shade>,
+  preferredFirstShade?: WaterDropShade,
+): readonly [dark: number, flat: number, light: number] {
+  const next: [number, number, number] = [
+    Math.max(0, rawDrops[Shade.Dark] || 0),
+    Math.max(0, rawDrops[Shade.Flat] || 0),
+    Math.max(0, rawDrops[Shade.Light] || 0),
+  ];
   const usedValues = new Set<number>();
   const orderedShades = preferredFirstShade === undefined
     ? WATER_DROP_INPUT_ORDER
@@ -167,11 +147,61 @@ function normalizeUsedWaterDrops(
   return next;
 }
 
+function buildWaterDropInputs(dark: number, flat: number, light: number): Record<WaterDropShade, number> {
+  return {
+    [Shade.Dark]: dark,
+    [Shade.Flat]: flat,
+    [Shade.Light]: light,
+  };
+}
+
+function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
+  const usedShadesByBase = new Map<number, Set<Shade>>();
+  const usedBaseColors = new Set<number>();
+  let hasTransparency = false;
+  let uniqueShadeCount = 0;
+  let uniqueBaseColorCount = 0;
+
+  for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
+    if (colorKey.isCustom) {
+      uniqueShadeCount += shadeFrequencyMap.size;
+      continue;
+    }
+
+    if (colorKey.id === TRANSPARENCY_BASE_INDEX) {
+      if ((shadeFrequencyMap.get(Shade.Dark) ?? 0) > 0) {
+        hasTransparency = true;
+        usedBaseColors.add(TRANSPARENCY_BASE_INDEX);
+      }
+      continue;
+    }
+
+    usedBaseColors.add(colorKey.id);
+    ++uniqueBaseColorCount;
+
+    const shades = new Set<Shade>(shadeFrequencyMap.keys());
+    uniqueShadeCount += shades.size;
+    usedShadesByBase.set(colorKey.id, shades);
+  }
+
+  const usedWaterShades = usedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>();
+
+  return {
+    hasTransparency,
+    allSameShade: imageStats.allSameShade,
+    imageHasWater: usedWaterShades.size > 0,
+    paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
+    usedBaseColors,
+    usedShadesByBase,
+    usedWaterShades,
+  };
+}
+
 type ShapeWarning = {
   text: string;
   invalid: boolean;
 };
-const DEFAULT_SWATCH_SHADES: Shade[] = [2, 1, 0];
+const DEFAULT_SWATCH_SHADES: Shade[] = [Shade.Light, Shade.Flat, Shade.Dark];
 const KNOWN_PRIMARY_ICON_BLOCKS = new Set(
   BASE_COLORS.flatMap(c => c.blocks),
 );
@@ -219,18 +249,6 @@ function PackedBlockIcon({ atlasKey, atlasName, fallbackSrc, alt, className }: P
   );
 }
 
-function getHue(r: number, g: number, b: number): number {
-  const [rn, gn, bn] = [r / 255, g / 255, b / 255];
-  const max = Math.max(rn, gn, bn),
-    min = Math.min(rn, gn, bn);
-  if (max === min) return 0;
-  const d = max - min;
-  let h: number;
-  if (max === rn) h = ((gn - bn) / d + 6) % 6;
-  else if (max === gn) h = (bn - rn) / d + 2;
-  else h = (rn - gn) / d + 4;
-  return h * 60;
-}
 
 type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 type SortDir = "asc" | "desc";
@@ -288,29 +306,6 @@ const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: BuildMode.Suppress2LayerLatePairs, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLatePairs) },
 ];
 
-function hashString32(input: string): number {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < input.length; ++i) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h >>> 0;
-}
-
-function getPaletteSeedOffset(blockMapping: Record<number, string>): number {
-  const serialized = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => `${i + 1}:${blockMapping[i + 1] ?? ""}`).join("|");
-  return hashString32(serialized);
-}
-
-function formatStacks(count: number): string {
-  if (count < 64) return String(count);
-  const sb = Math.floor(count / (64 * 27));
-  const rem = count % (64 * 27);
-  const st = Math.floor(rem / 64);
-  const items = rem % 64;
-  return [sb && `${sb}sb`, st && `${st}st`, items && String(items)].filter(Boolean).join(" ") || "0";
-}
-
 const getStoredTheme = (): "light" | "dark" | null => {
   const raw = localStorage.getItem(LS_KEYS.theme);
   return raw === "light" || raw === "dark" ? raw : null;
@@ -339,19 +334,19 @@ const Index = () => {
     return idx >= 0 ? idx : 0;
   });
   const [supportFillerBlock, setSupportFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.supportFiller, DEFAULT_SUPPORT_FILLER_BLOCK)),
+    sanitizeUserBlockEntry(loadCached(LS_KEYS.supportFiller, DEFAULT_SUPPORT_FILLER_BLOCK)),
   );
   const [shadeFillerBlock, setShadeFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.shadeFiller, DEFAULT_SHADE_FILLER_BLOCK)),
+    sanitizeUserBlockEntry(loadCached(LS_KEYS.shadeFiller, DEFAULT_SHADE_FILLER_BLOCK)),
   );
   const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.suppress2LayerLateFiller, DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK)),
+    sanitizeUserBlockEntry(loadCached(LS_KEYS.suppress2LayerLateFiller, DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK)),
   );
   const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.dominateVoidFiller, DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK)),
+    sanitizeUserBlockEntry(loadCached(LS_KEYS.dominateVoidFiller, DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK)),
   );
   const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() =>
-    canonicalizeBlockEntry(loadCached(LS_KEYS.recessiveVoidFiller, DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK)),
+    sanitizeUserBlockEntry(loadCached(LS_KEYS.recessiveVoidFiller, DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK)),
   );
   const [buildMode, setBuildMode] = useState<BuildMode>(() => {
     const storedBuildMode = loadCached(LS_KEYS.buildMode, DEFAULT_BUILD_MODE);
@@ -384,7 +379,7 @@ const Index = () => {
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
     loadCached(LS_KEYS.supportMode, DEFAULT_SUPPORT_MODE),
   );
-  const [customColors, setCustomColors] = useState<CustomColor[]>([]);
+  const [customColors, setCustomColors] = useState<ColorRgbCustom[]>([]);
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
   const [imageData, setImageData] = useState<ImageData | null>(null);
@@ -469,10 +464,9 @@ const Index = () => {
   );
 
   const preset = presets[activeIdx] || getBuiltinPreset(DEFAULT_ACTIVE_PRESET_NAME)!;
-  const activePresetBuiltinTooltip = useMemo(
-    () => (activeIdx < BUILTIN_PRESET_NAMES.length ? messages.presets.builtinTooltip(preset.name) : undefined),
-    [activeIdx, preset.name],
-  );
+  const activePresetBuiltinTooltip = activeIdx < BUILTIN_PRESET_NAMES.length
+    ? messages.presets.builtinTooltip(preset.name)
+    : undefined;
 
   const [savedBlocks, setSavedBlocks] = useState<Record<number, string> | null>(null);
 
@@ -600,7 +594,7 @@ const Index = () => {
     }
   }, [persistedSettings]);
 
-  const showPaletteSeedToggle = useMemo(() => buildModeUsesPaletteSeed(buildMode), [buildMode]);
+  const showPaletteSeedToggle = buildModeUsesPaletteSeed(buildMode);
   const paletteSeedOffset = useMemo(
     () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(preset.blocks) : 0),
     [showPaletteSeedToggle, calcProPaletteSeed, preset.blocks],
@@ -609,74 +603,55 @@ const Index = () => {
     () => (imageColorGrid && imageValid ? computeColorGridStats(imageColorGrid) : null),
     [imageColorGrid, imageValid],
   );
-  const fullImageUsedShadesByBase = imageStats?.usedShadesByBase ?? new Map<number, Set<number>>();
-  const usedWaterShades = fullImageUsedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>();
+  const derivedImageStats = useMemo(() => (imageStats ? deriveImageStats(imageStats) : null), [imageStats]);
+  const fullImageUsedShadesByBase = derivedImageStats?.usedShadesByBase ?? new Map<number, Set<Shade>>();
+  const usedWaterShades = derivedImageStats?.usedWaterShades ?? new Set<Shade>();
+  const imageHasWater = derivedImageStats?.imageHasWater ?? false;
+  const paletteUsageInfo = derivedImageStats?.paletteUsageInfo ?? null;
   const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
-  const supportFillerDisabled = useMemo(() => isFillerDisabled(supportFillerBlock), [supportFillerBlock]);
-  const imageHasNonLightWater = imageStats?.hasNonLightWater ?? false;
+  const supportFillerDisabled = isFillerDisabled(supportFillerBlock);
   const normalizedImmediateWaterDrops = useMemo(
-    () => normalizeUsedWaterDrops({
-      0: darkWaterDrop,
-      1: flatWaterDrop,
-      2: lightWaterDrop,
-    }, usedWaterShades),
+    () => normalizeUsedWaterDrops(buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop), usedWaterShades),
     [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades],
   );
   const normalizedDeferredWaterDrops = useMemo(
-    () => normalizeUsedWaterDrops({
-      0: calcDarkWaterDrop || 0,
-      1: calcFlatWaterDrop || 0,
-      2: calcLightWaterDrop || 0,
-    }, usedWaterShades),
+    () => normalizeUsedWaterDrops(
+      buildWaterDropInputs(calcDarkWaterDrop || 0, calcFlatWaterDrop || 0, calcLightWaterDrop || 0),
+      usedWaterShades,
+    ),
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
-  const waterDrops = normalizedDeferredWaterDrops;
-  const hasWaterSpecificSupport = useMemo(
-    () => !supportFillerDisabled && (
-      supportMode !== SupportMode.None && supportMode !== SupportMode.All &&
-      (usesIceForWater || supportMode === SupportMode.Water)
-    ),
-    [supportFillerDisabled, supportMode, usesIceForWater],
-  );
-  const waterFillerOffset = useMemo(
-    () => !belowPlatformWater && imageHasNonLightWater && hasWaterSpecificSupport,
-    [belowPlatformWater, imageHasNonLightWater, hasWaterSpecificSupport],
-  );
-  const staircaseWaterHandling = belowPlatformWater
-    ? StaircaseWaterHandling.Dropped
-    : waterFillerOffset
-      ? StaircaseWaterHandling.Supported
-      : StaircaseWaterHandling.Standard;
+  const activeWaterDrops = belowPlatformWater ? normalizedDeferredWaterDrops : undefined;
   const showMixStepsToggle = useMemo(
     () =>
       isSuppressStepsBuildMode(buildMode) &&
       !!imageColorGrid &&
       imageValid &&
       hasStepMixOpportunity(imageColorGrid, {
-        belowPlatformWater,
-        waterDrops,
+        waterDrops: activeWaterDrops,
       }),
-    [buildMode, imageColorGrid, imageValid, belowPlatformWater, waterDrops],
+    [buildMode, imageColorGrid, imageValid, activeWaterDrops],
   );
   const twoLayerHasLateVoidNeed = (imageStats?.voidShadowStats.dominant ?? 0) > 0;
   const shapeMap = useMemo(
     () => imageColorGrid && imageValid
-      ? generateShapeMap(imageColorGrid, {
+      ? generateShapeMap(
+          imageColorGrid,
+          derivedImageStats?.allSameShade,
+          imageHasWater,
+          derivedImageStats?.hasTransparency ?? false,
+          twoLayerHasLateVoidNeed,
+          {
           layerGap: calcLayerGap,
           mixSteps: showMixStepsToggle && calcMixSteps,
           paletteSeed: paletteSeedOffset,
-          staircaseWaterHandling,
-          waterDrops,
+          waterDrops: activeWaterDrops,
           selectedMode: buildMode,
           selectedStepDirection: suppressStepDirection,
-        }, imageStats ? {
-          hasWater: imageStats.hasWater,
-          hasTransparency: imageStats.hasTransparency,
-          uniformNonFlatDirection: imageStats.uniformNonFlatDirection,
-          hasTwoLayerLateVoidNeed: twoLayerHasLateVoidNeed,
-        } : undefined)
+          },
+        )
       : null,
     [
       imageColorGrid,
@@ -685,51 +660,45 @@ const Index = () => {
       showMixStepsToggle,
       calcMixSteps,
       paletteSeedOffset,
-      staircaseWaterHandling,
-      waterDrops,
+      activeWaterDrops,
       buildMode,
       suppressStepDirection,
-      imageStats,
+      derivedImageStats,
+      imageHasWater,
       twoLayerHasLateVoidNeed,
     ],
   );
-  const hasNonFlatShades = imageStats?.hasNonFlatShades ?? false;
   const hasVoidShadow = ((imageStats?.voidShadowStats.dominant ?? 0) + (imageStats?.voidShadowStats.recessive ?? 0)) > 0;
   const northlineShape = shapeMap?.[BuildMode.StaircaseNorthline] ?? null;
   const isFlatShape = useMemo(
     () => !!northlineShape && !generatedShapeHasNonWaterColorHeightVariance(northlineShape),
     [northlineShape],
   );
-  const usedBaseColors = imageStats?.usedBaseColors ?? new Set<number>();
-  const imageHasWater = imageStats?.hasWater ?? false;
-  const showLightWaterDropControl = imageValid && belowPlatformWater && usedWaterShades.has(2);
-  const showFlatWaterDropControl = imageValid && belowPlatformWater && usedWaterShades.has(1);
-  const showDarkWaterDropControl = imageValid && belowPlatformWater && usedWaterShades.has(0);
-  const showAnyWaterDropControl =
-    showLightWaterDropControl ||
-    showFlatWaterDropControl ||
-    showDarkWaterDropControl;
+  const usedBaseColors = derivedImageStats?.usedBaseColors ?? new Set<number>();
   const visibleWaterLevelControls = useMemo(
-    () => [
-      { shade: 2 as const, visible: showLightWaterDropControl, value: lightWaterDrop },
-      { shade: 1 as const, visible: showFlatWaterDropControl, value: flatWaterDrop },
-      { shade: 0 as const, visible: showDarkWaterDropControl, value: darkWaterDrop },
-    ].filter(control => control.visible),
+    () => {
+      if (!imageValid || !belowPlatformWater) return [];
+      const currentWaterDrops = buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
+      return WATER_DROP_INPUT_ORDER
+        .filter(shade => usedWaterShades.has(shade))
+        .map(shade => ({ shade, value: currentWaterDrops[shade] }));
+    },
     [
-      showLightWaterDropControl,
-      showFlatWaterDropControl,
-      showDarkWaterDropControl,
+      imageValid,
+      belowPlatformWater,
+      usedWaterShades,
       lightWaterDrop,
       flatWaterDrop,
       darkWaterDrop,
     ],
   );
+  const showAnyWaterDropControl = visibleWaterLevelControls.length > 0;
 
   useEffect(() => {
     if (!belowPlatformWater) return;
-    if (lightWaterDrop !== normalizedImmediateWaterDrops[2]) setLightWaterDrop(normalizedImmediateWaterDrops[2]);
-    if (flatWaterDrop !== normalizedImmediateWaterDrops[1]) setFlatWaterDrop(normalizedImmediateWaterDrops[1]);
-    if (darkWaterDrop !== normalizedImmediateWaterDrops[0]) setDarkWaterDrop(normalizedImmediateWaterDrops[0]);
+    if (lightWaterDrop !== normalizedImmediateWaterDrops[Shade.Light]) setLightWaterDrop(normalizedImmediateWaterDrops[Shade.Light]);
+    if (flatWaterDrop !== normalizedImmediateWaterDrops[Shade.Flat]) setFlatWaterDrop(normalizedImmediateWaterDrops[Shade.Flat]);
+    if (darkWaterDrop !== normalizedImmediateWaterDrops[Shade.Dark]) setDarkWaterDrop(normalizedImmediateWaterDrops[Shade.Dark]);
   }, [
     belowPlatformWater,
     lightWaterDrop,
@@ -738,47 +707,34 @@ const Index = () => {
     normalizedImmediateWaterDrops,
   ]);
 
-  const setNormalizedWaterDrop = useCallback((shade: 0 | 1 | 2, rawValue: number) => {
+  const setNormalizedWaterDrop = useCallback((shade: WaterDropShade, rawValue: number) => {
     const normalizedValue = Math.max(0, Math.trunc(rawValue) || 0);
-    const nextDrops = normalizeUsedWaterDrops({
-      0: shade === 0 ? normalizedValue : darkWaterDrop,
-      1: shade === 1 ? normalizedValue : flatWaterDrop,
-      2: shade === 2 ? normalizedValue : lightWaterDrop,
-    }, usedWaterShades, shade);
+    const nextDrops = normalizeUsedWaterDrops(
+      buildWaterDropInputs(
+        shade === Shade.Dark ? normalizedValue : darkWaterDrop,
+        shade === Shade.Flat ? normalizedValue : flatWaterDrop,
+        shade === Shade.Light ? normalizedValue : lightWaterDrop,
+      ),
+      usedWaterShades,
+      shade,
+    );
 
-    setLightWaterDrop(nextDrops[2]);
-    setFlatWaterDrop(nextDrops[1]);
-    setDarkWaterDrop(nextDrops[0]);
+    setLightWaterDrop(nextDrops[Shade.Light]);
+    setFlatWaterDrop(nextDrops[Shade.Flat]);
+    setDarkWaterDrop(nextDrops[Shade.Dark]);
   }, [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades]);
 
-  const supportFillerBlockId = useMemo(
-    () => normalizeBlockId(supportFillerBlock),
-    [supportFillerBlock],
-  );
-  const supportFillerIsFragile = useMemo(
-    () => supportFillerBlockId.length > 0 && isFragileBlock(supportFillerBlockId),
-    [supportFillerBlockId],
-  );
-  const supportWaterSidesFillerValid = useMemo(
-    () => isWaterSideSupportFillerValid(supportFillerBlock),
-    [supportFillerBlock],
-  );
+  const normalizedSupportFillerBlockId = normalizeBlockId(supportFillerBlock);
+  const supportFillerIsFragile =
+    normalizedSupportFillerBlockId.length > 0 && isFragileBlock(normalizedSupportFillerBlockId);
+  const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(supportFillerBlock);
   const commitSupportFillerBlock = useCallback((value: string) => {
     if (isFillerDisabled(value)) setSupportMode(SupportMode.None);
   }, []);
-  const shadeFillerShadingDisabled = useMemo(() => isShadeFillerDisabled(shadeFillerBlock), [shadeFillerBlock]);
-  const dominateVoidFillerShadingDisabled = useMemo(
-    () => isShadeFillerDisabled(dominateVoidFillerBlock || shadeFillerBlock),
-    [dominateVoidFillerBlock, shadeFillerBlock],
-  );
-  const recessiveVoidFillerShadingDisabled = useMemo(
-    () => isShadeFillerDisabled(recessiveVoidFillerBlock || shadeFillerBlock),
-    [recessiveVoidFillerBlock, shadeFillerBlock],
-  );
-  const lateFillerShadingDisabled = useMemo(
-    () => isShadeFillerDisabled(suppress2LayerLateFillerBlock || shadeFillerBlock),
-    [suppress2LayerLateFillerBlock, shadeFillerBlock],
-  );
+  const shadeFillerShadingDisabled = isShadeFillerDisabled(shadeFillerBlock);
+  const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(dominateVoidFillerBlock || shadeFillerBlock);
+  const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(recessiveVoidFillerBlock || shadeFillerBlock);
+  const lateFillerShadingDisabled = isShadeFillerDisabled(suppress2LayerLateFillerBlock || shadeFillerBlock);
   const uiFillerAssignments = useMemo(
     () => createFillerAssignments(
       supportFillerBlock,
@@ -807,59 +763,49 @@ const Index = () => {
     return [...usedBaseColors].filter(idx => idx > 0 && !preset.blocks[idx]);
   }, [imageValid, usedBaseColors, preset.blocks]);
 
-  const paletteUsageInfo = imageStats?.paletteUsageInfo ?? null;
-
   const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
   const isStepRangeMode = isSuppressStepsBuildMode(effectiveBuildMode);
   const isNorthSouthSuppressStepDirection =
     suppressStepDirection === SuppressStepDirection.NorthToSouth ||
     suppressStepDirection === SuppressStepDirection.SouthToNorth;
   const maxRangeIndex = useMemo(
-    () => getBuildModeRangeMax(effectiveBuildMode) + (isStepRangeMode && belowPlatformWater && (imageStats?.hasWater ?? false) ? 1 : 0),
-    [effectiveBuildMode, isStepRangeMode, belowPlatformWater, imageStats],
+    () => getBuildModeRangeMax(effectiveBuildMode) + (isStepRangeMode && belowPlatformWater && imageHasWater ? 1 : 0),
+    [effectiveBuildMode, isStepRangeMode, belowPlatformWater, imageHasWater],
   );
   const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
-  const supportShape = useMemo(
-    () => effectiveBuildMode === BuildMode.Flat
-      ? northlineShape
-      : (shapeMap?.[effectiveBuildMode] ?? null),
-    [shapeMap, effectiveBuildMode, northlineShape],
-  );
-  const candidateVisibleInPart = useCallback(
-    (part: NonNullable<typeof supportShape>["parts"][number], candidate: { x: number; y: number; z: number }) => {
-      const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
-      return isWithinShapeBounds(candidate, part.bounds, supportFloorYs);
-    },
-    [applySupportFloorYs],
-  );
+  const supportShape = effectiveBuildMode === BuildMode.Flat
+    ? northlineShape
+    : (shapeMap?.[effectiveBuildMode] ?? null);
   const enableStepsSupportOption = !imageData || !!supportShape?.parts.some(part =>
       [...part.cells.entries()].some(([coord, cell]) => {
       if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
       const [x, y, z] = parseShapeCoordKey(coord);
-      return candidateVisibleInPart(part, { x, y, z });
+      const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+      return isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs);
     }),
   );
   const enableFragileSupportOption = useMemo(() => {
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
-      return Object.values(preset.blocks).some(hasFragileMappedBlock) || customColors.some(color => hasFragileMappedBlock(color.block));
+      return Object.values(preset.blocks).some(hasFragileMappedBlock) || customColors.some(color => hasFragileMappedBlock(color.blocks[0] ?? ""));
     }
     if (!supportShape) return false;
     return supportShape.parts.some(part =>
       [...part.cells.entries()].some(([coord, cell]) => {
         if (!isShapeFillerCell(cell)) return false;
         const [x, y, z] = parseShapeCoordKey(coord);
-        if (!candidateVisibleInPart(part, { x, y, z })) return false;
+        const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+        if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) return false;
         if (!cell.includes(FillerRole.SupportFragile)) return false;
         const color = getSupportedColorAbove(part, coord);
         if (!color) return false;
         const mapped = color.isCustom
-          ? (customColors[color.id]?.block ?? "")
+          ? (customColors[color.id]?.blocks[0] ?? "")
           : (preset.blocks[color.id] || BASE_COLORS[color.id].blocks[0] || "");
         return hasFragileMappedBlock(mapped);
       }),
     );
-  }, [imageData, supportShape, preset.blocks, customColors, candidateVisibleInPart]);
+  }, [imageData, supportShape, preset.blocks, customColors, applySupportFloorYs]);
   const staircaseModeOptions = useMemo((): ModeOption[] => {
     if (!shapeMap || !imageValid || isFlatShape) {
       return DEFAULT_STAIRCASE_OPTIONS;
@@ -877,8 +823,8 @@ const Index = () => {
     !isFlatShape &&
     isSuppressStepsBuildMode(buildMode);
 
-  const shadingMethodTooltip = useMemo(() => messages.buildMode.tooltip(buildMode), [buildMode]);
-  const supportModeTooltip = useMemo(() => messages.supportMode.tooltip(supportMode), [supportMode]);
+  const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
+  const supportModeTooltip = messages.supportMode.tooltip(supportMode);
   const suppressStepNorthSouthWarning = useMemo(
     () =>
       showSuppressStepDirectionControl &&
@@ -895,8 +841,6 @@ const Index = () => {
       suppressStepDirection,
     ],
   );
-
-  const effectiveShape = supportShape;
   const buildMaterialAnalysisOptions = useCallback(
     (fillerAssignments: FillerAssignment[]) => ({
       blockMapping: preset.blocks,
@@ -909,11 +853,11 @@ const Index = () => {
   );
 
   const materialNeedStats = useMemo(() => {
-    if (!effectiveShape || !imageValid) return null;
-    return analyzeMaterialNeeds(imageColorGrid, effectiveShape, buildMaterialAnalysisOptions(uiFillerAssignments));
-  }, [effectiveShape, imageValid, imageColorGrid, buildMaterialAnalysisOptions, uiFillerAssignments]);
+    if (!supportShape || !imageValid) return null;
+    return analyzeMaterialNeeds(imageColorGrid, supportShape, buildMaterialAnalysisOptions(uiFillerAssignments));
+  }, [supportShape, imageValid, imageColorGrid, buildMaterialAnalysisOptions, uiFillerAssignments]);
   const supportModeRoleCounts = useMemo(() => {
-    if (!effectiveShape || !imageValid) return null;
+    if (!supportShape || !imageValid) return null;
 
     const analyzeMode = (mode: SupportMode) => {
       const modeUsesDirectWaterSides =
@@ -921,14 +865,14 @@ const Index = () => {
         (mode === SupportMode.All || mode === SupportMode.Water);
       const waterAvailabilitySupportFiller =
         modeUsesDirectWaterSides && !supportWaterSidesFillerValid
-          ? (BASE_COLORS[0].blocks[0] || supportFillerBlock)
+          ? (BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks[0] || supportFillerBlock)
           : supportFillerBlock;
       const shouldReuseCurrentStats =
         mode === supportMode &&
         materialNeedStats &&
         !(modeUsesDirectWaterSides && !supportWaterSidesFillerValid);
       if (shouldReuseCurrentStats) return materialNeedStats.fillerRoleCounts;
-      return analyzeMaterialNeeds(imageColorGrid, effectiveShape, buildMaterialAnalysisOptions(
+      return analyzeMaterialNeeds(imageColorGrid, supportShape, buildMaterialAnalysisOptions(
         createFillerAssignments(
           waterAvailabilitySupportFiller,
           shadeFillerBlock,
@@ -947,7 +891,7 @@ const Index = () => {
       [SupportMode.Water]: analyzeMode(SupportMode.Water),
     };
   }, [
-    effectiveShape,
+    supportShape,
     imageValid,
     imageColorGrid,
     buildMaterialAnalysisOptions,
@@ -967,18 +911,25 @@ const Index = () => {
       roles.reduce((sum, role) => sum + (supportModeRoleCounts?.[mode]?.get(role) ?? 0), 0),
     [supportModeRoleCounts],
   );
+  const allSupportRoles = useMemo(
+    () => getSupportModeFillerRoles(SupportMode.All, usesWaterForWater, usesIceForWater),
+    [usesWaterForWater, usesIceForWater],
+  );
+  const waterSupportRoles = useMemo(
+    () => getSupportModeFillerRoles(SupportMode.Water, usesWaterForWater, usesIceForWater),
+    [usesWaterForWater, usesIceForWater],
+  );
+  const activeSupportRoles = useMemo(
+    () => getSupportModeFillerRoles(supportMode, usesWaterForWater, usesIceForWater),
+    [supportMode, usesWaterForWater, usesIceForWater],
+  );
   const enableAllSupportOption = !imageData || getSupportModeRoleCount(
     SupportMode.All,
-    FillerRole.SupportAll,
-    ...(usesWaterForWater ? [FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered] : []),
-    FillerRole.WaterPath,
-    ...(usesIceForWater ? [FillerRole.SupportWaterBase] : []),
+    ...allSupportRoles,
   ) > 0;
   const enableWaterSupportOption = !imageData || getSupportModeRoleCount(
     SupportMode.Water,
-    ...(usesWaterForWater
-      ? [FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered, FillerRole.WaterPath]
-      : [FillerRole.SupportWaterBase, FillerRole.WaterPath]),
+    ...waterSupportRoles,
   ) > 0;
   const showSupportModeSelector = !imageData || (
     enableAllSupportOption ||
@@ -986,36 +937,16 @@ const Index = () => {
     enableWaterSupportOption ||
     (!supportFillerIsFragile && enableFragileSupportOption)
   );
-  const materialCounts = useMemo(() => materialNeedStats?.blockCounts ?? null, [materialNeedStats]);
-  const numUniqueColorShadesForPart = useMemo(
-    () => materialNeedStats?.numUniqueColorShadesForPart ?? (paletteUsageInfo?.uniqueShadeCount ?? 0),
-    [materialNeedStats, paletteUsageInfo],
-  );
-  const usedShadesByBase = useMemo(
-    () => materialNeedStats?.usedShadesByBase ?? fullImageUsedShadesByBase,
-    [materialNeedStats, fullImageUsedShadesByBase],
-  );
-  const formatRequiredCount = useCallback(
-    (count: number) => (showStacks ? formatStacks(count) : count),
-    [showStacks],
-  );
+  const materialCounts = materialNeedStats?.blockCounts ?? null;
+  const numUniqueColorShadesForPart = materialNeedStats?.numUniqueColorShadesForPart ?? (paletteUsageInfo?.uniqueShadeCount ?? 0);
+  const usedShadesByBase = materialNeedStats?.usedShadesByBase ?? fullImageUsedShadesByBase;
+  const formatRequiredCount = (count: number) => (showStacks ? formatStacks(count) : count);
+  const colorRequiredMap = materialNeedStats?.baseColorCounts ?? ({} as Record<number, number>);
+  const [rebaneRolePrefix, rebaneRoleSuffix] = messages.credits.rebaneRoleParts();
+  const numColorBlockTypesForPart = Object.values(colorRequiredMap).filter(count => count > 0).length;
 
-  const colorRequiredMap = useMemo(() => {
-    return materialNeedStats?.baseColorCounts ?? ({} as Record<number, number>);
-  }, [materialNeedStats]);
-  const [rebaneRolePrefix, rebaneRoleSuffix] = useMemo(
-    () => messages.credits.rebaneRoleParts(),
-    [],
-  );
-  const numColorBlockTypesForPart = useMemo(
-    () => Object.values(colorRequiredMap).filter(count => count > 0).length,
-    [colorRequiredMap],
-  );
-
-  const isBuiltinUnedited = useMemo(() => {
-    const builtin = getBuiltinPreset(preset.name);
-    return builtin ? arePresetBlocksEqual(builtin.blocks, preset.blocks) : false;
-  }, [preset]);
+  const builtinPreset = getBuiltinPreset(preset.name);
+  const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.blocks, preset.blocks) : false;
 
   useEffect(() => {
     const clampedStart = Math.max(0, Math.min(colStart, maxRangeIndex));
@@ -1113,7 +1044,9 @@ const Index = () => {
       for (let i = 0; i < BASE_COLORS.length; ++i) {
         const bc = BASE_COLORS[i];
         if (bc.r === cc.r && bc.g === cc.g && bc.b === cc.b) {
-          (map[i] ??= []).includes(cc.block) || map[i].push(cc.block);
+          for (const block of cc.blocks) {
+            (map[i] ??= []).includes(block) || map[i].push(block);
+          }
         }
       }
     }
@@ -1136,7 +1069,7 @@ const Index = () => {
       required: (a, b) => dir * ((colorRequiredMap[a] || 0) - (colorRequiredMap[b] || 0)),
     };
     return sorters[sortKey] ? base.sort(sorters[sortKey]) : base;
-  }, [sortKey, sortDir, materialCounts, colorRequiredMap, showTransparentRow]);
+  }, [sortKey, sortDir, colorRequiredMap, showTransparentRow]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
@@ -1160,7 +1093,7 @@ const Index = () => {
   const sortArrow = (key: SortKey) => (sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "");
 
   const updateBlock = (baseIndex: number, block: string) => {
-    const nextBlock = canonicalizeBlockEntry(block);
+    const nextBlock = sanitizeUserBlockEntry(block);
     const currentBlock = preset.blocks[baseIndex] ?? "";
     if (nextBlock === currentBlock) return;
 
@@ -1355,11 +1288,11 @@ const Index = () => {
   }, [handleFile]);
 
   const handleConvertAndDownload = async () => {
-    if (!effectiveShape) return;
+    if (!supportShape) return;
     setConverting(true);
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
-      const result = await convertToNbt(effectiveShape, {
+      const result = await convertToNbt(supportShape, {
         blockMapping: preset.blocks,
         fillerAssignments: uiFillerAssignments,
         applySupportFloorYs,
@@ -1382,15 +1315,15 @@ const Index = () => {
   };
 
   const addCustomColor = () => {
-    const block = canonicalizeBlockEntry(newCustom.block);
+    const block = sanitizeUserBlockEntry(newCustom.block);
     if (!block) return;
     if (customMode === "custom") {
       const [r, g, b] = [newCustom.r, newCustom.g, newCustom.b].map(v => parseInt(v));
       if ([r, g, b].some(isNaN)) return;
-      setCustomColors(prev => [...prev, { r, g, b, block }]);
+      setCustomColors(prev => [...prev, { r, g, b, blocks: [block] }]);
     } else {
       const { r, g, b } = BASE_COLORS[customMode];
-      setCustomColors(prev => [...prev, { r, g, b, block }]);
+      setCustomColors(prev => [...prev, { r, g, b, blocks: [block] }]);
     }
     setNewCustom({ r: "", g: "", b: "", block: "" });
   };
@@ -1408,16 +1341,16 @@ const Index = () => {
   };
 
   const fillerNeedStats = useMemo(
-    () => effectiveShape ? analyzeFillerNeeds(effectiveShape) : null,
-    [effectiveShape],
+    () => supportShape ? analyzeFillerNeeds(supportShape) : null,
+    [supportShape],
   );
   const northRowSingleLine = useMemo(
-    () => effectiveShape ? generatedShapeNooblineIsSingleY(effectiveShape) : true,
-    [effectiveShape],
+    () => supportShape ? generatedShapeNooblineIsSingleY(supportShape) : true,
+    [supportShape],
   );
 
   const canGenerate = imageValid && missingBlocks.length === 0;
-  const hasRequiredCol = materialCounts !== null;
+  const hasRequiredCol = materialNeedStats !== null;
   const northRowFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeNorthRow) ?? 0;
   const suppressFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeSuppress) ?? 0;
   const lateSuppressFillerCount = fillerNeedStats?.roleCounts.get(FillerRole.ShadeSuppressLate) ?? 0;
@@ -1439,39 +1372,7 @@ const Index = () => {
     usesWaterForWater &&
     getSupportModeRoleCount(supportMode, FillerRole.SupportWaterSides) > 0 &&
     !supportWaterSidesFillerValid;
-  const supportFillerRequiredCount = useMemo(() => {
-    switch (supportMode) {
-      case SupportMode.Steps:
-        return getRequiredFillerRoleCount(
-          FillerRole.StairStep,
-          FillerRole.WaterPath,
-          FillerRole.SupportWaterBase,
-        );
-      case SupportMode.All:
-        return getRequiredFillerRoleCount(
-          FillerRole.SupportAll,
-          FillerRole.SupportWaterSides,
-          FillerRole.SupportWaterSidesCovered,
-          FillerRole.WaterPath,
-          FillerRole.SupportWaterBase,
-        );
-      case SupportMode.Fragile:
-        return getRequiredFillerRoleCount(
-          FillerRole.SupportFragile,
-          FillerRole.SupportWaterBase,
-        );
-      case SupportMode.Water:
-        return getRequiredFillerRoleCount(
-          FillerRole.SupportWaterSides,
-          FillerRole.SupportWaterSidesCovered,
-          FillerRole.SupportWaterBase,
-          FillerRole.WaterPath,
-        );
-      case SupportMode.None:
-      default:
-        return 0;
-    }
-  }, [getRequiredFillerRoleCount, supportMode]);
+  const supportFillerRequiredCount = getRequiredFillerRoleCount(...activeSupportRoles);
   const hasInGridFillerNeed = suppressFillerCount + lateSuppressFillerCount > 0;
   const inGridShadingCountsAsWarning = hasInGridFillerNeed && isSuppressBuildMode(effectiveBuildMode);
   const hasComplexNorthNeed = northRowFillerCount > 0 && (showNooblineWarnings || !northRowSingleLine);
@@ -1497,7 +1398,7 @@ const Index = () => {
     !!imageData &&
     recessiveVoidFillerRequiredCount > 0;
   const previewVsFillerReplacements = useVsFillerPreviewReplacements({
-    shape: effectiveShape,
+    shape: supportShape,
     shadeFillerBlock,
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
@@ -1857,7 +1758,6 @@ const Index = () => {
     usedIndices.length,
     unusedIndices.length,
     showUnusedColors,
-    hasNonFlatShades,
     buildMode,
   ]);
 
@@ -1902,7 +1802,6 @@ const Index = () => {
     fillerToolbarMinWidthPx,
     imageData,
     buildMode,
-    hasNonFlatShades,
   ]);
 
   const colWidthMap: Record<ColumnId, string> = {
@@ -1958,15 +1857,15 @@ const Index = () => {
   const getColorSwatchStyle = useCallback((idx: number): React.CSSProperties => {
     const shades = getColorSwatchShades(idx);
     if (shades.length <= 1) {
-      const shade = shades[0] ?? 2;
-      const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
+      const shade = shades[0] ?? Shade.Light;
+      const [r, g, b] = getShadedRgb({ id: idx, shade });
       return { backgroundColor: `rgb(${r},${g},${b})` };
     }
 
     const stops: string[] = [];
     for (let i = 0; i < shades.length; ++i) {
       const shade = shades[i];
-      const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
+      const [r, g, b] = getShadedRgb({ id: idx, shade });
       const color = `rgb(${r},${g},${b})`;
       const start = (i * 100) / shades.length;
       const end = ((i + 1) * 100) / shades.length;
@@ -2008,7 +1907,7 @@ const Index = () => {
   );
 
   const getShadeTooltip = (idx: number, shade: Shade): string => {
-    const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
+    const [r, g, b] = getShadedRgb({ id: idx, shade });
     const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
     return messages.swatches.shadeTooltip(hex, shade);
   };
@@ -2039,7 +1938,7 @@ const Index = () => {
     const y = Math.min(rect.height - 0.001, Math.max(0, e.clientY - rect.top));
     const bandHeight = rect.height / swatchShades.length;
     const bandIndex = Math.min(swatchShades.length - 1, Math.max(0, Math.floor(y / bandHeight)));
-    return swatchShades[bandIndex] ?? swatchShades[0] ?? 2;
+    return swatchShades[bandIndex] ?? swatchShades[0] ?? Shade.Light;
   }, []);
 
   const handleSwatchTooltip = useCallback((e: React.MouseEvent<HTMLDivElement>, idx: number, swatchShades: Shade[]) => {
@@ -2102,7 +2001,7 @@ const Index = () => {
             onMouseLeave={() => queueSwatchTooltip(null)}
             onClick={e => {
               const shade = getSwatchShadeAtPointer(e, swatchShades);
-              const [r, g, b] = getShadedRgb({ baseIndex: idx, shade });
+              const [r, g, b] = getShadedRgb({ id: idx, shade });
               copyColorToClipboard(r, g, b);
             }}
           />
@@ -2284,39 +2183,64 @@ const Index = () => {
             <div
               className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
             >
-              <span className="text-xs font-semibold text-accent">{messages.presets.label}</span>
-              <div className="inline-flex items-center gap-1">
-                <select
-                  className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
-                  value={activeIdx}
-                  onChange={e => selectPreset(Number(e.target.value))}
-                  title={activePresetBuiltinTooltip}
-                >
-                  <optgroup label={messages.presets.builtInGroupLabel}>
-                    {presets.slice(0, BUILTIN_PRESET_NAMES.length).map((p, i) => (
-                      <option key={i} value={i} title={messages.presets.builtinTooltip(p.name)}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                  {presets.length > BUILTIN_PRESET_NAMES.length && (
-                    <optgroup label={messages.presets.customGroupLabel}>
-                      {presets.slice(BUILTIN_PRESET_NAMES.length).map((p, i) => (
-                        <option key={i + BUILTIN_PRESET_NAMES.length} value={i + BUILTIN_PRESET_NAMES.length}>
+              <div className="inline-flex items-center gap-1.5 shrink-0">
+                <span className="text-xs font-semibold text-accent">{messages.presets.label}</span>
+                <div className="inline-flex items-center gap-1">
+                  <select
+                    className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
+                    value={activeIdx}
+                    onChange={e => selectPreset(Number(e.target.value))}
+                    title={activePresetBuiltinTooltip}
+                  >
+                    <optgroup label={messages.presets.builtInGroupLabel}>
+                      {presets.slice(0, BUILTIN_PRESET_NAMES.length).map((p, i) => (
+                        <option key={i} value={i} title={messages.presets.builtinTooltip(p.name)}>
                           {p.name}
                         </option>
                       ))}
                     </optgroup>
+                    {presets.length > BUILTIN_PRESET_NAMES.length && (
+                      <optgroup label={messages.presets.customGroupLabel}>
+                        {presets.slice(BUILTIN_PRESET_NAMES.length).map((p, i) => (
+                          <option key={i + BUILTIN_PRESET_NAMES.length} value={i + BUILTIN_PRESET_NAMES.length}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  {presetDirty && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title={messages.common.unsavedChanges} />
                   )}
-                </select>
-                {presetDirty && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title={messages.common.unsavedChanges} />
+                </div>
+                {!isBuiltinUnedited && (
+                  <button
+                    className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
+                    onClick={sharePreset}
+                  >
+                    {messages.common.share}
+                  </button>
                 )}
+                {activeIdx >= BUILTIN_PRESET_NAMES.length && presets.length > BUILTIN_PRESET_NAMES.length && (
+                  <button
+                    className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
+                    onClick={deletePreset}
+                  >
+                    {messages.common.deleteShort}
+                  </button>
+                )}
+                <button
+                  className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20"
+                  onClick={createPreset}
+                  title={messages.common.newPresetTitle}
+                >
+                  +
+                </button>
               </div>
               {showSupportModeSelector && (
                 <>
                   <span className="h-4 border-l border-border/70" />
-                  <div className="inline-flex items-center gap-1">
+                  <div className="inline-flex items-center gap-1 shrink-0">
                     <span className="text-xs font-semibold text-accent whitespace-nowrap">{messages.supportMode.label}</span>
                     <select
                       className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
@@ -2347,29 +2271,6 @@ const Index = () => {
                   </div>
                 </>
               )}
-              {!isBuiltinUnedited && (
-                <button
-                  className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
-                  onClick={sharePreset}
-                >
-                  {messages.common.share}
-                </button>
-              )}
-              {activeIdx >= BUILTIN_PRESET_NAMES.length && presets.length > BUILTIN_PRESET_NAMES.length && (
-                <button
-                  className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
-                  onClick={deletePreset}
-                >
-                  {messages.common.deleteShort}
-                </button>
-              )}
-              <button
-                className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20"
-                onClick={createPreset}
-                title={messages.common.newPresetTitle}
-              >
-                +
-              </button>
               {imageData && (!isFlatShape || showAnyWaterDropControl) && (
                 <div className="ml-auto flex items-center gap-1">
                   {visibleWaterLevelControls.map(({ shade, value }) => {
@@ -2387,7 +2288,7 @@ const Index = () => {
                         >
                           <Droplets className="h-3 w-3" />
                           <span>{shade}</span>
-                          <ArrowDown className="h-3 w-3" />
+                          <ArrowDownToLine className="h-3 w-3" />
                         </span>
                         <span className="sr-only">{ariaLabel}</span>
                         <input
@@ -2894,7 +2795,7 @@ const Index = () => {
                     <span className="font-mono text-[10px]">
                       ({cc.r},{cc.g},{cc.b})
                     </span>
-                    <span className="font-mono text-[10px] text-primary">→ {cc.block}</span>
+                    <span className="font-mono text-[10px] text-primary">→ {cc.blocks.join(" | ")}</span>
                     <button
                       className="text-destructive text-[10px] hover:underline"
                       onClick={() => setCustomColors(prev => prev.filter((_, j) => j !== i))}
@@ -3383,4 +3284,6 @@ const Index = () => {
   );
 };
 
+// Callers:
+// - src/main.tsx
 export default Index;

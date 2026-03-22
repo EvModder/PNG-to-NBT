@@ -6,7 +6,6 @@
  *
  * Callers:
  * - src/lib/nbtExport.ts
- * - src/lib/shapeSubstitution.ts
  */
 
 class NbtWriter {
@@ -63,7 +62,6 @@ const TAG = {
 
 // Callers:
 // - src/lib/nbtExport.ts
-// - src/lib/shapeSubstitution.ts
 export interface BlockEntry {
   x: number;
   y: number;

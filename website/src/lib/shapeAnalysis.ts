@@ -10,20 +10,28 @@
  * - src/Index.tsx
  * - src/lib/previewImageEdits.ts
  */
-import { WATER_BASE_INDEX } from "../data/mapColors";
-import { MAP_SIZE, type ColorGrid, getColorCell, isTransparentColor } from "./colorGridTypes";
-import { FillerRole, type CustomColor, type FillerAssignment } from "./conversionTypes";
+import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
+import { type ColorGrid, type ColorRgbCustom, type Shade } from "@/types/color";
+import type { ShapePart } from "@/types/shape";
+import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor } from "@/utils/color";
+import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
-import type { GeneratedShape } from "./shapeGeneration";
-import { isShapeColorCell, isShapeFillerCell, parseShapeCoordKey, type ShapePart, ShapePartType } from "./shapeTypes";
-import { isWithinShapeBounds, NO_SUPPORT_FLOORS, shouldIncludeFragileSupportCell } from "./shapeCellRules";
+import { ShapePartType, type GeneratedShape } from "@/types/shape";
+import {
+  isShapeColorCell,
+  isShapeFillerCell,
+  isWithinShapeBounds,
+  NO_SUPPORT_FLOORS,
+  parseShapeCoordKey,
+  shouldIncludeFragileSupportCell,
+} from "./shapeModel";
 
 interface FillerNeedStats {
   roleCounts: Map<FillerRole, number>;
 }
 
-export interface FillerRolePixel {
+interface FillerRolePixel {
   x: number;
   z: number;
   role: FillerRole;
@@ -33,13 +41,13 @@ interface MaterialNeedStats {
   blockCounts: Record<string, number>;
   baseColorCounts: Record<number, number>;
   numUniqueColorShadesForPart: number;
-  usedShadesByBase: Map<number, Set<number>>;
+  usedShadesByBase: Map<number, Set<Shade>>;
   fillerRoleCounts: Map<FillerRole, number>;
 }
 
 type MaterialAnalysisOptions = {
   blockMapping: Record<number, string>;
-  customColors: CustomColor[];
+  customColors: ColorRgbCustom[];
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
   xColumnRange?: [number, number];
@@ -50,7 +58,7 @@ interface PartMaterialNeedStats {
   blockCounts: Record<string, number>;
   baseColorCounts: Record<number, number>;
   visibleColorKeys: Set<string>;
-  usedShadesByBase: Map<number, Set<number>>;
+  usedShadesByBase: Map<number, Set<Shade>>;
   fillerRoleCounts: Map<FillerRole, number>;
 }
 
@@ -64,10 +72,10 @@ function maximizeCounts(into: Record<string, number>, from: Record<string, numbe
   }
 }
 
-function addUsedShade(usedShadesByBase: Map<number, Set<number>>, baseIndex: number, shade: number): void {
+function addUsedShade(usedShadesByBase: Map<number, Set<Shade>>, baseIndex: number, shade: Shade): void {
   let shades = usedShadesByBase.get(baseIndex);
   if (!shades) {
-    shades = new Set<number>();
+    shades = new Set<Shade>();
     usedShadesByBase.set(baseIndex, shades);
   }
   shades.add(shade);
@@ -84,7 +92,7 @@ function addRoleCount(map: Map<FillerRole, number>, role: FillerRole, amount = 1
 }
 
 function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): string | null {
-  const color = getColorCell(colorGrid, x, z);
+  const color = z >= 0 && z < MAP_SIZE ? colorGrid[x][z] : TRANSPARENT_COLOR;
   if (isTransparentColor(color)) return null;
   return `${color.isCustom ? 1 : 0}:${color.id}:${color.shade}`;
 }
@@ -100,24 +108,24 @@ function analyzePartMaterialNeeds(
   const blockCounts: Record<string, number> = {};
   const baseColorCounts: Record<number, number> = {};
   const visibleColorKeys = new Set<string>();
-  const usedShadesByBase = new Map<number, Set<number>>();
+  const usedShadesByBase = new Map<number, Set<Shade>>();
   const fillerRoleCounts = new Map<FillerRole, number>();
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
 
     if (isShapeColorCell(cell)) {
-      if (!cell.isCustom && cell.id === 0) continue;
+      if (!cell.isCustom && cell.id === TRANSPARENCY_BASE_INDEX) continue;
       const blockName = resolveShapeColorBlockName(cell, options);
       if (!blockName) continue;
       const displayName = toDisplayName(blockName);
       addCount(blockCounts, displayName);
-      if (!cell.isCustom && cell.id !== 0) {
+      if (!cell.isCustom && cell.id !== TRANSPARENCY_BASE_INDEX) {
         baseColorCounts[cell.id] = (baseColorCounts[cell.id] || 0) + 1;
       }
       const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);
       if (visibleKey !== null) visibleColorKeys.add(visibleKey);
-      if (!cell.isCustom) addUsedShade(usedShadesByBase, cell.id, getColorCell(colorGrid, x, z).shade);
+      if (!cell.isCustom) addUsedShade(usedShadesByBase, cell.id, colorGrid[x][z].shade);
       continue;
     }
 
@@ -235,7 +243,7 @@ export function analyzeMaterialNeeds(
     const blockCounts: Record<string, number> = {};
     const baseColorCounts: Record<number, number> = {};
     const visibleColorKeys = new Set<string>();
-    const usedShadesByBase = new Map<number, Set<number>>();
+    const usedShadesByBase = new Map<number, Set<Shade>>();
     const fillerRoleCounts = new Map<FillerRole, number>();
 
     for (let i = start; i <= end && i < shape.parts.length; ++i) {
@@ -272,7 +280,7 @@ export function analyzeMaterialNeeds(
   const blockCounts: Record<string, number> = {};
   const baseColorCounts: Record<number, number> = {};
   const visibleColorKeys = new Set<string>();
-  const usedShadesByBase = new Map<number, Set<number>>();
+  const usedShadesByBase = new Map<number, Set<Shade>>();
   const fillerRoleCounts = new Map<FillerRole, number>();
 
   for (const part of shape.parts) {

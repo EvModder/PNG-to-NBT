@@ -2,12 +2,9 @@
  * Public API:
  * - Shade
  * - SHADE_MULTIPLIERS
+ * - TRANSPARENCY_BASE_INDEX
  * - WATER_BASE_INDEX
  * - BASE_COLORS
- * - ColorShade
- * - packRgb()
- * - unpackRgb()
- * - getShadedRgb()
  *
  * Callers:
  * - src/Index.tsx
@@ -15,13 +12,25 @@
  * - src/data/i18n/*
  * - src/data/mapColorsExcluded.ts
  * - src/data/presets.ts
- * - src/lib/colorGridTypes.ts
+ * - src/utils/color.ts
+ * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/fillerRules.ts
- * - src/lib/messages.ts
  * - src/lib/materialRules.ts
- * - src/lib/shapeCellRules.ts
+ * - src/lib/previewImageEdits.ts
+ * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeModel.ts
+ * - tests/run.mts
  */
+// Callers:
+// - src/Index.tsx
+// - src/data/colorSortOrder.ts
+// - src/data/i18n/*
+// - src/lib/colorGridAnalysis.ts
+// - src/lib/colorGridParsing.ts
+// - tests/run.mts
+export { Shade } from "@/types/color";
+import type { ColorRgbBase } from "@/types/color";
 
 /* Intentional omission policy (enforced/audited by `bun run audit:mapcolors`):
  * - Explicitly excluded block IDs (unobtainable):
@@ -51,37 +60,27 @@
  * - State-specific entries are used where one block ID can map to multiple map colors
  * depending on state (for example, `*_log[axis=x]` vs `*_log`).
  */
-
+// Callers:
+// - src/lib/colorGridParsing.ts
+// - src/utils/color.ts
+export const SHADE_MULTIPLIERS = [180, 220, 255, 135] as const;
 
 // Callers:
 // - src/Index.tsx
-// - src/data/i18n/*
-// - src/lib/colorGridTypes.ts
-// - src/lib/messages.ts
-// Index 0=dark, 1=flat, 2=light, 3=darkest (not obtainable)
-export enum Shade {
-  Dark = 0,
-  Flat = 1,
-  Light = 2,
-  Darkest = 3,
-}
-
-// Callers:
-// - src/lib/colorGridParsing.ts
-export const SHADE_MULTIPLIERS = [180, 220, 255, 135] as const;
-
-interface BaseColor {
-  name: string;
-  r: number;
-  g: number;
-  b: number;
-  blocks: string[]; // possible block IDs (without minecraft: prefix)
-}
+// - src/utils/color.ts
+// - src/lib/colorGridAnalysis.ts
+// - src/lib/fillerRules.ts
+// - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysis.ts
+// - tests/run.mts
+export const TRANSPARENCY_BASE_INDEX = 0;
 
 // WATER is the only base color with special logic; current hardcoding has it stored at index 12
 // Callers:
 // - src/Index.tsx
-// - src/lib/colorGridTypes.ts
+// - src/utils/color.ts
+// - src/lib/shapeAnalysis.ts
+// - tests/run.mts
 export const WATER_BASE_INDEX = 12;
 
 // 62 base colors (index 0 = transparent/NONE)
@@ -93,8 +92,11 @@ export const WATER_BASE_INDEX = 12;
 // - src/lib/colorGridParsing.ts
 // - src/lib/fillerRules.ts
 // - src/lib/materialRules.ts
-// - src/lib/shapeCellRules.ts
-export const BASE_COLORS: BaseColor[] = [
+// - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeModel.ts
+// - tests/run.mts
+export const BASE_COLORS: ColorRgbBase[] = [
   { name: "NONE", r: 0, g: 0, b: 0, blocks: ["glass", "glass_pane", "iron_bars", "chain", "end_rod", "ladder", "rail", "powered_rail", "detector_rail", "activator_rail", "lever", "torch", "wall_torch", "soul_torch", "soul_wall_torch", "redstone_wire", "repeater", "comparator", "tripwire_hook", "tripwire", "flower_pot", "cake"] },
   { name: "GRASS", r: 127, g: 178, b: 56, blocks: ["grass_block", "slime_block"] },
   { name: "SAND", r: 247, g: 233, b: 163, blocks: ["sand", "suspicious_sand", "sandstone", "sandstone_slab", "cut_sandstone", "cut_sandstone_slab", "smooth_sandstone", "smooth_sandstone_slab", "chiseled_sandstone", "candle", "ochre_froglight", "glowstone", "end_stone", "end_stone_bricks", "end_stone_brick_slab", "bone_block", "scaffolding", "birch_log", "stripped_birch_log", "birch_wood", "stripped_birch_wood", "birch_planks", "birch_slab", "birch_pressure_plate", "turtle_egg"] },
@@ -158,33 +160,3 @@ export const BASE_COLORS: BaseColor[] = [
   { name: "RAW_IRON", r: 216, g: 175, b: 147, blocks: ["raw_iron_block"] },
   { name: "GLOW_LICHEN", r: 127, g: 167, b: 150, blocks: ["verdant_froglight", "glow_lichen[down=true]"] },
 ];
-
-// Packed RGB lookup value → { baseIndex, shade }.
-// Callers:
-// - src/lib/colorGridParsing.ts
-export interface ColorShade {
-  baseIndex: number;
-  shade: Shade;
-}
-
-// Callers:
-// - src/lib/colorGridParsing.ts
-export function packRgb(r: number, g: number, b: number): number {
-  return (r << 16) | (g << 8) | b;
-}
-
-// Callers:
-// - src/lib/colorGridParsing.ts
-// - src/lib/messages.ts
-export function unpackRgb(key: number): [number, number, number] {
-  return [(key >> 16) & 255, (key >> 8) & 255, key & 255];
-}
-
-// Get the shaded RGB for display
-// Callers:
-// - src/Index.tsx
-export function getShadedRgb(color: ColorShade): [number, number, number] {
-  const { r, g, b } = BASE_COLORS[color.baseIndex];
-  const m = SHADE_MULTIPLIERS[color.shade];
-  return [Math.floor((r * m) / 255), Math.floor((g * m) / 255), Math.floor((b * m) / 255)];
-}

@@ -25,28 +25,29 @@ import {
   DEFAULT_SUPPRESS_STEP_DIRECTION,
   DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
 } from "@/data/defaultSettings";
-import { BASE_COLORS, WATER_BASE_INDEX, type Shade } from "@/data/mapColors";
+import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
-import { canonicalizeBlockEntry, normalizeBlockId } from "@/lib/blockId";
+import { normalizeBlockId, sanitizeUserBlockEntry } from "@/utils/blockId";
 import { computeColorGridStats, hasStepMixOpportunity } from "@/lib/colorGridAnalysis";
 import { convertImageToColorGrid } from "@/lib/colorGridParsing";
+import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import {
-  BuildMode,
-  SuppressStepDirection,
   buildModeUsesPaletteSeed,
   isSuppressStepsBuildMode,
-  type CustomColor,
-} from "@/lib/conversionTypes";
+} from "@/utils/conversion";
+import type { ColorRgbCustom } from "@/types/color";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { createFillerAssignments, isFillerDisabled } from "@/lib/fillerRules";
 import { convertToNbt } from "@/lib/nbtExport";
 import { hasNonWaterColorHeightVariance } from "@/lib/shapeAnalysis";
-import { StaircaseWaterHandling, generateShapeMap } from "@/lib/shapeGeneration";
-import { SupportMode } from "@/lib/uiTypes";
+import { generateShapeMap } from "@/lib/shapeGeneration";
+import { SupportMode } from "@/types/ui";
 
 const TEST_ROOT = import.meta.dir;
 const CASES_ROOT = path.join(TEST_ROOT, "cases");
 const FAILURE_ROOT = path.join(TEST_ROOT, "failures");
-const WATER_DROP_INPUT_ORDER = [2, 1, 0] as const;
+const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
+type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 if (typeof globalThis.ImageData === "undefined") {
@@ -87,8 +88,16 @@ type ExportFixtureSettings = {
   forceZ129: boolean;
   belowPlatformWater: boolean;
   convertUnsupported: boolean;
-  customColors: CustomColor[];
+  customColors: ColorRgbCustom[];
   presetOverrides: Record<string, string>;
+};
+
+type RawFixtureCustomColor = {
+  r: number;
+  g: number;
+  b: number;
+  block?: string;
+  blocks?: string[];
 };
 
 type FixtureCaseFile = {
@@ -125,33 +134,16 @@ function resolveEffectiveFillerBlock(rawValue: string, defaultValue: string): st
   return rawValue.trim() || defaultValue;
 }
 
-function hashString32(input: string): number {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < input.length; ++i) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h >>> 0;
-}
-
-function getPaletteSeedOffset(blockMapping: Record<number, string>): number {
-  const serialized = Array.from(
-    { length: BASE_COLORS.length - 1 },
-    (_, i) => `${i + 1}:${blockMapping[i + 1] ?? ""}`,
-  ).join("|");
-  return hashString32(serialized);
-}
-
 function normalizeUsedWaterDrops(
-  rawDrops: Record<0 | 1 | 2, number>,
-  usedWaterShades: ReadonlySet<number>,
-  preferredFirstShade?: 0 | 1 | 2,
-): Record<0 | 1 | 2, number> {
-  const next: Record<0 | 1 | 2, number> = {
-    0: Math.max(0, rawDrops[0] || 0),
-    1: Math.max(0, rawDrops[1] || 0),
-    2: Math.max(0, rawDrops[2] || 0),
-  };
+  rawDrops: Record<WaterDropShade, number>,
+  usedWaterShades: ReadonlySet<Shade>,
+  preferredFirstShade?: WaterDropShade,
+): readonly [dark: number, flat: number, light: number] {
+  const next: [number, number, number] = [
+    Math.max(0, rawDrops[Shade.Dark] || 0),
+    Math.max(0, rawDrops[Shade.Flat] || 0),
+    Math.max(0, rawDrops[Shade.Light] || 0),
+  ];
   const usedValues = new Set<number>();
   const orderedShades = preferredFirstShade === undefined
     ? WATER_DROP_INPUT_ORDER
@@ -166,6 +158,37 @@ function normalizeUsedWaterDrops(
   }
 
   return next;
+}
+
+function deriveImageStatsViews(imageStats: ReturnType<typeof computeColorGridStats>) {
+  const usedShadesByBase = new Map<number, Set<Shade>>();
+  let hasTransparency = false;
+
+  for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
+    if (colorKey.isCustom) {
+      continue;
+    }
+
+    if (colorKey.id === TRANSPARENCY_BASE_INDEX) {
+      if ((shadeFrequencyMap.get(Shade.Dark) ?? 0) > 0) hasTransparency = true;
+      continue;
+    }
+
+    const shades = new Set<Shade>();
+    for (const shade of shadeFrequencyMap.keys()) {
+      shades.add(shade);
+    }
+    usedShadesByBase.set(colorKey.id, shades);
+  }
+
+  const usedWaterShades = usedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>();
+  return {
+    allSameShade: imageStats.allSameShade,
+    hasTransparency,
+    imageHasWater: usedWaterShades.size > 0,
+    imageHasNonLightWater: usedWaterShades.has(Shade.Dark) || usedWaterShades.has(Shade.Flat),
+    usedWaterShades,
+  };
 }
 
 function sha256(data: Uint8Array): string {
@@ -608,7 +631,7 @@ function buildPreset(presetName: string, presetOverrides: Record<string, string>
     if (typeof rawBlock !== "string") {
       throw new Error(`Preset override for base color ${rawBaseIndex} must be a string`);
     }
-    blocks[baseIndex] = canonicalizeBlockEntry(rawBlock);
+    blocks[baseIndex] = sanitizeUserBlockEntry(rawBlock);
   }
 
   return { name: basePreset.name, blocks };
@@ -632,8 +655,20 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     throw new Error(`Invalid suppressStepDirection: ${String(settings.suppressStepDirection)}`);
   }
 
-  const customColors = settings.customColors ?? [];
-  if (!Array.isArray(customColors)) throw new Error(`customColors must be an array`);
+  const rawCustomColors = settings.customColors ?? [];
+  if (!Array.isArray(rawCustomColors)) throw new Error(`customColors must be an array`);
+  const customColors = rawCustomColors.map((color, index): ColorRgbCustom => {
+    const rawColor = color as RawFixtureCustomColor;
+    const blocks = Array.isArray(rawColor.blocks)
+      ? rawColor.blocks
+      : typeof rawColor.block === "string"
+        ? [rawColor.block]
+        : [];
+    if (typeof rawColor.r !== "number" || typeof rawColor.g !== "number" || typeof rawColor.b !== "number") {
+      throw new Error(`customColors[${index}] must include numeric r, g, b values`);
+    }
+    return { r: rawColor.r, g: rawColor.g, b: rawColor.b, blocks };
+  });
 
   const presetOverrides = settings.presetOverrides ?? {};
   if (typeof presetOverrides !== "object" || presetOverrides === null || Array.isArray(presetOverrides)) {
@@ -724,7 +759,10 @@ async function runFixtureCase(
 
   const colorGrid = analysis.colorGrid;
   const imageStats = computeColorGridStats(colorGrid);
-  const usedWaterShades = imageStats.usedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>();
+  const derivedImageStats = deriveImageStatsViews(imageStats);
+  const usedWaterShades = derivedImageStats.usedWaterShades;
+  const imageHasWater = derivedImageStats.imageHasWater;
+  const imageHasNonLightWater = derivedImageStats.imageHasNonLightWater;
   const selectedWaterBlock = testCase.preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
@@ -752,28 +790,18 @@ async function runFixtureCase(
   const supportFillerDisabled = isFillerDisabled(effectiveSupportFillerBlock);
   const waterDrops = normalizeUsedWaterDrops(
     {
-      0: testCase.settings.darkWaterDrop,
-      1: testCase.settings.flatWaterDrop,
-      2: testCase.settings.lightWaterDrop,
+      [Shade.Dark]: testCase.settings.darkWaterDrop,
+      [Shade.Flat]: testCase.settings.flatWaterDrop,
+      [Shade.Light]: testCase.settings.lightWaterDrop,
     },
     usedWaterShades,
   );
-
-  const staircaseWaterHandling =
-    testCase.settings.belowPlatformWater
-      ? StaircaseWaterHandling.Dropped
-      : imageStats.hasNonLightWater &&
-        !supportFillerDisabled &&
-        testCase.settings.supportMode !== SupportMode.None &&
-        (usesIceForWater || testCase.settings.supportMode === SupportMode.Water)
-        ? StaircaseWaterHandling.Supported
-        : StaircaseWaterHandling.Standard;
+  const activeWaterDrops = testCase.settings.belowPlatformWater ? waterDrops : undefined;
 
   const showMixStepsToggle =
     isSuppressStepsBuildMode(testCase.settings.buildMode) &&
     hasStepMixOpportunity(colorGrid, {
-      belowPlatformWater: testCase.settings.belowPlatformWater,
-      waterDrops,
+      waterDrops: activeWaterDrops,
     });
 
   const paletteSeedOffset =
@@ -785,20 +813,17 @@ async function runFixtureCase(
 
   const shapeMap = generateShapeMap(
     colorGrid,
+    derivedImageStats.allSameShade,
+    imageHasWater,
+    derivedImageStats.hasTransparency,
+    twoLayerHasLateVoidNeed,
     {
       layerGap: testCase.settings.layerGap,
       mixSteps: showMixStepsToggle && testCase.settings.mixSteps,
       paletteSeed: paletteSeedOffset,
-      staircaseWaterHandling,
-      waterDrops,
+      waterDrops: activeWaterDrops,
       selectedMode: testCase.settings.buildMode,
       selectedStepDirection: testCase.settings.suppressStepDirection,
-    },
-    {
-      hasWater: imageStats.hasWater,
-      hasTransparency: imageStats.hasTransparency,
-      uniformNonFlatDirection: imageStats.uniformNonFlatDirection,
-      hasTwoLayerLateVoidNeed: twoLayerHasLateVoidNeed,
     },
   );
 
@@ -819,15 +844,14 @@ async function runFixtureCase(
     selectedWaterBlock,
     usesWaterForWater,
     usesIceForWater,
-    staircaseWaterHandling,
+    belowPlatformWater: testCase.settings.belowPlatformWater,
     supportFillerDisabled,
     waterDrops,
     imageStats: {
-      hasWater: imageStats.hasWater,
-      hasNonLightWater: imageStats.hasNonLightWater,
-      hasTransparency: imageStats.hasTransparency,
-      hasNonFlatShades: imageStats.hasNonFlatShades,
-      uniformNonFlatDirection: imageStats.uniformNonFlatDirection,
+      allSameShade: derivedImageStats.allSameShade,
+      hasWater: imageHasWater,
+      hasNonLightWater: imageHasNonLightWater,
+      hasTransparency: derivedImageStats.hasTransparency,
       voidShadowStats: imageStats.voidShadowStats,
     },
     requestedSettings: testCase.settings,

@@ -5,10 +5,10 @@
  * Callers:
  * - src/lib/messages.ts
  */
-import { Shade } from "@/data/mapColors";
-import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
+import { Shade } from "@/types/color";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { type MessageCatalog } from "@/data/i18n/en";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
+import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
 
 type PluralForms = {
   zero?: string;

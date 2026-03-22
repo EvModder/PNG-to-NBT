@@ -7,9 +7,9 @@
  * - src/data/i18n/*
  * - src/lib/messages.ts
  */
-import { Shade } from "@/data/mapColors";
-import { BuildMode, SuppressStepDirection } from "@/lib/conversionTypes";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/lib/uiTypes";
+import { Shade } from "@/types/color";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
 
 type PluralForms = {
   zero?: string;

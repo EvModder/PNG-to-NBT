@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - createFillerAssignments()
+ * - getSupportModeFillerRoles()
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
  * - isWaterSideSupportFillerValid()
@@ -12,15 +13,15 @@
  * Callers:
  * - src/Index.tsx
  * - src/lib/shapeAnalysis.ts
- * - src/lib/shapeSubstitution.ts
+ * - src/lib/nbtExport.ts
  */
-import { BASE_COLORS } from "../data/mapColors";
-import { normalizeBlockId } from "./blockId";
-import { FillerRole, type FillerAssignment } from "./conversionTypes";
+import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "../data/mapColors";
+import { normalizeBlockId } from "@/utils/blockId";
+import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { resolveBlockName } from "./materialRules";
-import { SupportMode } from "./uiTypes";
+import { SupportMode } from "@/types/ui";
 
-const TRANSPARENT_FILLER_BLOCKS = new Set<string>(BASE_COLORS[0].blocks.map(normalizeBlockId));
+const TRANSPARENT_FILLER_BLOCKS = new Set<string>(BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId));
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
 
 function isShadeCriticalFillerRole(role: FillerRole): boolean {
@@ -34,6 +35,52 @@ function isShadeCriticalFillerRole(role: FillerRole): boolean {
     default:
       return false;
   }
+}
+
+// Callers:
+// - src/Index.tsx
+export function getSupportModeFillerRoles(
+  supportMode: SupportMode,
+  usesDirectWaterBlock: boolean,
+  usesIceWaterBlock: boolean,
+): FillerRole[] {
+  const roles: FillerRole[] = [];
+
+  switch (supportMode) {
+    case SupportMode.Steps:
+      roles.push(FillerRole.StairStep, FillerRole.WaterPath);
+      break;
+    case SupportMode.All:
+      roles.push(FillerRole.SupportAll);
+      if (usesDirectWaterBlock) {
+        roles.push(FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered);
+      }
+      roles.push(FillerRole.WaterPath);
+      break;
+    case SupportMode.Fragile:
+      roles.push(FillerRole.SupportFragile);
+      break;
+    case SupportMode.Water:
+      if (usesDirectWaterBlock) {
+        roles.push(FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered);
+      } else {
+        roles.push(FillerRole.SupportWaterBase);
+      }
+      roles.push(FillerRole.WaterPath);
+      break;
+    case SupportMode.None:
+      break;
+  }
+
+  if (
+    supportMode !== SupportMode.None &&
+    usesIceWaterBlock &&
+    !roles.includes(FillerRole.SupportWaterBase)
+  ) {
+    roles.push(FillerRole.SupportWaterBase);
+  }
+
+  return roles;
 }
 
 // Callers:
@@ -55,40 +102,8 @@ export function createFillerAssignments(
     { role: FillerRole.ShadeVoidRecessive, block: recessiveVoidFillerBlock || shadeFillerBlock },
     { role: FillerRole.ShadeSuppressLate, block: suppress2LayerLateFillerBlock || shadeFillerBlock },
   ];
-  switch (supportMode) {
-    case SupportMode.Steps:
-      assignments.push({ role: FillerRole.StairStep, block: supportFillerBlock });
-      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
-      break;
-    case SupportMode.All:
-      assignments.push({ role: FillerRole.SupportAll, block: supportFillerBlock });
-      if (usesDirectWaterBlock) {
-        assignments.push({ role: FillerRole.SupportWaterSides, block: supportFillerBlock });
-        assignments.push({ role: FillerRole.SupportWaterSidesCovered, block: supportFillerBlock });
-      }
-      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
-      break;
-    case SupportMode.Fragile:
-      assignments.push({ role: FillerRole.SupportFragile, block: supportFillerBlock });
-      break;
-    case SupportMode.Water:
-      if (usesDirectWaterBlock) {
-        assignments.push({ role: FillerRole.SupportWaterSides, block: supportFillerBlock });
-        assignments.push({ role: FillerRole.SupportWaterSidesCovered, block: supportFillerBlock });
-      } else {
-        assignments.push({ role: FillerRole.SupportWaterBase, block: supportFillerBlock });
-      }
-      assignments.push({ role: FillerRole.WaterPath, block: supportFillerBlock });
-      break;
-    case SupportMode.None:
-      break;
-  }
-  if (
-    supportMode !== SupportMode.None &&
-    usesIceWaterBlock &&
-    !assignments.some(({ role }) => role === FillerRole.SupportWaterBase)
-  ) {
-    assignments.push({ role: FillerRole.SupportWaterBase, block: supportFillerBlock });
+  for (const role of getSupportModeFillerRoles(supportMode, usesDirectWaterBlock, usesIceWaterBlock)) {
+    assignments.push({ role, block: supportFillerBlock });
   }
   return assignments;
 }
@@ -121,7 +136,7 @@ export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
 
 // Callers:
 // - src/lib/shapeAnalysis.ts
-// - src/lib/shapeSubstitution.ts
+// - src/lib/nbtExport.ts
 export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[]): Map<FillerRole, string> {
   const byRole = new Map<FillerRole, string>();
   for (const assignment of assignments) {
@@ -132,7 +147,7 @@ export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[
 
 // Callers:
 // - src/lib/shapeAnalysis.ts
-// - src/lib/shapeSubstitution.ts
+// - src/lib/nbtExport.ts
 export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, role: FillerRole): string | null {
   const block = assignments.get(role) ?? "";
   if (!block) return null;

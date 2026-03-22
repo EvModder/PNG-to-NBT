@@ -74,6 +74,8 @@ function startPreviewImageSession(
   };
 }
 
+// Callers:
+// - src/Index.tsx
 export function usePreviewImageUrl(
   { imageData, pixelReplacements }: UsePreviewImageUrlOptions,
 ): string | null {

@@ -1,89 +1,25 @@
 /**
  * Public API:
- * - CustomColor
- * - BuildMode
- * - FillerRole
  * - isStaircaseBuildMode()
  * - isSuppressBuildMode()
+ * - isSuppressStepsBuildMode()
  * - buildModeUsesLayerGap()
  * - buildModeUsesPaletteSeed()
  * - getBuildModeRangeMax()
  * - getVisibleSuppressBuildModes()
- * - SuppressStepDirection
  * - isSuppressStepDirection()
  * - getBuildModeDownloadSuffix()
  * - getSuppressStepDirectionRotationDegrees()
  * - cycleSuppressStepDirection()
- * - FillerAssignment
  *
  * Callers:
- * - src/data/defaultSettings.ts
  * - src/Index.tsx
- * - src/data/i18n/*
- * - src/lib/fillerRules.ts
- * - src/lib/materialRules.ts
- * - src/lib/messages.ts
+ * - src/lib/nbtExport.ts
  * - src/lib/presetCodec.ts
- * - src/lib/previewImageEdits.ts
- * - src/lib/shapeAnalysis.ts
- * - src/lib/shapeCellRules.ts
  * - src/lib/shapeGeneration.ts
- * - src/lib/shapeSubstitution.ts
- * - src/lib/shapeTypes.ts
+ * - tests/run.mts
  */
-// Callers:
-// - src/data/defaultSettings.ts
-// - src/Index.tsx
-// - src/lib/materialRules.ts
-// - src/lib/presetCodec.ts
-// - src/lib/shapeAnalysis.ts
-// - src/lib/shapeCellRules.ts
-// - src/lib/shapeSubstitution.ts
-export interface CustomColor {
-  r: number;
-  g: number;
-  b: number;
-  block: string;
-}
-
-// Callers:
-// - src/data/defaultSettings.ts
-// - src/Index.tsx
-// - src/data/i18n/*
-// - src/lib/messages.ts
-// - src/lib/presetCodec.ts
-// - src/lib/shapeGeneration.ts
-export enum BuildMode {
-  Flat = "flat",
-  InclineUp = "incline_up",
-  InclineDown = "incline_down",
-  StaircaseNorthline = "staircase_northline",
-  StaircaseSouthline = "staircase_southline",
-  StaircaseClassic = "staircase_classic",
-  StaircaseValley = "staircase_valley",
-  StaircaseGrouped = "staircase_grouped",
-  StaircaseParty = "staircase_party",
-  SuppressSplitRow = "suppress_split_row",
-  SuppressSplitChecker = "suppress_split_checker",
-  SuppressStepPairs = "suppress_step_pairs",
-  SuppressStepChecker = "suppress_step_checker",
-  Suppress2Layer = "suppress_2layer",
-  Suppress2LayerLateFillers = "suppress_2layer_late_fillers",
-  Suppress2LayerLatePairs = "suppress_2layer_late_pairs",
-}
-
-// Callers:
-// - src/data/defaultSettings.ts
-// - src/Index.tsx
-// - src/lib/messages.ts
-// - src/lib/presetCodec.ts
-// - src/lib/shapeGeneration.ts
-export enum SuppressStepDirection {
-  EastToWest = "east_to_west",
-  WestToEast = "west_to_east",
-  NorthToSouth = "north_to_south",
-  SouthToNorth = "south_to_north",
-}
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 
 const SUPPRESS_STEP_DIRECTIONS = [
   SuppressStepDirection.WestToEast,
@@ -95,6 +31,7 @@ const SUPPRESS_STEP_DIRECTIONS = [
 // Callers:
 // - src/Index.tsx
 // - src/lib/presetCodec.ts
+// - tests/run.mts
 export function isSuppressStepDirection(raw: unknown): raw is SuppressStepDirection {
   return Object.values(SuppressStepDirection).includes(raw as SuppressStepDirection);
 }
@@ -113,7 +50,7 @@ function getDirectionSuffix(direction: SuppressStepDirection): string {
 }
 
 // Callers:
-// - src/Index.tsx
+// - src/lib/nbtExport.ts
 export function getBuildModeDownloadSuffix(
   buildMode: BuildMode,
   direction: SuppressStepDirection,
@@ -169,32 +106,6 @@ export function getSuppressStepDirectionRotationDegrees(direction: SuppressStepD
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/fillerRules.ts
-// - src/lib/shapeAnalysis.ts
-// - src/lib/shapeCellRules.ts
-// - src/lib/shapeGeneration.ts
-// - src/lib/previewImageEdits.ts
-// - src/lib/shapeTypes.ts
-export enum FillerRole {
-  ShadeNorthRow = "shade_north_row",
-  ShadeSuppress = "shade_suppress",
-  ShadeSuppressLate = "shade_suppress_late",
-  ShadeVoidDominant = "shade_void_dominant",
-  ShadeVoidRecessive = "shade_void_recessive",
-
-  StairStep = "convenience_stair_step",
-  WaterPath = "convenience_water_path",
-
-  SupportAll = "support_all",
-  SupportFragile = "support_fragile",
-  SupportWaterBase = "support_water_base",
-  SupportWaterSides = "support_water_sides",
-  SupportWaterSidesCovered = "support_water_sides_covered",
-}
-
-// Callers:
-// - src/Index.tsx
-// - src/lib/shapeGeneration.ts
 export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Flat:
@@ -221,6 +132,7 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
+// - tests/run.mts
 export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.SuppressStepPairs:
@@ -248,6 +160,7 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
+// - tests/run.mts
 export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
   return buildMode === BuildMode.StaircaseParty;
 }
@@ -294,14 +207,4 @@ export function cycleSuppressStepDirection(
   const index = SUPPRESS_STEP_DIRECTIONS.indexOf(stepDirection);
   if (index < 0) return SUPPRESS_STEP_DIRECTIONS[0];
   return SUPPRESS_STEP_DIRECTIONS[(index + 1) % SUPPRESS_STEP_DIRECTIONS.length];
-}
-
-// Callers:
-// - src/Index.tsx
-// - src/lib/fillerRules.ts
-// - src/lib/shapeAnalysis.ts
-// - src/lib/shapeSubstitution.ts
-export interface FillerAssignment {
-  role: FillerRole;
-  block: string;
 }

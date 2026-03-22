@@ -1,4 +1,5 @@
 # My crap
+tests/failures/
 sample_imgs/
 website/reports/
 upstream-compare-*/

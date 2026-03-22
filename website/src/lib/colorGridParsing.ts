@@ -5,29 +5,25 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - tests/run.mts
  */
 import * as UTIF from "utif";
-import { BASE_COLORS, Shade, type ColorShade, SHADE_MULTIPLIERS, packRgb, unpackRgb } from "@/data/mapColors";
+import { BASE_COLORS, SHADE_MULTIPLIERS } from "@/data/mapColors";
+import { packRgb, unpackRgb } from "@/utils/color";
 import { messages, type PaletteNotice } from "@/lib/messages";
-import { type ColorData, type ColorGrid, MAP_SIZE, TRANSPARENT_COLOR } from "./colorGridTypes";
+import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
+import { type ColorGrid, Shade, type ColorRgbCustom, type ShadedColorRef } from "@/types/color";
 
-interface CustomColorLike {
-  r: number;
-  g: number;
-  b: number;
-  block: string;
-}
-
-interface ColorGridAnalysis {
+interface ColorGridParseResult {
   imageData: ImageData;
   colorGrid: ColorGrid;
   paletteNotices: PaletteNotice[];
   hasBlockingIssue: boolean;
 }
 
-let baseColorLookup: Map<number, ColorShade> | null = null;
+let baseColorLookup: Map<number, ShadedColorRef> | null = null;
 
-function getBaseColorLookup(): Map<number, ColorShade> {
+function getBaseColorLookup(): Map<number, ShadedColorRef> {
   if (baseColorLookup) return baseColorLookup;
   baseColorLookup = new Map();
   for (let i = 1; i < BASE_COLORS.length; ++i) {
@@ -36,20 +32,20 @@ function getBaseColorLookup(): Map<number, ColorShade> {
       const mr = Math.floor((r * SHADE_MULTIPLIERS[shade]) / 255);
       const mg = Math.floor((g * SHADE_MULTIPLIERS[shade]) / 255);
       const mb = Math.floor((b * SHADE_MULTIPLIERS[shade]) / 255);
-      baseColorLookup.set(packRgb(mr, mg, mb), { baseIndex: i, shade });
+      baseColorLookup.set(packRgb(mr, mg, mb), { isCustom: false, id: i, shade });
     }
   }
   return baseColorLookup;
 }
 
 function createEmptyColorGrid(): ColorGrid {
-  return Array.from({ length: MAP_SIZE }, () => Array<ColorData>(MAP_SIZE).fill(TRANSPARENT_COLOR));
+  return Array.from({ length: MAP_SIZE }, () => Array<ShadedColorRef>(MAP_SIZE).fill(TRANSPARENT_COLOR));
 }
 
-function buildCustomShadeLookup(customColors: CustomColorLike[]): Map<number, ColorData> {
-  const lookup = new Map<number, ColorData>();
+function buildCustomShadeLookup(customColors: ColorRgbCustom[]): Map<number, ShadedColorRef> {
+  const lookup = new Map<number, ShadedColorRef>();
   for (const [customIndex, color] of customColors.entries()) {
-    if (!color.block?.trim()) continue;
+    if (!color.blocks.some(block => block.trim() !== "")) continue;
     for (const shade of [Shade.Dark, Shade.Flat, Shade.Light] as const) {
       const r = Math.floor((color.r * SHADE_MULTIPLIERS[shade]) / 255);
       const g = Math.floor((color.g * SHADE_MULTIPLIERS[shade]) / 255);
@@ -63,8 +59,8 @@ function buildCustomShadeLookup(customColors: CustomColorLike[]): Map<number, Co
 
 function scanImageToColorGrid(
   imageData: ImageData,
-  baseLookup: Map<number, ColorShade>,
-  customLookup: Map<number, ColorData>,
+  baseLookup: Map<number, ShadedColorRef>,
+  customLookup: Map<number, ShadedColorRef>,
 ): { colorGrid: ColorGrid; unsupportedColors: number[] } {
   const colorGrid = createEmptyColorGrid();
   const unsupported = new Set<number>();
@@ -80,7 +76,7 @@ function scanImageToColorGrid(
       const key = packRgb(imageData.data[idx], imageData.data[idx + 1], imageData.data[idx + 2]);
       const baseMatch = baseLookup.get(key);
       if (baseMatch) {
-        colorGrid[x][z] = { isCustom: false, id: baseMatch.baseIndex, shade: baseMatch.shade };
+        colorGrid[x][z] = baseMatch;
         continue;
       }
 
@@ -101,7 +97,7 @@ function cloneImageData(imageData: ImageData): ImageData {
   return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
 }
 
-function convertUnsupportedToNearestBasePalette(imageData: ImageData, baseLookup: Map<number, ColorShade>) {
+function convertUnsupportedToNearestBasePalette(imageData: ImageData, baseLookup: Map<number, ShadedColorRef>) {
   const availableColors = [...baseLookup.keys()].map(key => {
     const [r, g, b] = unpackRgb(key);
     return { r, g, b };
@@ -203,11 +199,12 @@ function buildConversionNotices(convertedCount: number, totalInputColorCount: nu
 
 // Callers:
 // - src/Index.tsx
+// - tests/run.mts
 export function convertImageToColorGrid(
   imageData: ImageData,
-  customColors: CustomColorLike[],
+  customColors: ColorRgbCustom[],
   convertUnsupported = false,
-): ColorGridAnalysis {
+): ColorGridParseResult {
   const baseLookup = getBaseColorLookup();
   const customLookup = buildCustomShadeLookup(customColors);
   const hasSizeError = imageData.width !== MAP_SIZE || imageData.height !== MAP_SIZE;
@@ -256,9 +253,9 @@ export function convertImageToColorGrid(
 // - src/Index.tsx
 export async function convertFileToColorGrid(
   file: File,
-  customColors: CustomColorLike[],
+  customColors: ColorRgbCustom[],
   convertUnsupported = false,
-): Promise<ColorGridAnalysis> {
+): Promise<ColorGridParseResult> {
   const imageData = await loadImageDataFromFile(file);
   return convertImageToColorGrid(imageData, customColors, convertUnsupported);
 }

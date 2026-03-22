@@ -1,7 +1,9 @@
 /**
  * Public API:
+ * - WaterDrops
+ * - ColorFrequencyMap
+ * - ColorGridStats
  * - PixelParity
- * - UniformNonFlatDirection
  * - getPixelParity()
  * - hasStepMixOpportunity()
  * - computeColorGridStats()
@@ -9,9 +11,11 @@
  * Callers:
  * - src/Index.tsx
  * - src/lib/shapeGeneration.ts
+ * - tests/run.mts
  */
-import { MAP_SIZE, type ColorGrid, isTransparentColor, isWaterColor } from "./colorGridTypes";
-import { Shade, type Shade as ShadeType } from "@/data/mapColors";
+import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
+import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
+import { type ColorGrid, Shade, type ColorRef } from "@/types/color";
 
 // Callers:
 // - src/lib/shapeGeneration.ts
@@ -21,26 +25,26 @@ export enum PixelParity {
 }
 
 // Callers:
+// - src/Index.tsx
 // - src/lib/shapeGeneration.ts
-export enum UniformNonFlatDirection {
-  AllLight = "all_light",
-  AllDark = "all_dark",
-  Mixed = "mixed",
-}
+// - tests/run.mts
+export type WaterDrops = readonly [dark: number, flat: number, light: number];
 
-interface ColorGridStats {
-  hasNonFlatShades: boolean;
-  hasTransparency: boolean;
-  hasWater: boolean;
-  hasNonLightWater: boolean;
-  uniformNonFlatDirection: UniformNonFlatDirection;
-  usedBaseColors: Set<number>;
+// Callers:
+// - src/Index.tsx
+// - tests/run.mts
+export type ColorFrequencyMap = Map<ColorRef, Map<Shade, number>>;
+
+// Callers:
+// - src/Index.tsx
+// - tests/run.mts
+export interface ColorGridStats {
+  allSameShade?: Shade;
+  colorFrequencyMap: ColorFrequencyMap;
   voidShadowStats: {
     dominant: number;
     recessive: number;
   };
-  paletteUsageInfo: { uniqueShadeCount: number; uniqueBaseColorCount: number };
-  usedShadesByBase: Map<number, Set<ShadeType>>;
 }
 
 // Callers:
@@ -49,45 +53,33 @@ export function getPixelParity(x: number, z: number): PixelParity {
   return ((x + z) & 1) === 0 ? PixelParity.Recessive : PixelParity.Dominant;
 }
 
-function isDarkShade(shade: ShadeType): boolean {
-  return shade === Shade.Dark || shade === Shade.Darkest;
-}
-
 // Callers:
 // - src/Index.tsx
+// - tests/run.mts
 export function hasStepMixOpportunity(
   colorGrid: ColorGrid,
-  options: { belowPlatformWater: boolean; waterDrops: Readonly<Record<Shade.Dark | Shade.Flat | Shade.Light, number>> },
+  options: { waterDrops?: WaterDrops },
 ): boolean {
+  const belowPlatformWater = options.waterDrops !== undefined;
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 1; z < MAP_SIZE; ++z) {
       const color = colorGrid[x][z];
       const north = colorGrid[x][z - 1];
       if (isTransparentColor(color) || isTransparentColor(north)) continue;
       if (isWaterColor(color)) {
-        if (!options.belowPlatformWater) return true;
+        if (!belowPlatformWater) return true;
         continue;
       }
       if (color.shade === Shade.Flat && !isWaterColor(north)) return true;
       if (!isWaterColor(north)) continue;
-      if (options.belowPlatformWater) {
+      if (belowPlatformWater) {
         const northWaterDrop = options.waterDrops[north.shade as Shade.Dark | Shade.Flat | Shade.Light];
         if (northWaterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${north.shade}`);
         if (color.shade === Shade.Flat && northWaterDrop === 0) return true;
         continue;
       }
       if (color.shade === Shade.Flat && north.shade === Shade.Light) return true;
-      if (isDarkShade(color.shade) && north.shade !== Shade.Light) return true;
-    }
-  }
-  return false;
-}
-
-function imageHasNonFlatShades(colorGrid: ColorGrid): boolean {
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = colorGrid[x][z];
-      if (!isTransparentColor(color) && color.shade !== Shade.Flat) return true;
+      if (color.shade === Shade.Dark && north.shade !== Shade.Light) return true;
     }
   }
   return false;
@@ -110,118 +102,56 @@ function analyzeVoidShadows(colorGrid: ColorGrid) {
   return stats;
 }
 
-function computePaletteUsageInfo(colorGrid: ColorGrid) {
-  const usedBaseColors = new Set<number>();
-  const usedShades = new Set<string>();
+function computeColorFrequencyMap(colorGrid: ColorGrid): ColorFrequencyMap {
+  const colorFrequencyMap = new Map<ColorRef, Map<Shade, number>>();
+  const baseKeys = new Map<number, ColorRef>();
+  const customKeys = new Map<number, ColorRef>();
+
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
       const color = colorGrid[x][z];
-      if (isTransparentColor(color)) continue;
-      if (color.isCustom) usedShades.add(`custom:${color.id}:${color.shade}`);
-      else {
-        usedBaseColors.add(color.id);
-        usedShades.add(`${color.id}:${color.shade}`);
+      const keyMap = color.isCustom ? customKeys : baseKeys;
+      let colorKey = keyMap.get(color.id);
+      if (!colorKey) {
+        colorKey = { id: color.id, isCustom: color.isCustom };
+        keyMap.set(color.id, colorKey);
+        colorFrequencyMap.set(colorKey, new Map<Shade, number>());
       }
+      const shadeFrequencyMap = colorFrequencyMap.get(colorKey);
+      if (!shadeFrequencyMap) throw new Error(`Missing shade frequency map for ${color.id}`);
+      shadeFrequencyMap.set(color.shade, (shadeFrequencyMap.get(color.shade) ?? 0) + 1);
     }
   }
-  return { uniqueShadeCount: usedShades.size, uniqueBaseColorCount: usedBaseColors.size };
+
+  return colorFrequencyMap;
 }
 
-function detectUniformNonFlatDirection(colorGrid: ColorGrid): UniformNonFlatDirection {
-  let sawNonTransparent = false;
-  let allLight = true;
-  let allDark = true;
+function findAllSameShade(colorFrequencyMap: ColorFrequencyMap): Shade | undefined {
+  let allSameShade: Shade | undefined;
 
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = colorGrid[x][z];
-      if (isTransparentColor(color)) continue;
-      sawNonTransparent = true;
-      if (color.shade !== Shade.Light) allLight = false;
-      if (color.shade !== Shade.Dark) allDark = false;
+  for (const [colorKey, shadeFrequencyMap] of colorFrequencyMap) {
+    if (!colorKey.isCustom && colorKey.id === TRANSPARENCY_BASE_INDEX) continue;
+    if (shadeFrequencyMap.size !== 1) return undefined;
+    const shade = shadeFrequencyMap.keys().next().value;
+    if (shade === undefined) continue;
+    if (allSameShade === undefined) {
+      allSameShade = shade;
+      continue;
     }
+    if (allSameShade !== shade) return undefined;
   }
 
-  if (!sawNonTransparent) return UniformNonFlatDirection.Mixed;
-  if (allLight) return UniformNonFlatDirection.AllLight;
-  if (allDark) return UniformNonFlatDirection.AllDark;
-  return UniformNonFlatDirection.Mixed;
-}
-
-function computeUsedShadesByBase(colorGrid: ColorGrid): Map<number, Set<ShadeType>> {
-  const used = new Map<number, Set<ShadeType>>();
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = colorGrid[x][z];
-      if (isTransparentColor(color) || color.isCustom) continue;
-      let shades = used.get(color.id);
-      if (!shades) {
-        shades = new Set<ShadeType>();
-        used.set(color.id, shades);
-      }
-      shades.add(color.shade);
-    }
-  }
-  return used;
-}
-
-function computeUsedBaseColors(colorGrid: ColorGrid): Set<number> {
-  const used = new Set<number>();
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = colorGrid[x][z];
-      if (color.isCustom) continue;
-      if (isTransparentColor(color)) {
-        used.add(0);
-        continue;
-      }
-      used.add(color.id);
-    }
-  }
-  return used;
-}
-
-function colorGridHasTransparency(colorGrid: ColorGrid): boolean {
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      if (isTransparentColor(colorGrid[x][z])) return true;
-    }
-  }
-  return false;
-}
-
-function colorGridHasWater(colorGrid: ColorGrid): boolean {
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      if (isWaterColor(colorGrid[x][z])) return true;
-    }
-  }
-  return false;
-}
-
-function colorGridHasNonLightWater(colorGrid: ColorGrid): boolean {
-  for (let x = 0; x < MAP_SIZE; ++x) {
-    for (let z = 0; z < MAP_SIZE; ++z) {
-      const color = colorGrid[x][z];
-      if (isWaterColor(color) && color.shade !== Shade.Light) return true;
-    }
-  }
-  return false;
+  return allSameShade;
 }
 
 // Callers:
 // - src/Index.tsx
+// - tests/run.mts
 export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
-  const voidShadowStats = analyzeVoidShadows(colorGrid);
+  const colorFrequencyMap = computeColorFrequencyMap(colorGrid);
   return {
-    hasNonFlatShades: imageHasNonFlatShades(colorGrid),
-    hasTransparency: colorGridHasTransparency(colorGrid),
-    hasWater: colorGridHasWater(colorGrid),
-    hasNonLightWater: colorGridHasNonLightWater(colorGrid),
-    uniformNonFlatDirection: detectUniformNonFlatDirection(colorGrid),
-    usedBaseColors: computeUsedBaseColors(colorGrid),
-    voidShadowStats,
-    paletteUsageInfo: computePaletteUsageInfo(colorGrid),
-    usedShadesByBase: computeUsedShadesByBase(colorGrid),
+    allSameShade: findAllSameShade(colorFrequencyMap),
+    colorFrequencyMap,
+    voidShadowStats: analyzeVoidShadows(colorGrid),
   };
 }

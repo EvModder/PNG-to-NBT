@@ -11,15 +11,22 @@
  * Callers:
  * - src/Index.tsx
  * - src/lib/presetCodec.ts
+ * - tests/run.mts
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import { STORAGE_KEYS } from "@/lib/storageKeys";
+import { STORAGE_KEYS } from "@/data/storageKeys";
 
+// Callers:
+// - src/Index.tsx
+// - src/lib/presetCodec.ts
+// - tests/run.mts
 export interface BlockPreset {
   name: string;
   blocks: Record<number, string>;
 }
 
+// Callers:
+// - src/Index.tsx
 export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear"] as const;
 
 function buildPistonClearPreset(): BlockPreset {
@@ -123,7 +130,7 @@ function buildFullblockPreset(): BlockPreset {
       16: "purpur_block",
       17: "light_blue_glazed_terracotta",
       18: "yellow_glazed_terracotta",
-      19: "lime_glazed_terracotta",
+      19: "melon",
       20: "pink_glazed_terracotta",
       21: "gray_glazed_terracotta",
       22: "light_gray_glazed_terracotta",
@@ -176,6 +183,8 @@ const BUILTIN_BUILDERS: Record<string, () => BlockPreset> = {
   Fullblock: buildFullblockPreset,
 };
 
+// Callers:
+// - src/Index.tsx
 export function arePresetBlocksEqual(
   left: Record<number, string>,
   right: Record<number, string>,
@@ -188,8 +197,15 @@ export function arePresetBlocksEqual(
   return true;
 }
 
+// Callers:
+// - src/Index.tsx
+// - tests/run.mts
 export const getBuiltinPreset = (name: string): BlockPreset | null => BUILTIN_BUILDERS[name]?.() ?? null;
+// Callers:
+// - src/Index.tsx
 export const isAutoCustomPresetName = (name: string): boolean => /^Custom(?: \d+)?$/.test(name);
+// Callers:
+// - src/Index.tsx
 export function findMatchingBuiltinPresetName(blocks: Record<number, string>): string | null {
   for (const name of BUILTIN_PRESET_NAMES) {
     const builtin = BUILTIN_BUILDERS[name]();
@@ -198,6 +214,8 @@ export function findMatchingBuiltinPresetName(blocks: Record<number, string>): s
   return null;
 }
 
+// Callers:
+// - src/Index.tsx
 export function loadPresets(): BlockPreset[] {
   const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => BUILTIN_BUILDERS[n]());
   try {

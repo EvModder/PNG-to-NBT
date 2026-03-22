@@ -7,11 +7,10 @@
  * Callers:
  * - src/lib/fillerRules.ts
  * - src/lib/shapeAnalysis.ts
- * - src/lib/shapeSubstitution.ts
+ * - src/lib/nbtExport.ts
  */
 import { BASE_COLORS } from "../data/mapColors";
-import type { CustomColor } from "./conversionTypes";
-import type { ShapeColor } from "./shapeTypes";
+import type { ColorRef, ColorRgbCustom } from "@/types/color";
 
 // Callers:
 // - src/lib/fillerRules.ts
@@ -53,13 +52,13 @@ export function toDisplayName(blockName: string): string {
 
 // Callers:
 // - src/lib/shapeAnalysis.ts
-// - src/lib/shapeSubstitution.ts
+// - src/lib/nbtExport.ts
 export function resolveShapeColorBlockName(
-  color: ShapeColor,
-  options: { blockMapping: Record<number, string>; customColors: CustomColor[] },
+  color: ColorRef,
+  options: { blockMapping: Record<number, string>; customColors: ColorRgbCustom[] },
 ): string | null {
   if (color.isCustom) {
-    const block = options.customColors[color.id]?.block ?? "";
+    const block = options.customColors[color.id]?.blocks[0] ?? "";
     return block ? resolveBlockName(block) : null;
   }
   const mapped = options.blockMapping[color.id] || BASE_COLORS[color.id].blocks[0];

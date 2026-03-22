@@ -1,6 +1,6 @@
 /**
  * Public API:
- * - BlockIconAtlasEntry
+ * - toBlockIconKey()
  * - getBlockIconAtlasEntry()
  *
  * Callers:
@@ -8,12 +8,25 @@
  */
 import { BLOCK_ICON_ATLASES, type BlockIconAtlasName } from "@/data/blockIconAtlases";
 
-export interface BlockIconAtlasEntry {
+interface BlockIconAtlasEntry {
   atlasSrc: string;
   columns: number;
   rows: number;
   col: number;
   row: number;
+}
+
+// Callers:
+// - src/Index.tsx
+export function toBlockIconKey(raw: string): string {
+  return raw
+    .replace(/^minecraft:/i, "")
+    .replace(/__/g, "__us__")
+    .replace(/\[/g, "__lb__")
+    .replace(/\]/g, "__rb__")
+    .replace(/=/g, "__eq__")
+    .replace(/,/g, "__cm__")
+    .replace(/:/g, "__cl__");
 }
 
 // Callers:

@@ -1,6 +1,5 @@
 /**
  * Public API:
- * - FullPreset
  * - encodeFullPreset()
  * - decodeFullPreset()
  *
@@ -9,16 +8,18 @@
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import { type BlockPreset } from "@/data/presets";
-import { BuildMode, SuppressStepDirection, type CustomColor, isSuppressStepDirection } from "@/lib/conversionTypes";
-import { SupportMode } from "@/lib/uiTypes";
+import type { ColorRgbCustom } from "@/types/color";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { isSuppressStepDirection } from "@/utils/conversion";
+import { SupportMode } from "@/types/ui";
 
-export interface FullPreset {
+interface FullPreset {
   blockPreset: BlockPreset;
   supportFiller?: string;
   shadeFiller?: string;
   supportMode?: SupportMode;
   buildMode?: BuildMode;
-  customColors?: CustomColor[];
+  customColors?: ColorRgbCustom[];
   convertUnsupported?: boolean;
   suppress2LayerLateFillerBlock?: string;
   proPaletteSeed?: boolean;
@@ -28,9 +29,11 @@ export interface FullPreset {
   recessiveVoidFillerBlock?: string;
 }
 
+// Callers:
+// - src/Index.tsx
 export function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: CustomColor[], convertUnsupported: boolean,
+  buildMode: BuildMode, customColors: ColorRgbCustom[], convertUnsupported: boolean,
   suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
@@ -40,7 +43,7 @@ export function encodeFullPreset(
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
   const customColorString = customColors.length > 0
-    ? customColors.map(color => `${color.r},${color.g},${color.b}:${color.block}`).join(";")
+    ? customColors.map(color => `${color.r},${color.g},${color.b}:${color.blocks.map(encodeURIComponent).join(",")}`).join(";")
     : "";
   const serialized = [
     preset.name,
@@ -61,6 +64,8 @@ export function encodeFullPreset(
   return btoa(serialized).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
+// Callers:
+// - src/Index.tsx
 export function decodeFullPreset(encoded: string): FullPreset | null {
   try {
     let serialized = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -86,11 +91,19 @@ export function decodeFullPreset(encoded: string): FullPreset | null {
       ? sections[6]
           .split(";")
           .map(entry => {
-            const [rgb, block] = entry.split(":");
+            const [rgb, encodedBlocks] = entry.split(":");
             const [r, g, b] = rgb.split(",").map(Number);
-            return { r, g, b, block: block || "" };
+            return {
+              r,
+              g,
+              b,
+              blocks: (encodedBlocks || "")
+                .split(",")
+                .filter(block => block !== "")
+                .map(block => decodeURIComponent(block)),
+            };
           })
-          .filter(color => !isNaN(color.r) && color.block)
+          .filter(color => !isNaN(color.r) && color.blocks.length > 0)
       : undefined;
 
     const convertUnsupported = sections[7] === "1" ? true : sections[7] === "0" ? false : undefined;
