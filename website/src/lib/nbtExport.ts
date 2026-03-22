@@ -6,13 +6,14 @@
  * - src/Index.tsx
  */
 import { MAP_SIZE } from "@/utils/color";
-import type { ColorRgbCustom } from "@/types/color";
+import type { ColorRef, ColorRgbCustom } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName } from "./materialRules";
 import { type BlockEntry, gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { createZip } from "@/utils/zip";
 import type { FillerAssignment } from "@/types/conversion";
+import { WATER_BASE_INDEX } from "@/data/mapColors";
 import {
   isShapeColorCell,
   isShapeFillerCell,
@@ -33,15 +34,49 @@ interface ExportOptions {
   baseName: string;
 }
 
+function getWaterColumnTopY(part: ShapePart): Map<string, number> {
+  const topYByColumn = new Map<string, number>();
+
+  for (const [coord, cell] of part.cells) {
+    if (!isShapeColorCell(cell) || cell.isCustom || cell.id !== WATER_BASE_INDEX) continue;
+    const [x, y, z] = parseShapeCoordKey(coord);
+    const columnKey = `${x},${z}`;
+    const currentTopY = topYByColumn.get(columnKey);
+    if (currentTopY === undefined || y > currentTopY) topYByColumn.set(columnKey, y);
+  }
+
+  return topYByColumn;
+}
+
+function resolveExportShapeColorBlockName(
+  color: ColorRef,
+  x: number,
+  y: number,
+  z: number,
+  waterTopYByColumn: ReadonlyMap<string, number>,
+  options: ExportOptions,
+): string | null {
+  const blockName = resolveShapeColorBlockName(color, options);
+  if (!blockName) return null;
+  if (color.isCustom || color.id !== WATER_BASE_INDEX) return blockName;
+
+  const waterTopY = waterTopYByColumn.get(`${x},${z}`);
+  if (waterTopY === undefined || y >= waterTopY) return blockName;
+
+  const blockBaseName = blockName.split("[", 1)[0];
+  return blockBaseName === "minecraft:water" ? "minecraft:water[level=8]" : blockName;
+}
+
 function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs: ReadonlySet<number>): BlockEntry[] {
   const resolved: BlockEntry[] = [];
   const occupied = new Set<number>();
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
+  const waterTopYByColumn = getWaterColumnTopY(part);
 
   for (const [coord, cell] of part.cells) {
     if (!isShapeColorCell(cell)) continue;
     const [x, y, z] = parseShapeCoordKey(coord);
-    const blockName = resolveShapeColorBlockName(cell, options);
+    const blockName = resolveExportShapeColorBlockName(cell, x, y, z, waterTopYByColumn, options);
     if (!blockName) continue;
     resolved.push({ x, y, z, blockName });
     occupied.add(coord);

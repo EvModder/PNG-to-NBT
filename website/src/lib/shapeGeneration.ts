@@ -406,6 +406,9 @@ function buildFillerCandidates(blocks: ShapeBlock[], occupiedExtraBlocks: ShapeB
       }
     }
     if (!isWaterBlock(block)) continue;
+    const waterPillar = waterRange.get(toColumnCoordKey(block.x, block.z));
+    if (!waterPillar) continue;
+    if (block.y !== waterPillar.minY && block.y !== waterPillar.maxY) continue;
     const addWaterSideCandidate = (x: number, y: number, z: number) => {
       const role = (maxColorY.get(toColumnCoordKey(x, z)) ?? -Infinity) > y
         ? FillerRole.SupportWaterSidesCovered

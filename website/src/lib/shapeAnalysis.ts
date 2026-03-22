@@ -97,6 +97,10 @@ function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): st
   return `${color.isCustom ? 1 : 0}:${color.id}:${color.shade}`;
 }
 
+function isRealWaterBlockName(blockName: string): boolean {
+  return blockName.split("[", 1)[0] === "minecraft:water";
+}
+
 function analyzePartMaterialNeeds(
   colorGrid: ColorGrid,
   part: ShapePart,
@@ -110,6 +114,7 @@ function analyzePartMaterialNeeds(
   const visibleColorKeys = new Set<string>();
   const usedShadesByBase = new Map<number, Set<Shade>>();
   const fillerRoleCounts = new Map<FillerRole, number>();
+  const countedWaterColumns = new Set<number>();
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
@@ -118,6 +123,11 @@ function analyzePartMaterialNeeds(
       if (!cell.isCustom && cell.id === TRANSPARENCY_BASE_INDEX) continue;
       const blockName = resolveShapeColorBlockName(cell, options);
       if (!blockName) continue;
+      if (!cell.isCustom && cell.id === WATER_BASE_INDEX && isRealWaterBlockName(blockName)) {
+        const waterColumnKey = x*128 + z;
+        if (countedWaterColumns.has(waterColumnKey)) continue;
+        countedWaterColumns.add(waterColumnKey);
+      }
       const displayName = toDisplayName(blockName);
       addCount(blockCounts, displayName);
       if (!cell.isCustom && cell.id !== TRANSPARENCY_BASE_INDEX) {

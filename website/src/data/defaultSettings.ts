@@ -20,7 +20,7 @@ export const DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
 
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGrouped;
-export const DEFAULT_SUPPORT_MODE = SupportMode.None;
+export const DEFAULT_SUPPORT_MODE = SupportMode.Water;
 export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
 export const DEFAULT_PALETTE_SEED = false;
 export const DEFAULT_LAYER_GAP = 5;
