@@ -48,14 +48,13 @@ export function getSupportModeFillerRoles(
 
   switch (supportMode) {
     case SupportMode.Steps:
-      roles.push(FillerRole.StairStep, FillerRole.WaterPath);
+      roles.push(FillerRole.StairStep);
       break;
     case SupportMode.All:
       roles.push(FillerRole.SupportAll);
       if (usesDirectWaterBlock) {
         roles.push(FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered);
       }
-      roles.push(FillerRole.WaterPath);
       break;
     case SupportMode.Fragile:
       roles.push(FillerRole.SupportFragile);
@@ -66,10 +65,13 @@ export function getSupportModeFillerRoles(
       } else {
         roles.push(FillerRole.SupportWaterBase);
       }
-      roles.push(FillerRole.WaterPath);
       break;
     case SupportMode.None:
       break;
+  }
+
+  if (supportMode !== SupportMode.None && !roles.includes(FillerRole.WaterPath)) {
+    roles.push(FillerRole.WaterPath);
   }
 
   if (

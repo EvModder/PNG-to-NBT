@@ -123,7 +123,7 @@ function buildFullblockPreset(): BlockPreset {
       9: "clay",
       10: "brown_mushroom_block",
       11: "andesite",
-      12: "oak_leaves[waterlogged=true]",
+      12: "water",
       13: "oak_planks",
       14: "diorite",
       15: "honey_block",

@@ -111,7 +111,6 @@ type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 type DerivedImageStats = {
   allSameShade?: Shade;
   hasTransparency: boolean;
-  imageHasWater: boolean;
   paletteUsageInfo: {
     uniqueShadeCount: number;
     uniqueBaseColorCount: number;
@@ -189,7 +188,6 @@ function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
   return {
     hasTransparency,
     allSameShade: imageStats.allSameShade,
-    imageHasWater: usedWaterShades.size > 0,
     paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
     usedBaseColors,
     usedShadesByBase,
@@ -606,7 +604,7 @@ const Index = () => {
   const derivedImageStats = useMemo(() => (imageStats ? deriveImageStats(imageStats) : null), [imageStats]);
   const fullImageUsedShadesByBase = derivedImageStats?.usedShadesByBase ?? new Map<number, Set<Shade>>();
   const usedWaterShades = derivedImageStats?.usedWaterShades ?? new Set<Shade>();
-  const imageHasWater = derivedImageStats?.imageHasWater ?? false;
+  const imageHasWater = usedWaterShades.size > 0;
   const paletteUsageInfo = derivedImageStats?.paletteUsageInfo ?? null;
   const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
@@ -623,7 +621,7 @@ const Index = () => {
     ),
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
-  const activeWaterDrops = belowPlatformWater ? normalizedDeferredWaterDrops : undefined;
+  const activeWaterDrops = belowPlatformWater && imageHasWater ? normalizedDeferredWaterDrops : undefined;
   const showMixStepsToggle = useMemo(
     () =>
       isSuppressStepsBuildMode(buildMode) &&

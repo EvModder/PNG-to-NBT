@@ -743,6 +743,10 @@ function addStaircaseWaterConvenienceFillers(
 
       const runLength = runEndZ - waterZPos;
       if (runLength <= 0 || runLength >= waterDepth) continue;
+      let runTopY = -Infinity;
+      for (let z = waterZPos; z <= runEndZ; ++z) {
+        if (rowMaxY[z + 1] > runTopY) runTopY = rowMaxY[z + 1];
+      }
 
       const darkZ = runEndZ + 1;
       const darkInfo = pixelInfo.get(darkZ);
@@ -752,37 +756,22 @@ function addStaircaseWaterConvenienceFillers(
       }
 
       const darkY = rowMaxY[darkZ + 1];
-      const westSupportY = (() => {
-        if (x <= 0) return undefined;
-        for (let y = waterBottom + 1; y <= overallMaxY; ++y) {
-          if (occupied.has(toShapeCoordKey(x - 1, y, waterZPos))) return y;
-        }
-        return undefined;
-      })();
-      const candidates: ({
+      const candidates: {
         targetWaterBottom: number;
         requiredSupportDistance: number;
-        kind: "south" | "west";
-      })[] = [];
-      candidates.push({
+        kind: "south";
+      }[] = [{
         kind: "south",
         targetWaterBottom: darkY,
         requiredSupportDistance: runLength,
-      });
-      if (westSupportY !== undefined) {
-        candidates.push({
-          kind: "west",
-          targetWaterBottom: westSupportY,
-          requiredSupportDistance: 0,
-        });
-      }
+      }];
 
       let chosen: typeof candidates[number] | undefined;
       for (const candidate of candidates) {
         if (candidate.requiredSupportDistance >= waterDepth) continue;
         const delta = candidate.targetWaterBottom - waterBottom;
         if (delta <= 0) continue;
-        if (waterTop + delta > overallMaxY) continue;
+        if (runTopY + delta > overallMaxY) continue;
         if (
           !chosen ||
           candidate.requiredSupportDistance < chosen.requiredSupportDistance ||
@@ -795,18 +784,8 @@ function addStaircaseWaterConvenienceFillers(
 
       const targetWaterBottom = chosen.targetWaterBottom;
       const delta = targetWaterBottom - waterBottom;
-      // If the pillar is already anchored to a real north-row block at this bottom Y,
-      // lifting it would create floating water rather than fixing a missing support path.
-      const northRowAlreadyAnchorsWaterBottom =
-        waterZPos > 0 &&
-        rowPresent[waterZPos] &&
-        rowMinY[waterZPos] <= waterBottom &&
-        waterBottom <= rowMaxY[waterZPos];
-      if (delta > 0 && northRowAlreadyAnchorsWaterBottom) continue;
-
       shiftRows(waterZPos, runEndZ, delta);
 
-      if (chosen.kind !== "south") continue;
       const targetSupportY = targetWaterBottom;
       for (let z = waterZPos + 1; z < darkZ; ++z) {
         const coord = toShapeCoordKey(x, targetSupportY, z);
@@ -1323,20 +1302,6 @@ function applyStaircaseVariantValley<T extends PositionedEntry>(
           if (southShade && southShade.shade === Shade.Dark && waterBottomAfter !== minimumWaterBottom) {
             const southY = southZ < MAP_SIZE && primaryPresent[southZ] ? currentMaxY[southZ] : undefined;
             if (southY !== undefined) targetTopY = southY + (segment.waterDepth - 1);
-          }
-        } else if (waterBottomAfter !== minimumWaterBottom) {
-          const southY = southZ < MAP_SIZE && primaryPresent[southZ] ? currentMaxY[southZ] : undefined;
-          if (southY !== undefined) {
-            const delta = southY + (segment.waterDepth - 1) - segment.topY;
-            for (let z = segment.zStart; z <= segment.zEnd; ++z) {
-              const segmentRowBlocks = rowBlocks[z + 1];
-              if (segmentRowBlocks) for (const block of segmentRowBlocks) block.y += delta;
-              if (primaryPresent[z]) {
-                currentMaxY[z] += delta;
-                deltaApplied[z] += delta;
-              }
-            }
-            continue;
           }
         }
       }
@@ -2451,7 +2416,10 @@ function getCachedStaircaseParts(
       const { loweredWaterBlocks, supportFloorYs } = buildBelowPlatformWaterBlocks(blocks, colorGrid, waterDrops);
       return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
     }
-    const waterConvenienceFillerCandidates = addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache);
+    const waterConvenienceFillerCandidates =
+      buildMode === BuildMode.StaircaseParty
+        ? []
+        : addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache);
     return [buildShapePart(blocks, waterConvenienceFillerCandidates)];
   });
 }

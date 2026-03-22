@@ -796,7 +796,7 @@ async function runFixtureCase(
     },
     usedWaterShades,
   );
-  const activeWaterDrops = testCase.settings.belowPlatformWater ? waterDrops : undefined;
+  const activeWaterDrops = testCase.settings.belowPlatformWater && imageHasWater ? waterDrops : undefined;
 
   const showMixStepsToggle =
     isSuppressStepsBuildMode(testCase.settings.buildMode) &&
