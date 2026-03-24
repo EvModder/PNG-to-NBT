@@ -4,6 +4,7 @@
  * - collectFillerRolePixels()
  * - nooblineIsSingleY()
  * - hasNonWaterColorHeightVariance()
+ * - hasBuildAtWorldMinYOpportunity()
  * - analyzeMaterialNeeds()
  *
  * Callers:
@@ -11,9 +12,9 @@
  * - src/lib/previewImageEdits.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
-import { type ColorGrid, type ColorRgbCustom, type Shade } from "@/types/color";
+import { type ColorGrid, type ColorRgbCustom, Shade } from "@/types/color";
 import type { ShapePart } from "@/types/shape";
-import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor } from "@/utils/color";
+import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
@@ -236,6 +237,46 @@ export function hasNonWaterColorHeightVariance(shape: GeneratedShape): boolean {
       else if (firstY !== y) return true;
     }
   }
+  return false;
+}
+
+// Callers:
+// - src/Index.tsx
+export function hasBuildAtWorldMinYOpportunity(
+  colorGrid: ColorGrid,
+  shape: GeneratedShape,
+  applySupportFloorYs: boolean,
+): boolean {
+  let minY = Infinity;
+
+  for (const part of shape.parts) {
+    const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+    for (const [coord, cell] of part.cells) {
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
+      if (isShapeColorCell(cell) && !cell.isCustom && cell.id === TRANSPARENCY_BASE_INDEX) continue;
+      if (y < minY) minY = y;
+    }
+  }
+
+  if (!Number.isFinite(minY)) return false;
+
+  for (const part of shape.parts) {
+    const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+    for (const [coord, cell] of part.cells) {
+      if (!isShapeColorCell(cell)) continue;
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
+      if (y !== minY || z <= 0) continue;
+
+      const color = colorGrid[x][z];
+      if (isTransparentColor(color) || isWaterColor(color)) continue;
+      if (!isTransparentColor(colorGrid[x][z - 1])) continue;
+      if (color.shade !== Shade.Flat) continue;
+      return true;
+    }
+  }
+
   return false;
 }
 

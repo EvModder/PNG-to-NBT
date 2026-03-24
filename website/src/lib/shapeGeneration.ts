@@ -588,6 +588,7 @@ function buildStaircaseBlocks(
   colorGrid: ColorGrid,
   omitWater: boolean,
   topAlignedWater: boolean,
+  buildAtWorldMinY: boolean,
 ): ShapeBlock[] {
   const blocks: ShapeBlock[] = [];
   const baseY = 64;
@@ -642,14 +643,14 @@ function buildStaircaseBlocks(
         let colorY = north.y;
         switch (color.shade) {
           case Shade.Dark:
-            addVoidShadowFiller(x, north.y + (z === 0 ? 0 : 1), z - 1);
-            if (z === 0) colorY = north.y - 1;
+            if (z === 0)  colorY = north.y - 1;
+            addVoidShadowFiller(x, colorY + 1, z - 1);
             break;
           case Shade.Flat:
-            addVoidShadowFiller(x, north.y, z - 1);
+            if (!buildAtWorldMinY) addVoidShadowFiller(x, north.y, z - 1);
             break;
           case Shade.Light:
-            if (z === 0 && topRowHasNorthlineFiller) colorY = north.y + 1;
+            if (buildAtWorldMinY || (topRowHasNorthlineFiller && z === 0)) colorY = north.y + 1;
             break;
           // case Shade.Darkest:
           //   break; // Unreachable: the darkest shade should never survive color conversion.
@@ -2334,6 +2335,7 @@ function getShapeCacheKeyId(
   waterDrops?: WaterDrops,
   topAlignedWater = false,
   enableWaterConvenience = true,
+  buildAtWorldMinY = false,
 ): ShapeCacheKeyId {
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
@@ -2342,6 +2344,7 @@ function getShapeCacheKeyId(
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
   else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
+  if (buildAtWorldMinY && isStaircaseBuildMode(buildMode)) id += "|world-min-y:1";
   if (isStaircaseBuildMode(buildMode)) id += `|waterconv:${enableWaterConvenience ? 1 : 0}`;
   return id as ShapeCacheKeyId;
 }
@@ -2359,11 +2362,12 @@ function getCachedStaircaseBaseBlocks(
   cache: GridShapeCache,
   excludeWater: boolean,
   topAlignedWater: boolean,
+  buildAtWorldMinY: boolean,
 ): ShapeBlock[] {
-  const cacheKey = excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default");
+  const cacheKey = `${excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default")}|${buildAtWorldMinY ? "world-min-y" : "default-y"}`;
   const cached = cache.staircaseBaseBlocks.get(cacheKey);
   if (cached) return cached;
-  const blocks = buildStaircaseBlocks(colorGrid, excludeWater, topAlignedWater);
+  const blocks = buildStaircaseBlocks(colorGrid, excludeWater, topAlignedWater, buildAtWorldMinY);
   cache.staircaseBaseBlocks.set(cacheKey, blocks);
   return blocks;
 }
@@ -2373,9 +2377,10 @@ function getStaircaseVariantCacheKey(
   paletteSeed: number,
   excludeWater: boolean,
   topAlignedWater: boolean,
+  buildAtWorldMinY: boolean,
 ): string {
   const modeKey = buildModeUsesPaletteSeed(buildMode) ? `${buildMode}|seed:${paletteSeed}` : buildMode;
-  return `${excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default")}|${modeKey}`;
+  return `${excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default")}|${buildAtWorldMinY ? "world-min-y" : "default-y"}|${modeKey}`;
 }
 
 function getCachedStaircaseVariantBlocks(
@@ -2385,15 +2390,16 @@ function getCachedStaircaseVariantBlocks(
   paletteSeed: number,
   waterDrops?: WaterDrops,
   topAlignedWater = false,
+  buildAtWorldMinY = false,
 ): ShapeBlock[] {
   const excludeWater = waterDrops !== undefined;
-  const key = getStaircaseVariantCacheKey(buildMode, paletteSeed, excludeWater, topAlignedWater);
+  const key = getStaircaseVariantCacheKey(buildMode, paletteSeed, excludeWater, topAlignedWater, buildAtWorldMinY);
   const cached = cache.staircaseVariantBlocks.get(key);
   if (cached) return cached;
 
   const baseBlocks = buildMode === BuildMode.StaircaseGrouped
-    ? getCachedStaircaseVariantBlocks(colorGrid, cache, BuildMode.StaircaseValley, paletteSeed, waterDrops, topAlignedWater)
-    : getCachedStaircaseBaseBlocks(colorGrid, cache, excludeWater, topAlignedWater);
+    ? getCachedStaircaseVariantBlocks(colorGrid, cache, BuildMode.StaircaseValley, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY)
+    : getCachedStaircaseBaseBlocks(colorGrid, cache, excludeWater, topAlignedWater, buildAtWorldMinY);
   const blocks = cloneShapeBlocks(baseBlocks);
   switch (buildMode) {
     case BuildMode.StaircaseNorthline:
@@ -2427,6 +2433,7 @@ function getCachedStaircaseParts(
   waterDrops?: WaterDrops,
   topAlignedWater = false,
   enableWaterConvenience = true,
+  buildAtWorldMinY = false,
 ): RawShapePart[] {
   const belowPlatformWater = waterDrops !== undefined;
   const sourceBuildMode =
@@ -2442,9 +2449,10 @@ function getCachedStaircaseParts(
     waterDrops,
     topAlignedWater,
     enableWaterConvenience,
+    buildAtWorldMinY,
   );
   return getCachedRawParts(cache, keyId, () => {
-    const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, sourceBuildMode, paletteSeed, waterDrops, topAlignedWater));
+    const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, sourceBuildMode, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY));
     const waterConvenienceFillerCandidates =
       belowPlatformWater || sourceBuildMode === BuildMode.StaircaseParty || topAlignedWater || !enableWaterConvenience
         ? []
@@ -2519,6 +2527,7 @@ function buildRawShapeParts(
   waterDrops?: WaterDrops,
   topAlignedWater = false,
   enableWaterConvenience = true,
+  buildAtWorldMinY = false,
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
@@ -2534,7 +2543,7 @@ function buildRawShapeParts(
     case BuildMode.Suppress2LayerLatePairs:
       return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs, waterDrops);
     default: {
-      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience);
+      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience, buildAtWorldMinY);
     }
   }
 }
@@ -2549,6 +2558,7 @@ function getGeneratedShape(
   waterDrops?: WaterDrops,
   topAlignedWater = false,
   enableWaterConvenience = true,
+  buildAtWorldMinY = false,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
   const cacheKeyId = getShapeCacheKeyId(
@@ -2560,6 +2570,7 @@ function getGeneratedShape(
     waterDrops,
     topAlignedWater,
     enableWaterConvenience,
+    buildAtWorldMinY,
   );
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
@@ -2575,6 +2586,7 @@ function getGeneratedShape(
     waterDrops,
     topAlignedWater,
     enableWaterConvenience,
+    buildAtWorldMinY,
   );
   const parts = rawParts.map(finalizeShapePart);
   const splitExportNames =
@@ -2613,6 +2625,7 @@ export function generateShapeMap(
     paletteSeed?: number;
     waterSetting?: StaircaseWaterSetting;
     enableWaterConvenience?: boolean;
+    buildAtWorldMinY?: boolean;
     selectedMode?: BuildMode | null;
     selectedStepDirection: SuppressStepDirection;
   },
@@ -2623,6 +2636,7 @@ export function generateShapeMap(
   const waterDrops = options.waterSetting?.kind === "below-platform" ? options.waterSetting.drops : undefined;
   const topAlignedWater = options.waterSetting?.kind === "top-aligned";
   const enableWaterConvenience = options.enableWaterConvenience ?? true;
+  const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
   const staircaseVisibleModes: BuildMode[] =
     !hasTransparency && !hasWater &&
     (allSameShade === Shade.Dark || allSameShade === Shade.Light)
@@ -2646,6 +2660,7 @@ export function generateShapeMap(
       waterDrops,
       topAlignedWater,
       enableWaterConvenience,
+      buildAtWorldMinY,
     );
     if (seenShapeSignatures.has(signatureId)) continue;
     seenShapeSignatures.add(signatureId);
@@ -2664,6 +2679,7 @@ export function generateShapeMap(
       waterDrops,
       topAlignedWater,
       enableWaterConvenience,
+      buildAtWorldMinY,
     );
     if (!seenShapeSignatures.has(signatureId)) {
       seenShapeSignatures.add(signatureId);

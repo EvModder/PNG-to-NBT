@@ -86,6 +86,9 @@ export const esCatalog = {
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
       "Permite que pasos adyacentes de supresión compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
+    buildAtWorldMinYLabel: "Construir en minY mundial:",
+    buildAtWorldMinYTooltip:
+      "Optimización para mapas planos: construye el mapa en la Y mínima del mundo para que los píxeles de tono plano justo al sur de transparencia dentro de la cuadrícula no requieran rellenos de sombra de vacío.",
     waterShadeNames: {
       [Shade.Dark]: "oscuro",
       [Shade.Flat]: "medio",

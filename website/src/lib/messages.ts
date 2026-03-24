@@ -145,6 +145,8 @@ export const messages = {
     layerGapTooltip: catalog.buildMode.layerGapTooltip,
     mixStepsLabel: catalog.buildMode.mixStepsLabel,
     mixStepsTooltip: catalog.buildMode.mixStepsTooltip,
+    buildAtWorldMinYLabel: catalog.buildMode.buildAtWorldMinYLabel,
+    buildAtWorldMinYTooltip: catalog.buildMode.buildAtWorldMinYTooltip,
     waterLevelTooltip(shade: Shade.Dark | Shade.Flat | Shade.Light): string {
       return formatTemplate(catalog.buildMode.waterLevelTooltip, {
         shade,

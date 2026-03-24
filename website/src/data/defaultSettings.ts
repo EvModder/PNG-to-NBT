@@ -28,6 +28,7 @@ export const DEFAULT_MIX_STEPS = false;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;
 export const DEFAULT_DARK_WATER_DROP = 4;
+export const DEFAULT_BUILD_AT_WORLD_MIN_Y = true;
 
 export const DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW = false;
 export const DEFAULT_SHOW_NAMES = false;

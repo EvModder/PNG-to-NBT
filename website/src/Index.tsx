@@ -8,6 +8,7 @@ import {
   DEFAULT_BLOCK_COLUMN_EXPANDED,
   DEFAULT_BLOCK_DISPLAY_MODE,
   DEFAULT_BUILD_MODE,
+  DEFAULT_BUILD_AT_WORLD_MIN_Y,
   DEFAULT_COLUMN_ORDER,
   DEFAULT_CONVERT_UNSUPPORTED,
   DEFAULT_DARK_WATER_DROP,
@@ -50,6 +51,7 @@ import type { ColorRgbCustom } from "@/types/color";
 import {
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
+  hasBuildAtWorldMinYOpportunity,
   hasNonWaterColorHeightVariance as generatedShapeHasNonWaterColorHeightVariance,
   nooblineIsSingleY as generatedShapeNooblineIsSingleY,
 } from "@/lib/shapeAnalysis";
@@ -356,6 +358,7 @@ const Index = () => {
   const calcLayerGap = useDeferredValue(layerGap);
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
+  const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
   const [suppressStepDirection, setSuppressStepDirection] = useState<SuppressStepDirection>(() => {
     const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
     return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
@@ -528,6 +531,7 @@ const Index = () => {
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.mixSteps]: mixSteps,
+      [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
       [LS_KEYS.lightWaterDrop]: lightWaterDrop,
       [LS_KEYS.flatWaterDrop]: flatWaterDrop,
@@ -563,6 +567,7 @@ const Index = () => {
       sortDir,
       layerGap,
       mixSteps,
+      buildAtWorldMinY,
       suppressStepDirection,
       lightWaterDrop,
       flatWaterDrop,
@@ -622,13 +627,15 @@ const Index = () => {
     ),
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
+  const flatBuildModeSelected = buildMode === BuildMode.Flat;
   const activeWaterSetting = useMemo(
     () => {
+      if (flatBuildModeSelected) return undefined;
       if (belowPlatformWater && imageHasWater) return { kind: "below-platform", drops: normalizedDeferredWaterDrops } as const;
       if (!belowPlatformWater && usesWaterForWater && imageHasNonLightWater) return { kind: "top-aligned" } as const;
       return undefined;
     },
-    [belowPlatformWater, imageHasWater, normalizedDeferredWaterDrops, usesWaterForWater, imageHasNonLightWater],
+    [belowPlatformWater, flatBuildModeSelected, imageHasWater, normalizedDeferredWaterDrops, usesWaterForWater, imageHasNonLightWater],
   );
   const activeWaterDrops = activeWaterSetting?.kind === "below-platform" ? activeWaterSetting.drops : undefined;
   const showMixStepsToggle = useMemo(
@@ -642,7 +649,7 @@ const Index = () => {
     [buildMode, imageColorGrid, imageValid, activeWaterDrops],
   );
   const twoLayerHasLateVoidNeed = (imageStats?.voidShadowStats.dominant ?? 0) > 0;
-  const shapeMap = useMemo(
+  const baseShapeMap = useMemo(
     () => imageColorGrid && imageValid
       ? generateShapeMap(
           imageColorGrid,
@@ -656,6 +663,7 @@ const Index = () => {
           paletteSeed: paletteSeedOffset,
           waterSetting: activeWaterSetting,
           enableWaterConvenience: supportMode !== SupportMode.None,
+          buildAtWorldMinY: false,
           selectedMode: buildMode,
           selectedStepDirection: suppressStepDirection,
           },
@@ -678,15 +686,74 @@ const Index = () => {
     ],
   );
   const hasVoidShadow = ((imageStats?.voidShadowStats.dominant ?? 0) + (imageStats?.voidShadowStats.recessive ?? 0)) > 0;
-  const northlineShape = shapeMap?.[BuildMode.StaircaseNorthline] ?? null;
+  const baseNorthlineShape = baseShapeMap?.[BuildMode.StaircaseNorthline] ?? null;
   const isFlatShape = useMemo(
-    () => !!northlineShape && !generatedShapeHasNonWaterColorHeightVariance(northlineShape),
-    [northlineShape],
+    () => !!baseNorthlineShape && !generatedShapeHasNonWaterColorHeightVariance(baseNorthlineShape),
+    [baseNorthlineShape],
   );
+  const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
+  const baseSelectedShape = useMemo(
+    () =>
+      effectiveBuildMode === BuildMode.Flat
+        ? baseNorthlineShape
+        : (baseShapeMap?.[effectiveBuildMode] ?? null),
+    [effectiveBuildMode, baseNorthlineShape, baseShapeMap],
+  );
+  const buildAtWorldMinYEligible = useMemo(
+    () =>
+      !!imageColorGrid &&
+      !!baseSelectedShape &&
+      isStaircaseBuildMode(effectiveBuildMode) &&
+      (supportMode === SupportMode.None || applySupportFloorYs) &&
+      hasBuildAtWorldMinYOpportunity(imageColorGrid, baseSelectedShape, applySupportFloorYs),
+    [imageColorGrid, baseSelectedShape, effectiveBuildMode, supportMode, applySupportFloorYs],
+  );
+  const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
+  const activeBuildAtWorldMinY = showBuildAtWorldMinYToggle && buildAtWorldMinY;
+  const shapeMap = useMemo(
+    () => {
+      if (!activeBuildAtWorldMinY || !imageColorGrid || !imageValid) return baseShapeMap;
+      return generateShapeMap(
+        imageColorGrid,
+        derivedImageStats?.allSameShade,
+        imageHasWater,
+        derivedImageStats?.hasTransparency ?? false,
+        twoLayerHasLateVoidNeed,
+        {
+          layerGap: calcLayerGap,
+          mixSteps: showMixStepsToggle && calcMixSteps,
+          paletteSeed: paletteSeedOffset,
+          waterSetting: activeWaterSetting,
+          enableWaterConvenience: supportMode !== SupportMode.None,
+          buildAtWorldMinY: true,
+          selectedMode: buildMode,
+          selectedStepDirection: suppressStepDirection,
+        },
+      );
+    },
+    [
+      activeBuildAtWorldMinY,
+      activeWaterSetting,
+      baseShapeMap,
+      buildMode,
+      calcLayerGap,
+      calcMixSteps,
+      derivedImageStats,
+      imageColorGrid,
+      imageHasWater,
+      imageValid,
+      paletteSeedOffset,
+      showMixStepsToggle,
+      suppressStepDirection,
+      supportMode,
+      twoLayerHasLateVoidNeed,
+    ],
+  );
+  const northlineShape = shapeMap?.[BuildMode.StaircaseNorthline] ?? null;
   const usedBaseColors = derivedImageStats?.usedBaseColors ?? new Set<number>();
   const visibleWaterLevelControls = useMemo(
     () => {
-      if (!imageValid || !belowPlatformWater) return [];
+      if (!imageValid || !belowPlatformWater || flatBuildModeSelected) return [];
       const currentWaterDrops = buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
       return WATER_DROP_INPUT_ORDER
         .filter(shade => usedWaterShades.has(shade))
@@ -695,6 +762,7 @@ const Index = () => {
     [
       imageValid,
       belowPlatformWater,
+      flatBuildModeSelected,
       usedWaterShades,
       lightWaterDrop,
       flatWaterDrop,
@@ -772,7 +840,6 @@ const Index = () => {
     return [...usedBaseColors].filter(idx => idx > 0 && !preset.blocks[idx]);
   }, [imageValid, usedBaseColors, preset.blocks]);
 
-  const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
   const isStepRangeMode = isSuppressStepsBuildMode(effectiveBuildMode);
   const isNorthSouthSuppressStepDirection =
     suppressStepDirection === SuppressStepDirection.NorthToSouth ||
@@ -990,6 +1057,7 @@ const Index = () => {
     }
     if (decoded.proPaletteSeed !== undefined) setProPaletteSeed(decoded.proPaletteSeed);
     if (decoded.mixSteps !== undefined) setMixSteps(decoded.mixSteps);
+    if (decoded.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decoded.buildAtWorldMinY);
     if (decoded.suppressStepDirection !== undefined && isSuppressStepDirection(decoded.suppressStepDirection)) {
       setSuppressStepDirection(decoded.suppressStepDirection);
     }
@@ -1199,6 +1267,7 @@ const Index = () => {
       suppress2LayerLateFillerBlock,
       proPaletteSeed,
       mixSteps,
+      buildAtWorldMinY,
       suppressStepDirection,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
@@ -2280,7 +2349,7 @@ const Index = () => {
                   </div>
                 </>
               )}
-              {imageData && (!isFlatShape || showAnyWaterDropControl) && (
+              {imageData && (!isFlatShape || showAnyWaterDropControl || showBuildAtWorldMinYToggle) && (
                 <div className="ml-auto flex items-center gap-1">
                   {visibleWaterLevelControls.map(({ shade, value }) => {
                     const tooltip = messages.buildMode.waterLevelTooltip(shade);
@@ -2357,6 +2426,24 @@ const Index = () => {
                         className="h-3.5 w-3.5 accent-primary"
                       />
                     </label>
+                  )}
+                  {showBuildAtWorldMinYToggle && (
+                    <>
+                      <label
+                        className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
+                        title={messages.buildMode.buildAtWorldMinYTooltip}
+                      >
+                        <span>{messages.buildMode.buildAtWorldMinYLabel}</span>
+                        <input
+                          type="checkbox"
+                          checked={buildAtWorldMinY}
+                          onChange={e => setBuildAtWorldMinY(e.target.checked)}
+                          title={messages.buildMode.buildAtWorldMinYTooltip}
+                          className="h-3.5 w-3.5 accent-primary"
+                        />
+                      </label>
+                      {!isFlatShape && <span className="h-4 border-l border-border/70" />}
+                    </>
                   )}
                   {!isFlatShape && (
                     <>

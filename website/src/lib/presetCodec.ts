@@ -24,6 +24,7 @@ interface FullPreset {
   suppress2LayerLateFillerBlock?: string;
   proPaletteSeed?: boolean;
   mixSteps?: boolean;
+  buildAtWorldMinY?: boolean;
   suppressStepDirection?: SuppressStepDirection;
   dominateVoidFillerBlock?: string;
   recessiveVoidFillerBlock?: string;
@@ -34,7 +35,7 @@ interface FullPreset {
 export function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: ColorRgbCustom[], convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, suppressStepDirection: SuppressStepDirection,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
@@ -59,6 +60,7 @@ export function encodeFullPreset(
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
     mixSteps ? "1" : "0",
+    buildAtWorldMinY ? "1" : "0",
     suppressStepDirection,
   ].join("|");
   return btoa(serialized).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -112,10 +114,8 @@ export function decodeFullPreset(encoded: string): FullPreset | null {
     const dominateVoidFillerBlock = sections[10] || undefined;
     const recessiveVoidFillerBlock = sections[11] || undefined;
     const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
-    const suppressStepDirection =
-      sections[13] && isSuppressStepDirection(sections[13])
-        ? sections[13]
-        : undefined;
+    const buildAtWorldMinY = sections[13] === "1" ? true : sections[13] === "0" ? false : undefined;
+    const suppressStepDirection = sections[14] && isSuppressStepDirection(sections[14]) ? sections[14] : undefined;
 
     return {
       blockPreset: { name: sections[0], blocks },
@@ -127,6 +127,7 @@ export function decodeFullPreset(encoded: string): FullPreset | null {
       convertUnsupported,
       proPaletteSeed,
       mixSteps,
+      buildAtWorldMinY,
       suppressStepDirection,
       suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock || undefined,
       dominateVoidFillerBlock: dominateVoidFillerBlock || undefined,

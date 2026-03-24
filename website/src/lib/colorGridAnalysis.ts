@@ -44,6 +44,8 @@ export interface ColorGridStats {
   voidShadowStats: {
     dominant: number;
     recessive: number;
+    flatEligible: number;
+    lightEligible: number;
   };
 }
 
@@ -86,14 +88,19 @@ export function hasStepMixOpportunity(
 }
 
 function analyzeVoidShadows(colorGrid: ColorGrid) {
-  const stats = { dominant: 0, recessive: 0 };
+  const stats = { dominant: 0, recessive: 0, flatEligible: 0, lightEligible: 0 };
 
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
       const color = colorGrid[x][z];
       if (isTransparentColor(color)) continue;
       if (z === 0 || !isTransparentColor(colorGrid[x][z - 1])) continue;
-      if (isWaterColor(color) || color.shade === Shade.Light) continue;
+      if (isWaterColor(color)) continue;
+      if (color.shade === Shade.Light) {
+        ++stats.lightEligible;
+        continue;
+      }
+      if (color.shade === Shade.Flat) ++stats.flatEligible;
       if (getPixelParity(x, z - 1) === PixelParity.Recessive) ++stats.recessive;
       else ++stats.dominant;
     }

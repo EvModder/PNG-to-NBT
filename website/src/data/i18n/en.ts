@@ -92,6 +92,9 @@ export const enCatalog = {
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
       "Adjacent suppress steps can reuse prior-step recessive color blocks as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
+    buildAtWorldMinYLabel: "Build at Y=0:",
+    buildAtWorldMinYTooltip:
+      "Flat-map optimization: build the map at world minimum Y so flat-shade pixels directly south of transparent pixels do not require color suppression fillers.",
     waterShadeNames: {
       [Shade.Dark]: "dark",
       [Shade.Flat]: "medium",

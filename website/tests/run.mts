@@ -81,6 +81,7 @@ type ExportFixtureSettings = {
   proPaletteSeed: boolean;
   layerGap: number;
   mixSteps: boolean;
+  buildAtWorldMinY?: boolean;
   lightWaterDrop: number;
   flatWaterDrop: number;
   darkWaterDrop: number;
@@ -829,6 +830,7 @@ async function runFixtureCase(
       paletteSeed: paletteSeedOffset,
       waterSetting: activeWaterSetting,
       enableWaterConvenience: testCase.settings.supportMode !== SupportMode.None,
+      buildAtWorldMinY: testCase.settings.buildAtWorldMinY ?? false,
       selectedMode: testCase.settings.buildMode,
       selectedStepDirection: testCase.settings.suppressStepDirection,
     },

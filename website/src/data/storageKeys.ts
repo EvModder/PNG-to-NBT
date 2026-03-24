@@ -30,6 +30,7 @@ export const STORAGE_KEYS = {
   sortDir: "mapart_sort_dir",
   layerGap: "mapart_layer_gap",
   mixSteps: "mapart_mix_steps",
+  buildAtWorldMinY: "mapart_build_at_world_min_y",
   suppressStepDirection: "mapart_suppress_step_direction",
   suppress2LayerLateFiller: "mapart_suppress_2layer_late_filler",
   paletteSeed: "mapart_palette_seed",
