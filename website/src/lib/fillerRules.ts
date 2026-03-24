@@ -45,6 +45,8 @@ export function getSupportModeFillerRoles(
   usesIceWaterBlock: boolean,
 ): FillerRole[] {
   const roles: FillerRole[] = [];
+  const shouldIncludeWaterPath = supportMode !== SupportMode.None;
+  const shouldIncludeDirectWaterSupport = supportMode !== SupportMode.None && usesDirectWaterBlock;
 
   switch (supportMode) {
     case SupportMode.Steps:
@@ -52,17 +54,12 @@ export function getSupportModeFillerRoles(
       break;
     case SupportMode.All:
       roles.push(FillerRole.SupportAll);
-      if (usesDirectWaterBlock) {
-        roles.push(FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered);
-      }
       break;
     case SupportMode.Fragile:
       roles.push(FillerRole.SupportFragile);
       break;
     case SupportMode.Water:
-      if (usesDirectWaterBlock) {
-        roles.push(FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered);
-      } else {
+      if (!usesDirectWaterBlock) {
         roles.push(FillerRole.SupportWaterBase);
       }
       break;
@@ -70,8 +67,14 @@ export function getSupportModeFillerRoles(
       break;
   }
 
-  if (supportMode !== SupportMode.None && !roles.includes(FillerRole.WaterPath)) {
+  if (shouldIncludeWaterPath && !roles.includes(FillerRole.WaterPath)) {
     roles.push(FillerRole.WaterPath);
+  }
+
+  if (shouldIncludeDirectWaterSupport) {
+    if (!roles.includes(FillerRole.SupportWaterBase)) roles.push(FillerRole.SupportWaterBase);
+    if (!roles.includes(FillerRole.SupportWaterSides)) roles.push(FillerRole.SupportWaterSides);
+    if (!roles.includes(FillerRole.SupportWaterSidesCovered)) roles.push(FillerRole.SupportWaterSidesCovered);
   }
 
   if (

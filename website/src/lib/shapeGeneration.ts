@@ -9,6 +9,7 @@ import {
   buildModeUsesLayerGap,
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
+  isStaircaseBuildMode,
 } from "@/utils/conversion";
 import { FillerRole, BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { type ColorGrid, Shade } from "@/types/color";
@@ -46,6 +47,10 @@ interface RawShapePart {
   bounds: ShapeBounds;
   supportFloorYs: ReadonlySet<number>;
 }
+
+type StaircaseWaterSetting =
+  | { kind: "below-platform"; drops: WaterDrops }
+  | { kind: "top-aligned" };
 
 type StepwiseBuildMode = BuildMode.SuppressStepPairs | BuildMode.SuppressStepChecker;
 type TwoLayerSuppressBuildMode = BuildMode.Suppress2LayerLateFillers | BuildMode.Suppress2LayerLatePairs;
@@ -579,7 +584,11 @@ function getStepPhaseYOffset(
   return yOffset;
 }
 
-function buildStaircaseBlocks(colorGrid: ColorGrid, omitWater: boolean): ShapeBlock[] {
+function buildStaircaseBlocks(
+  colorGrid: ColorGrid,
+  omitWater: boolean,
+  topAlignedWater: boolean,
+): ShapeBlock[] {
   const blocks: ShapeBlock[] = [];
   const baseY = 64;
   const topRowHasNorthlineFiller = (() => {
@@ -618,7 +627,11 @@ function buildStaircaseBlocks(colorGrid: ColorGrid, omitWater: boolean): ShapeBl
           continue;
         }
         const depth = getWaterDepth(color.shade, x, z);
-        let bottom = north.waterBottom !== undefined ? north.waterBottom : north.y;
+        const northIsWater = north.waterBottom !== undefined;
+        const anchorY = northIsWater
+          ? (topAlignedWater ? north.y : north.waterBottom!)
+          : north.y;
+        const bottom = topAlignedWater ? anchorY - depth + 1 : anchorY;
         const top = bottom + depth - 1;
         for (let d = 0; d < depth; ++d) addBlock(x, bottom + d, z, colorRef);
         north = { y: top, transparent: false, waterBottom: bottom, waterDepth: depth };
@@ -651,10 +664,12 @@ function buildStaircaseBlocks(colorGrid: ColorGrid, omitWater: boolean): ShapeBl
       switch (color.shade) {
         case Shade.Dark:
           {
-            const northIsDeepWater = north.waterBottom !== undefined && (north.waterDepth ?? 0) > 1;
-            const useY = northIsDeepWater
-              ? north.waterBottom!
-              : (north.waterBottom !== undefined ? north.waterBottom : north.y) - 1;
+            const northWaterY = north.waterBottom !== undefined
+              ? topAlignedWater
+                ? north.waterBottom + (north.waterDepth ?? 1) - 2
+                : north.waterBottom
+              : undefined;
+            const useY = northWaterY ?? (north.y - 1);
             addBlock(x, useY, z, colorRef);
             north = { y: useY, transparent: false };
           }
@@ -743,51 +758,39 @@ function addStaircaseWaterConvenienceFillers(
 
       const runLength = runEndZ - waterZPos;
       if (runLength <= 0 || runLength >= waterDepth) continue;
-      let runTopY = -Infinity;
-      for (let z = waterZPos; z <= runEndZ; ++z) {
-        if (rowMaxY[z + 1] > runTopY) runTopY = rowMaxY[z + 1];
-      }
-
-      const darkZ = runEndZ + 1;
-      const darkInfo = pixelInfo.get(darkZ);
-      if (darkZ >= MAP_SIZE || !darkInfo || darkInfo.isWater || darkInfo.shade !== Shade.Dark || !rowPresent[darkZ + 1]) {
-        // throw new Error(`Invalid staircase water convenience segment at x=${x}, z=${waterZPos}`);
+      const anchorZ = runEndZ + 1;
+      const anchorInfo = pixelInfo.get(anchorZ);
+      if (anchorZ >= MAP_SIZE || !anchorInfo || !rowPresent[anchorZ + 1]) {
         continue;
       }
 
-      const darkY = rowMaxY[darkZ + 1];
-      const candidates: {
-        targetWaterBottom: number;
-        requiredSupportDistance: number;
-        kind: "south";
-      }[] = [{
-        kind: "south",
-        targetWaterBottom: darkY,
-        requiredSupportDistance: runLength,
-      }];
+      const anchorIsWater = anchorInfo.isWater;
+      if (!anchorIsWater && anchorInfo.shade !== Shade.Dark) continue;
 
-      let chosen: typeof candidates[number] | undefined;
-      for (const candidate of candidates) {
-        if (candidate.requiredSupportDistance >= waterDepth) continue;
-        const delta = candidate.targetWaterBottom - waterBottom;
-        if (delta <= 0) continue;
-        if (runTopY + delta > overallMaxY) continue;
-        if (
-          !chosen ||
-          candidate.requiredSupportDistance < chosen.requiredSupportDistance ||
-          (candidate.requiredSupportDistance === chosen.requiredSupportDistance && candidate.targetWaterBottom < chosen.targetWaterBottom)
-        ) {
-          chosen = candidate;
-        }
+      const anchorY = anchorIsWater ? rowMinY[anchorZ + 1] : rowMaxY[anchorZ + 1];
+      let tailEndZ = anchorZ;
+      while (tailEndZ + 1 < MAP_SIZE && primaryPresent[tailEndZ + 1]) ++tailEndZ;
+
+      const liftWaterDelta = anchorY - waterBottom;
+      const canLiftWater =
+        liftWaterDelta > 0 &&
+        waterTop + liftWaterDelta <= overallMaxY;
+
+      const lowerTailDelta = waterBottom - anchorY;
+      const canLowerTail = lowerTailDelta < 0;
+
+      let targetSupportY: number | undefined;
+      if (canLowerTail) {
+        shiftRows(anchorZ, tailEndZ, lowerTailDelta);
+        targetSupportY = waterBottom;
+      } else if (canLiftWater) {
+        shiftRows(waterZPos, waterZPos, liftWaterDelta);
+        targetSupportY = anchorY;
+      } else {
+        continue;
       }
-      if (!chosen) continue;
 
-      const targetWaterBottom = chosen.targetWaterBottom;
-      const delta = targetWaterBottom - waterBottom;
-      shiftRows(waterZPos, runEndZ, delta);
-
-      const targetSupportY = targetWaterBottom;
-      for (let z = waterZPos + 1; z < darkZ; ++z) {
+      for (let z = waterZPos + 1; z < anchorZ; ++z) {
         const coord = toShapeCoordKey(x, targetSupportY, z);
         if (occupied.has(coord)) continue;
         fillerCandidates.push({
@@ -1164,31 +1167,41 @@ function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(
   }
 }
 
-function applyStaircaseVariantClassic<T extends PositionedEntry>(blocks: T[]) {
+function getStaircaseClassicColumnOffsets<T extends PositionedEntry>(blocks: T[]): number[] {
+  const offsets = new Array<number>(MAP_SIZE).fill(0);
   const columns = groupBlocksByColumn(blocks);
   for (let x = 0; x < MAP_SIZE; ++x) {
     const colBlocks = columns[x];
     if (colBlocks.length === 0) continue;
     let minY = Infinity;
     for (const block of colBlocks) if (block.y < minY) minY = block.y;
-    for (const block of colBlocks) block.y -= minY;
+    offsets[x] = -minY;
   }
+  return offsets;
 }
 
-function applyStaircaseVariantSouthline<T extends PositionedEntry>(blocks: T[]) {
+function getStaircaseSouthlineColumnOffsets(blocks: ShapeBlock[], topAlignedWater: boolean): number[] {
+  const offsets = new Array<number>(MAP_SIZE).fill(0);
   const columns = groupBlocksByColumn(blocks);
   for (let x = 0; x < MAP_SIZE; ++x) {
     const colBlocks = columns[x];
     if (colBlocks.length === 0) continue;
+    const { rowBlocks, rowMinY, rowMaxY, zValues } = buildColumnBlockRows(colBlocks);
     let maxZ = -Infinity;
-    let southY = 0;
-    for (const block of colBlocks) {
-      if (block.z > maxZ) {
-        maxZ = block.z;
-        southY = block.y;
-      }
-    }
-    for (const block of colBlocks) block.y -= southY;
+    for (const z of zValues) if (z > maxZ) maxZ = z;
+    const southRow = rowBlocks[maxZ + 1];
+    if (!southRow) continue;
+    const southHasWater = southRow.some(isWaterBlock);
+    const southY = southHasWater && !topAlignedWater ? rowMinY[maxZ + 1] : rowMaxY[maxZ + 1];
+    offsets[x] = -southY;
+  }
+  return offsets;
+}
+
+function applyColumnYOffsets<T extends PositionedEntry>(entries: T[], offsets: readonly number[]) {
+  for (const entry of entries) {
+    const delta = offsets[entry.x];
+    if (delta !== 0) entry.y += delta;
   }
 }
 
@@ -2319,6 +2332,8 @@ function getShapeCacheKeyId(
   stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterDrops?: WaterDrops,
+  topAlignedWater = false,
+  enableWaterConvenience = true,
 ): ShapeCacheKeyId {
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
@@ -2326,6 +2341,8 @@ function getShapeCacheKeyId(
   if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
+  else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
+  if (isStaircaseBuildMode(buildMode)) id += `|waterconv:${enableWaterConvenience ? 1 : 0}`;
   return id as ShapeCacheKeyId;
 }
 
@@ -2341,11 +2358,12 @@ function getCachedStaircaseBaseBlocks(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
   excludeWater: boolean,
+  topAlignedWater: boolean,
 ): ShapeBlock[] {
-  const cacheKey = excludeWater ? "exclude-water" : "default";
+  const cacheKey = excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default");
   const cached = cache.staircaseBaseBlocks.get(cacheKey);
   if (cached) return cached;
-  const blocks = buildStaircaseBlocks(colorGrid, excludeWater);
+  const blocks = buildStaircaseBlocks(colorGrid, excludeWater, topAlignedWater);
   cache.staircaseBaseBlocks.set(cacheKey, blocks);
   return blocks;
 }
@@ -2354,9 +2372,10 @@ function getStaircaseVariantCacheKey(
   buildMode: StaircaseInternalBuildMode,
   paletteSeed: number,
   excludeWater: boolean,
+  topAlignedWater: boolean,
 ): string {
   const modeKey = buildModeUsesPaletteSeed(buildMode) ? `${buildMode}|seed:${paletteSeed}` : buildMode;
-  return `${excludeWater ? "exclude-water" : "default"}|${modeKey}`;
+  return `${excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default")}|${modeKey}`;
 }
 
 function getCachedStaircaseVariantBlocks(
@@ -2365,24 +2384,23 @@ function getCachedStaircaseVariantBlocks(
   buildMode: StaircaseInternalBuildMode,
   paletteSeed: number,
   waterDrops?: WaterDrops,
+  topAlignedWater = false,
 ): ShapeBlock[] {
   const excludeWater = waterDrops !== undefined;
-  const key = getStaircaseVariantCacheKey(buildMode, paletteSeed, excludeWater);
+  const key = getStaircaseVariantCacheKey(buildMode, paletteSeed, excludeWater, topAlignedWater);
   const cached = cache.staircaseVariantBlocks.get(key);
   if (cached) return cached;
 
   const baseBlocks = buildMode === BuildMode.StaircaseGrouped
-    ? getCachedStaircaseVariantBlocks(colorGrid, cache, BuildMode.StaircaseValley, paletteSeed, waterDrops)
-    : getCachedStaircaseBaseBlocks(colorGrid, cache, excludeWater);
+    ? getCachedStaircaseVariantBlocks(colorGrid, cache, BuildMode.StaircaseValley, paletteSeed, waterDrops, topAlignedWater)
+    : getCachedStaircaseBaseBlocks(colorGrid, cache, excludeWater, topAlignedWater);
   const blocks = cloneShapeBlocks(baseBlocks);
   switch (buildMode) {
     case BuildMode.StaircaseNorthline:
       break;
     case BuildMode.StaircaseSouthline:
-      applyStaircaseVariantSouthline(blocks);
       break;
     case BuildMode.StaircaseClassic:
-      applyStaircaseVariantClassic(blocks);
       break;
     case BuildMode.StaircaseValley:
       applyStaircaseVariantValley(blocks, colorGrid, cache, excludeWater);
@@ -2407,19 +2425,45 @@ function getCachedStaircaseParts(
   buildMode: StaircaseInternalBuildMode,
   paletteSeed: number,
   waterDrops?: WaterDrops,
+  topAlignedWater = false,
+  enableWaterConvenience = true,
 ): RawShapePart[] {
   const belowPlatformWater = waterDrops !== undefined;
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, SuppressStepDirection.EastToWest, paletteSeed, waterDrops);
+  const sourceBuildMode =
+    buildMode === BuildMode.StaircaseSouthline || buildMode === BuildMode.StaircaseClassic
+      ? BuildMode.StaircaseNorthline
+      : buildMode;
+  const keyId = getShapeCacheKeyId(
+    buildMode,
+    0,
+    false,
+    SuppressStepDirection.EastToWest,
+    paletteSeed,
+    waterDrops,
+    topAlignedWater,
+    enableWaterConvenience,
+  );
   return getCachedRawParts(cache, keyId, () => {
-    const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, buildMode, paletteSeed, waterDrops));
+    const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, sourceBuildMode, paletteSeed, waterDrops, topAlignedWater));
+    const waterConvenienceFillerCandidates =
+      belowPlatformWater || sourceBuildMode === BuildMode.StaircaseParty || topAlignedWater || !enableWaterConvenience
+        ? []
+        : addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache);
+
+    if (buildMode === BuildMode.StaircaseSouthline) {
+      const southlineOffsets = getStaircaseSouthlineColumnOffsets(blocks, topAlignedWater);
+      applyColumnYOffsets(blocks, southlineOffsets);
+      applyColumnYOffsets(waterConvenienceFillerCandidates, southlineOffsets);
+    } else if (buildMode === BuildMode.StaircaseClassic) {
+      const classicOffsets = getStaircaseClassicColumnOffsets(blocks);
+      applyColumnYOffsets(blocks, classicOffsets);
+      applyColumnYOffsets(waterConvenienceFillerCandidates, classicOffsets);
+    }
+
     if (belowPlatformWater) {
       const { loweredWaterBlocks, supportFloorYs } = buildBelowPlatformWaterBlocks(blocks, colorGrid, waterDrops);
       return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
     }
-    const waterConvenienceFillerCandidates =
-      buildMode === BuildMode.StaircaseParty
-        ? []
-        : addStaircaseWaterConvenienceFillers(blocks, colorGrid, cache);
     return [buildShapePart(blocks, waterConvenienceFillerCandidates)];
   });
 }
@@ -2473,6 +2517,8 @@ function buildRawShapeParts(
   stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterDrops?: WaterDrops,
+  topAlignedWater = false,
+  enableWaterConvenience = true,
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
@@ -2488,7 +2534,7 @@ function buildRawShapeParts(
     case BuildMode.Suppress2LayerLatePairs:
       return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs, waterDrops);
     default: {
-      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterDrops);
+      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience);
     }
   }
 }
@@ -2501,13 +2547,35 @@ function getGeneratedShape(
   stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterDrops?: WaterDrops,
+  topAlignedWater = false,
+  enableWaterConvenience = true,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
-  const cacheKeyId = getShapeCacheKeyId(buildMode, layerGap, mixSteps, stepDirection, paletteSeed, waterDrops);
+  const cacheKeyId = getShapeCacheKeyId(
+    buildMode,
+    layerGap,
+    mixSteps,
+    stepDirection,
+    paletteSeed,
+    waterDrops,
+    topAlignedWater,
+    enableWaterConvenience,
+  );
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
-  const rawParts = buildRawShapeParts(colorGrid, cache, buildMode, layerGap, mixSteps, stepDirection, paletteSeed, waterDrops);
+  const rawParts = buildRawShapeParts(
+    colorGrid,
+    cache,
+    buildMode,
+    layerGap,
+    mixSteps,
+    stepDirection,
+    paletteSeed,
+    waterDrops,
+    topAlignedWater,
+    enableWaterConvenience,
+  );
   const parts = rawParts.map(finalizeShapePart);
   const splitExportNames =
     buildMode === BuildMode.SuppressSplitRow
@@ -2543,7 +2611,8 @@ export function generateShapeMap(
     layerGap: number;
     mixSteps?: boolean;
     paletteSeed?: number;
-    waterDrops?: WaterDrops;
+    waterSetting?: StaircaseWaterSetting;
+    enableWaterConvenience?: boolean;
     selectedMode?: BuildMode | null;
     selectedStepDirection: SuppressStepDirection;
   },
@@ -2551,7 +2620,9 @@ export function generateShapeMap(
   const mixSteps = options.mixSteps ?? false;
   const stepDirection = options.selectedStepDirection;
   const paletteSeed = options.paletteSeed ?? 0;
-  const waterDrops = options.waterDrops;
+  const waterDrops = options.waterSetting?.kind === "below-platform" ? options.waterSetting.drops : undefined;
+  const topAlignedWater = options.waterSetting?.kind === "top-aligned";
+  const enableWaterConvenience = options.enableWaterConvenience ?? true;
   const staircaseVisibleModes: BuildMode[] =
     !hasTransparency && !hasWater &&
     (allSameShade === Shade.Dark || allSameShade === Shade.Light)
@@ -2573,6 +2644,8 @@ export function generateShapeMap(
       stepDirection,
       paletteSeed,
       waterDrops,
+      topAlignedWater,
+      enableWaterConvenience,
     );
     if (seenShapeSignatures.has(signatureId)) continue;
     seenShapeSignatures.add(signatureId);
@@ -2589,6 +2662,8 @@ export function generateShapeMap(
       stepDirection,
       paletteSeed,
       waterDrops,
+      topAlignedWater,
+      enableWaterConvenience,
     );
     if (!seenShapeSignatures.has(signatureId)) {
       seenShapeSignatures.add(signatureId);

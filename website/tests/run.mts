@@ -796,7 +796,13 @@ async function runFixtureCase(
     },
     usedWaterShades,
   );
-  const activeWaterDrops = testCase.settings.belowPlatformWater && imageHasWater ? waterDrops : undefined;
+  const activeWaterSetting =
+    testCase.settings.belowPlatformWater && imageHasWater
+      ? ({ kind: "below-platform", drops: waterDrops } as const)
+      : (!testCase.settings.belowPlatformWater && usesWaterForWater && imageHasNonLightWater
+          ? ({ kind: "top-aligned" } as const)
+          : undefined);
+  const activeWaterDrops = activeWaterSetting?.kind === "below-platform" ? activeWaterSetting.drops : undefined;
 
   const showMixStepsToggle =
     isSuppressStepsBuildMode(testCase.settings.buildMode) &&
@@ -821,7 +827,8 @@ async function runFixtureCase(
       layerGap: testCase.settings.layerGap,
       mixSteps: showMixStepsToggle && testCase.settings.mixSteps,
       paletteSeed: paletteSeedOffset,
-      waterDrops: activeWaterDrops,
+      waterSetting: activeWaterSetting,
+      enableWaterConvenience: testCase.settings.supportMode !== SupportMode.None,
       selectedMode: testCase.settings.buildMode,
       selectedStepDirection: testCase.settings.suppressStepDirection,
     },

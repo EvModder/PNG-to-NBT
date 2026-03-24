@@ -605,6 +605,7 @@ const Index = () => {
   const fullImageUsedShadesByBase = derivedImageStats?.usedShadesByBase ?? new Map<number, Set<Shade>>();
   const usedWaterShades = derivedImageStats?.usedWaterShades ?? new Set<Shade>();
   const imageHasWater = usedWaterShades.size > 0;
+  const imageHasNonLightWater = usedWaterShades.has(Shade.Dark) || usedWaterShades.has(Shade.Flat);
   const paletteUsageInfo = derivedImageStats?.paletteUsageInfo ?? null;
   const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
@@ -621,7 +622,15 @@ const Index = () => {
     ),
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
-  const activeWaterDrops = belowPlatformWater && imageHasWater ? normalizedDeferredWaterDrops : undefined;
+  const activeWaterSetting = useMemo(
+    () => {
+      if (belowPlatformWater && imageHasWater) return { kind: "below-platform", drops: normalizedDeferredWaterDrops } as const;
+      if (!belowPlatformWater && usesWaterForWater && imageHasNonLightWater) return { kind: "top-aligned" } as const;
+      return undefined;
+    },
+    [belowPlatformWater, imageHasWater, normalizedDeferredWaterDrops, usesWaterForWater, imageHasNonLightWater],
+  );
+  const activeWaterDrops = activeWaterSetting?.kind === "below-platform" ? activeWaterSetting.drops : undefined;
   const showMixStepsToggle = useMemo(
     () =>
       isSuppressStepsBuildMode(buildMode) &&
@@ -645,7 +654,8 @@ const Index = () => {
           layerGap: calcLayerGap,
           mixSteps: showMixStepsToggle && calcMixSteps,
           paletteSeed: paletteSeedOffset,
-          waterDrops: activeWaterDrops,
+          waterSetting: activeWaterSetting,
+          enableWaterConvenience: supportMode !== SupportMode.None,
           selectedMode: buildMode,
           selectedStepDirection: suppressStepDirection,
           },
@@ -658,9 +668,10 @@ const Index = () => {
       showMixStepsToggle,
       calcMixSteps,
       paletteSeedOffset,
-      activeWaterDrops,
+      activeWaterSetting,
       buildMode,
       suppressStepDirection,
+      supportMode,
       derivedImageStats,
       imageHasWater,
       twoLayerHasLateVoidNeed,

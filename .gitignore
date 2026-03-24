@@ -1,7 +1,7 @@
 # My crap
-tests/failures/
-sample_imgs/
+website/tests/failures/
 website/reports/
+sample_imgs/
 upstream-compare-*/
 
 # Log crap
