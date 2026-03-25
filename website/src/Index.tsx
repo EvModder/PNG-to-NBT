@@ -65,7 +65,7 @@ import {
 } from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { decodeFullPreset, encodeFullPreset } from "@/lib/presetCodec";
-import { useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
+import { usePreviewVisiblePixelMask, useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { getBlockIconAtlasEntry, toBlockIconKey } from "@/lib/blockIconAtlas";
 import { getSupportedColorAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
@@ -1475,17 +1475,31 @@ const Index = () => {
   const showRecessiveVoidFillerInput =
     !!imageData &&
     recessiveVoidFillerRequiredCount > 0;
+  const previewXColumnRange = useMemo<[number, number] | undefined>(
+    () => (colRangeEnabled && !isStepRangeMode ? [colStart, colEnd] : undefined),
+    [colRangeEnabled, isStepRangeMode, colStart, colEnd],
+  );
+  const previewPhaseRange = useMemo<[number, number] | undefined>(
+    () => (colRangeEnabled && isStepRangeMode ? [colStart, colEnd] : undefined),
+    [colRangeEnabled, isStepRangeMode, colStart, colEnd],
+  );
   const previewVsFillerReplacements = useVsFillerPreviewReplacements({
     shape: supportShape,
     shadeFillerBlock,
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
-    xColumnRange: colRangeEnabled && !isStepRangeMode ? [colStart, colEnd] : undefined,
+    xColumnRange: previewXColumnRange,
+  });
+  const previewVisiblePixelMask = usePreviewVisiblePixelMask({
+    shape: previewPhaseRange ? supportShape : null,
+    phaseRange: previewPhaseRange,
   });
   const showVsFillersInPreviewToggle = previewVsFillerReplacements.length > 0;
   const previewImageUrl = usePreviewImageUrl({
     imageData,
     pixelReplacements: showVsFillersInPreview ? previewVsFillerReplacements : undefined,
+    xColumnRange: previewXColumnRange,
+    visiblePixelMask: previewPhaseRange ? previewVisiblePixelMask : undefined,
   });
   const hasAnyFillerInput =
     showSupportFillerInput ||
@@ -2242,7 +2256,7 @@ const Index = () => {
 
       <div
         ref={layoutRootRef}
-        className={`flex gap-2 p-2 max-w-[2000px] mx-auto ${
+        className={`flex gap-2 p-2 w-full ${
           isStackedLayout ? "flex-col" : "flex-row flex-wrap items-start"
         }`}
       >
