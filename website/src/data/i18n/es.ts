@@ -256,8 +256,10 @@ export const esCatalog = {
       "El relleno de soporte no es válido ({value}).\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán.",
     waterSideSupportNotColorIdZero:
       "El relleno de soporte no es color_id=0 ({value}).\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán.",
+    fragileSupportOverrideWarningSingle:
+      "El soporte para {blockId} debe ser {support}",
     fragileSupportOverrideWarning:
-      "El soporte para {blockId} debe ser {supports}.",
+      "El soporte para {blockId} debe ser uno de:\n{supports}",
     vsFillerInvalid: {
       one: "{label} no es válido ({value}).\nHabrá {count} píxel de escalera con sombreado incorrecto.",
       other: "{label} no es válido ({value}).\nHabrá {count} píxeles de escalera con sombreado incorrecto.",

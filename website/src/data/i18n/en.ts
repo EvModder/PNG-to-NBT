@@ -260,8 +260,10 @@ export const enCatalog = {
       "Support filler is invalid ({value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.",
     waterSideSupportNotColorIdZero:
       "Support filler is not color_id=0 ({value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.",
+    fragileSupportOverrideWarningSingle:
+      "Support for {blockId} must be {support}",
     fragileSupportOverrideWarning:
-      "Support for {blockId} must be {supports}.",
+      "Support for {blockId} must be one of:\n{supports}",
     vsFillerInvalid: {
       one: "{label} is invalid ({value}).\nThere will be {count} staircase pixel with incorrect shading.",
       other: "{label} is invalid ({value}).\nThere will be {count} staircase pixels with incorrect shading.",

@@ -84,12 +84,9 @@ function formatRgbList(colors: number[]): string {
 
 function formatBlockIdList(blockIds: readonly string[]): string {
   const formatted = [...blockIds];
-  if (formatted.length <= 1) return formatted[0] ?? "";
-
-  const conjunction = catalog.locale === "es" ? "o" : "or";
-  if (formatted.length === 2) return `${formatted[0]} ${conjunction} ${formatted[1]}`;
-
-  return `${formatted.slice(0, -1).join(", ")} ${conjunction} ${formatted[formatted.length - 1]}`;
+  if (formatted.length === 0) return "[]";
+  if (formatted.length <= 3) return `[${formatted.join(", ")}]`;
+  return `[${formatted[0]}, ${formatted[1]}, ... +${formatted.length - 2}]`;
 }
 
 // Callers:
@@ -289,6 +286,12 @@ export const messages = {
       );
     },
     fragileSupportOverrideWarning(blockId: string, validSupportBlocks: readonly string[]): string {
+      if (validSupportBlocks.length === 1) {
+        return formatTemplate(catalog.preview.fragileSupportOverrideWarningSingle, {
+          blockId,
+          support: validSupportBlocks[0],
+        });
+      }
       return formatTemplate(catalog.preview.fragileSupportOverrideWarning, {
         blockId,
         supports: formatBlockIdList(validSupportBlocks),

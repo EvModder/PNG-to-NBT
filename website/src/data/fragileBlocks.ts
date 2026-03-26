@@ -50,7 +50,7 @@ const FRAGILE_BLOCKS = new Set([
   "blue_candle", "brown_candle", "green_candle", "red_candle", "black_candle",
 
     // Plants / vegetation with placement conditions
-  "pink_petals", "fern", "short_grass", "tall_grass", "dead_bush",
+  "pink_petals", "wildflowers", "fern", "short_grass", "tall_grass", "dead_bush",
   "sugar_cane", "cactus", "vine", "lily_pad",
   "crimson_roots", "warped_roots", "nether_sprouts",
   "twisting_vines", "weeping_vines",
@@ -68,31 +68,36 @@ const FRAGILE_BLOCKS = new Set([
 ]);
 
 const DIRT_LIKE_SUPPORT_BLOCKS = [
-  "grass_block",
   "dirt",
-  "coarse_dirt",
+  "mud",
   "podzol",
-  "rooted_dirt",
-  "farmland",
   "mycelium",
+  "grass_block",
   "moss_block",
   "pale_moss_block",
-  "mud",
+  "coarse_dirt",
+  "rooted_dirt",
   "muddy_mangrove_roots",
 ] as const;
+// Intentionally omits some edge-case valid supports such as farmland, to keep the shared
+// dirt-like family small and predictable across the fragile-support replacement rules.
 
-const NETHER_FUNGUS_SUPPORT_BLOCKS = [
+const MUSHROOM_SUPPORT_BLOCKS = [
   ...DIRT_LIKE_SUPPORT_BLOCKS,
   "crimson_nylium",
   "warped_nylium",
   "soul_soil",
 ] as const;
 
-const MUSHROOM_SAFE_SUPPORT_BLOCKS = [
-  "podzol",
-  "mycelium",
-  "crimson_nylium",
-  "warped_nylium",
+const SAND_SUPPORT_BLOCKS = [
+  "sand",
+  "red_sand",
+  "suspicious_sand",
+] as const;
+
+const SUGAR_CANE_SUPPORT_BLOCKS = [
+  ...DIRT_LIKE_SUPPORT_BLOCKS,
+  ...SAND_SUPPORT_BLOCKS,
 ] as const;
 
 type FragileSupportRuleValue = {
@@ -112,16 +117,24 @@ export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ["fire", { validSupportBlocks: ["netherrack"], replacementBlock: "netherrack" }],
   ["soul_fire", { validSupportBlocks: ["soul_sand", "soul_soil"], replacementBlock: "soul_soil" }],
   ["nether_wart", { validSupportBlocks: ["soul_sand"], replacementBlock: "soul_sand" }],
-  ["brown_mushroom", { validSupportBlocks: MUSHROOM_SAFE_SUPPORT_BLOCKS, replacementBlock: "podzol" }],
-  ["red_mushroom", { validSupportBlocks: MUSHROOM_SAFE_SUPPORT_BLOCKS, replacementBlock: "podzol" }],
-  ["crimson_fungus", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "crimson_nylium" }],
-  ["crimson_roots", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "crimson_nylium" }],
-  ["warped_fungus", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "warped_nylium" }],
-  ["warped_roots", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "warped_nylium" }],
-  ["nether_sprouts", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "warped_nylium" }],
+  // Direct-below support only. Sugar cane also requires adjacent water, waterlogging, or frosted ice,
+  // which is intentionally outside the scope of this replacement system.
+  ["sugar_cane", { validSupportBlocks: SUGAR_CANE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  // Direct-below support only. This does not try to model the cactus side-adjacency survival rules.
+  ["cactus", { validSupportBlocks: SAND_SUPPORT_BLOCKS, replacementBlock: "sand" }],
+  // Low-light-capable substrates only. This intentionally does not try to model every possible
+  // full-top support block mushrooms can use at low light.
+  ["brown_mushroom", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["red_mushroom", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["crimson_fungus", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["crimson_roots", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["warped_fungus", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["warped_roots", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["nether_sprouts", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   // Intentionally partial: vanilla also allows some waterlogged support blocks.
-  ["lily_pad", { validSupportBlocks: ["water", "ice", "frosted_ice"], replacementBlock: "water" }],
+  ["lily_pad", { validSupportBlocks: ["water", "ice", "frosted_ice"], replacementBlock: "ice" }],
   ["pink_petals", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["wildflowers", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["fern", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["short_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["tall_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
