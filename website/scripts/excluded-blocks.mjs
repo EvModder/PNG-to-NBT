@@ -8,14 +8,14 @@
  *
  * Callers:
  * - scripts/audit-mapcolors.mjs
- * - scripts/build-precomputed-block-icons.mjs
+ * - scripts/build-block-icon-files.mjs
  */
 // Callers:
 // - scripts/audit-mapcolors.mjs
-// - scripts/build-precomputed-block-icons.mjs
+// - scripts/build-block-icon-files.mjs
 export const EXCLUDED_BLOCK_PATTERNS = [
   /_stairs$/,
-  /_shulker_box$/,
+  /^(?!purple_shulker_box$).*_shulker_box$/,
   /_button$/,
   /_wall$/,
   /_fence$/,
@@ -34,6 +34,8 @@ export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "cauldron",
   "farmland",
   "dirt_path",
+  "shulker_box",
+  "end_portal_frame",
   "grindstone",
   "brewing_stand",
   "heavy_core",
@@ -110,7 +112,7 @@ export const EXCLUDED_BLOCK_IDS_UNOBTAINABLE = new Set([
 
 // Callers:
 // - scripts/audit-mapcolors.mjs
-// - scripts/build-precomputed-block-icons.mjs
+// - scripts/build-block-icon-files.mjs
 export const EXCLUDED_BLOCK_IDS = new Set([
   ...EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL,
   ...EXCLUDED_BLOCK_IDS_UNOBTAINABLE,

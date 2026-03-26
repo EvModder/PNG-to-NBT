@@ -43,11 +43,11 @@ import type { ColorRgbBase } from "@/types/color";
  *   - `budding_amethyst`
  *   - `infested_*`
  * - Explicitly excluded block IDs (obtainable but intentionally omitted):
- *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`
+ *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`, `lily_pad`, `shulker_box`, `end_portal_frame`
  *   - `grindstone`, `brewing_stand`, `heavy_core`
  *   - `.*_head` and `.*_skull`
  *   - `.*_stairs`
- *   - `.*_shulker_box`
+ *   - `.*_shulker_box`, except `purple_shulker_box`
  *   - `.*_button`
  *   - `.*_wall`
  *   - `.*_fence`
@@ -104,7 +104,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "FIRE", r: 255, g: 0, b: 0, blocks: ["redstone_block", "tnt", "lava", "fire"] },
   { name: "ICE", r: 160, g: 160, b: 255, blocks: ["ice", "packed_ice", "blue_ice", "frosted_ice"] },
   { name: "METAL", r: 167, g: 167, b: 167, blocks: ["iron_block", "heavy_weighted_pressure_plate", "lodestone", "pale_oak_leaves", "anvil", "lantern", "closed_eyeblossom"] },
-  { name: "PLANT", r: 0, g: 124, b: 0, blocks: ["oak_leaves", "spruce_leaves", "birch_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "azalea_leaves", "flowering_azalea_leaves", "cactus", "vine", "sugar_cane", "fern", "short_grass", "tall_grass", "lily_pad", "pink_petals", "wildflowers"] },
+  { name: "PLANT", r: 0, g: 124, b: 0, blocks: ["oak_leaves", "spruce_leaves", "birch_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "azalea_leaves", "flowering_azalea_leaves", "cactus", "vine", "sugar_cane", "fern", "short_grass", "tall_grass", "pink_petals", "wildflowers"] },
   { name: "SNOW", r: 255, g: 255, b: 255, blocks: ["white_wool", "white_carpet", "white_concrete", "white_concrete_powder", "white_glazed_terracotta", "white_stained_glass", "snow_block", "snow", "powder_snow"] },
   { name: "CLAY", r: 164, g: 168, b: 184, blocks: ["clay"] },
   { name: "DIRT", r: 151, g: 109, b: 77, blocks: ["dirt", "coarse_dirt", "granite", "granite_slab", "polished_granite", "polished_granite_slab", "packed_mud", "jungle_log", "stripped_jungle_log", "jungle_wood", "stripped_jungle_wood", "jungle_planks", "jungle_slab", "jungle_pressure_plate", "brown_mushroom_block", "rooted_dirt", "hanging_roots"] },
@@ -143,7 +143,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "TERRACOTTA_GRAY", r: 57, g: 41, b: 35, blocks: ["gray_terracotta", "cherry_wood", "tuff", "tuff_slab", "polished_tuff", "polished_tuff_slab", "tuff_bricks", "tuff_brick_slab", "chiseled_tuff", "chiseled_tuff_bricks"] },
   { name: "TERRACOTTA_LIGHT_GRAY", r: 135, g: 107, b: 98, blocks: ["light_gray_terracotta", "waxed_exposed_copper", "waxed_exposed_cut_copper", "waxed_exposed_cut_copper_slab", "mud_bricks", "mud_brick_slab"] },
   { name: "TERRACOTTA_CYAN", r: 87, g: 92, b: 92, blocks: ["cyan_terracotta", "mud"] },
-  { name: "TERRACOTTA_PURPLE", r: 122, g: 73, b: 88, blocks: ["purple_terracotta"] },
+  { name: "TERRACOTTA_PURPLE", r: 122, g: 73, b: 88, blocks: ["purple_terracotta", "purple_shulker_box"] },
   { name: "TERRACOTTA_BLUE", r: 76, g: 62, b: 92, blocks: ["blue_terracotta"] },
   { name: "TERRACOTTA_BROWN", r: 76, g: 50, b: 35, blocks: ["brown_terracotta", "dripstone_block", "pointed_dripstone"] },
   { name: "TERRACOTTA_GREEN", r: 76, g: 82, b: 42, blocks: ["green_terracotta"] },

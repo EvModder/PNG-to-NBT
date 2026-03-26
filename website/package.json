@@ -16,7 +16,7 @@
     "test:fixtures": "bun run tests/run.mts",
     "audit:mapcolors": "node scripts/audit-mapcolors.mjs",
     "audit:mapcolors:strict": "node scripts/audit-mapcolors.mjs --strict-missing",
-    "build:block-icons": "python3 scripts/generate-stateful-icon-overrides.py && node scripts/build-precomputed-block-icons.mjs && python3 scripts/postprocess-precomputed-block-icons.py && python3 scripts/build-icon-atlases.py"
+    "build:block-icons": "python3 scripts/generate-stateful-icon-overrides.py && node scripts/build-block-icon-files.mjs && python3 scripts/postprocess-block-icon-files.py && python3 scripts/render-shulker-icons.py && python3 scripts/build-icon-atlases.py"
   },
   "dependencies": {
     "@types/utif": "^3.0.6",

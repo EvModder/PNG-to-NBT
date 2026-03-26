@@ -41,6 +41,7 @@ import {
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
+import { BLOCK_ICON_ATLASES } from "@/data/blockIconAtlases";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
@@ -203,11 +204,8 @@ type ShapeWarning = {
   invalid: boolean;
 };
 const DEFAULT_SWATCH_SHADES: Shade[] = [Shade.Light, Shade.Flat, Shade.Dark];
-const KNOWN_PRIMARY_ICON_BLOCKS = new Set(
-  BASE_COLORS.flatMap(c => c.blocks),
-);
-const KNOWN_EXCLUDED_ICON_BLOCKS = new Set(EXCLUDED_BLOCKS.flat());
-const KNOWN_PRECOMPUTED_ICON_BLOCKS = new Set([...KNOWN_PRIMARY_ICON_BLOCKS, ...KNOWN_EXCLUDED_ICON_BLOCKS]);
+const KNOWN_PRIMARY_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.primary.entries));
+const KNOWN_UNUSED_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.unused.entries));
 
 type PackedBlockIconProps = {
   atlasKey: string;
@@ -1998,36 +1996,23 @@ const Index = () => {
     return { backgroundImage: `linear-gradient(to bottom, ${stops.join(", ")})` };
   }, [getColorSwatchShades]);
 
-  const getBlockIconSrc = useCallback(
-    (block: string): string => {
-      const key = toBlockIconKey(block);
-      if (KNOWN_PRIMARY_ICON_BLOCKS.has(block)) {
-        return `${import.meta.env.BASE_URL}block-icons/precomputed/${key}.png`;
-      }
-      if (KNOWN_EXCLUDED_ICON_BLOCKS.has(block)) {
-        return `${import.meta.env.BASE_URL}block-icons/precomputed/unused/${key}.png`;
-      }
-      return `${import.meta.env.BASE_URL}block-icons/precomputed/${key}.png`;
-    },
-    [],
-  );
   const getBlockIconAsset = useCallback(
     (block: string) => {
       const atlasKey = toBlockIconKey(block);
-      if (KNOWN_EXCLUDED_ICON_BLOCKS.has(block)) {
+      if (KNOWN_UNUSED_ICON_KEYS.has(atlasKey)) {
         return {
           atlasKey,
           atlasName: "unused" as const,
-          fallbackSrc: `${import.meta.env.BASE_URL}block-icons/precomputed/unused/${atlasKey}.png`,
+          fallbackSrc: `${import.meta.env.BASE_URL}block-icons/unused/${atlasKey}.png`,
         };
       }
       return {
         atlasKey,
         atlasName: "primary" as const,
-        fallbackSrc: getBlockIconSrc(block),
+        fallbackSrc: `${import.meta.env.BASE_URL}block-icons/primary/${atlasKey}.png`,
       };
     },
-    [getBlockIconSrc],
+    [],
   );
 
   const getShadeTooltip = (idx: number, shade: Shade): string => {
@@ -2107,13 +2092,13 @@ const Index = () => {
             }
             onMouseLeave={() => queueSwatchTooltip(null)}
           >
-            <PackedBlockIcon
-              atlasKey="world_border"
-              atlasName="primary"
-              fallbackSrc={`${import.meta.env.BASE_URL}block-icons/precomputed/world_border.png`}
-              alt={messages.swatches.transparent}
-              className="w-full h-full"
-            />
+              <PackedBlockIcon
+                atlasKey="world_border"
+                atlasName="primary"
+                fallbackSrc={`${import.meta.env.BASE_URL}block-icons/primary/world_border.png`}
+                alt={messages.swatches.transparent}
+                className="w-full h-full"
+              />
           </div>
         ) : (
           <div
@@ -2204,8 +2189,10 @@ const Index = () => {
               ).map(b => {
                 const selected = selectedBlock === b;
                 const isIceWaterOption = idx === WATER_BASE_INDEX && normalizeBlockId(b) === "ice";
-                const hasIcon = KNOWN_PRECOMPUTED_ICON_BLOCKS.has(b);
                 const iconAsset = getBlockIconAsset(b);
+                const hasIcon = iconAsset.atlasName === "unused"
+                  ? KNOWN_UNUSED_ICON_KEYS.has(iconAsset.atlasKey)
+                  : KNOWN_PRIMARY_ICON_KEYS.has(iconAsset.atlasKey);
                 return (
                   <button
                     key={b}

@@ -10,7 +10,7 @@ import { BASE_COLORS } from "./mapColors";
 /* Exclusion documentation:
  * - Pattern-excluded obtainable omissions:
  *   - `.*_stairs`
- *   - `.*_shulker_box`
+ *   - `.*_shulker_box`, except `purple_shulker_box`
  *   - `.*_button`
  *   - `.*_wall`
  *   - `.*_fence`
@@ -29,7 +29,7 @@ import { BASE_COLORS } from "./mapColors";
  *   - `budding_amethyst`
  *   - `infested_*`
  * - Explicit obtainable but intentionally omitted exclusions:
- *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`
+ *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`, `lily_pad`, `shulker_box`, `end_portal_frame`
  *   - `grindstone`, `brewing_stand`, `heavy_core`
  *   - `player_head`, `zombie_head`, `skeleton_skull`, `wither_skeleton_skull`, `creeper_head`, `dragon_head`, `piglin_head`
  *   - `jukebox`
@@ -106,6 +106,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "smooth_sandstone_stairs",
   ],
   6: ["brewing_stand", "grindstone", "heavy_core", "iron_door", "iron_trapdoor"],
+  7: ["lily_pad"],
   8: ["white_shulker_box"],
   9: [
     "infested_chiseled_stone_bricks",
@@ -190,6 +191,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "smooth_quartz_stairs",
   ],
   15: [
+    "orange_shulker_box",
     "acacia_door",
     "acacia_fence",
     "acacia_fence_gate",
@@ -204,7 +206,6 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "acacia_wall_sign",
     "cut_copper_stairs",
     "lightning_rod",
-    "orange_shulker_box",
     "red_sandstone_stairs",
     "red_sandstone_wall",
     "smooth_red_sandstone_stairs",
@@ -213,17 +214,17 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   ],
   16: ["magenta_shulker_box", "purpur_stairs"],
   17: ["light_blue_shulker_box"],
-  18: ["bamboo_hanging_sign", "bamboo_trapdoor", "bamboo_wall_hanging_sign", "yellow_shulker_box"],
+  18: ["yellow_shulker_box", "bamboo_hanging_sign", "bamboo_trapdoor", "bamboo_wall_hanging_sign"],
   19: ["lime_shulker_box"],
   20: ["pink_shulker_box"],
   21: ["gray_shulker_box"],
-  22: ["jigsaw", "light_gray_shulker_box", "structure_block"],
+  22: ["light_gray_shulker_box", "jigsaw", "structure_block"],
   23: ["cyan_shulker_box", "prismarine_stairs", "prismarine_wall"],
-  24: ["budding_amethyst", "purple_shulker_box", "repeating_command_block"],
+  24: ["shulker_box", "budding_amethyst", "repeating_command_block"],
   25: ["blue_shulker_box"],
   26: ["brown_shulker_box", "command_block", "dark_oak_door", "dark_oak_fence", "dark_oak_fence_gate", "dark_oak_sign", "dark_oak_stairs", "dark_oak_trapdoor"],
-  27: ["chain_command_block", "green_shulker_box"],
-  28: ["brick_stairs", "brick_wall", "enchanting_table", "mangrove_door", "mangrove_fence", "mangrove_fence_gate", "mangrove_sign", "mangrove_stairs", "mangrove_trapdoor", "red_shulker_box"],
+  27: ["green_shulker_box", "end_portal_frame", "chain_command_block"],
+  28: ["red_shulker_box", "brick_stairs", "brick_wall", "enchanting_table", "mangrove_door", "mangrove_fence", "mangrove_fence_gate", "mangrove_sign", "mangrove_stairs", "mangrove_trapdoor"],
   29: ["black_shulker_box", "dragon_egg", "end_portal", "respawn_anchor"],
   34: ["spruce_door", "spruce_fence", "spruce_fence_gate", "spruce_sign", "spruce_stairs", "spruce_trapdoor"],
   35: ["nether_brick_fence", "nether_brick_stairs", "nether_brick_wall", "red_nether_brick_stairs", "red_nether_brick_wall"],
