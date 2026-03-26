@@ -164,7 +164,6 @@ export const enCatalog = {
     supportLabel: "Support:",
     supportTooltip:
       "Used for support and convenience filler placements, including Steps, All, Fragile, Water support, and water-path connectors.",
-    supportPlaceholder: "resin_block",
     supportRequiredTooltip: "Required support/convenience filler placements for the current output range.",
     shadeLabel: "Shade:",
     nooblineLabel: "Noobline:",
@@ -176,18 +175,15 @@ export const enCatalog = {
     dominateVoidWarningLabel: "VS-Filler-1",
     dominateVoidTooltip:
       "Used when the north cell for a dominant pixel does not naturally provide the needed shading height (for example transparent or dropped-below water), so a temporary filler must overwrite that north cell. This filler will need to be manually suppressed after building the NBT.",
-    dominateVoidPlaceholder: "slime_block",
     dominateVoidRequiredTooltip: "Required VS-Filler-1 placements for the current output range.",
     recessiveVoidLabel: "VS-2:",
     recessiveVoidWarningLabel: "VS-Filler-2",
     recessiveVoidTooltip:
       "Used when the north cell for a recessive pixel does not naturally provide the needed shading height (for example transparent or dropped-below water), so a temporary filler must overwrite that north cell. This filler will need to be manually suppressed after building the NBT.",
-    recessiveVoidPlaceholder: "honey_block",
     recessiveVoidRequiredTooltip: "Required VS-Filler-2 placements for the current output range.",
     voidFillersWarningLabel: "VS-Fillers",
     lateLabel: "Late:",
     lateTooltip: "Used by Suppress (2-Layer, Late-Fillers) for late lower-layer suppress placements.",
-    latePlaceholder: "slime_block",
     lateRequiredTooltip: "Required late suppress filler placements for the current output range.",
   },
   table: {
@@ -264,6 +260,8 @@ export const enCatalog = {
       "Support filler is invalid ({value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.",
     waterSideSupportNotColorIdZero:
       "Support filler is not color_id=0 ({value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.",
+    fragileSupportOverrideWarning:
+      "Support for {blockId} must be {supports}.",
     vsFillerInvalid: {
       one: "{label} is invalid ({value}).\nThere will be {count} staircase pixel with incorrect shading.",
       other: "{label} is invalid ({value}).\nThere will be {count} staircase pixels with incorrect shading.",

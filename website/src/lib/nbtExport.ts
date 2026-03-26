@@ -9,7 +9,7 @@ import { MAP_SIZE } from "@/utils/color";
 import type { ColorRef, ColorRgbCustom } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
-import { resolveShapeColorBlockName } from "./materialRules";
+import { resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
 import { type BlockEntry, gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { createZip } from "@/utils/zip";
 import type { FillerAssignment } from "@/types/conversion";
@@ -21,6 +21,7 @@ import {
   NO_SUPPORT_FLOORS,
   parseShapeCoordKey,
   shouldIncludeFragileSupportCell,
+  getFragileSupportOverride,
 } from "./shapeModel";
 
 interface ExportOptions {
@@ -86,14 +87,17 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
 
   for (const assignment of options.fillerAssignments) {
     const fillerName = resolveAssignedFillerName(fillerAssignments, assignment.role);
-    if (!fillerName) continue;
     for (const [coord, cell] of part.cells) {
       if (!isShapeFillerCell(cell) || !cell.includes(assignment.role)) continue;
       const [x, y, z] = parseShapeCoordKey(coord);
       if (!shouldIncludeFragileSupportCell(part, coord, cell, assignment.role, options)) continue;
       if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
       if (occupied.has(coord)) continue;
-      resolved.push({ x, y, z, blockName: fillerName });
+      const assignedSupportBlock = fillerAssignments.get(assignment.role) ?? null;
+      const override = getFragileSupportOverride(part, coord, assignment.role, assignedSupportBlock, options);
+      const blockName = override ? resolveExportBlockName(override.replacementBlockId) : fillerName;
+      if (!blockName) continue;
+      resolved.push({ x, y, z, blockName });
       occupied.add(coord);
     }
   }

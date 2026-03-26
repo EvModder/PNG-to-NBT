@@ -7,6 +7,7 @@
  * - src/Index.tsx
  */
 import { BLOCK_ICON_ATLASES, type BlockIconAtlasName } from "@/data/blockIconAtlases";
+import { stripDefaultBlockNamespace } from "@/lib/blockId";
 
 interface BlockIconAtlasEntry {
   atlasSrc: string;
@@ -19,8 +20,7 @@ interface BlockIconAtlasEntry {
 // Callers:
 // - src/Index.tsx
 export function toBlockIconKey(raw: string): string {
-  return raw
-    .replace(/^minecraft:/i, "")
+  return stripDefaultBlockNamespace(raw)
     .replace(/__/g, "__us__")
     .replace(/\[/g, "__lb__")
     .replace(/\]/g, "__rb__")

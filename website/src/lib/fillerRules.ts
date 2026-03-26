@@ -16,9 +16,8 @@
  * - src/lib/nbtExport.ts
  */
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "../data/mapColors";
-import { normalizeBlockId } from "@/utils/blockId";
+import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
-import { resolveBlockName } from "./materialRules";
 import { SupportMode } from "@/types/ui";
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId));
@@ -158,7 +157,7 @@ export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, 
   if (!block) return null;
   if (role === FillerRole.SupportWaterSides && !isWaterSideSupportFillerValid(block)) return null;
   if (isShadeCriticalFillerRole(role) ? isShadeFillerDisabled(block) : isFillerDisabled(block)) return null;
-  return resolveBlockName(block);
+  return resolveExportBlockName(block);
 }
 
 // Callers:

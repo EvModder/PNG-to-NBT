@@ -159,7 +159,6 @@ export const esCatalog = {
     supportLabel: "Soporte:",
     supportTooltip:
       "Se usa para colocaciones de relleno de soporte y conveniencia, incluyendo Escalones, Todo, Frágil, soporte de agua y conectores de camino de agua.",
-    supportPlaceholder: "resin_block",
     supportRequiredTooltip: "Colocaciones de relleno de soporte/conveniencia requeridas para el rango de salida actual.",
     shadeLabel: "Sombra:",
     nooblineLabel: "Noobline:",
@@ -172,18 +171,15 @@ export const esCatalog = {
     dominateVoidWarningLabel: "VS-Relleno-1",
     dominateVoidTooltip:
       "Se usa cuando la celda norte de un píxel dominante no aporta de forma natural la altura de sombreado necesaria (por ejemplo, por transparencia o por agua bajada bajo la plataforma), así que un relleno temporal debe sobrescribir esa celda norte. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
-    dominateVoidPlaceholder: "slime_block",
     dominateVoidRequiredTooltip: "Colocaciones requeridas de VS-Relleno-1 para el rango de salida actual.",
     recessiveVoidLabel: "VS-2:",
     recessiveVoidWarningLabel: "VS-Relleno-2",
     recessiveVoidTooltip:
       "Se usa cuando la celda norte de un píxel recesivo no aporta de forma natural la altura de sombreado necesaria (por ejemplo, por transparencia o por agua bajada bajo la plataforma), así que un relleno temporal debe sobrescribir esa celda norte. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
-    recessiveVoidPlaceholder: "honey_block",
     recessiveVoidRequiredTooltip: "Colocaciones requeridas de VS-Relleno-2 para el rango de salida actual.",
     voidFillersWarningLabel: "VS-Rellenos",
     lateLabel: "Tardío:",
     lateTooltip: "Usado por Supresión (2 capas, rellenos tardíos) para colocaciones tardías de supresión en la capa inferior.",
-    latePlaceholder: "slime_block",
     lateRequiredTooltip: "Colocaciones requeridas del relleno tardío para el rango de salida actual.",
   },
   table: {
@@ -260,6 +256,8 @@ export const esCatalog = {
       "El relleno de soporte no es válido ({value}).\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán.",
     waterSideSupportNotColorIdZero:
       "El relleno de soporte no es color_id=0 ({value}).\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán.",
+    fragileSupportOverrideWarning:
+      "El soporte para {blockId} debe ser {supports}.",
     vsFillerInvalid: {
       one: "{label} no es válido ({value}).\nHabrá {count} píxel de escalera con sombreado incorrecto.",
       other: "{label} no es válido ({value}).\nHabrá {count} píxeles de escalera con sombreado incorrecto.",

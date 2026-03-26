@@ -13,7 +13,7 @@
 import { useMemo } from "react";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
-import { normalizeBlockId } from "@/utils/blockId";
+import { normalizeBlockId } from "@/lib/blockId";
 import { FillerRole } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import { isShadeFillerDisabled } from "@/lib/fillerRules";

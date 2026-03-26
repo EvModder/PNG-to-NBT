@@ -13,9 +13,9 @@
  * - src/data/i18n/*
  * - src/data/mapColors.ts
  * - src/utils/color.ts
+ * - src/lib/blockId.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
- * - src/lib/materialRules.ts
  * - src/lib/messages.ts
  * - src/lib/presetCodec.ts
  * - src/lib/shapeAnalysis.ts
@@ -46,7 +46,7 @@ export enum Shade {
 
 // Callers:
 // - src/lib/colorGridAnalysis.ts
-// - src/lib/materialRules.ts
+// - src/lib/blockId.ts
 // - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/nbtExport.ts
@@ -93,7 +93,7 @@ export interface ColorRgbBase extends ColorRgb {
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridParsing.ts
-// - src/lib/materialRules.ts
+// - src/lib/blockId.ts
 // - src/lib/presetCodec.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts

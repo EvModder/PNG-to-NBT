@@ -49,13 +49,14 @@ import { computeColorGridStats, hasStepMixOpportunity, type ColorGridStats } fro
 import { getHue, getShadedRgb } from "@/utils/color";
 import type { ColorRgbCustom } from "@/types/color";
 import {
+  analyzeFragileSupportOverrideNeeds,
   analyzeMaterialNeeds,
   analyzeFillerNeeds,
   hasBuildAtWorldMinYOpportunity,
   hasNonWaterColorHeightVariance as generatedShapeHasNonWaterColorHeightVariance,
   nooblineIsSingleY as generatedShapeNooblineIsSingleY,
 } from "@/lib/shapeAnalysis";
-import { sanitizeUserBlockEntry, normalizeBlockId } from "@/utils/blockId";
+import { sanitizeUserBlockEntry, normalizeBlockId } from "@/lib/blockId";
 import {
   createFillerAssignments,
   getSupportModeFillerRoles,
@@ -87,7 +88,7 @@ import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
 import { BuildMode, SuppressStepDirection, type FillerAssignment, FillerRole } from "@/types/conversion";
 import { getPaletteSeedOffset } from "@/lib/paletteSeed";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import {
   arePresetBlocksEqual,
   BUILTIN_PRESET_NAMES,
@@ -615,7 +616,15 @@ const Index = () => {
   const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
-  const supportFillerDisabled = isFillerDisabled(supportFillerBlock);
+  const effectiveSupportFillerBlock = supportFillerBlock.trim() || DEFAULT_SUPPORT_FILLER_BLOCK;
+  const effectiveShadeFillerBlock = shadeFillerBlock.trim() || DEFAULT_SHADE_FILLER_BLOCK;
+  const effectiveSuppress2LayerLateFillerBlock =
+    suppress2LayerLateFillerBlock.trim() || DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK;
+  const effectiveDominateVoidFillerBlock =
+    dominateVoidFillerBlock.trim() || DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK;
+  const effectiveRecessiveVoidFillerBlock =
+    recessiveVoidFillerBlock.trim() || DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK;
+  const supportFillerDisabled = isFillerDisabled(effectiveSupportFillerBlock);
   const normalizedImmediateWaterDrops = useMemo(
     () => normalizeUsedWaterDrops(buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop), usedWaterShades),
     [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades],
@@ -801,34 +810,34 @@ const Index = () => {
     setDarkWaterDrop(nextDrops[Shade.Dark]);
   }, [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades]);
 
-  const normalizedSupportFillerBlockId = normalizeBlockId(supportFillerBlock);
+  const normalizedSupportFillerBlockId = normalizeBlockId(effectiveSupportFillerBlock);
   const supportFillerIsFragile =
     normalizedSupportFillerBlockId.length > 0 && isFragileBlock(normalizedSupportFillerBlockId);
-  const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(supportFillerBlock);
+  const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(effectiveSupportFillerBlock);
   const commitSupportFillerBlock = useCallback((value: string) => {
     if (isFillerDisabled(value)) setSupportMode(SupportMode.None);
   }, []);
-  const shadeFillerShadingDisabled = isShadeFillerDisabled(shadeFillerBlock);
-  const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(dominateVoidFillerBlock || shadeFillerBlock);
-  const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(recessiveVoidFillerBlock || shadeFillerBlock);
-  const lateFillerShadingDisabled = isShadeFillerDisabled(suppress2LayerLateFillerBlock || shadeFillerBlock);
+  const shadeFillerShadingDisabled = isShadeFillerDisabled(effectiveShadeFillerBlock);
+  const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock || effectiveShadeFillerBlock);
+  const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock || effectiveShadeFillerBlock);
+  const lateFillerShadingDisabled = isShadeFillerDisabled(effectiveSuppress2LayerLateFillerBlock || effectiveShadeFillerBlock);
   const uiFillerAssignments = useMemo(
     () => createFillerAssignments(
-      supportFillerBlock,
-      shadeFillerBlock,
-      dominateVoidFillerBlock,
-      recessiveVoidFillerBlock,
-      suppress2LayerLateFillerBlock,
+      effectiveSupportFillerBlock,
+      effectiveShadeFillerBlock,
+      effectiveDominateVoidFillerBlock,
+      effectiveRecessiveVoidFillerBlock,
+      effectiveSuppress2LayerLateFillerBlock,
       supportMode,
       usesWaterForWater,
       usesIceForWater,
     ),
     [
-      supportFillerBlock,
-      shadeFillerBlock,
-      dominateVoidFillerBlock,
-      recessiveVoidFillerBlock,
-      suppress2LayerLateFillerBlock,
+      effectiveSupportFillerBlock,
+      effectiveShadeFillerBlock,
+      effectiveDominateVoidFillerBlock,
+      effectiveRecessiveVoidFillerBlock,
+      effectiveSuppress2LayerLateFillerBlock,
       supportMode,
       usesWaterForWater,
       usesIceForWater,
@@ -932,6 +941,10 @@ const Index = () => {
     if (!supportShape || !imageValid) return null;
     return analyzeMaterialNeeds(imageColorGrid, supportShape, buildMaterialAnalysisOptions(uiFillerAssignments));
   }, [supportShape, imageValid, imageColorGrid, buildMaterialAnalysisOptions, uiFillerAssignments]);
+  const fragileSupportOverrideNeedStats = useMemo(() => {
+    if (!supportShape || !imageValid || supportMode === SupportMode.None) return null;
+    return analyzeFragileSupportOverrideNeeds(supportShape, buildMaterialAnalysisOptions(uiFillerAssignments));
+  }, [supportShape, imageValid, supportMode, buildMaterialAnalysisOptions, uiFillerAssignments]);
   const supportModeRoleCounts = useMemo(() => {
     if (!supportShape || !imageValid) return null;
 
@@ -941,8 +954,8 @@ const Index = () => {
         (mode === SupportMode.All || mode === SupportMode.Water);
       const waterAvailabilitySupportFiller =
         modeUsesDirectWaterSides && !supportWaterSidesFillerValid
-          ? (BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks[0] || supportFillerBlock)
-          : supportFillerBlock;
+          ? (BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks[0] || effectiveSupportFillerBlock)
+          : effectiveSupportFillerBlock;
       const shouldReuseCurrentStats =
         mode === supportMode &&
         materialNeedStats &&
@@ -951,10 +964,10 @@ const Index = () => {
       return analyzeMaterialNeeds(imageColorGrid, supportShape, buildMaterialAnalysisOptions(
         createFillerAssignments(
           waterAvailabilitySupportFiller,
-          shadeFillerBlock,
-          dominateVoidFillerBlock,
-          recessiveVoidFillerBlock,
-          suppress2LayerLateFillerBlock,
+          effectiveShadeFillerBlock,
+          effectiveDominateVoidFillerBlock,
+          effectiveRecessiveVoidFillerBlock,
+          effectiveSuppress2LayerLateFillerBlock,
           mode,
           usesWaterForWater,
           usesIceForWater,
@@ -973,11 +986,11 @@ const Index = () => {
     buildMaterialAnalysisOptions,
     supportMode,
     materialNeedStats,
-    supportFillerBlock,
-    shadeFillerBlock,
-    dominateVoidFillerBlock,
-    recessiveVoidFillerBlock,
-    suppress2LayerLateFillerBlock,
+    effectiveSupportFillerBlock,
+    effectiveShadeFillerBlock,
+    effectiveDominateVoidFillerBlock,
+    effectiveRecessiveVoidFillerBlock,
+    effectiveSuppress2LayerLateFillerBlock,
     usesWaterForWater,
     usesIceForWater,
     supportWaterSidesFillerValid,
@@ -1526,10 +1539,10 @@ const Index = () => {
       );
     }
     if (parts.length === 0) return null;
-    return messages.preview.noFillerWarning(shadeFillerBlock.trim() || messages.common.none, parts);
+    return messages.preview.noFillerWarning(effectiveShadeFillerBlock, parts);
   }, [
     effectiveBuildMode,
-    shadeFillerBlock,
+    effectiveShadeFillerBlock,
     fillerNeedStats,
     hasInGridFillerNeed,
     lateSuppressFillerCount,
@@ -1540,12 +1553,31 @@ const Index = () => {
   ]);
   const waterSideSupportWarning = useMemo<ShapeWarning | null>(() => {
     if (!showWaterSideSupportWarning) return null;
-    const value = supportFillerBlock.trim() || messages.common.none;
+    const value = effectiveSupportFillerBlock;
     return {
       text: messages.preview.waterSideSupportWarning(value, supportFillerDisabled),
       invalid: true,
     };
-  }, [showWaterSideSupportWarning, supportFillerBlock, supportFillerDisabled]);
+  }, [showWaterSideSupportWarning, effectiveSupportFillerBlock, supportFillerDisabled]);
+  const fragileSupportOverrideWarning = useMemo<ShapeWarning | null>(() => {
+    if (!imageValid || !fragileSupportOverrideNeedStats) return null;
+    if (supportMode === SupportMode.None) return null;
+
+    const warningLines: string[] = [];
+
+    for (const [blockId, rule] of FRAGILE_SUPPORT_RULES) {
+      if ((fragileSupportOverrideNeedStats.overrideCounts[blockId] ?? 0) <= 0) continue;
+      warningLines.push(messages.preview.fragileSupportOverrideWarning(blockId, rule.validSupportBlocks));
+    }
+
+    return warningLines.length > 0
+      ? { text: warningLines.join("\n\n"), invalid: false }
+      : null;
+  }, [
+    fragileSupportOverrideNeedStats,
+    imageValid,
+    supportMode,
+  ]);
   const vsFillerWarning = useMemo<ShapeWarning | null>(() => {
     type VsEntry = {
       label: string;
@@ -1560,7 +1592,7 @@ const Index = () => {
       noobPixels: number,
     ): VsEntry | null => {
       if (!show) return null;
-      const value = rawValue.trim() || shadeFillerBlock.trim() || messages.common.none;
+      const value = rawValue.trim() || effectiveShadeFillerBlock;
       return { label, value, invalid: isFillerDisabled(value), noobPixels };
     };
     const formatInvalid = (entry: VsEntry) => messages.preview.vsFillerInvalid(entry.label, entry.value, entry.noobPixels);
@@ -1604,7 +1636,7 @@ const Index = () => {
     return { text: formatRequired(messages.fillers.voidFillersWarningLabel, pixels, true), invalid: false };
   }, [
     dominateVoidFillerBlock,
-    shadeFillerBlock,
+    effectiveShadeFillerBlock,
     recessiveVoidFillerBlock,
     showDominateVoidFillerInput,
     showRecessiveVoidFillerInput,
@@ -1614,7 +1646,7 @@ const Index = () => {
   ]);
   const lateFillerWarning = useMemo<ShapeWarning | null>(() => {
     if (!showLateFillerInput || lateFillerRequiredCount <= 0 || !lateFillerShadingDisabled) return null;
-    const value = suppress2LayerLateFillerBlock.trim() || shadeFillerBlock.trim() || messages.common.none;
+    const value = suppress2LayerLateFillerBlock.trim() || effectiveShadeFillerBlock;
     return {
       text: messages.preview.lateFillerInvalid(value, lateFillerRequiredCount),
       invalid: true,
@@ -1624,7 +1656,7 @@ const Index = () => {
     lateFillerRequiredCount,
     lateFillerShadingDisabled,
     suppress2LayerLateFillerBlock,
-    shadeFillerBlock,
+    effectiveShadeFillerBlock,
   ]);
 
   const requiredColWidth = useMemo(() => {
@@ -2543,7 +2575,7 @@ const Index = () => {
                     onKeyDown={e => {
                       if (e.key === "Enter") commitSupportFillerBlock(e.currentTarget.value);
                     }}
-                    placeholder={messages.fillers.supportPlaceholder}
+                    placeholder={DEFAULT_SUPPORT_FILLER_BLOCK}
                     title={messages.fillers.supportTooltip}
                     className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                   />
@@ -2577,7 +2609,7 @@ const Index = () => {
                       type="text"
                       value={shadeFillerBlock}
                       onChange={e => setShadeFillerBlock(e.target.value)}
-                      placeholder={messages.fillers.supportPlaceholder}
+                      placeholder={DEFAULT_SHADE_FILLER_BLOCK}
                       title={shadeFillerTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
@@ -2612,7 +2644,7 @@ const Index = () => {
                       type="text"
                       value={dominateVoidFillerBlock}
                       onChange={e => setDominateVoidFillerBlock(e.target.value)}
-                      placeholder={messages.fillers.dominateVoidPlaceholder}
+                      placeholder={DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK}
                       title={messages.fillers.dominateVoidTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
@@ -2647,7 +2679,7 @@ const Index = () => {
                       type="text"
                       value={recessiveVoidFillerBlock}
                       onChange={e => setRecessiveVoidFillerBlock(e.target.value)}
-                      placeholder={messages.fillers.recessiveVoidPlaceholder}
+                      placeholder={DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK}
                       title={messages.fillers.recessiveVoidTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
@@ -2682,7 +2714,7 @@ const Index = () => {
                       type="text"
                       value={suppress2LayerLateFillerBlock}
                       onChange={e => setSuppress2LayerLateFillerBlock(e.target.value)}
-                      placeholder={messages.fillers.latePlaceholder}
+                      placeholder={DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK}
                       title={messages.fillers.lateTooltip}
                       className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
                     />
@@ -3087,6 +3119,14 @@ const Index = () => {
               <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
                 <p className={`text-xs whitespace-pre-line ${waterSideSupportWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
                   {waterSideSupportWarning.text}
+                </p>
+              </div>
+            )}
+
+            {fragileSupportOverrideWarning && (
+              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
+                <p className={`text-xs whitespace-pre-line ${fragileSupportOverrideWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
+                  {fragileSupportOverrideWarning.text}
                 </p>
               </div>
             )}

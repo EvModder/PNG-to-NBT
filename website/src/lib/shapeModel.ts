@@ -8,6 +8,8 @@
  * - NO_SUPPORT_FLOORS
  * - isWithinShapeBounds()
  * - shouldIncludeFragileSupportCell()
+ * - FragileSupportOverride
+ * - getFragileSupportOverride()
  *
  * Callers:
  * - src/Index.tsx
@@ -16,12 +18,12 @@
  * - src/lib/shapeGeneration.ts
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import type { ColorRef, ColorRgbCustom } from "@/types/color";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { normalizeBlockId } from "@/utils/blockId";
+import { normalizeBlockId } from "@/lib/blockId";
 
 // Callers:
 // - src/lib/nbtExport.ts
@@ -118,4 +120,41 @@ export function shouldIncludeFragileSupportCell(
   if (!fragileColor) return false;
   const blockId = getMappedShapeColorBlockId(fragileColor, options);
   return !!blockId && isFragileBlock(blockId);
+}
+
+// Callers:
+// - src/lib/nbtExport.ts
+// - src/lib/shapeAnalysis.ts
+export interface FragileSupportOverride {
+  blockId: string;
+  replacementBlockId: string;
+}
+
+// Callers:
+// - src/lib/nbtExport.ts
+// - src/lib/shapeAnalysis.ts
+export function getFragileSupportOverride(
+  part: ShapePart,
+  coord: number,
+  activeRole: FillerRole | null,
+  assignedSupportBlock: string | null,
+  options: { blockMapping: Record<number, string>; customColors: ColorRgbCustom[] },
+): FragileSupportOverride | null {
+  if (
+    activeRole !== FillerRole.SupportAll &&
+    activeRole !== FillerRole.SupportFragile &&
+    activeRole !== FillerRole.StairStep &&
+    activeRole !== FillerRole.SupportWaterSidesCovered
+  ) return null;
+  const supportedColor = getSupportedColorAbove(part, coord);
+  if (!supportedColor) return null;
+  const blockId = getMappedShapeColorBlockId(supportedColor, options);
+  if (!blockId) return null;
+  const rule = FRAGILE_SUPPORT_RULES.get(blockId);
+  if (!rule) return null;
+  const normalizedAssignedSupportBlock = assignedSupportBlock ? normalizeBlockId(assignedSupportBlock) : "";
+  if (normalizedAssignedSupportBlock && rule.validSupportBlocks.includes(normalizedAssignedSupportBlock)) {
+    return null;
+  }
+  return { blockId, replacementBlockId: rule.replacementBlock };
 }

@@ -5,6 +5,7 @@
  * - nooblineIsSingleY()
  * - hasNonWaterColorHeightVariance()
  * - hasBuildAtWorldMinYOpportunity()
+ * - analyzeFragileSupportOverrideNeeds()
  * - analyzeMaterialNeeds()
  *
  * Callers:
@@ -17,9 +18,10 @@ import type { ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
-import { resolveShapeColorBlockName, toDisplayName } from "./materialRules";
+import { resolveExportBlockName, resolveShapeColorBlockName, toDisplayName } from "./blockId";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import {
+  getFragileSupportOverride,
   isShapeColorCell,
   isShapeFillerCell,
   isWithinShapeBounds,
@@ -44,6 +46,10 @@ interface MaterialNeedStats {
   numUniqueColorShadesForPart: number;
   usedShadesByBase: Map<number, Set<Shade>>;
   fillerRoleCounts: Map<FillerRole, number>;
+}
+
+interface FragileSupportOverrideNeedStats {
+  overrideCounts: Record<string, number>;
 }
 
 type MaterialAnalysisOptions = {
@@ -152,7 +158,11 @@ function analyzePartMaterialNeeds(
     ) {
       addRoleCount(fillerRoleCounts, assignedRole);
     }
-    const fillerName = resolveCellFillerName(cell, options.fillerAssignments, fillerAssignments);
+    const assignedSupportBlock = assignedRole ? (fillerAssignments.get(assignedRole) ?? null) : null;
+    const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options);
+    const fillerName = override
+      ? resolveExportBlockName(override.replacementBlockId)
+      : resolveCellFillerName(cell, options.fillerAssignments, fillerAssignments);
     if (!fillerName) continue;
     const displayName = toDisplayName(fillerName);
     addCount(blockCounts, displayName);
@@ -278,6 +288,42 @@ export function hasBuildAtWorldMinYOpportunity(
   }
 
   return false;
+}
+
+// Callers:
+// - src/Index.tsx
+export function analyzeFragileSupportOverrideNeeds(
+  shape: GeneratedShape,
+  options: MaterialAnalysisOptions,
+): FragileSupportOverrideNeedStats {
+  const overrideCounts: Record<string, number> = {};
+  const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
+
+  const analyzePart = (part: ShapePart, applyColumnRange: boolean) => {
+    const supportFloorYs = options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+    for (const [coord, cell] of part.cells) {
+      if (!isShapeFillerCell(cell)) continue;
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
+      const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
+      if (!assignedRole) continue;
+      if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options)) continue;
+      if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
+      const assignedSupportBlock = fillerAssignments.get(assignedRole) ?? null;
+      const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options);
+      if (!override) continue;
+      addCount(overrideCounts, override.blockId);
+    }
+  };
+
+  if (shape.partType === ShapePartType.SuppressStepPhases) {
+    const [start, end] = options.phaseRange ?? [0, shape.parts.length - 1];
+    for (let i = start; i <= end && i < shape.parts.length; ++i) analyzePart(shape.parts[i], false);
+    return { overrideCounts };
+  }
+
+  for (const part of shape.parts) analyzePart(part, true);
+  return { overrideCounts };
 }
 
 // Callers:

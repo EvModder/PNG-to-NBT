@@ -27,7 +27,7 @@ import {
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
-import { normalizeBlockId, sanitizeUserBlockEntry } from "@/utils/blockId";
+import { normalizeBlockId, sanitizeUserBlockEntry } from "@/lib/blockId";
 import { computeColorGridStats, hasStepMixOpportunity } from "@/lib/colorGridAnalysis";
 import { convertImageToColorGrid } from "@/lib/colorGridParsing";
 import { getPaletteSeedOffset } from "@/lib/paletteSeed";
@@ -130,10 +130,6 @@ type FailurePayload = {
   actualData?: Uint8Array;
   actualExt?: string;
 };
-
-function resolveEffectiveFillerBlock(rawValue: string, defaultValue: string): string {
-  return rawValue.trim() || defaultValue;
-}
 
 function normalizeUsedWaterDrops(
   rawDrops: Record<WaterDropShade, number>,
@@ -768,26 +764,14 @@ async function runFixtureCase(
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
 
-  const effectiveSupportFillerBlock = resolveEffectiveFillerBlock(
-    testCase.settings.supportFillerBlock,
-    DEFAULT_SUPPORT_FILLER_BLOCK,
-  );
-  const effectiveShadeFillerBlock = resolveEffectiveFillerBlock(
-    testCase.settings.shadeFillerBlock,
-    DEFAULT_SHADE_FILLER_BLOCK,
-  );
-  const effectiveSuppress2LayerLateFillerBlock = resolveEffectiveFillerBlock(
-    testCase.settings.suppress2LayerLateFillerBlock,
-    DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
-  );
-  const effectiveDominateVoidFillerBlock = resolveEffectiveFillerBlock(
-    testCase.settings.dominateVoidFillerBlock,
-    DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
-  );
-  const effectiveRecessiveVoidFillerBlock = resolveEffectiveFillerBlock(
-    testCase.settings.recessiveVoidFillerBlock,
-    DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
-  );
+  const effectiveSupportFillerBlock = testCase.settings.supportFillerBlock.trim() || DEFAULT_SUPPORT_FILLER_BLOCK;
+  const effectiveShadeFillerBlock = testCase.settings.shadeFillerBlock.trim() || DEFAULT_SHADE_FILLER_BLOCK;
+  const effectiveSuppress2LayerLateFillerBlock =
+    testCase.settings.suppress2LayerLateFillerBlock.trim() || DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK;
+  const effectiveDominateVoidFillerBlock =
+    testCase.settings.dominateVoidFillerBlock.trim() || DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK;
+  const effectiveRecessiveVoidFillerBlock =
+    testCase.settings.recessiveVoidFillerBlock.trim() || DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK;
   const supportFillerDisabled = isFillerDisabled(effectiveSupportFillerBlock);
   const waterDrops = normalizeUsedWaterDrops(
     {

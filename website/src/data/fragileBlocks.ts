@@ -1,5 +1,7 @@
 /**
  * Public API:
+ * - FragileSupportRule
+ * - FRAGILE_SUPPORT_RULES
  * - isFragileBlock()
  *
  * Callers:
@@ -58,12 +60,81 @@ const FRAGILE_BLOCKS = new Set([
   "chorus_plant", "chorus_flower",
 
     // Other blocks with placement conditions
-  "fire", "snow", "pointed_dripstone", "lantern",
+  "fire", "soul_fire", "snow", "pointed_dripstone", "lantern",
   "bell", "turtle_egg", "leaf_litter",
   "open_eyeblossom", "closed_eyeblossom",
   "sculk_sensor", "calibrated_sculk_sensor", "sculk_vein",
   "scaffolding", "glow_lichen", "resin_clump",
 ]);
+
+const DIRT_LIKE_SUPPORT_BLOCKS = [
+  "grass_block",
+  "dirt",
+  "coarse_dirt",
+  "podzol",
+  "rooted_dirt",
+  "farmland",
+  "mycelium",
+  "moss_block",
+  "pale_moss_block",
+  "mud",
+  "muddy_mangrove_roots",
+] as const;
+
+const NETHER_FUNGUS_SUPPORT_BLOCKS = [
+  ...DIRT_LIKE_SUPPORT_BLOCKS,
+  "crimson_nylium",
+  "warped_nylium",
+  "soul_soil",
+] as const;
+
+const MUSHROOM_SAFE_SUPPORT_BLOCKS = [
+  "podzol",
+  "mycelium",
+  "crimson_nylium",
+  "warped_nylium",
+] as const;
+
+type FragileSupportRuleValue = {
+  validSupportBlocks: readonly string[];
+  replacementBlock: string;
+};
+
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeModel.ts
+export type FragileSupportRule = Readonly<FragileSupportRuleValue>;
+
+// Callers:
+// - src/Index.tsx
+// - src/lib/shapeModel.ts
+export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
+  ["fire", { validSupportBlocks: ["netherrack"], replacementBlock: "netherrack" }],
+  ["soul_fire", { validSupportBlocks: ["soul_sand", "soul_soil"], replacementBlock: "soul_soil" }],
+  ["nether_wart", { validSupportBlocks: ["soul_sand"], replacementBlock: "soul_sand" }],
+  ["brown_mushroom", { validSupportBlocks: MUSHROOM_SAFE_SUPPORT_BLOCKS, replacementBlock: "podzol" }],
+  ["red_mushroom", { validSupportBlocks: MUSHROOM_SAFE_SUPPORT_BLOCKS, replacementBlock: "podzol" }],
+  ["crimson_fungus", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "crimson_nylium" }],
+  ["crimson_roots", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "crimson_nylium" }],
+  ["warped_fungus", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "warped_nylium" }],
+  ["warped_roots", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "warped_nylium" }],
+  ["nether_sprouts", { validSupportBlocks: NETHER_FUNGUS_SUPPORT_BLOCKS, replacementBlock: "warped_nylium" }],
+  // Intentionally partial: vanilla also allows some waterlogged support blocks.
+  ["lily_pad", { validSupportBlocks: ["water", "ice", "frosted_ice"], replacementBlock: "water" }],
+  ["pink_petals", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["fern", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["short_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["tall_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["bamboo_sapling", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["open_eyeblossom", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["closed_eyeblossom", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  // Intentionally omitted for simplicity, but perfectly valid supports: [sand, red_sand, and terracotta variants].
+  ["dead_bush", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+]);
+
+function getBaseBlockId(blockId: string): string {
+  return blockId.includes("[") ? blockId.slice(0, blockId.indexOf("[")) : blockId;
+}
 
 /**
  * Check if a block name (possibly with properties like "[south=true]") is fragile.
@@ -73,6 +144,5 @@ const FRAGILE_BLOCKS = new Set([
 // - src/Index.tsx
 // - src/lib/shapeModel.ts
 export function isFragileBlock(blockId: string): boolean {
-  const name = blockId.includes("[") ? blockId.slice(0, blockId.indexOf("[")) : blockId;
-  return FRAGILE_BLOCKS.has(name);
+  return FRAGILE_BLOCKS.has(getBaseBlockId(blockId));
 }

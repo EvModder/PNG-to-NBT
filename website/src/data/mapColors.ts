@@ -13,10 +13,10 @@
  * - src/data/mapColorsExcluded.ts
  * - src/data/presets.ts
  * - src/utils/color.ts
+ * - src/lib/blockId.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/fillerRules.ts
- * - src/lib/materialRules.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -89,9 +89,9 @@ export const WATER_BASE_INDEX = 12;
 // - src/data/colorSortOrder.ts
 // - src/data/mapColorsExcluded.ts
 // - src/data/presets.ts
+// - src/lib/blockId.ts
 // - src/lib/colorGridParsing.ts
 // - src/lib/fillerRules.ts
-// - src/lib/materialRules.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
@@ -114,7 +114,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "QUARTZ", r: 255, g: 252, b: 245, blocks: ["quartz_block", "smooth_quartz", "smooth_quartz_slab", "chiseled_quartz_block", "quartz_pillar", "quartz_slab", "diorite", "diorite_slab", "polished_diorite", "polished_diorite_slab", "sea_lantern", "target", "pale_oak_log", "stripped_pale_oak_log", "pale_oak_planks", "pale_oak_slab", "pale_oak_pressure_plate", "stripped_pale_oak_wood"] },
   { name: "COLOR_ORANGE", r: 216, g: 127, b: 51, blocks: ["orange_wool", "orange_carpet", "orange_concrete", "orange_concrete_powder", "orange_glazed_terracotta", "orange_stained_glass", "orange_candle", "acacia_log", "stripped_acacia_log", "stripped_acacia_wood", "acacia_planks", "acacia_slab", "acacia_pressure_plate", "terracotta", "pumpkin", "carved_pumpkin", "jack_o_lantern", "red_sand", "red_sandstone", "red_sandstone_slab", "cut_red_sandstone", "cut_red_sandstone_slab", "smooth_red_sandstone", "smooth_red_sandstone_slab", "chiseled_red_sandstone", "honey_block", "honeycomb_block", "raw_copper_block", "waxed_copper_block", "waxed_cut_copper", "waxed_cut_copper_slab", "open_eyeblossom"] },
   { name: "COLOR_MAGENTA", r: 178, g: 76, b: 216, blocks: ["magenta_wool", "magenta_carpet", "magenta_concrete", "magenta_concrete_powder", "magenta_glazed_terracotta", "magenta_stained_glass", "magenta_candle", "purpur_block", "purpur_pillar", "purpur_slab"] },
-  { name: "COLOR_LIGHT_BLUE", r: 102, g: 153, b: 216, blocks: ["light_blue_wool", "light_blue_carpet", "light_blue_concrete", "light_blue_concrete_powder", "light_blue_glazed_terracotta", "light_blue_stained_glass", "light_blue_candle"] },
+  { name: "COLOR_LIGHT_BLUE", r: 102, g: 153, b: 216, blocks: ["light_blue_wool", "light_blue_carpet", "light_blue_concrete", "light_blue_concrete_powder", "light_blue_glazed_terracotta", "light_blue_stained_glass", "light_blue_candle", "soul_fire"] },
   { name: "COLOR_YELLOW", r: 229, g: 229, b: 51, blocks: ["yellow_wool", "yellow_carpet", "yellow_concrete", "yellow_concrete_powder", "yellow_glazed_terracotta", "yellow_stained_glass", "yellow_candle", "sponge", "wet_sponge", "hay_block", "bee_nest", "bamboo_planks"] },
   { name: "COLOR_LIGHT_GREEN", r: 127, g: 204, b: 25, blocks: ["lime_wool", "lime_carpet", "lime_concrete", "lime_concrete_powder", "lime_glazed_terracotta", "lime_stained_glass", "lime_candle", "melon"] },
   { name: "COLOR_PINK", r: 242, g: 127, b: 165, blocks: ["pink_wool", "pink_carpet", "pink_concrete", "pink_concrete_powder", "pink_glazed_terracotta", "pink_stained_glass", "pink_candle", "brain_coral_block", "pearlescent_froglight", "cherry_leaves"] },

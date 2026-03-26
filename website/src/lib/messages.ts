@@ -82,6 +82,16 @@ function formatRgbList(colors: number[]): string {
     .join(", ");
 }
 
+function formatBlockIdList(blockIds: readonly string[]): string {
+  const formatted = [...blockIds];
+  if (formatted.length <= 1) return formatted[0] ?? "";
+
+  const conjunction = catalog.locale === "es" ? "o" : "or";
+  if (formatted.length === 2) return `${formatted[0]} ${conjunction} ${formatted[1]}`;
+
+  return `${formatted.slice(0, -1).join(", ")} ${conjunction} ${formatted[formatted.length - 1]}`;
+}
+
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridParsing.ts
@@ -185,7 +195,6 @@ export const messages = {
     headingTooltip: catalog.fillers.headingTooltip,
     supportLabel: catalog.fillers.supportLabel,
     supportTooltip: catalog.fillers.supportTooltip,
-    supportPlaceholder: catalog.fillers.supportPlaceholder,
     supportRequiredTooltip: catalog.fillers.supportRequiredTooltip,
     shadeLabel(isNorthRowOnly: boolean): string {
       return isNorthRowOnly ? catalog.fillers.nooblineLabel : catalog.fillers.shadeLabel;
@@ -199,17 +208,14 @@ export const messages = {
     dominateVoidLabel: catalog.fillers.dominateVoidLabel,
     dominateVoidWarningLabel: catalog.fillers.dominateVoidWarningLabel,
     dominateVoidTooltip: catalog.fillers.dominateVoidTooltip,
-    dominateVoidPlaceholder: catalog.fillers.dominateVoidPlaceholder,
     dominateVoidRequiredTooltip: catalog.fillers.dominateVoidRequiredTooltip,
     recessiveVoidLabel: catalog.fillers.recessiveVoidLabel,
     recessiveVoidWarningLabel: catalog.fillers.recessiveVoidWarningLabel,
     recessiveVoidTooltip: catalog.fillers.recessiveVoidTooltip,
-    recessiveVoidPlaceholder: catalog.fillers.recessiveVoidPlaceholder,
     recessiveVoidRequiredTooltip: catalog.fillers.recessiveVoidRequiredTooltip,
     voidFillersWarningLabel: catalog.fillers.voidFillersWarningLabel,
     lateLabel: catalog.fillers.lateLabel,
     lateTooltip: catalog.fillers.lateTooltip,
-    latePlaceholder: catalog.fillers.latePlaceholder,
     lateRequiredTooltip: catalog.fillers.lateRequiredTooltip,
   },
   table: {
@@ -281,6 +287,12 @@ export const messages = {
         isInvalid ? catalog.preview.waterSideSupportInvalid : catalog.preview.waterSideSupportNotColorIdZero,
         { value },
       );
+    },
+    fragileSupportOverrideWarning(blockId: string, validSupportBlocks: readonly string[]): string {
+      return formatTemplate(catalog.preview.fragileSupportOverrideWarning, {
+        blockId,
+        supports: formatBlockIdList(validSupportBlocks),
+      });
     },
     vsFillerInvalid(label: string, value: string, noobPixels: number): string {
       return formatPlural(catalog.preview.vsFillerInvalid, noobPixels, {
