@@ -1,6 +1,7 @@
 # My crap
 website/tests/failures/
 website/reports/
+website/.tmp*
 sample_imgs/
 upstream-compare-*/
 
