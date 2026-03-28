@@ -106,12 +106,10 @@ function getNearestStepLine(
 ): number {
   switch (direction) {
     case SuppressStepDirection.EastToWest:
+    case SuppressStepDirection.SouthToNorth:
       return Math.min(...lines);
     case SuppressStepDirection.WestToEast:
-      return Math.max(...lines);
     case SuppressStepDirection.NorthToSouth:
-      return Math.min(...lines);
-    case SuppressStepDirection.SouthToNorth:
       return Math.max(...lines);
   }
 }
@@ -123,10 +121,10 @@ function getLoadSpotCoordinate(
 ): number {
   switch (direction) {
     case SuppressStepDirection.EastToWest:
-    case SuppressStepDirection.NorthToSouth:
-      return line - distance;
-    case SuppressStepDirection.WestToEast:
     case SuppressStepDirection.SouthToNorth:
+      return line - distance;
+    case SuppressStepDirection.NorthToSouth:
+    case SuppressStepDirection.WestToEast:
       return line + distance;
   }
 }

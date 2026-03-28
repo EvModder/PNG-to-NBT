@@ -203,8 +203,13 @@ export function getVisibleSuppressBuildModes(hasTwoLayerLateVoidNeed: boolean): 
 // - src/Index.tsx
 export function cycleSuppressStepDirection(
   stepDirection: SuppressStepDirection,
+  isSelectable: (direction: SuppressStepDirection) => boolean = () => true,
 ): SuppressStepDirection {
   const index = SUPPRESS_STEP_DIRECTIONS.indexOf(stepDirection);
-  if (index < 0) return SUPPRESS_STEP_DIRECTIONS[0];
-  return SUPPRESS_STEP_DIRECTIONS[(index + 1) % SUPPRESS_STEP_DIRECTIONS.length];
+  if (index < 0) return SUPPRESS_STEP_DIRECTIONS.find(isSelectable) ?? SUPPRESS_STEP_DIRECTIONS[0];
+  for (let offset = 1; offset <= SUPPRESS_STEP_DIRECTIONS.length; ++offset) {
+    const candidate = SUPPRESS_STEP_DIRECTIONS[(index + offset) % SUPPRESS_STEP_DIRECTIONS.length];
+    if (isSelectable(candidate)) return candidate;
+  }
+  return stepDirection;
 }

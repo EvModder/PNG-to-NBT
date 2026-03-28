@@ -664,6 +664,25 @@ const Index = () => {
     [buildMode, imageColorGrid, imageValid, activeWaterDrops],
   );
   const twoLayerHasLateVoidNeed = (imageStats?.voidShadowStats.dominant ?? 0) > 0;
+  const isSuppressStepDirectionSelectable = useCallback(
+    (direction: SuppressStepDirection) => {
+      if (buildMode !== BuildMode.SuppressStepChecker) return false;
+      switch (direction) {
+        case SuppressStepDirection.EastToWest:
+        case SuppressStepDirection.WestToEast:
+          return true;
+        case SuppressStepDirection.NorthToSouth:
+          return (imageStats?.voidShadowStats.dominant ?? 0) === 0;
+        case SuppressStepDirection.SouthToNorth:
+          return (imageStats?.voidShadowStats.recessive ?? 0) === 0;
+      }
+    },
+    [buildMode, imageStats],
+  );
+  useEffect(() => {
+    if (buildMode !== BuildMode.SuppressStepChecker || isSuppressStepDirectionSelectable(suppressStepDirection)) return;
+    setSuppressStepDirection(current => cycleSuppressStepDirection(current, isSuppressStepDirectionSelectable));
+  }, [buildMode, suppressStepDirection, isSuppressStepDirectionSelectable]);
   const baseShapeMap = useMemo(
     () => imageColorGrid && imageValid
       ? generateShapeMap(
@@ -2506,7 +2525,7 @@ const Index = () => {
                             title={messages.buildMode.stepDirectionTooltip(suppressStepDirection)}
                             aria-label={messages.buildMode.stepDirectionAriaLabel(suppressStepDirection)}
                             onClick={() => setSuppressStepDirection(
-                              cycleSuppressStepDirection(suppressStepDirection),
+                              cycleSuppressStepDirection(suppressStepDirection, isSuppressStepDirectionSelectable),
                             )}
                           >
                             <SuppressStepDirectionIcon direction={suppressStepDirection} />

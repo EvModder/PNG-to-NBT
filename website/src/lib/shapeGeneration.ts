@@ -560,15 +560,16 @@ function appendSuppressPixelBlocks(
 
 function getStepPhaseYOffset(
   colorGrid: ColorGrid,
+  stepDirection: SuppressStepDirection,
   cache?: GridShapeCache,
   waterDrops?: WaterDrops,
 ): number {
   const belowPlatformWater = waterDrops !== undefined;
-  const cacheKey = belowPlatformWater ? "below" : "default";
+  const axisZSuppress = getSuppressStepAxis(stepDirection) === "z";
+  const cacheKey = `${belowPlatformWater ? "below" : "default"}|${axisZSuppress ? "axis-z" : "axis-x"}`;
   const cached = cache?.stepPhaseYOffsets.get(cacheKey);
   if (cached !== undefined) return cached;
   let yOffset = 1;
-  let hasDarkNonWater = false;
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
       const color = colorGrid[x][z];
@@ -578,13 +579,13 @@ function getStepPhaseYOffset(
         if (color.shade !== Shade.Light) yOffset = Math.max(yOffset, getWaterDepth(color.shade, x, z));
         continue;
       }
-      if (color.shade === Shade.Dark) {
-        if (belowPlatformWater) hasDarkNonWater = true;
-        else yOffset = Math.max(yOffset, 2);
+      if (color.shade === Shade.Light) {
+        if (axisZSuppress) yOffset = Math.max(yOffset, 2);
+        continue;
       }
+      if (color.shade === Shade.Dark) yOffset = Math.max(yOffset, axisZSuppress ? 3 : 2);
     }
   }
-  if (belowPlatformWater) yOffset = Math.max(yOffset, hasDarkNonWater ? 2 : 1);
   if (cache) cache.stepPhaseYOffsets.set(cacheKey, yOffset);
   return yOffset;
 }
@@ -1919,16 +1920,20 @@ function buildSuppressDualLayerBlocks(
 function getOrderedStepLines(
   direction: SuppressStepDirection,
 ): { axis: "x" | "z"; lines: number[] } {
-  const axis = (
-    direction === SuppressStepDirection.NorthToSouth ||
-    direction === SuppressStepDirection.SouthToNorth
-  ) ? "z" : "x";
+  const axis = getSuppressStepAxis(direction);
   const ascending = (
     direction === SuppressStepDirection.WestToEast ||
     direction === SuppressStepDirection.NorthToSouth
   );
   const lines = Array.from({ length: MAP_SIZE }, (_, index) => ascending ? index : MAP_SIZE - 1 - index);
   return { axis, lines };
+}
+
+function getSuppressStepAxis(direction: SuppressStepDirection): "x" | "z" {
+  return (
+    direction === SuppressStepDirection.NorthToSouth ||
+    direction === SuppressStepDirection.SouthToNorth
+  ) ? "z" : "x";
 }
 
 function makeStepPhaseSpec(
@@ -2033,6 +2038,9 @@ function buildStepPhaseBlocks(
   const currentPhaseColorYOffsets = new Map<ColumnCoordKey, number>();
   const repeatedPhaseColorYOffsets = new Map<ColumnCoordKey, number>();
   const cellKey = (x: number, z: number) => toColumnCoordKey(x, z);
+  const setMaxOffset = (offsets: Map<ColumnCoordKey, number>, key: ColumnCoordKey, offset: number) => {
+    offsets.set(key, Math.max(offsets.get(key) ?? 0, offset));
+  };
   const getCurrentPhaseBaseY = (x: number, z: number) => currentBaseY + (currentPhaseColorYOffsets.get(cellKey(x, z)) ?? 0);
   const getRepeatedPhaseBaseY = (x: number, z: number) => currentBaseY + (repeatedPhaseColorYOffsets.get(cellKey(x, z)) ?? 0);
   const pushUnique = (block: ShapeBlock) => {
@@ -2061,9 +2069,15 @@ function buildStepPhaseBlocks(
     }
     return false;
   };
+  const canReuseAxisZNorthColumnAsShader = (shadedColor: ShadedColorRef, northColor: ShadedColorRef): boolean => {
+    return currentSpec.axis === "z" &&
+      !isTransparentColor(northColor) &&
+      !isWaterColor(northColor) &&
+      shadedColor.shade !== Shade.Flat;
+  };
   const canReuseCurrentPhaseNorthColumnAsShader = (shadedColor: ShadedColorRef, northColor: ShadedColorRef): boolean => {
     if (canReuseNorthColumnAsShader(shadedColor, northColor)) return true;
-    return currentSpec.axis === "z" && !isWaterColor(northColor) && shadedColor.shade === Shade.Dark;
+    return canReuseAxisZNorthColumnAsShader(shadedColor, northColor);
   };
 
   const collectRepeatedNorthBlocks = (
@@ -2081,7 +2095,7 @@ function buildStepPhaseBlocks(
         const northZ = z - 1;
         if (!adjacentSpec.includeAt(x, northZ) || getPixelParity(x, northZ) !== northParity) continue;
         const north = colorGrid[x][northZ];
-        if (!canReuseNorthColumnAsShader(color, north)) continue;
+        if (!canReuseNorthColumnAsShader(color, north) && !canReuseAxisZNorthColumnAsShader(color, north)) continue;
         shadedByRepeatedNorth.add(cellKey(x, z));
         repeatedNorthShaderColumns.add(cellKey(x, northZ));
       }
@@ -2137,17 +2151,28 @@ function buildStepPhaseBlocks(
         const northKey = cellKey(x, z - 1);
         const requiredNorthOffset = (currentPhaseColorYOffsets.get(southKey) ?? 0) + (color.shade === Shade.Dark ? 1 : 0);
         if (shadedByCurrentNorth.has(southKey)) {
-          currentPhaseColorYOffsets.set(
-            northKey,
-            Math.max(currentPhaseColorYOffsets.get(northKey) ?? 0, requiredNorthOffset),
-          );
+          setMaxOffset(currentPhaseColorYOffsets, northKey, requiredNorthOffset);
           continue;
         }
         if (shadedByRepeatedNorth.has(southKey)) {
-          repeatedPhaseColorYOffsets.set(
-            northKey,
-            Math.max(repeatedPhaseColorYOffsets.get(northKey) ?? 0, requiredNorthOffset),
-          );
+          setMaxOffset(repeatedPhaseColorYOffsets, northKey, requiredNorthOffset);
+        }
+      }
+    }
+
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      for (let z = 1; z < MAP_SIZE; ++z) {
+        if (!currentSpec.includeAt(x, z)) continue;
+        const color = colorGrid[x][z];
+        if (isTransparentColor(color) || color.shade !== Shade.Light) continue;
+        const southKey = cellKey(x, z);
+        const northKey = cellKey(x, z - 1);
+        if (shadedByCurrentNorth.has(southKey)) {
+          setMaxOffset(currentPhaseColorYOffsets, southKey, (currentPhaseColorYOffsets.get(northKey) ?? 0) + 1);
+          continue;
+        }
+        if (shadedByRepeatedNorth.has(southKey)) {
+          setMaxOffset(currentPhaseColorYOffsets, southKey, (repeatedPhaseColorYOffsets.get(northKey) ?? 0) + 1);
         }
       }
     }
@@ -2272,7 +2297,7 @@ function buildStepPhaseParts(
   const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
   const steps: RawShapePart[] = [];
   let hasAnyEmptyPhase = false;
-  const yOffset = getStepPhaseYOffset(colorGrid, cache, waterDrops);
+  const yOffset = getStepPhaseYOffset(colorGrid, stepDirection, cache, waterDrops);
   const previewWaterBlocks = belowPlatformWater
     ? buildBelowPlatformWaterPreviewBlocks(colorGrid, 0, waterDrops)
     : [];
