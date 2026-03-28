@@ -17,6 +17,7 @@ import {
   DEFAULT_FORCE_Z129,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
+  DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
   DEFAULT_MIX_STEPS,
   DEFAULT_PALETTE_SEED,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
@@ -409,6 +410,7 @@ const Index = () => {
   const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.assumeFloor, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
   const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, DEFAULT_BELOW_PLATFORM_WATER));
   const [skipEmptySuppressSteps, setSkipEmptySuppressSteps] = useState(() => loadCached(LS_KEYS.skipEmptySuppressSteps, DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS));
+  const [markSuppressLoadSpotsInSchematic, setMarkSuppressLoadSpotsInSchematic] = useState(() => loadCached(LS_KEYS.markSuppressLoadSpotsInSchematic, DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
@@ -549,6 +551,7 @@ const Index = () => {
       [LS_KEYS.assumeFloor]: applySupportFloorYs,
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
       [LS_KEYS.skipEmptySuppressSteps]: skipEmptySuppressSteps,
+      [LS_KEYS.markSuppressLoadSpotsInSchematic]: markSuppressLoadSpotsInSchematic,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
@@ -586,6 +589,7 @@ const Index = () => {
       applySupportFloorYs,
       belowPlatformWater,
       skipEmptySuppressSteps,
+      markSuppressLoadSpotsInSchematic,
       showVsFillerWarnings,
       showAlignmentReminder,
       showNooblineWarnings,
@@ -1398,6 +1402,9 @@ const Index = () => {
         forceZ129,
         customColors,
         baseName,
+        buildMode: effectiveBuildMode,
+        suppressStepDirection,
+        markSuppressLoadSpotsInSchematic,
       });
       const suffix = getBuildModeDownloadSuffix(buildMode, suppressStepDirection);
       const ext = result.isZip ? "zip" : "nbt";
@@ -3396,6 +3403,15 @@ const Index = () => {
                   className="h-3.5 w-3.5"
                 />
                 <span>{messages.dialogs.options.skipEmptySuppressSteps}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={markSuppressLoadSpotsInSchematic}
+                  onChange={e => setMarkSuppressLoadSpotsInSchematic(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>{messages.dialogs.options.markSuppressLoadSpotsInSchematic}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input

@@ -4,6 +4,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - tests/run.mts
  */
 import { MAP_SIZE } from "@/utils/color";
 import type { ColorRef, ColorRgbCustom } from "@/types/color";
@@ -12,7 +13,7 @@ import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRul
 import { resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
 import { type BlockEntry, gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { createZip } from "@/utils/zip";
-import type { FillerAssignment } from "@/types/conversion";
+import { BuildMode, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { WATER_BASE_INDEX } from "@/data/mapColors";
 import {
   isShapeColorCell,
@@ -23,6 +24,7 @@ import {
   shouldIncludeFragileSupportCell,
   getFragileSupportOverride,
 } from "./shapeModel";
+import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
 
 interface ExportOptions {
   blockMapping: Record<number, string>;
@@ -33,6 +35,50 @@ interface ExportOptions {
   xColumnRange?: [number, number];
   phaseRange?: [number, number];
   baseName: string;
+  buildMode: BuildMode;
+  suppressStepDirection: SuppressStepDirection;
+  markSuppressLoadSpotsInSchematic?: boolean;
+}
+
+type ExportBoundsOptions = Pick<
+  ExportOptions,
+  "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceZ129"
+>;
+
+function getSuppressLoadMarkerDistance(options: ExportBoundsOptions): number {
+  if (!options.markSuppressLoadSpotsInSchematic) return 0;
+  if (options.buildMode === BuildMode.SuppressStepPairs) return 126;
+  if (options.buildMode === BuildMode.SuppressStepChecker) return 124;
+  return 0;
+}
+
+function validateExportHorizontalBounds(
+  minX: number,
+  maxX: number,
+  minZ: number,
+  maxZ: number,
+  options: ExportBoundsOptions,
+): void {
+  const loadMarkerDistance = getSuppressLoadMarkerDistance(options);
+  const extendsX =
+    loadMarkerDistance > 0 &&
+    (options.suppressStepDirection === SuppressStepDirection.EastToWest ||
+      options.suppressStepDirection === SuppressStepDirection.WestToEast);
+  const extendsZ =
+    loadMarkerDistance > 0 &&
+    (options.suppressStepDirection === SuppressStepDirection.NorthToSouth ||
+      options.suppressStepDirection === SuppressStepDirection.SouthToNorth);
+  const minExpectedX = extendsX ? -loadMarkerDistance : 0;
+  const maxExpectedX = extendsX ? MAP_SIZE - 1 + loadMarkerDistance : MAP_SIZE - 1;
+  const minExpectedZ = extendsZ ? -loadMarkerDistance : -1;
+  const maxExpectedZ = extendsZ ? MAP_SIZE - 1 + loadMarkerDistance : MAP_SIZE - 1;
+
+  if (minX < minExpectedX || maxX > maxExpectedX) {
+    throw new Error(`Invalid shape x range during export: [${minX}, ${maxX}] (expected within [${minExpectedX}, ${maxExpectedX}])`);
+  }
+  if (minZ < minExpectedZ || maxZ > maxExpectedZ) {
+    throw new Error(`Invalid shape z range during export: [${minZ}, ${maxZ}] (expected within [${minExpectedZ}, ${maxExpectedZ}])`);
+  }
 }
 
 function getWaterColumnTopY(part: ShapePart): Map<string, number> {
@@ -111,33 +157,40 @@ function materializeShapeParts(shape: GeneratedShape, options: ExportOptions): B
   );
 }
 
-function normalizeAndMeasure(blocks: BlockEntry[], forceZ129 = false): { sizeX: number; sizeY: number; sizeZ: number } {
+function normalizeAndMeasure(
+  blocks: BlockEntry[],
+  options: Pick<ExportOptions, "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceZ129">,
+): { sizeX: number; sizeY: number; sizeZ: number } {
+  const forceZ129 = options.forceZ129 === true;
   if (blocks.length === 0) return { sizeX: MAP_SIZE, sizeY: 1, sizeZ: forceZ129 ? MAP_SIZE + 1 : MAP_SIZE };
 
+  let minX = Infinity;
+  let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
   let minZ = Infinity;
   let maxZ = -Infinity;
   for (const block of blocks) {
+    if (block.x < minX) minX = block.x;
+    if (block.x > maxX) maxX = block.x;
     if (block.y < minY) minY = block.y;
     if (block.y > maxY) maxY = block.y;
     if (block.z < minZ) minZ = block.z;
     if (block.z > maxZ) maxZ = block.z;
   }
-
-  if (minZ < -1 || maxZ >= MAP_SIZE) {
-    throw new Error(`Invalid shape z range during export: [${minZ}, ${maxZ}]`);
-  }
+  validateExportHorizontalBounds(minX, maxX, minZ, maxZ, options);
+  const zShift = minZ < 0 ? -minZ : (forceZ129 ? 1 : 0);
 
   for (const block of blocks) {
+    block.x -= minX;
     block.y -= minY;
-    if (minZ < 0 || forceZ129) block.z += 1;
+    block.z += zShift;
   }
 
   return {
-    sizeX: MAP_SIZE,
+    sizeX: maxX - minX + 1,
     sizeY: maxY - minY + 1,
-    sizeZ: minZ < 0 || forceZ129 ? MAP_SIZE + 1 : MAP_SIZE,
+    sizeZ: maxZ + zShift + 1,
   };
 }
 
@@ -147,7 +200,7 @@ async function buildSplitZip(
   names: [string, string],
 ): Promise<{ data: Uint8Array; isZip: boolean }> {
   const toNbt = async (blocks: BlockEntry[]) => {
-    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
+    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
     return gzipCompress(writeStructureNbt(blocks, sizeX, sizeY, sizeZ));
   };
 
@@ -169,6 +222,14 @@ export async function convertToNbt(
   if (shape.splitExportNames) return buildSplitZip(parts, options, shape.splitExportNames);
 
   const blocks = parts.flat();
-  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options.forceZ129 === true);
+  for (const marker of buildSuppressLoadSpotMarkers(
+    shape,
+    options.buildMode,
+    options.suppressStepDirection,
+    options.markSuppressLoadSpotsInSchematic === true,
+  )) {
+    blocks.push(marker);
+  }
+  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
   return { data: await gzipCompress(writeStructureNbt(blocks, sizeX, sizeY, sizeZ)), isZip: false };
 }

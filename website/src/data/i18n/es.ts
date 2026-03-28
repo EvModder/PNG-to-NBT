@@ -317,6 +317,7 @@ export const esCatalog = {
       assumeFloor: "Suponer suelo",
       belowPlatformWater: "Agua bajo la plataforma",
       skipEmptySuppressSteps: "Omitir pasos suppress vacíos",
+      markSuppressLoadSpotsInSchematic: "Marcar puntos de carga suppress en el esquema",
       showAlignmentReminder: "Mostrar recordatorio de alineación",
       showNooblineWarnings: "Mostrar advertencias para nooblines",
       showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",

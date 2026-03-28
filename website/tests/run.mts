@@ -16,6 +16,7 @@ import {
   DEFAULT_FORCE_Z129,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
+  DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
   DEFAULT_MIX_STEPS,
   DEFAULT_PALETTE_SEED,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
@@ -84,6 +85,7 @@ type ExportFixtureSettings = {
   mixSteps: boolean;
   buildAtWorldMinY?: boolean;
   skipEmptySuppressSteps: boolean;
+  markSuppressLoadSpotsInSchematic: boolean;
   lightWaterDrop: number;
   flatWaterDrop: number;
   darkWaterDrop: number;
@@ -693,6 +695,8 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     layerGap: settings.layerGap ?? DEFAULT_LAYER_GAP,
     mixSteps: settings.mixSteps ?? DEFAULT_MIX_STEPS,
     skipEmptySuppressSteps: settings.skipEmptySuppressSteps ?? DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
+    markSuppressLoadSpotsInSchematic:
+      settings.markSuppressLoadSpotsInSchematic ?? DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
     lightWaterDrop: waterDrops.light ?? settings.lightWaterDrop ?? DEFAULT_LIGHT_WATER_DROP,
     flatWaterDrop: waterDrops.flat ?? settings.flatWaterDrop ?? DEFAULT_FLAT_WATER_DROP,
     darkWaterDrop: waterDrops.dark ?? settings.darkWaterDrop ?? DEFAULT_DARK_WATER_DROP,
@@ -891,6 +895,9 @@ async function runFixtureCase(
     forceZ129: testCase.settings.forceZ129,
     customColors: testCase.settings.customColors,
     baseName: testCase.baseName,
+    buildMode: effectiveBuildMode,
+    suppressStepDirection: testCase.settings.suppressStepDirection,
+    markSuppressLoadSpotsInSchematic: testCase.settings.markSuppressLoadSpotsInSchematic,
   });
 
   if (generated.isZip !== (testCase.outputExtension === ".zip")) {

@@ -321,6 +321,7 @@ export const enCatalog = {
       assumeFloor: "Assume floor",
       belowPlatformWater: "Below-platform water",
       skipEmptySuppressSteps: "Skip empty suppress steps",
+      markSuppressLoadSpotsInSchematic: "Mark suppress load-spots in schematic",
       showAlignmentReminder: "Show alignment reminder",
       showNooblineWarnings: "Show warnings for nooblines",
       showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",

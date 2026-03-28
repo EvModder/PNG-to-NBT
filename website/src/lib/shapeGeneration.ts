@@ -2604,6 +2604,7 @@ function getGeneratedShape(
     topAlignedWater,
     enableWaterConvenience,
     buildAtWorldMinY,
+    skipEmptySuppressSteps,
   );
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;

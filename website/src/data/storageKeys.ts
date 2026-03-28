@@ -47,6 +47,7 @@ export const STORAGE_KEYS = {
   assumeFloor: "mapart_secret_assume_floor",
   belowPlatformWater: "mapart_secret_below_platform_water",
   skipEmptySuppressSteps: "mapart_secret_skip_empty_suppress_steps",
+  markSuppressLoadSpotsInSchematic: "mapart_secret_mark_suppress_load_spots_in_schematic",
   showVsFillerWarnings: "mapart_secret_show_vs_filler_warnings",
   showAlignmentReminder: "mapart_secret_show_alignment_reminder",
   showNooblineWarnings: "mapart_secret_show_noobline_warnings",
