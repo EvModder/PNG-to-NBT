@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@types/utif": "^3.0.6",
-    "lucide-react": "^0.577.0",
+    "lucide-react": "^1.7.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "utif": "^3.1.0"
@@ -34,7 +34,7 @@
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
-    "typescript": "^5.9.3",
-    "vite": "^8.0.1"
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3"
   }
 }
