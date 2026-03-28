@@ -316,6 +316,7 @@ export const esCatalog = {
       forceZ129: "Ancho Z siempre 129",
       assumeFloor: "Suponer suelo",
       belowPlatformWater: "Agua bajo la plataforma",
+      skipEmptySuppressSteps: "Omitir pasos suppress vacíos",
       showAlignmentReminder: "Mostrar recordatorio de alineación",
       showNooblineWarnings: "Mostrar advertencias para nooblines",
       showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",

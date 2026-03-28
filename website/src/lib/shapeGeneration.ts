@@ -48,6 +48,11 @@ interface RawShapePart {
   supportFloorYs: ReadonlySet<number>;
 }
 
+type StepPhasePartsBuildResult = {
+  parts: RawShapePart[];
+  hasAnyEmptyPhase: boolean;
+};
+
 type StaircaseWaterSetting =
   | { kind: "below-platform"; drops: WaterDrops }
   | { kind: "top-aligned" };
@@ -2260,11 +2265,13 @@ function buildStepPhaseParts(
   stepDirection: SuppressStepDirection,
   mixSteps: boolean,
   waterDrops: WaterDrops | undefined,
+  skipEmptySuppressSteps: boolean,
   cache?: GridShapeCache,
-): RawShapePart[] {
+): StepPhasePartsBuildResult {
   const belowPlatformWater = waterDrops !== undefined;
   const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
   const steps: RawShapePart[] = [];
+  let hasAnyEmptyPhase = false;
   const yOffset = getStepPhaseYOffset(colorGrid, cache, waterDrops);
   const previewWaterBlocks = belowPlatformWater
     ? buildBelowPlatformWaterPreviewBlocks(colorGrid, 0, waterDrops)
@@ -2274,8 +2281,10 @@ function buildStepPhaseParts(
     steps.push(buildShapePart([], [], true, new Set<number>(), previewWaterBlocks));
   }
 
+  // When empty suppress phases are skipped, later phases must reuse the next packed Y slot.
+  let outputStepIndex = steps.length;
   for (let stepIndex = 0; stepIndex < specs.length; ++stepIndex) {
-    const baseY = (stepIndex + (previewWaterBlocks.length > 0 ? 1 : 0)) * yOffset;
+    const baseY = outputStepIndex * yOffset;
     const { blocks, loweredWaterBlocks } = buildStepPhaseBlocks(
       colorGrid,
       specs[stepIndex],
@@ -2285,10 +2294,20 @@ function buildStepPhaseParts(
       mixSteps,
       waterDrops,
     );
-    steps.push(buildShapePart(blocks, [], true, new Set<number>([baseY - 1]), loweredWaterBlocks));
+    const part = buildShapePart(blocks, [], true, new Set<number>([baseY - 1]), loweredWaterBlocks);
+    const isEmptyPart = part.blocks.length === 0 && part.loweredWaterBlocks.length === 0 && part.fillerCandidates.length === 0;
+    if (isEmptyPart) hasAnyEmptyPhase = true;
+    if (skipEmptySuppressSteps && isEmptyPart) {
+      continue;
+    }
+    steps.push(part);
+    outputStepIndex += 1;
   }
 
-  return steps;
+  return {
+    parts: steps,
+    hasAnyEmptyPhase,
+  };
 }
 
 function finalizeShapePart(part: RawShapePart): ShapePart {
@@ -2336,11 +2355,13 @@ function getShapeCacheKeyId(
   topAlignedWater = false,
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
+  skipEmptySuppressSteps = true,
 ): ShapeCacheKeyId {
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|dir:${stepDirection}`;
   if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
+  if (isSuppressStepsBuildMode(buildMode)) id += `|skipempty:${skipEmptySuppressSteps ? 1 : 0}`;
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
   else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
@@ -2484,9 +2505,9 @@ function getCachedSuppressSplitParts(
 ): RawShapePart[] {
   const keyId = getShapeCacheKeyId(buildMode, 0, false, SuppressStepDirection.EastToWest, 0, waterDrops);
   return getCachedRawParts(cache, keyId, () =>
-    buildMode === BuildMode.SuppressSplitRow
-      ? buildSuppressSplitRowBlockSets(colorGrid, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks))
-      : buildSuppressSplitCheckerBlockSets(colorGrid, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks)),
+      buildMode === BuildMode.SuppressSplitRow
+        ? buildSuppressSplitRowBlockSets(colorGrid, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks))
+        : buildSuppressSplitCheckerBlockSets(colorGrid, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks)),
   );
 }
 
@@ -2496,10 +2517,20 @@ function getCachedSuppressStepParts(
   buildMode: StepwiseBuildMode,
   stepDirection: SuppressStepDirection,
   mixSteps: boolean,
+  skipEmptySuppressSteps: boolean,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, stepDirection, 0, waterDrops);
-  return getCachedRawParts(cache, keyId, () => buildStepPhaseParts(colorGrid, buildMode, stepDirection, mixSteps, waterDrops, cache));
+  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, stepDirection, 0, waterDrops, false, true, false, skipEmptySuppressSteps);
+  const cached = cache.rawParts.get(keyId);
+  if (cached) return cached;
+
+  const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, mixSteps, waterDrops, skipEmptySuppressSteps, cache);
+  cache.rawParts.set(keyId, rawPartsBuild.parts);
+  if (!rawPartsBuild.hasAnyEmptyPhase) {
+    const alternateKeyId = getShapeCacheKeyId(buildMode, 0, mixSteps, stepDirection, 0, waterDrops, false, true, false, !skipEmptySuppressSteps);
+    cache.rawParts.set(alternateKeyId, rawPartsBuild.parts);
+  }
+  return rawPartsBuild.parts;
 }
 
 function getCachedSuppress2LayerParts(
@@ -2528,6 +2559,7 @@ function buildRawShapeParts(
   topAlignedWater = false,
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
+  skipEmptySuppressSteps = true,
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
@@ -2535,9 +2567,9 @@ function buildRawShapeParts(
     case BuildMode.SuppressSplitChecker:
       return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker, waterDrops);
     case BuildMode.SuppressStepPairs:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, mixSteps, waterDrops);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, mixSteps, skipEmptySuppressSteps, waterDrops);
     case BuildMode.SuppressStepChecker:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, mixSteps, waterDrops);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, mixSteps, skipEmptySuppressSteps, waterDrops);
     case BuildMode.Suppress2LayerLateFillers:
       return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLateFillers, waterDrops);
     case BuildMode.Suppress2LayerLatePairs:
@@ -2559,6 +2591,7 @@ function getGeneratedShape(
   topAlignedWater = false,
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
+  skipEmptySuppressSteps = true,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
   const cacheKeyId = getShapeCacheKeyId(
@@ -2587,6 +2620,7 @@ function getGeneratedShape(
     topAlignedWater,
     enableWaterConvenience,
     buildAtWorldMinY,
+    skipEmptySuppressSteps,
   );
   const parts = rawParts.map(finalizeShapePart);
   const splitExportNames =
@@ -2626,6 +2660,7 @@ export function generateShapeMap(
     waterSetting?: StaircaseWaterSetting;
     enableWaterConvenience?: boolean;
     buildAtWorldMinY?: boolean;
+    skipEmptySuppressSteps?: boolean;
     selectedMode?: BuildMode | null;
     selectedStepDirection: SuppressStepDirection;
   },
@@ -2637,6 +2672,7 @@ export function generateShapeMap(
   const topAlignedWater = options.waterSetting?.kind === "top-aligned";
   const enableWaterConvenience = options.enableWaterConvenience ?? true;
   const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
+  const skipEmptySuppressSteps = options.skipEmptySuppressSteps ?? true;
   const staircaseVisibleModes: BuildMode[] =
     !hasTransparency && !hasWater &&
     (allSameShade === Shade.Dark || allSameShade === Shade.Light)
@@ -2661,6 +2697,7 @@ export function generateShapeMap(
       topAlignedWater,
       enableWaterConvenience,
       buildAtWorldMinY,
+      skipEmptySuppressSteps,
     );
     if (seenShapeSignatures.has(signatureId)) continue;
     seenShapeSignatures.add(signatureId);
@@ -2680,6 +2717,7 @@ export function generateShapeMap(
       topAlignedWater,
       enableWaterConvenience,
       buildAtWorldMinY,
+      skipEmptySuppressSteps,
     );
     if (!seenShapeSignatures.has(signatureId)) {
       seenShapeSignatures.add(signatureId);

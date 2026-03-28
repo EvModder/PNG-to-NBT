@@ -21,6 +21,7 @@ import {
   DEFAULT_PALETTE_SEED,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_SHADE_FILLER_BLOCK,
+  DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
   DEFAULT_SHOW_ALIGNMENT_REMINDER,
   DEFAULT_SHOW_EXCLUDED_BLOCKS,
   DEFAULT_SHOW_IDS,
@@ -407,6 +408,7 @@ const Index = () => {
   const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, DEFAULT_FORCE_Z129));
   const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.assumeFloor, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
   const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, DEFAULT_BELOW_PLATFORM_WATER));
+  const [skipEmptySuppressSteps, setSkipEmptySuppressSteps] = useState(() => loadCached(LS_KEYS.skipEmptySuppressSteps, DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
@@ -546,6 +548,7 @@ const Index = () => {
       [LS_KEYS.forceZ129]: forceZ129,
       [LS_KEYS.assumeFloor]: applySupportFloorYs,
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
+      [LS_KEYS.skipEmptySuppressSteps]: skipEmptySuppressSteps,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
@@ -582,6 +585,7 @@ const Index = () => {
       forceZ129,
       applySupportFloorYs,
       belowPlatformWater,
+      skipEmptySuppressSteps,
       showVsFillerWarnings,
       showAlignmentReminder,
       showNooblineWarnings,
@@ -671,6 +675,7 @@ const Index = () => {
           waterSetting: activeWaterSetting,
           enableWaterConvenience: supportMode !== SupportMode.None,
           buildAtWorldMinY: false,
+          skipEmptySuppressSteps,
           selectedMode: buildMode,
           selectedStepDirection: suppressStepDirection,
           },
@@ -687,6 +692,7 @@ const Index = () => {
       buildMode,
       suppressStepDirection,
       supportMode,
+      skipEmptySuppressSteps,
       derivedImageStats,
       imageHasWater,
       twoLayerHasLateVoidNeed,
@@ -733,6 +739,7 @@ const Index = () => {
           waterSetting: activeWaterSetting,
           enableWaterConvenience: supportMode !== SupportMode.None,
           buildAtWorldMinY: true,
+          skipEmptySuppressSteps,
           selectedMode: buildMode,
           selectedStepDirection: suppressStepDirection,
         },
@@ -753,6 +760,7 @@ const Index = () => {
       showMixStepsToggle,
       suppressStepDirection,
       supportMode,
+      skipEmptySuppressSteps,
       twoLayerHasLateVoidNeed,
     ],
   );
@@ -851,14 +859,16 @@ const Index = () => {
   const isNorthSouthSuppressStepDirection =
     suppressStepDirection === SuppressStepDirection.NorthToSouth ||
     suppressStepDirection === SuppressStepDirection.SouthToNorth;
-  const maxRangeIndex = useMemo(
-    () => getBuildModeRangeMax(effectiveBuildMode) + (isStepRangeMode && belowPlatformWater && imageHasWater ? 1 : 0),
-    [effectiveBuildMode, isStepRangeMode, belowPlatformWater, imageHasWater],
-  );
-  const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
   const supportShape = effectiveBuildMode === BuildMode.Flat
     ? northlineShape
     : (shapeMap?.[effectiveBuildMode] ?? null);
+  const maxRangeIndex = useMemo(
+    () => isStepRangeMode
+      ? Math.max(0, (supportShape?.parts.length ?? (getBuildModeRangeMax(effectiveBuildMode) + (belowPlatformWater && imageHasWater ? 1 : 0))) - 1)
+      : getBuildModeRangeMax(effectiveBuildMode),
+    [effectiveBuildMode, isStepRangeMode, supportShape, belowPlatformWater, imageHasWater],
+  );
+  const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
   const enableStepsSupportOption = !imageData || !!supportShape?.parts.some(part =>
       [...part.cells.entries()].some(([coord, cell]) => {
       if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
@@ -3377,6 +3387,15 @@ const Index = () => {
                   className="h-3.5 w-3.5"
                 />
                 <span>{messages.dialogs.options.belowPlatformWater}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={skipEmptySuppressSteps}
+                  onChange={e => setSkipEmptySuppressSteps(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>{messages.dialogs.options.skipEmptySuppressSteps}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input

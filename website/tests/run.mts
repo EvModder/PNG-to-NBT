@@ -20,6 +20,7 @@ import {
   DEFAULT_PALETTE_SEED,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_SHADE_FILLER_BLOCK,
+  DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
   DEFAULT_SUPPORT_FILLER_BLOCK,
   DEFAULT_SUPPORT_MODE,
   DEFAULT_SUPPRESS_STEP_DIRECTION,
@@ -82,6 +83,7 @@ type ExportFixtureSettings = {
   layerGap: number;
   mixSteps: boolean;
   buildAtWorldMinY?: boolean;
+  skipEmptySuppressSteps: boolean;
   lightWaterDrop: number;
   flatWaterDrop: number;
   darkWaterDrop: number;
@@ -690,6 +692,7 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     proPaletteSeed: settings.proPaletteSeed ?? DEFAULT_PALETTE_SEED,
     layerGap: settings.layerGap ?? DEFAULT_LAYER_GAP,
     mixSteps: settings.mixSteps ?? DEFAULT_MIX_STEPS,
+    skipEmptySuppressSteps: settings.skipEmptySuppressSteps ?? DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
     lightWaterDrop: waterDrops.light ?? settings.lightWaterDrop ?? DEFAULT_LIGHT_WATER_DROP,
     flatWaterDrop: waterDrops.flat ?? settings.flatWaterDrop ?? DEFAULT_FLAT_WATER_DROP,
     darkWaterDrop: waterDrops.dark ?? settings.darkWaterDrop ?? DEFAULT_DARK_WATER_DROP,
@@ -815,6 +818,7 @@ async function runFixtureCase(
       waterSetting: activeWaterSetting,
       enableWaterConvenience: testCase.settings.supportMode !== SupportMode.None,
       buildAtWorldMinY: testCase.settings.buildAtWorldMinY ?? false,
+      skipEmptySuppressSteps: testCase.settings.skipEmptySuppressSteps,
       selectedMode: testCase.settings.buildMode,
       selectedStepDirection: testCase.settings.suppressStepDirection,
     },

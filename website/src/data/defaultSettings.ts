@@ -45,6 +45,7 @@ export const DEFAULT_SHOW_EXCLUDED_BLOCKS = false;
 export const DEFAULT_FORCE_Z129 = false;
 export const DEFAULT_APPLY_SUPPORT_FLOOR_YS = true;
 export const DEFAULT_BELOW_PLATFORM_WATER = false;
+export const DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS = true;
 export const DEFAULT_SHOW_VS_FILLER_WARNINGS = true;
 export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
 export const DEFAULT_SHOW_NOOBLINE_WARNINGS = false;

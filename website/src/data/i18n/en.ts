@@ -320,6 +320,7 @@ export const enCatalog = {
       forceZ129: "Z-width always 129",
       assumeFloor: "Assume floor",
       belowPlatformWater: "Below-platform water",
+      skipEmptySuppressSteps: "Skip empty suppress steps",
       showAlignmentReminder: "Show alignment reminder",
       showNooblineWarnings: "Show warnings for nooblines",
       showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",
