@@ -47,8 +47,8 @@ type ExportBoundsOptions = Pick<
 
 function getSuppressLoadMarkerDistance(options: ExportBoundsOptions): number {
   if (!options.markSuppressLoadSpotsInSchematic) return 0;
-  if (options.buildMode === BuildMode.SuppressStepPairs) return 126;
-  if (options.buildMode === BuildMode.SuppressStepChecker) return 124;
+  if (options.buildMode === BuildMode.SuppressStepPairs) return 127;
+  if (options.buildMode === BuildMode.SuppressStepChecker) return 126;
   return 0;
 }
 

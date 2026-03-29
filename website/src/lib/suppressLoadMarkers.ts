@@ -22,12 +22,13 @@ const BARRIER_BLOCK_NAME = "minecraft:barrier";
 type NonWaterColorCoord = { x: number; z: number };
 type StepPhaseSpec = {
   lines: number[];
+  loadLine: number;
   includeAt: (x: number, z: number) => boolean;
 };
 
 function getOrderedStepLines(
   direction: SuppressStepDirection,
-): { axis: "x" | "z"; lines: number[] } {
+): { axis: "x" | "z"; lines: number[]; lineStep: 1 | -1 } {
   const axis = (
     direction === SuppressStepDirection.NorthToSouth ||
     direction === SuppressStepDirection.SouthToNorth
@@ -37,11 +38,15 @@ function getOrderedStepLines(
     direction === SuppressStepDirection.NorthToSouth
   );
   const lines = Array.from({ length: MAP_SIZE }, (_, index) => ascending ? index : MAP_SIZE - 1 - index);
-  return { axis, lines };
+  return { axis, lines, lineStep: ascending ? 1 : -1 };
 }
 
-function makeStepPhaseSpec(lines: readonly number[], includeAt: (x: number, z: number) => boolean): StepPhaseSpec {
-  return { lines: [...lines], includeAt };
+function makeStepPhaseSpec(
+  lines: readonly number[],
+  loadLine: number,
+  includeAt: (x: number, z: number) => boolean,
+): StepPhaseSpec {
+  return { lines: [...lines], loadLine, includeAt };
 }
 
 function buildStepPhaseSpecsForDirection(
@@ -49,17 +54,18 @@ function buildStepPhaseSpecsForDirection(
   direction: SuppressStepDirection,
 ): StepPhaseSpec[] {
   const specs: StepPhaseSpec[] = [];
-  const { axis, lines } = getOrderedStepLines(direction);
+  const { axis, lines, lineStep } = getOrderedStepLines(direction);
   const getLine = (x: number, z: number) => axis === "x" ? x : z;
   const makeSingleLineParitySpec = (line: number, parity: PixelParity) =>
-    makeStepPhaseSpec([line], (x, z) => getLine(x, z) === line && getPixelParity(x, z) === parity);
+    makeStepPhaseSpec([line], line, (x, z) => getLine(x, z) === line && getPixelParity(x, z) === parity);
   const makeDualParitySpec = (
     dominantLines: readonly number[],
     recessiveLines: readonly number[],
+    loadLine: number,
   ) => {
     const dominantSet = new Set(dominantLines);
     const recessiveSet = new Set(recessiveLines);
-    return makeStepPhaseSpec([...dominantLines, ...recessiveLines], (x, z) => {
+    return makeStepPhaseSpec([...dominantLines, ...recessiveLines], loadLine, (x, z) => {
       const line = getLine(x, z);
       const parity = getPixelParity(x, z);
       return (
@@ -72,9 +78,11 @@ function buildStepPhaseSpecsForDirection(
   if (buildMode === BuildMode.SuppressStepPairs) {
     specs.push(makeSingleLineParitySpec(lines[0], PixelParity.Recessive));
     for (let i = 1; i < lines.length; ++i) {
-      specs.push(makeDualParitySpec([lines[i - 1]], [lines[i]]));
+      specs.push(makeDualParitySpec([lines[i - 1]], [lines[i]], lines[i]));
     }
-    specs.push(makeSingleLineParitySpec(lines[lines.length - 1], PixelParity.Dominant));
+    specs.push(makeStepPhaseSpec([lines[lines.length - 1]], lines[lines.length - 1] + lineStep, (x, z) => {
+      return getLine(x, z) === lines[lines.length - 1] && getPixelParity(x, z) === PixelParity.Dominant;
+    }));
     return specs;
   }
 
@@ -85,33 +93,19 @@ function buildStepPhaseSpecsForDirection(
     if (second === undefined) break;
     linePairs.push([first, second]);
   }
-  specs.push(makeStepPhaseSpec(linePairs[0] ?? [], (x, z) => {
+  specs.push(makeStepPhaseSpec(linePairs[0] ?? [], lines[1] ?? lines[0], (x, z) => {
     const line = getLine(x, z);
     return (linePairs[0]?.includes(line) ?? false) && getPixelParity(x, z) === PixelParity.Recessive;
   }));
   for (let i = 1; i < linePairs.length; ++i) {
-    specs.push(makeDualParitySpec(linePairs[i - 1], linePairs[i]));
+    specs.push(makeDualParitySpec(linePairs[i - 1], linePairs[i], lines[i * 2 + 1] ?? (lines[lines.length - 1] + lineStep * 2)));
   }
   const lastPair = linePairs[linePairs.length - 1] ?? [];
-  specs.push(makeStepPhaseSpec(lastPair, (x, z) => {
+  specs.push(makeStepPhaseSpec(lastPair, lines[lines.length - 1] + lineStep * 2, (x, z) => {
     const line = getLine(x, z);
     return lastPair.includes(line) && getPixelParity(x, z) === PixelParity.Dominant;
   }));
   return specs;
-}
-
-function getNearestStepLine(
-  direction: SuppressStepDirection,
-  lines: readonly number[],
-): number {
-  switch (direction) {
-    case SuppressStepDirection.EastToWest:
-    case SuppressStepDirection.SouthToNorth:
-      return Math.min(...lines);
-    case SuppressStepDirection.WestToEast:
-    case SuppressStepDirection.NorthToSouth:
-      return Math.max(...lines);
-  }
 }
 
 function getLoadSpotCoordinate(
@@ -177,7 +171,7 @@ function buildSuppressStepPairMarkers(
 ): BlockEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
-    getNearestStepLine(stepDirection, spec.lines),
+    spec.loadLine,
     SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE,
   );
   const markers: BlockEntry[] = [];
@@ -210,7 +204,7 @@ function buildSuppressStepCheckerMarkers(
 ): BlockEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
-    getNearestStepLine(stepDirection, spec.lines),
+    spec.loadLine,
     SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE,
   );
   const orthogonalOffsets = (markerLine & 1) === 0
