@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
-import { Moon, Sun, Plus, Minus, Glasses, Droplets, ArrowDownToLine } from "lucide-react";
+import { Moon, Sun, Plus, Minus, Glasses } from "lucide-react";
 import {
   AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS,
   DEFAULT_ACTIVE_PRESET_NAME,
@@ -77,8 +77,6 @@ import { getSupportedColorAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPP
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
 import {
   getBuildModeDownloadSuffix,
-  getSuppressStepDirectionRotationDegrees,
-  buildModeUsesLayerGap,
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
   cycleSuppressStepDirection,
@@ -102,6 +100,10 @@ import {
   loadPresets,
   type BlockPreset,
 } from "@/data/presets";
+import { ToolbarPresetSettings } from "@/components/ToolbarPresetSettings";
+import { ToolbarFillerSettings } from "@/components/ToolbarFillerSettings";
+import { PanelCustomColors } from "@/components/PanelCustomColors";
+import { PanelImagePreview } from "@/components/PanelImagePreview";
 
 function loadCached<T>(key: string, fallback: T): T {
   try {
@@ -256,34 +258,6 @@ type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 type SortDir = "asc" | "desc";
 type ModeOption = { value: BuildMode; label: string; disabled?: boolean; muted?: boolean };
 
-function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirection }) {
-  const rotation = getSuppressStepDirectionRotationDegrees(direction);
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-      <g
-        className="fill-current"
-        style={{
-          color: "hsl(var(--accent))",
-          fontFamily: "'JetBrains Mono', monospace",
-          paintOrder: "stroke fill",
-          stroke: "hsl(var(--input))",
-          strokeWidth: 1.25,
-        }}
-      >
-        <text x="12" y="3.3" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">N</text>
-        <text x="21.0" y="12" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">E</text>
-        <text x="12" y="21.8" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">S</text>
-        <text x="3.0" y="12" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">W</text>
-      </g>
-      <g transform={`rotate(${rotation} 12 12)`} className="stroke-current fill-none">
-        <path d="M12 16.6 L12 9.6" strokeWidth="2.1" strokeLinecap="round" />
-        <path d="M12 7.8 L9.8 10.2" strokeWidth="2.1" strokeLinecap="round" />
-        <path d="M12 7.8 L14.2 10.2" strokeWidth="2.1" strokeLinecap="round" />
-      </g>
-    </svg>
-  );
-}
-
 const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: BuildMode.Flat, label: messages.buildMode.optionLabel(BuildMode.Flat) },
   { value: BuildMode.InclineUp, label: messages.buildMode.optionLabel(BuildMode.InclineUp) },
@@ -292,7 +266,7 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
   { value: BuildMode.StaircaseSouthline, label: messages.buildMode.optionLabel(BuildMode.StaircaseSouthline) },
   { value: BuildMode.StaircaseClassic, label: messages.buildMode.optionLabel(BuildMode.StaircaseClassic) },
   { value: BuildMode.StaircaseValley, label: messages.buildMode.optionLabel(BuildMode.StaircaseValley) },
-  { value: BuildMode.StaircaseGrouped, label: messages.buildMode.optionLabel(BuildMode.StaircaseGrouped) },
+  { value: BuildMode.StaircaseGroup, label: messages.buildMode.optionLabel(BuildMode.StaircaseGroup) },
   { value: BuildMode.StaircaseParty, label: messages.buildMode.optionLabel(BuildMode.StaircaseParty) },
 ];
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
@@ -438,7 +412,6 @@ const Index = () => {
   const swatchTooltipRafRef = useRef<number | null>(null);
   const swatchTooltipPendingRef = useRef<{ text: string; x: number; y: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const supportFillerInputRef = useRef<HTMLInputElement>(null);
   const blockMeasureSelectRef = useRef<HTMLSelectElement | null>(null);
   const blockHeaderCollapseBtnRef = useRef<HTMLButtonElement | null>(null);
   const [blockMeasureFont, setBlockMeasureFont] = useState("11px monospace");
@@ -820,7 +793,6 @@ const Index = () => {
       darkWaterDrop,
     ],
   );
-  const showAnyWaterDropControl = visibleWaterLevelControls.length > 0;
 
   useEffect(() => {
     if (!belowPlatformWater) return;
@@ -951,9 +923,35 @@ const Index = () => {
     imageValid &&
     !isFlatShape &&
     isSuppressStepsBuildMode(buildMode);
-
   const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
   const supportModeTooltip = messages.supportMode.tooltip(supportMode);
+  const toolbarBuildSettingsProps = imageData ? {
+    isFlatShape,
+    visibleWaterLevelControls,
+    setNormalizedWaterDrop,
+    minLayerGap,
+    layerGap,
+    setLayerGap,
+    showMixStepsToggle,
+    mixSteps,
+    setMixSteps,
+    showPaletteSeedToggle,
+    proPaletteSeed,
+    setProPaletteSeed,
+    showBuildAtWorldMinYToggle,
+    buildAtWorldMinY,
+    setBuildAtWorldMinY,
+    buildMode,
+    setBuildMode,
+    showSuppressStepDirectionControl,
+    suppressStepDirection,
+    setSuppressStepDirection,
+    isSuppressStepDirectionSelectable,
+    staircaseModeOptions,
+    suppressModeOptions,
+    shadingMethodTooltip,
+  } : null;
+
   const suppressStepNorthSouthWarning = useMemo(
     () =>
       showSuppressStepDirectionControl &&
@@ -1602,9 +1600,6 @@ const Index = () => {
     (!imageData || supportFillerRequiredCount > 0 || showWaterSideSupportWarning);
   const showShadeFillerInput = !!imageData && shadeFillerRequiredCount > 0;
   const shadeFillerIsNorthRowOnly = northRowFillerCount > 0 && suppressFillerCount === 0;
-  const shadeFillerLabel = messages.fillers.shadeLabel(shadeFillerIsNorthRowOnly);
-  const shadeFillerTooltip = messages.fillers.shadeTooltip(shadeFillerIsNorthRowOnly);
-  const shadeFillerRequiredTooltip = messages.fillers.shadeRequiredTooltip(shadeFillerIsNorthRowOnly);
   const showDominateVoidFillerInput =
     !!imageData &&
     dominateVoidFillerRequiredCount > 0;
@@ -1640,12 +1635,6 @@ const Index = () => {
   const canCopyImageShareUrl = !!imageColorGrid && imageValid;
   const presetPrimaryActionLabel = presetDirty ? messages.common.save : messages.common.share;
   const presetPrimaryActionTitle = presetDirty ? messages.presets.saveTitle : messages.presets.shareTitle;
-  const hasAnyFillerInput =
-    showSupportFillerInput ||
-    showShadeFillerInput ||
-    showDominateVoidFillerInput ||
-    showRecessiveVoidFillerInput ||
-    showLateFillerInput;
   const showNorthRowAlignmentInfo =
     showAlignmentReminder &&
     canGenerate &&
@@ -2418,441 +2407,67 @@ const Index = () => {
         >
           <div className={`${isStackedLayout ? "order-1" : ""} space-y-2`}>
           {/* Preset Manager */}
-          <section ref={presetToolbarSectionRef} className="bg-card border border-border rounded-md p-1.5">
-            <div
-              className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
-            >
-              <div className="inline-flex items-center gap-1.5 shrink-0">
-                <span className="text-xs font-semibold text-accent">{messages.presets.label}</span>
-                <div className="inline-flex items-center gap-1">
-                  <select
-                    className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
-                    value={activeIdx}
-                    onChange={e => selectPreset(Number(e.target.value))}
-                    title={activePresetBuiltinTooltip}
-                  >
-                    <optgroup label={messages.presets.builtInGroupLabel}>
-                      {presets.slice(0, BUILTIN_PRESET_NAMES.length).map((p, i) => (
-                        <option key={i} value={i} title={messages.presets.builtinTooltip(p.name)}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                    {presets.length > BUILTIN_PRESET_NAMES.length && (
-                      <optgroup label={messages.presets.customGroupLabel}>
-                        {presets.slice(BUILTIN_PRESET_NAMES.length).map((p, i) => (
-                          <option key={i + BUILTIN_PRESET_NAMES.length} value={i + BUILTIN_PRESET_NAMES.length}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                  {presetDirty && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title={messages.common.unsavedChanges} />
-                  )}
-                </div>
-                {!isBuiltinUnedited && (
-                  <button
-                    className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
-                    onClick={() => { void sharePreset(); }}
-                    title={presetPrimaryActionTitle}
-                  >
-                    {presetPrimaryActionLabel}
-                  </button>
-                )}
-                {activeIdx >= BUILTIN_PRESET_NAMES.length && presets.length > BUILTIN_PRESET_NAMES.length && (
-                  <button
-                    className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
-                    onClick={deletePreset}
-                    title={messages.presets.deleteTitle}
-                  >
-                    {messages.common.deleteShort}
-                  </button>
-                )}
-                <button
-                  className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20"
-                  onClick={createPreset}
-                  title={messages.common.newPresetTitle}
-                >
-                  +
-                </button>
-              </div>
-              {showSupportModeSelector && (
-                <>
-                  <span className="h-4 border-l border-border/70" />
-                  <div className="inline-flex items-center gap-1 shrink-0">
-                    <span className="text-xs font-semibold text-accent whitespace-nowrap">{messages.supportMode.label}</span>
-                    <select
-                      className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
-                      value={supportMode}
-                      onChange={e => setSupportMode(e.target.value as SupportMode)}
-                      title={supportModeTooltip}
-                    >
-                      <option value={SupportMode.All} disabled={!enableAllSupportOption} title={messages.supportMode.tooltip(SupportMode.All)}>
-                        {messages.supportMode.optionLabel(SupportMode.All)}
-                      </option>
-                      <option value={SupportMode.None} title={messages.supportMode.tooltip(SupportMode.None)}>
-                        {messages.supportMode.optionLabel(SupportMode.None)}
-                      </option>
-                      <option value={SupportMode.Steps} disabled={!enableStepsSupportOption} title={messages.supportMode.tooltip(SupportMode.Steps)}>
-                        {messages.supportMode.optionLabel(SupportMode.Steps)}
-                      </option>
-                      <option value={SupportMode.Water} disabled={!enableWaterSupportOption} title={messages.supportMode.tooltip(SupportMode.Water)}>
-                        {messages.supportMode.optionLabel(SupportMode.Water)}
-                      </option>
-                      <option
-                        value={SupportMode.Fragile}
-                        disabled={supportFillerIsFragile || !enableFragileSupportOption}
-                        title={messages.supportMode.tooltip(SupportMode.Fragile)}
-                      >
-                        {messages.supportMode.optionLabel(SupportMode.Fragile)}
-                      </option>
-                    </select>
-                  </div>
-                </>
-              )}
-              {imageData && (!isFlatShape || showAnyWaterDropControl || showBuildAtWorldMinYToggle) && (
-                <div className="ml-auto flex items-center gap-1">
-                  {visibleWaterLevelControls.map(({ shade, value }) => {
-                    const tooltip = messages.buildMode.waterLevelTooltip(shade);
-                    const ariaLabel = messages.buildMode.waterLevelAriaLabel(shade);
-                    return (
-                      <label
-                        key={shade}
-                        className="inline-flex items-center gap-1 cursor-help"
-                        title={tooltip}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="text-xs font-semibold text-accent whitespace-nowrap inline-flex items-center gap-0.5"
-                        >
-                          <Droplets className="h-3 w-3" />
-                          <span>{shade}</span>
-                          <ArrowDownToLine className="h-3 w-3" />
-                        </span>
-                        <span className="sr-only">{ariaLabel}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          value={value}
-                          onChange={e => setNormalizedWaterDrop(shade, parseInt(e.target.value) || 0)}
-                          title={tooltip}
-                          aria-label={ariaLabel}
-                          className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
-                        />
-                      </label>
-                    );
-                  })}
-                  {!isFlatShape && buildModeUsesLayerGap(buildMode) && (
-                    <>
-                      <span className="h-4 border-l border-border/70" />
-                      <span
-                        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                        title={messages.buildMode.layerGapTooltip}
-                      >
-                        {messages.buildMode.layerGapLabel}
-                      </span>
-                      <input
-                        type="number"
-                        min={minLayerGap}
-                        max={20}
-                        value={layerGap}
-                        onChange={e => setLayerGap(Math.max(minLayerGap, Math.min(20, parseInt(e.target.value) || 5)))}
-                        title={messages.buildMode.layerGapTooltip}
-                        className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
-                      />
-                    </>
-                  )}
-                  {!isFlatShape && showMixStepsToggle && (
-                    <label
-                      className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
-                      title={messages.buildMode.mixStepsTooltip}
-                    >
-                      <span title={messages.buildMode.mixStepsTooltip}>{messages.buildMode.mixStepsLabel}</span>
-                      <input
-                        type="checkbox"
-                        checked={mixSteps}
-                        onChange={e => setMixSteps(e.target.checked)}
-                        title={messages.buildMode.mixStepsTooltip}
-                        className="h-3.5 w-3.5 accent-primary"
-                      />
-                    </label>
-                  )}
-                  {!isFlatShape && showPaletteSeedToggle && (
-                    <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
-                      <span>{messages.buildMode.paletteSeedLabel}</span>
-                      <input
-                        type="checkbox"
-                        checked={proPaletteSeed}
-                        onChange={e => setProPaletteSeed(e.target.checked)}
-                        className="h-3.5 w-3.5 accent-primary"
-                      />
-                    </label>
-                  )}
-                  {showBuildAtWorldMinYToggle && (
-                    <>
-                      <label
-                        className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
-                        title={messages.buildMode.buildAtWorldMinYTooltip}
-                      >
-                        <span>{messages.buildMode.buildAtWorldMinYLabel}</span>
-                        <input
-                          type="checkbox"
-                          checked={buildAtWorldMinY}
-                          onChange={e => setBuildAtWorldMinY(e.target.checked)}
-                          title={messages.buildMode.buildAtWorldMinYTooltip}
-                          className="h-3.5 w-3.5 accent-primary"
-                        />
-                      </label>
-                      {!isFlatShape && <span className="h-4 border-l border-border/70" />}
-                    </>
-                  )}
-                  {!isFlatShape && (
-                    <>
-                      {(showMixStepsToggle || buildModeUsesLayerGap(buildMode) || showSuppressStepDirectionControl) && <span className="h-4 border-l border-border/70" />}
-                      {showSuppressStepDirectionControl && (
-                        <>
-                          <button
-                            type="button"
-                            className="inline-flex h-6 w-6 items-center justify-center rounded border border-border bg-input text-foreground hover:border-primary/60"
-                            title={messages.buildMode.stepDirectionTooltip(suppressStepDirection)}
-                            aria-label={messages.buildMode.stepDirectionAriaLabel(suppressStepDirection)}
-                            onClick={() => setSuppressStepDirection(
-                              cycleSuppressStepDirection(suppressStepDirection, isSuppressStepDirectionSelectable),
-                            )}
-                          >
-                            <SuppressStepDirectionIcon direction={suppressStepDirection} />
-                          </button>
-                          <span className="h-4 border-l border-border/70" />
-                        </>
-                      )}
-                      <span className="text-xs font-semibold text-accent whitespace-nowrap">
-                        {messages.buildMode.label}
-                      </span>
-                      <select
-                        className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
-                          buildMode === BuildMode.SuppressSplitRow ? "text-muted-foreground" : "text-foreground"
-                        }`}
-                        value={buildMode}
-                        onChange={e => setBuildMode(e.target.value as BuildMode)}
-                        title={shadingMethodTooltip}
-                      >
-                        <optgroup label={messages.buildMode.staircaseGroupLabel}>
-                          {staircaseModeOptions.map(opt => (
-                            <option key={opt.value} value={opt.value} title={messages.buildMode.tooltip(opt.value)}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                        <optgroup label={messages.buildMode.suppressGroupLabel}>
-                          {suppressModeOptions.map(opt => (
-                            <option
-                              key={opt.value}
-                              value={opt.value}
-                              disabled={opt.disabled}
-                              data-muted={opt.muted ? "true" : undefined}
-                              style={opt.muted ? { color: "var(--muted-foreground)", fontStyle: "italic" } : undefined}
-                              title={messages.buildMode.tooltip(opt.value)}
-                            >
-                              {opt.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </select>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
+          <ToolbarPresetSettings
+            toolbarRef={presetToolbarSectionRef}
+            isStackedLayout={isStackedLayout}
+            presets={presets}
+            builtInPresetCount={BUILTIN_PRESET_NAMES.length}
+            activeIdx={activeIdx}
+            selectPreset={selectPreset}
+            activePresetBuiltinTooltip={activePresetBuiltinTooltip}
+            presetDirty={presetDirty}
+            isBuiltinUnedited={isBuiltinUnedited}
+            sharePreset={sharePreset}
+            presetPrimaryActionTitle={presetPrimaryActionTitle}
+            presetPrimaryActionLabel={presetPrimaryActionLabel}
+            deletePreset={deletePreset}
+            createPreset={createPreset}
+            showSupportModeSelector={showSupportModeSelector}
+            supportMode={supportMode}
+            setSupportMode={setSupportMode}
+            supportModeTooltip={supportModeTooltip}
+            enableAllSupportOption={enableAllSupportOption}
+            enableStepsSupportOption={enableStepsSupportOption}
+            enableWaterSupportOption={enableWaterSupportOption}
+            enableFragileSupportOption={enableFragileSupportOption}
+            supportFillerIsFragile={supportFillerIsFragile}
+            buildSettingsProps={toolbarBuildSettingsProps}
+          />
 
           {/* Filler Block + Support + Shading Method */}
-          {hasAnyFillerInput && (
-          <section
-            ref={fillerToolbarSectionRef}
-            className={`bg-card border border-border rounded-md p-1.5 flex items-center gap-1.5 ${
-              isStackedLayout ? "flex-wrap" : "flex-nowrap"
-            }`}
-          >
-            {showSupportFillerInput && (
-              <div className="inline-flex items-center gap-1 shrink-0">
-                <span
-                  className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                  title={messages.fillers.supportTooltip}
-                >
-                  {messages.fillers.supportLabel}
-                </span>
-                <div className="inline-flex items-center gap-0 shrink-0">
-                  <input
-                    ref={supportFillerInputRef}
-                    type="text"
-                    value={supportFillerBlock}
-                    onChange={e => setSupportFillerBlock(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === "Enter") commitSupportFillerBlock(e.currentTarget.value);
-                    }}
-                    placeholder={DEFAULT_SUPPORT_FILLER_BLOCK}
-                    title={messages.fillers.supportTooltip}
-                    className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                  />
-                  {!!imageData && !supportFillerDisabled && supportFillerRequiredCount > 0 && (
-                    <>
-                      <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
-                      <span
-                        className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                        title={messages.fillers.supportRequiredTooltip}
-                      >
-                        <span className="font-semibold">{messages.common.requiredBadge}</span>
-                        <span className="text-foreground">{formatRequiredCount(supportFillerRequiredCount)}</span>
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-            {showShadeFillerInput && (
-              <>
-                {showSupportFillerInput && <span className="h-4 border-l border-border/70" />}
-                <div className="inline-flex items-center gap-1 shrink-0">
-                  <span
-                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title={shadeFillerTooltip}
-                  >
-                    {shadeFillerLabel}
-                  </span>
-                  <div className="inline-flex items-center gap-0 shrink-0">
-                    <input
-                      type="text"
-                      value={shadeFillerBlock}
-                      onChange={e => setShadeFillerBlock(e.target.value)}
-                      placeholder={DEFAULT_SHADE_FILLER_BLOCK}
-                      title={shadeFillerTooltip}
-                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                    />
-                    {!!imageData && !shadeFillerShadingDisabled && shadeFillerRequiredCount > 0 && (
-                      <>
-                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
-                        <span
-                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title={shadeFillerRequiredTooltip}
-                        >
-                          <span className="font-semibold">{messages.common.requiredBadge}</span>
-                          <span className="text-foreground">{formatRequiredCount(shadeFillerRequiredCount)}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-            {showDominateVoidFillerInput && (
-              <>
-                {(showSupportFillerInput || showShadeFillerInput) && <span className="h-4 border-l border-border/70" />}
-                <div className="inline-flex items-center gap-1 shrink-0">
-                  <span
-                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title={messages.fillers.dominateVoidTooltip}
-                  >
-                    {messages.fillers.dominateVoidLabel}
-                  </span>
-                  <div className="inline-flex items-center gap-0 shrink-0">
-                    <input
-                      type="text"
-                      value={dominateVoidFillerBlock}
-                      onChange={e => setDominateVoidFillerBlock(e.target.value)}
-                      placeholder={DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK}
-                      title={messages.fillers.dominateVoidTooltip}
-                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                    />
-                    {!!imageData && !dominateVoidFillerShadingDisabled && dominateVoidFillerRequiredCount > 0 && (
-                      <>
-                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
-                        <span
-                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title={messages.fillers.dominateVoidRequiredTooltip}
-                        >
-                          <span className="font-semibold">{messages.common.requiredBadge}</span>
-                          <span className="text-foreground">{formatRequiredCount(dominateVoidFillerRequiredCount)}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-            {showRecessiveVoidFillerInput && (
-              <>
-                {(showSupportFillerInput || showShadeFillerInput || showDominateVoidFillerInput) && <span className="h-4 border-l border-border/70" />}
-                <div className="inline-flex items-center gap-1 shrink-0">
-                  <span
-                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title={messages.fillers.recessiveVoidTooltip}
-                  >
-                    {messages.fillers.recessiveVoidLabel}
-                  </span>
-                  <div className="inline-flex items-center gap-0 shrink-0">
-                    <input
-                      type="text"
-                      value={recessiveVoidFillerBlock}
-                      onChange={e => setRecessiveVoidFillerBlock(e.target.value)}
-                      placeholder={DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK}
-                      title={messages.fillers.recessiveVoidTooltip}
-                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                    />
-                    {!!imageData && !recessiveVoidFillerShadingDisabled && recessiveVoidFillerRequiredCount > 0 && (
-                      <>
-                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
-                        <span
-                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title={messages.fillers.recessiveVoidRequiredTooltip}
-                        >
-                          <span className="font-semibold">{messages.common.requiredBadge}</span>
-                          <span className="text-foreground">{formatRequiredCount(recessiveVoidFillerRequiredCount)}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-            {showLateFillerInput && (
-              <>
-                {(showSupportFillerInput || showShadeFillerInput || showDominateVoidFillerInput || showRecessiveVoidFillerInput) && <span className="h-4 border-l border-border/70" />}
-                <div className="inline-flex items-center gap-1 shrink-0">
-                  <span
-                    className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
-                    title={messages.fillers.lateTooltip}
-                  >
-                    {messages.fillers.lateLabel}
-                  </span>
-                  <div className="inline-flex items-center gap-0 shrink-0">
-                    <input
-                      type="text"
-                      value={suppress2LayerLateFillerBlock}
-                      onChange={e => setSuppress2LayerLateFillerBlock(e.target.value)}
-                      placeholder={DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK}
-                      title={messages.fillers.lateTooltip}
-                      className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
-                    />
-                    {!!imageData && !lateFillerShadingDisabled && lateFillerRequiredCount > 0 && (
-                      <>
-                        <span className="-mx-px w-2 h-px bg-primary/60 self-center shrink-0" />
-                        <span
-                          className="text-[10px] font-mono text-muted-foreground inline-flex items-center gap-1 border-2 border-primary/60 bg-primary/10 rounded px-1.5 h-6"
-                          title={messages.fillers.lateRequiredTooltip}
-                        >
-                          <span className="font-semibold">{messages.common.requiredBadge}</span>
-                          <span className="text-foreground">{formatRequiredCount(lateFillerRequiredCount)}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-          )}
+          <ToolbarFillerSettings
+            toolbarRef={fillerToolbarSectionRef}
+            isStackedLayout={isStackedLayout}
+            hasImageData={!!imageData}
+            showSupportFillerInput={showSupportFillerInput}
+            supportFillerBlock={supportFillerBlock}
+            setSupportFillerBlock={setSupportFillerBlock}
+            commitSupportFillerBlock={commitSupportFillerBlock}
+            supportFillerDisabled={supportFillerDisabled}
+            supportFillerRequiredCount={supportFillerRequiredCount}
+            showShadeFillerInput={showShadeFillerInput}
+            shadeFillerBlock={shadeFillerBlock}
+            setShadeFillerBlock={setShadeFillerBlock}
+            shadeFillerIsNorthRowOnly={shadeFillerIsNorthRowOnly}
+            shadeFillerShadingDisabled={shadeFillerShadingDisabled}
+            shadeFillerRequiredCount={shadeFillerRequiredCount}
+            showDominateVoidFillerInput={showDominateVoidFillerInput}
+            dominateVoidFillerBlock={dominateVoidFillerBlock}
+            setDominateVoidFillerBlock={setDominateVoidFillerBlock}
+            dominateVoidFillerShadingDisabled={dominateVoidFillerShadingDisabled}
+            dominateVoidFillerRequiredCount={dominateVoidFillerRequiredCount}
+            showRecessiveVoidFillerInput={showRecessiveVoidFillerInput}
+            recessiveVoidFillerBlock={recessiveVoidFillerBlock}
+            setRecessiveVoidFillerBlock={setRecessiveVoidFillerBlock}
+            recessiveVoidFillerShadingDisabled={recessiveVoidFillerShadingDisabled}
+            recessiveVoidFillerRequiredCount={recessiveVoidFillerRequiredCount}
+            showLateFillerInput={showLateFillerInput}
+            suppress2LayerLateFillerBlock={suppress2LayerLateFillerBlock}
+            setSuppress2LayerLateFillerBlock={setSuppress2LayerLateFillerBlock}
+            lateFillerShadingDisabled={lateFillerShadingDisabled}
+            lateFillerRequiredCount={lateFillerRequiredCount}
+            formatRequiredCount={formatRequiredCount}
+          />
           </div>
 
           <div className={`${isStackedLayout ? "order-3" : "mt-2"} space-y-2`}>
@@ -3032,86 +2647,15 @@ const Index = () => {
             </div>
           </section>
 
-          {/* Custom Colors */}
-          <section className="bg-card border border-border rounded-md p-2">
-            <div className="flex items-center gap-1 mb-1">
-              <h2
-                className="text-sm font-semibold text-accent cursor-help"
-                title={messages.customColors.tooltip}
-                aria-label={messages.customColors.ariaLabel}
-              >
-                {messages.customColors.title}
-              </h2>
-            </div>
-            {customColors.length > 0 && (
-              <div className="space-y-0.5 mb-2">
-                {customColors.map((cc, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-xs">
-                    <div
-                      className="w-4 h-4 rounded border border-border flex-shrink-0"
-                      style={{ backgroundColor: `rgb(${cc.r},${cc.g},${cc.b})` }}
-                    />
-                    <span className="font-mono text-[10px]">
-                      ({cc.r},{cc.g},{cc.b})
-                    </span>
-                    <span className="font-mono text-[10px] text-primary">→ {cc.blocks.join(" | ")}</span>
-                    <button
-                      className="text-destructive text-[10px] hover:underline"
-                      onClick={() => setCustomColors(prev => prev.filter((_, j) => j !== i))}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-1.5 items-center">
-              <select
-                className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground w-48"
-                value={customMode === "custom" ? "custom" : String(customMode)}
-                onChange={e => setCustomMode(e.target.value === "custom" ? "custom" : parseInt(e.target.value))}
-              >
-                <option value="custom">{messages.customColors.customRgbOption}</option>
-                {BASE_COLORS.map((_, idx) => (
-                  <option key={idx} value={idx}>
-                    {idx} – {BASE_COLORS[idx].name}
-                  </option>
-                ))}
-              </select>
-              {customMode === "custom" && (
-                <>
-                  {(["r", "g", "b"] as const).map(ch => (
-                    <div key={ch} className="flex items-center gap-0.5">
-                      <label className="text-[10px] text-muted-foreground">{messages.customColors.channelLabel(ch)}</label>
-                      <input
-                        className="w-10 h-6 text-[11px] font-mono no-spinner px-1 bg-input border border-border rounded"
-                        type="number"
-                        min={0}
-                        max={255}
-                        value={newCustom[ch]}
-                        onChange={e => setNewCustom(p => ({ ...p, [ch]: e.target.value }))}
-                      />
-                    </div>
-                  ))}
-                </>
-              )}
-              <div className="flex items-center gap-0.5">
-                <label className="text-[10px] text-muted-foreground">{messages.customColors.blockLabel}</label>
-                <input
-                  className="w-40 h-6 text-[11px] font-mono px-1 bg-input border border-border rounded"
-                  placeholder={messages.customColors.blockPlaceholder}
-                  value={newCustom.block}
-                  onChange={e => setNewCustom(p => ({ ...p, block: e.target.value }))}
-                />
-              </div>
-              <button
-                className="h-6 px-2 text-xs rounded border border-border text-muted-foreground hover:text-foreground"
-                onClick={addCustomColor}
-              >
-                {messages.common.add}
-              </button>
-            </div>
-          </section>
+          <PanelCustomColors
+            customColors={customColors}
+            setCustomColors={setCustomColors}
+            customMode={customMode}
+            setCustomMode={setCustomMode}
+            newCustom={newCustom}
+            setNewCustom={setNewCustom}
+            addCustomColor={addCustomColor}
+          />
           </div>
         </div>
 
@@ -3125,280 +2669,49 @@ const Index = () => {
           }
         >
           <div className={isStackedLayout ? "order-2" : ""}>
-            <section className="bg-card border border-border rounded-md p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              {canCopyImageShareUrl ? (
-                <button
-                  type="button"
-                  className="bg-transparent p-0 border-0 text-sm font-semibold text-accent text-left hover:underline decoration-dotted underline-offset-2"
-                  onClick={() => { void copyImageShareUrl(); }}
-                  title={messages.upload.copyImageUrlTitle}
-                >
-                  {messages.upload.title}
-                </button>
-              ) : (
-                <h2 className="text-sm font-semibold text-accent">{messages.upload.title}</h2>
-              )}
-              {showVsFillersInPreviewToggle && (
-                <label
-                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none"
-                  title={messages.upload.showVsFillersTooltip}
-                >
-                  <input
-                    type="checkbox"
-                    checked={showVsFillersInPreview}
-                    onChange={e => setShowVsFillersInPreview(e.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span>{messages.upload.showVsFillersToggle}</span>
-                </label>
-              )}
-            </div>
-            {/* Unsupported-color conversion toggle intentionally hidden; conversion is always on. */}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={e => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
+            <PanelImagePreview
+              fileRef={fileRef}
+              imageData={imageData}
+              previewImageUrl={previewImageUrl}
+              imageName={imageName}
+              handleFile={handleFile}
+              canCopyImageShareUrl={canCopyImageShareUrl}
+              copyImageShareUrl={copyImageShareUrl}
+              showVsFillersInPreviewToggle={showVsFillersInPreviewToggle}
+              showVsFillersInPreview={showVsFillersInPreview}
+              setShowVsFillersInPreview={setShowVsFillersInPreview}
+              paletteNotices={paletteNotices}
+              imageValid={imageValid}
+              missingBlocks={missingBlocks}
+              noFillerWarning={noFillerWarning}
+              suppressStepNorthSouthWarning={suppressStepNorthSouthWarning}
+              waterSideSupportWarning={waterSideSupportWarning}
+              fragileSupportOverrideWarning={fragileSupportOverrideWarning}
+              vsFillerWarning={vsFillerWarning}
+              lateFillerWarning={lateFillerWarning}
+              showNorthRowAlignmentInfo={showNorthRowAlignmentInfo}
+              canGenerate={canGenerate}
+              imageHasWater={imageHasWater}
+              usesIceForWater={usesIceForWater}
+              clearImage={clearImage}
+              handleConvertAndDownload={handleConvertAndDownload}
+              converting={converting}
+              buildMode={buildMode}
+              showUsageInfo={!!paletteUsageInfo && imageValid}
+              numUniqueColorShadesForPart={numUniqueColorShadesForPart}
+              numColorBlockTypesForPart={numColorBlockTypesForPart}
+              vsFillerSpotCount={vsFillerSpotCount}
+              colRangeEnabled={colRangeEnabled}
+              setColRangeEnabled={setColRangeEnabled}
+              isStepRangeMode={isStepRangeMode}
+              colStart={colStart}
+              colEnd={colEnd}
+              maxRangeIndex={maxRangeIndex}
+              colStartRef={colStartRef}
+              colEndRef={colEndRef}
+              setColStart={setColStart}
+              setColEnd={setColEnd}
             />
-            {imageName && <p className="text-xs text-primary font-mono truncate mb-1">{imageName}</p>}
-            <div className="w-full max-w-[516px] mx-auto">
-              <div
-                className="rounded-md w-full aspect-square cursor-pointer border-2 border-dashed border-border hover:border-primary/50 transition-colors overflow-hidden flex items-center justify-center"
-                onClick={() => fileRef.current?.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => {
-                  e.preventDefault();
-                  const f = e.dataTransfer.files[0];
-                  if (f) handleFile(f);
-                }}
-              >
-                {imageData && previewImageUrl ? (
-                  <img
-                    src={previewImageUrl}
-                    alt={imageName || messages.upload.title}
-                    className="w-full h-full"
-                    style={{ imageRendering: "pixelated" }}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center px-2">{messages.upload.placeholder}</p>
-                )}
-              </div>
-            </div>
-
-            {paletteNotices.length > 0 && (
-              <div
-                className={`mt-2 rounded p-2 ${
-                  messages.parsing.bannerTone(paletteNotices) === "error"
-                    ? "bg-destructive/25 border-2 border-destructive/50"
-                    : messages.parsing.bannerTone(paletteNotices) === "warning"
-                      ? "bg-warning/20 border-2 border-warning/40"
-                      : "bg-primary/10 border-2 border-primary/30"
-                }`}
-              >
-                {paletteNotices.map((notice, i) => (
-                  <p
-                    key={i}
-                    className={`text-xs whitespace-pre-wrap ${
-                      messages.parsing.noticeTone(notice) === "error"
-                        ? notice.kind === PaletteNoticeKind.ReducedUniqueColors
-                          ? "text-destructive font-bold"
-                          : "text-destructive font-medium"
-                        : messages.parsing.noticeTone(notice) === "warning"
-                          ? "text-warning font-medium"
-                          : "text-primary font-medium"
-                    }`}
-                  >
-                    {messages.parsing.noticeText(notice)}
-                  </p>
-                ))}
-              </div>
-            )}
-
-            {imageValid && missingBlocks.length > 0 && (
-              <div className="mt-2 bg-destructive/25 border-2 border-destructive/50 rounded p-2">
-                <p className="text-xs text-destructive font-medium">
-                  {messages.preview.missingBlockAssignments(missingBlocks.length)}
-                </p>
-              </div>
-            )}
-
-            {noFillerWarning && (
-              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                <p className="text-xs text-warning font-medium whitespace-pre-line">
-                  {noFillerWarning}
-                </p>
-              </div>
-            )}
-
-            {suppressStepNorthSouthWarning && (
-              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                <p className="text-xs text-warning font-medium whitespace-pre-line">
-                  {suppressStepNorthSouthWarning}
-                </p>
-              </div>
-            )}
-
-            {waterSideSupportWarning && (
-              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                <p className={`text-xs whitespace-pre-line ${waterSideSupportWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
-                  {waterSideSupportWarning.text}
-                </p>
-              </div>
-            )}
-
-            {fragileSupportOverrideWarning && (
-              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                <p className={`text-xs whitespace-pre-line ${fragileSupportOverrideWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
-                  {fragileSupportOverrideWarning.text}
-                </p>
-              </div>
-            )}
-
-            {vsFillerWarning && (
-              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                <p className={`text-xs whitespace-pre-line ${vsFillerWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
-                  {vsFillerWarning.text}
-                </p>
-              </div>
-            )}
-
-            {lateFillerWarning && (
-              <div className="mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2">
-                <p className={`text-xs whitespace-pre-line ${lateFillerWarning.invalid ? "text-destructive font-bold" : "text-warning font-medium"}`}>
-                  {lateFillerWarning.text}
-                </p>
-              </div>
-            )}
-
-            {showNorthRowAlignmentInfo && (
-              <div className="mt-2 bg-muted/30 border border-border rounded p-2">
-                <p className="text-xs text-muted-foreground font-medium whitespace-pre-line">
-                  {messages.preview.northRowAlignmentInfo}
-                </p>
-              </div>
-            )}
-
-            {canGenerate && imageHasWater && usesIceForWater && (
-              <div className="mt-2 bg-muted/30 border border-border rounded p-2">
-                <p className="text-xs text-muted-foreground font-medium whitespace-pre-line">
-                  {messages.preview.iceConversionInfo}
-                </p>
-              </div>
-            )}
-
-            {imageData && (
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  className="text-xs px-2 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/20 whitespace-nowrap"
-                  onClick={clearImage}
-                >
-                  {messages.common.remove}
-                </button>
-                {canGenerate && (
-                  <button
-                    onClick={handleConvertAndDownload}
-                    disabled={converting}
-                    className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {converting
-                      ? messages.upload.convertButton(true, false)
-                      : messages.upload.convertButton(
-                          false,
-                          buildMode === BuildMode.SuppressSplitRow || buildMode === BuildMode.SuppressSplitChecker,
-                        )}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {paletteUsageInfo && imageValid && (
-              <div className="mt-2 space-y-1">
-                <div className="flex gap-3 text-[11px] text-muted-foreground flex-wrap items-center">
-                  {numUniqueColorShadesForPart > numColorBlockTypesForPart && (
-                    <span>
-                      <strong className="text-foreground">{messages.preview.uniqueColorCount(numUniqueColorShadesForPart)}</strong>
-                    </span>
-                  )}
-                  <span>
-                    <strong className="text-foreground">{messages.preview.blockTypeCount(numColorBlockTypesForPart)}</strong>
-                  </span>
-                  {vsFillerSpotCount > 0 && (
-                    <span>
-                      <strong className="text-foreground">{messages.preview.voidShadowCount(vsFillerSpotCount)}</strong>
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 mt-1">
-                  <button
-                    className={`text-[10px] px-1.5 py-0.5 rounded border ${colRangeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
-                    onClick={() => setColRangeEnabled(v => !v)}
-                  >
-                    {messages.preview.rangeButtonLabel(isStepRangeMode)}
-                  </button>
-                </div>
-                {colRangeEnabled && (
-                  <div className="mt-1 border border-border rounded p-1.5 bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-foreground w-6 text-right">{colStart}</span>
-                      <div
-                        className="relative flex-1 h-4 select-none touch-none"
-                        onPointerDown={e => {
-                          const el = e.currentTarget;
-                          el.setPointerCapture(e.pointerId);
-                          const rect = el.getBoundingClientRect();
-                          const valFromEvent = (ev: PointerEvent) => {
-                            const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-                            return Math.round(pct * maxRangeIndex);
-                          };
-                          const val = valFromEvent(e.nativeEvent);
-                          // When both thumbs overlap, choose the side that allows the range to expand again.
-                          const grabStart =
-                            colStartRef.current === colEndRef.current
-                              ? colStartRef.current >= maxRangeIndex
-                              : Math.abs(val - colStartRef.current) <= Math.abs(val - colEndRef.current);
-                          const update = (v: number) => {
-                            if (grabStart) setColStart(Math.min(v, colEndRef.current));
-                            else setColEnd(Math.max(v, colStartRef.current));
-                          };
-                          update(val);
-                          const onMove = (ev: PointerEvent) => update(valFromEvent(ev));
-                          const onUp = () => {
-                            el.removeEventListener("pointermove", onMove);
-                            el.removeEventListener("pointerup", onUp);
-                          };
-                          el.addEventListener("pointermove", onMove);
-                          el.addEventListener("pointerup", onUp);
-                        }}
-                      >
-                        <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1 rounded bg-border" />
-                        <div
-                          className="absolute top-1/2 -translate-y-1/2 h-1 rounded bg-primary"
-                          style={{
-                            left: `${maxRangeIndex > 0 ? (colStart / maxRangeIndex) * 100 : 0}%`,
-                            right: `${100 - (maxRangeIndex > 0 ? (colEnd / maxRangeIndex) * 100 : 0)}%`,
-                          }}
-                        />
-                        <div
-                          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground -ml-1.5"
-                          style={{ left: `${maxRangeIndex > 0 ? (colStart / maxRangeIndex) * 100 : 0}%` }}
-                        />
-                        <div
-                          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-primary-foreground -ml-1.5"
-                          style={{ left: `${maxRangeIndex > 0 ? (colEnd / maxRangeIndex) * 100 : 0}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] font-mono text-foreground w-6">{colEnd}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            </section>
           </div>
 
           {/* Credits */}

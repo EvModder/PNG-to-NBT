@@ -40,7 +40,7 @@ export enum BuildMode {
   StaircaseSouthline = "staircase_southline",
   StaircaseClassic = "staircase_classic",
   StaircaseValley = "staircase_valley",
-  StaircaseGrouped = "staircase_grouped",
+  StaircaseGroup = "staircase_group",
   StaircaseParty = "staircase_party",
   SuppressSplitRow = "suppress_split_row",
   SuppressSplitChecker = "suppress_split_checker",

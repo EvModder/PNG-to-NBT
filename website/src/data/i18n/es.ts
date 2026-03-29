@@ -118,7 +118,7 @@ export const esCatalog = {
       [BuildMode.StaircaseSouthline]: "Escalera (Southline)",
       [BuildMode.StaircaseClassic]: "Escalera (Clásica)",
       [BuildMode.StaircaseValley]: "Escalera (Valle)",
-      [BuildMode.StaircaseGrouped]: "Escalera (Agrupada)",
+      [BuildMode.StaircaseGroup]: "Escalera (Grupo)",
       [BuildMode.StaircaseParty]: "Escalera (Party)",
       [BuildMode.SuppressSplitRow]: "Supresión (división: filas)",
       [BuildMode.SuppressSplitChecker]: "Supresión (división: ajedrez)",
@@ -139,7 +139,7 @@ export const esCatalog = {
       [BuildMode.StaircaseClassic]: "Minimiza la diferencia maxY-minY manteniendo contiguas las columnas N→S",
       [BuildMode.StaircaseValley]:
         "Minimiza la diferencia maxY-minY y divide las columnas N→S, bajando cada segmento todo lo posible",
-      [BuildMode.StaircaseGrouped]:
+      [BuildMode.StaircaseGroup]:
         "Segmentación estilo valle con agrupación segura entre columnas para reducir tramos bajos aislados",
       [BuildMode.StaircaseParty]: "El mismo MapArt, pero hace el proceso de construcción más divertido y emocionante.",
       [BuildMode.SuppressSplitRow]: "División por filas; se mantiene por compatibilidad, pero en general no es útil",

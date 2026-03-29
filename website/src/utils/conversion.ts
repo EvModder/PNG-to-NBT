@@ -70,8 +70,8 @@ export function getBuildModeDownloadSuffix(
       return "-classic";
     case BuildMode.StaircaseValley:
       return "-valley";
-    case BuildMode.StaircaseGrouped:
-      return "-grouped";
+    case BuildMode.StaircaseGroup:
+      return "-group";
     case BuildMode.StaircaseParty:
       return "-party";
     case BuildMode.SuppressSplitRow:
@@ -115,7 +115,7 @@ export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
     case BuildMode.StaircaseSouthline:
     case BuildMode.StaircaseClassic:
     case BuildMode.StaircaseValley:
-    case BuildMode.StaircaseGrouped:
+    case BuildMode.StaircaseGroup:
     case BuildMode.StaircaseParty:
       return true;
     default:

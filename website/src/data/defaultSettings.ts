@@ -19,8 +19,8 @@ export const DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
 
-export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGrouped;
-export const DEFAULT_SUPPORT_MODE = SupportMode.Water;
+export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
+export const DEFAULT_SUPPORT_MODE = SupportMode.None;
 export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
 export const DEFAULT_PALETTE_SEED = false;
 export const DEFAULT_LAYER_GAP = 5;
@@ -52,4 +52,4 @@ export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
 export const DEFAULT_SHOW_NOOBLINE_WARNINGS = false;
 
 export const DEFAULT_CONVERT_UNSUPPORTED = true;
-export const AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS = true;
+export const AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS = false;

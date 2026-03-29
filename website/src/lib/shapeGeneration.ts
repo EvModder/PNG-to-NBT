@@ -64,7 +64,7 @@ type InternalBuildMode =
   | BuildMode.StaircaseSouthline
   | BuildMode.StaircaseClassic
   | BuildMode.StaircaseValley
-  | BuildMode.StaircaseGrouped
+  | BuildMode.StaircaseGroup
   | BuildMode.StaircaseParty
   | BuildMode.SuppressSplitRow
   | BuildMode.SuppressSplitChecker
@@ -84,7 +84,7 @@ type StaircaseInternalBuildMode =
   | BuildMode.StaircaseSouthline
   | BuildMode.StaircaseClassic
   | BuildMode.StaircaseValley
-  | BuildMode.StaircaseGrouped
+  | BuildMode.StaircaseGroup
   | BuildMode.StaircaseParty;
 
 type ColumnPixelCell = { shade: Shade; isWater: boolean };
@@ -95,7 +95,7 @@ const DEFAULT_STAIRCASE_BUILD_MODES: InternalBuildMode[] = [
   BuildMode.StaircaseSouthline,
   BuildMode.StaircaseClassic,
   BuildMode.StaircaseValley,
-  BuildMode.StaircaseGrouped,
+  BuildMode.StaircaseGroup,
   BuildMode.StaircaseParty,
 ];
 
@@ -860,7 +860,7 @@ function buildBelowPlatformWaterBlocks(
   };
 }
 
-function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(
+function applyStaircaseVariantGroupPostProcess<T extends PositionedEntry>(
   blocks: T[],
   colorGrid: ColorGrid,
   cache: GridShapeCache,
@@ -878,7 +878,7 @@ function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(
     segmentId?: number;
     neighbors: RowRecord[];
   }
-  interface GroupedSegment {
+  interface GroupSegment {
     id: number;
     x: number;
     primaryZ: number[];
@@ -919,7 +919,7 @@ function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(
   const primaryTopY = new Map<ColumnCoordKey, number>();
   const primaryMinY = new Map<ColumnCoordKey, number>();
   const primaryZByColumn = new Map<number, number[]>();
-  const segments: GroupedSegment[] = [];
+  const segments: GroupSegment[] = [];
 
   for (let x = 0; x < MAP_SIZE; ++x) {
     const primaryInfo = pixelByColumn.get(x);
@@ -996,7 +996,7 @@ function applyStaircaseVariantGroupedPostProcess<T extends PositionedEntry>(
         if (row.minY < segMin) segMin = row.minY;
         if (row.maxY > segMaxY) segMaxY = row.maxY;
       }
-      const segment: GroupedSegment = {
+      const segment: GroupSegment = {
         id: segments.length,
         x,
         primaryZ: primaryZList,
@@ -2443,7 +2443,7 @@ function getCachedStaircaseVariantBlocks(
   const cached = cache.staircaseVariantBlocks.get(key);
   if (cached) return cached;
 
-  const baseBlocks = buildMode === BuildMode.StaircaseGrouped
+  const baseBlocks = buildMode === BuildMode.StaircaseGroup
     ? getCachedStaircaseVariantBlocks(colorGrid, cache, BuildMode.StaircaseValley, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY)
     : getCachedStaircaseBaseBlocks(colorGrid, cache, excludeWater, topAlignedWater, buildAtWorldMinY);
   const blocks = cloneShapeBlocks(baseBlocks);
@@ -2457,8 +2457,8 @@ function getCachedStaircaseVariantBlocks(
     case BuildMode.StaircaseValley:
       applyStaircaseVariantValley(blocks, colorGrid, cache, excludeWater);
       break;
-    case BuildMode.StaircaseGrouped:
-      applyStaircaseVariantGroupedPostProcess(blocks, colorGrid, cache, excludeWater);
+    case BuildMode.StaircaseGroup:
+      applyStaircaseVariantGroupPostProcess(blocks, colorGrid, cache, excludeWater);
       break;
     case BuildMode.StaircaseParty:
       applyStaircaseVariantParty(blocks, colorGrid, paletteSeed, cache, excludeWater);
