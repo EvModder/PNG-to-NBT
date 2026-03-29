@@ -10,7 +10,7 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/presetCodec.ts
+ * - src/lib/codecPreset.ts
  * - tests/run.mts
  */
 import { BASE_COLORS } from "@/data/mapColors";
@@ -18,7 +18,7 @@ import { STORAGE_KEYS } from "@/data/storageKeys";
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/presetCodec.ts
+// - src/lib/codecPreset.ts
 // - tests/run.mts
 export interface BlockPreset {
   name: string;

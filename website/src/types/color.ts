@@ -16,8 +16,9 @@
  * - src/lib/blockId.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
+ * - src/lib/codecColorGrid.ts
  * - src/lib/messages.ts
- * - src/lib/presetCodec.ts
+ * - src/lib/codecPreset.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
  * - src/lib/shapeGeneration.ts
@@ -33,6 +34,7 @@
 // - src/utils/color.ts
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts
+// - src/lib/codecColorGrid.ts
 // - src/lib/messages.ts
 // - src/lib/shapeGeneration.ts
 // - src/Index.tsx
@@ -59,6 +61,7 @@ export interface ColorRef {
 // Callers:
 // - src/utils/color.ts
 // - src/lib/colorGridParsing.ts
+// - src/lib/codecColorGrid.ts
 // - src/utils/color.ts
 // - src/lib/shapeGeneration.ts
 export interface ShadedColorRef extends ColorRef {
@@ -68,6 +71,7 @@ export interface ShadedColorRef extends ColorRef {
 // Callers:
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts
+// - src/lib/codecColorGrid.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 export type ColorGrid = ShadedColorRef[][];
@@ -75,6 +79,7 @@ export type ColorGrid = ShadedColorRef[][];
 // Callers:
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts
+// - src/lib/codecColorGrid.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 export interface ColorRgb {
@@ -94,7 +99,7 @@ export interface ColorRgbBase extends ColorRgb {
 // - src/Index.tsx
 // - src/lib/colorGridParsing.ts
 // - src/lib/blockId.ts
-// - src/lib/presetCodec.ts
+// - src/lib/codecPreset.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
 // - src/lib/nbtExport.ts

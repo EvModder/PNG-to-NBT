@@ -13,7 +13,7 @@
  * - src/utils/conversion.ts
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
- * - src/lib/presetCodec.ts
+ * - src/lib/codecPreset.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -29,7 +29,7 @@
 // - src/data/i18n/*
 // - src/utils/conversion.ts
 // - src/lib/messages.ts
-// - src/lib/presetCodec.ts
+// - src/lib/codecPreset.ts
 // - src/lib/shapeGeneration.ts
 // - tests/run.mts
 export enum BuildMode {
@@ -57,7 +57,7 @@ export enum BuildMode {
 // - src/data/i18n/*
 // - src/utils/conversion.ts
 // - src/lib/messages.ts
-// - src/lib/presetCodec.ts
+// - src/lib/codecPreset.ts
 // - src/lib/shapeGeneration.ts
 // - tests/run.mts
 export enum SuppressStepDirection {

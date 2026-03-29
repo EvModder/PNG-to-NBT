@@ -10,7 +10,7 @@
  * - src/Index.tsx
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
- * - src/lib/presetCodec.ts
+ * - src/lib/codecPreset.ts
  * - tests/run.mts
  */
 
@@ -20,7 +20,7 @@
 // - src/Index.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/messages.ts
-// - src/lib/presetCodec.ts
+// - src/lib/codecPreset.ts
 // - tests/run.mts
 export enum SupportMode {
   None = "none",

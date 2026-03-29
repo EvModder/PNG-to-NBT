@@ -49,8 +49,9 @@ import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";
 import { computeColorGridStats, hasStepMixOpportunity, type ColorGridStats } from "@/lib/colorGridAnalysis";
-import { getHue, getShadedRgb } from "@/utils/color";
-import type { ColorRgbCustom } from "@/types/color";
+import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
+import { createImageDataFromColorGrid, getHue, getShadedRgb } from "@/utils/color";
+import type { ColorGrid, ColorRgbCustom } from "@/types/color";
 import {
   analyzeFragileSupportOverrideNeeds,
   analyzeMaterialNeeds,
@@ -68,7 +69,7 @@ import {
   isWaterSideSupportFillerValid,
 } from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
-import { decodeFullPreset, encodeFullPreset } from "@/lib/presetCodec";
+import { decodeFullPreset, encodeFullPreset } from "@/lib/codecPreset";
 import { usePreviewVisiblePixelMask, useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { getBlockIconAtlasEntry, toBlockIconKey } from "@/lib/blockIconAtlas";
@@ -415,11 +416,23 @@ const Index = () => {
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
+  const [decodedColorGrid, setDecodedColorGrid] = useState<ColorGrid | null>(null);
   const parsedImage = useMemo(
-    () => imageData ? convertImageToColorGrid(imageData, customColors, convertUnsupported) : null,
-    [imageData, customColors, convertUnsupported],
+    () => decodedColorGrid
+      ? {
+          imageData: createImageDataFromColorGrid(decodedColorGrid, customColors),
+          colorGrid: decodedColorGrid,
+          paletteNotices: [],
+          hasBlockingIssue: false as const,
+        }
+      : imageData ? convertImageToColorGrid(imageData, customColors, convertUnsupported) : null,
+    [decodedColorGrid, imageData, customColors, convertUnsupported],
   );
   const imageColorGrid = parsedImage?.colorGrid ?? null;
+  const imageUsesCustomColors = useMemo(
+    () => !!imageColorGrid && imageColorGrid.some(column => column.some(color => color.isCustom)),
+    [imageColorGrid],
+  );
   const dragColRef = useRef<ColumnId | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const swatchTooltipRafRef = useRef<number | null>(null);
@@ -1076,38 +1089,64 @@ const Index = () => {
   }, [colStart, colEnd, maxRangeIndex]);
 
   useEffect(() => {
-    const encoded = new URLSearchParams(window.location.search).get("preset");
-    if (!encoded) return;
-    const decoded = decodeFullPreset(encoded);
-    if (!decoded) return;
-    setPresets(prev => {
-      const exists = prev.findIndex(p => p.name === decoded.blockPreset.name);
-      if (exists >= 0) {
-        const n = [...prev];
-        n[exists] = decoded.blockPreset;
-        setActiveIdx(exists);
-        return n;
+    const params = new URLSearchParams(window.location.search);
+    const encodedPreset = params.get("preset");
+    const encodedImage = params.get("image");
+    let cancelled = false;
+
+    void (async () => {
+      const decodedPreset = encodedPreset ? await decodeFullPreset(encodedPreset) : null;
+      const decodedColorGrid = encodedImage ? await decodeColorGrid(encodedImage) : null;
+      if (cancelled) return;
+
+      if (decodedPreset) {
+        setPresets(prev => {
+          const exists = prev.findIndex(p => p.name === decodedPreset.blockPreset.name);
+          if (exists >= 0) {
+            const n = [...prev];
+            n[exists] = decodedPreset.blockPreset;
+            setActiveIdx(exists);
+            return n;
+          }
+          setActiveIdx(prev.length);
+          return [...prev, decodedPreset.blockPreset];
+        });
+        if (decodedPreset.supportFiller) setSupportFillerBlock(decodedPreset.supportFiller);
+        if (decodedPreset.shadeFiller) setShadeFillerBlock(decodedPreset.shadeFiller);
+        if (decodedPreset.supportMode !== undefined) setSupportMode(decodedPreset.supportMode);
+        if (decodedPreset.buildMode) setBuildMode(decodedPreset.buildMode);
+        if (decodedPreset.customColors) setCustomColors(decodedPreset.customColors);
+        if (decodedPreset.suppress2LayerLateFillerBlock) {
+          setSuppress2LayerLateFillerBlock(decodedPreset.suppress2LayerLateFillerBlock);
+        }
+        if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
+        if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
+        if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
+        if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
+          setSuppressStepDirection(decodedPreset.suppressStepDirection);
+        }
+        if (decodedPreset.dominateVoidFillerBlock) setDominateVoidFillerBlock(decodedPreset.dominateVoidFillerBlock);
+        if (decodedPreset.recessiveVoidFillerBlock) setRecessiveVoidFillerBlock(decodedPreset.recessiveVoidFillerBlock);
+        // if (decodedPreset.convertUnsupported !== undefined) setConvertUnsupported(decodedPreset.convertUnsupported);
       }
-      setActiveIdx(prev.length);
-      return [...prev, decoded.blockPreset];
-    });
-    if (decoded.supportFiller) setSupportFillerBlock(decoded.supportFiller);
-    if (decoded.shadeFiller) setShadeFillerBlock(decoded.shadeFiller);
-    if (decoded.supportMode !== undefined) setSupportMode(decoded.supportMode);
-    if (decoded.buildMode) setBuildMode(decoded.buildMode);
-    if (decoded.customColors) setCustomColors(decoded.customColors);
-    if (decoded.suppress2LayerLateFillerBlock) {
-      setSuppress2LayerLateFillerBlock(decoded.suppress2LayerLateFillerBlock);
-    }
-    if (decoded.proPaletteSeed !== undefined) setProPaletteSeed(decoded.proPaletteSeed);
-    if (decoded.mixSteps !== undefined) setMixSteps(decoded.mixSteps);
-    if (decoded.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decoded.buildAtWorldMinY);
-    if (decoded.suppressStepDirection !== undefined && isSuppressStepDirection(decoded.suppressStepDirection)) {
-      setSuppressStepDirection(decoded.suppressStepDirection);
-    }
-    if (decoded.dominateVoidFillerBlock) setDominateVoidFillerBlock(decoded.dominateVoidFillerBlock);
-    if (decoded.recessiveVoidFillerBlock) setRecessiveVoidFillerBlock(decoded.recessiveVoidFillerBlock);
-    // if (decoded.convertUnsupported !== undefined) setConvertUnsupported(decoded.convertUnsupported);
+
+      if (decodedColorGrid) {
+        setDecodedColorGrid(decodedColorGrid);
+        setImageData(createImageDataFromColorGrid(decodedColorGrid, decodedPreset?.customColors ?? []));
+        setImageName(messages.upload.sharedImageName);
+        setImageValid(true);
+        setPaletteNotices([]);
+        setShowUnusedColors(false);
+        if (sortKey === "default") {
+          setSortKey("required");
+          setSortDir("desc");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Auto-select mode when image changes
@@ -1298,29 +1337,76 @@ const Index = () => {
     markSavedDeferred();
   };
 
-  const sharePreset = () => {
-    markSavedImmediate();
-    const url = `${location.origin}${location.pathname}?preset=${encodeFullPreset(
-      preset,
-      supportFillerBlock,
-      shadeFillerBlock,
-      supportMode,
-      buildMode,
-      customColors,
-      convertUnsupported,
-      suppress2LayerLateFillerBlock,
-      proPaletteSeed,
-      mixSteps,
-      buildAtWorldMinY,
-      suppressStepDirection,
-      dominateVoidFillerBlock,
-      recessiveVoidFillerBlock,
-    )}`;
-    navigator.clipboard.writeText(url);
-    alert(messages.presets.copiedUrlAlert);
-  };
+  const copyUrlToClipboard = useCallback(async (url: string, copiedAlert: string) => {
+    await navigator.clipboard.writeText(url);
+    alert(copiedAlert);
+  }, []);
+
+  const buildShareUrl = useCallback(async (includePreset: boolean, includeImage: boolean) => {
+    const params = new URLSearchParams();
+    const includePresetInUrl = includePreset || (includeImage && imageUsesCustomColors);
+    if (includePresetInUrl) {
+      params.set(
+        "preset",
+        await encodeFullPreset(
+          preset,
+          supportFillerBlock,
+          shadeFillerBlock,
+          supportMode,
+          buildMode,
+          customColors,
+          convertUnsupported,
+          suppress2LayerLateFillerBlock,
+          proPaletteSeed,
+          mixSteps,
+          buildAtWorldMinY,
+          suppressStepDirection,
+          dominateVoidFillerBlock,
+          recessiveVoidFillerBlock,
+        ),
+      );
+    }
+    if (includeImage && imageColorGrid && imageValid) {
+      params.set("image", await encodeColorGrid(imageColorGrid));
+    }
+    const query = params.toString();
+    return query ? `${location.origin}${location.pathname}?${query}` : `${location.origin}${location.pathname}`;
+  }, [
+    preset,
+    supportFillerBlock,
+    shadeFillerBlock,
+    supportMode,
+    buildMode,
+    customColors,
+    convertUnsupported,
+    suppress2LayerLateFillerBlock,
+    proPaletteSeed,
+    mixSteps,
+    buildAtWorldMinY,
+    suppressStepDirection,
+    dominateVoidFillerBlock,
+    recessiveVoidFillerBlock,
+    imageColorGrid,
+    imageValid,
+    imageUsesCustomColors,
+  ]);
+
+  const copyImageShareUrl = useCallback(async () => {
+    const url = await buildShareUrl(false, true);
+    await copyUrlToClipboard(url, messages.upload.copiedImageUrlAlert);
+  }, [buildShareUrl, copyUrlToClipboard]);
+
+  const sharePreset = useCallback(async () => {
+    if (presetDirty) {
+      markSavedImmediate();
+      return;
+    }
+    const url = await buildShareUrl(true, activeIdx >= BUILTIN_PRESET_NAMES.length);
+    await copyUrlToClipboard(url, messages.presets.copiedUrlAlert);
+  }, [presetDirty, markSavedImmediate, buildShareUrl, activeIdx, copyUrlToClipboard]);
 
   const clearImage = () => {
+    setDecodedColorGrid(null);
     setImageData(null);
     setImageName("");
     setImageValid(false);
@@ -1358,6 +1444,7 @@ const Index = () => {
 
   const handleFile = useCallback(
     (file: File) => {
+      setDecodedColorGrid(null);
       setPaletteNotices([]);
       convertFileToColorGrid(file, customColors, convertUnsupported)
         .then(analysis => {
@@ -1369,6 +1456,7 @@ const Index = () => {
               ]
             : analysis.paletteNotices;
         if (analysis.hasBlockingIssue) {
+          setDecodedColorGrid(null);
           setImageData(null);
           setImageName("");
           setImageValid(false);
@@ -1387,6 +1475,7 @@ const Index = () => {
         }
         })
         .catch((err: unknown) => {
+          setDecodedColorGrid(null);
           setImageData(null);
           setImageName("");
           setImageValid(false);
@@ -1548,6 +1637,9 @@ const Index = () => {
     xColumnRange: previewXColumnRange,
     visiblePixelMask: previewPhaseRange ? previewVisiblePixelMask : undefined,
   });
+  const canCopyImageShareUrl = !!imageColorGrid && imageValid;
+  const presetPrimaryActionLabel = presetDirty ? messages.common.save : messages.common.share;
+  const presetPrimaryActionTitle = presetDirty ? messages.presets.saveTitle : messages.presets.shareTitle;
   const hasAnyFillerInput =
     showSupportFillerInput ||
     showShadeFillerInput ||
@@ -2363,15 +2455,17 @@ const Index = () => {
                 {!isBuiltinUnedited && (
                   <button
                     className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
-                    onClick={sharePreset}
+                    onClick={() => { void sharePreset(); }}
+                    title={presetPrimaryActionTitle}
                   >
-                    {messages.common.share}
+                    {presetPrimaryActionLabel}
                   </button>
                 )}
                 {activeIdx >= BUILTIN_PRESET_NAMES.length && presets.length > BUILTIN_PRESET_NAMES.length && (
                   <button
                     className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
                     onClick={deletePreset}
+                    title={messages.presets.deleteTitle}
                   >
                     {messages.common.deleteShort}
                   </button>
@@ -3033,7 +3127,18 @@ const Index = () => {
           <div className={isStackedLayout ? "order-2" : ""}>
             <section className="bg-card border border-border rounded-md p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-accent">{messages.upload.title}</h2>
+              {canCopyImageShareUrl ? (
+                <button
+                  type="button"
+                  className="bg-transparent p-0 border-0 text-sm font-semibold text-accent text-left hover:underline decoration-dotted underline-offset-2"
+                  onClick={() => { void copyImageShareUrl(); }}
+                  title={messages.upload.copyImageUrlTitle}
+                >
+                  {messages.upload.title}
+                </button>
+              ) : (
+                <h2 className="text-sm font-semibold text-accent">{messages.upload.title}</h2>
+              )}
               {showVsFillersInPreviewToggle && (
                 <label
                   className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none"

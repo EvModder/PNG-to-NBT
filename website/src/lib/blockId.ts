@@ -12,7 +12,7 @@
  * - src/lib/blockIconAtlas.ts
  * - src/lib/fillerRules.ts
  * - src/lib/nbtExport.ts
- * - src/lib/presetCodec.ts
+ * - src/lib/codecPreset.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -42,7 +42,7 @@ export function normalizeBlockId(raw: string): string {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/presetCodec.ts
+// - src/lib/codecPreset.ts
 // - tests/run.mts
 export function sanitizeUserBlockEntry(raw: string): string {
   const trimmed = raw.trim();

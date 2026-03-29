@@ -15,7 +15,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/lib/nbtExport.ts
- * - src/lib/presetCodec.ts
+ * - src/lib/codecPreset.ts
  * - src/lib/shapeGeneration.ts
  * - tests/run.mts
  */
@@ -30,7 +30,7 @@ const SUPPRESS_STEP_DIRECTIONS = [
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/presetCodec.ts
+// - src/lib/codecPreset.ts
 // - tests/run.mts
 export function isSuppressStepDirection(raw: unknown): raw is SuppressStepDirection {
   return Object.values(SuppressStepDirection).includes(raw as SuppressStepDirection);

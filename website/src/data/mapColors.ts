@@ -17,6 +17,7 @@
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/fillerRules.ts
+ * - src/lib/codecColorGrid.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -28,6 +29,7 @@
 // - src/data/i18n/*
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts
+// - src/lib/codecColorGrid.ts
 // - tests/run.mts
 export { Shade } from "@/types/color";
 import type { ColorRgbBase } from "@/types/color";
