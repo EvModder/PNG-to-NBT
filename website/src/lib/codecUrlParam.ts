@@ -111,30 +111,27 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-async function deflateBytes(bytes: Uint8Array): Promise<Uint8Array | null> {
+async function compressBytes(bytes: Uint8Array, format: CompressionFormat): Promise<Uint8Array | null> {
   if (typeof CompressionStream === "undefined") return null;
   try {
-    const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(new CompressionStream(format));
     return await readStreamBytes(stream);
   } catch {
     return null;
   }
 }
 
-async function inflateBytes(bytes: Uint8Array): Promise<Uint8Array | null> {
+async function decompressBytes(bytes: Uint8Array, format: CompressionFormat): Promise<Uint8Array | null> {
   if (typeof DecompressionStream === "undefined") return null;
   try {
-    const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(new DecompressionStream(format));
     return await readStreamBytes(stream);
   } catch {
     return null;
   }
 }
 
-// Callers:
-// - src/lib/codecColorGrid.ts
-// - src/lib/codecPreset.ts
-export async function encodeUrlParamBytes(bytes: Uint8Array): Promise<string> {
+async function encodeSingleUrlParamBytes(bytes: Uint8Array): Promise<string> {
   let bestPrefix = RAW_PREFIX;
   let bestBytes = bytes;
 
@@ -144,13 +141,20 @@ export async function encodeUrlParamBytes(bytes: Uint8Array): Promise<string> {
     bestBytes = packed;
   }
 
-  const deflated = await deflateBytes(bytes);
+  const deflated = await compressBytes(bytes, "deflate-raw");
   if (deflated && deflated.length < bestBytes.length) {
     bestPrefix = COMPRESSED_PREFIX;
     bestBytes = deflated;
   }
 
   return `${bestPrefix}${bytesToBase64Url(bestBytes)}`;
+}
+
+// Callers:
+// - src/lib/codecColorGrid.ts
+// - src/lib/codecPreset.ts
+export async function encodeUrlParamBytes(bytes: Uint8Array): Promise<string> {
+  return encodeSingleUrlParamBytes(bytes);
 }
 
 // Callers:
@@ -167,7 +171,7 @@ export async function decodeUrlParamBytes(encoded: string): Promise<Uint8Array |
       case PACKED_PREFIX:
         return unpackBytes(payload);
       case COMPRESSED_PREFIX:
-        return await inflateBytes(payload);
+        return await decompressBytes(payload, "deflate-raw");
       default:
         return null;
     }
