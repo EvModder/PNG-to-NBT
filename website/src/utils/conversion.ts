@@ -5,6 +5,7 @@
  * - isSuppressStepsBuildMode()
  * - buildModeUsesLayerGap()
  * - buildModeUsesPaletteSeed()
+ * - shouldIncludeTransparentBlocks()
  * - getBuildModeRangeMax()
  * - getVisibleSuppressBuildModes()
  * - isSuppressStepDirection()
@@ -20,6 +21,7 @@
  * - tests/run.mts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
 
 const SUPPRESS_STEP_DIRECTIONS = [
   SuppressStepDirection.WestToEast,
@@ -164,6 +166,19 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 // - tests/run.mts
 export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
   return buildMode === BuildMode.StaircaseParty;
+}
+
+// Callers:
+// - src/Index.tsx
+// - tests/run.mts
+export function shouldIncludeTransparentBlocks(
+  blockMapping: Record<number, string>,
+  hasTransparency: boolean,
+  buildMode: BuildMode,
+): boolean {
+  return hasTransparency &&
+    !isSuppressBuildMode(buildMode) &&
+    (blockMapping[TRANSPARENCY_BASE_INDEX] ?? "").trim() !== "";
 }
 
 // Callers:

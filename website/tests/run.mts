@@ -14,7 +14,6 @@ import {
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_FLAT_WATER_DROP,
   DEFAULT_FORCE_Z129,
-  DEFAULT_INCLUDE_TRANSPARENCY,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
@@ -37,6 +36,7 @@ import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import {
   buildModeUsesPaletteSeed,
   isSuppressStepsBuildMode,
+  shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
 import type { ColorRgbCustom } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -84,7 +84,6 @@ type ExportFixtureSettings = {
   proPaletteSeed: boolean;
   layerGap: number;
   mixSteps: boolean;
-  includeTransparency: boolean;
   buildAtWorldMinY?: boolean;
   skipEmptySuppressSteps: boolean;
   markSuppressLoadSpotsInSchematic: boolean;
@@ -696,7 +695,6 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     proPaletteSeed: settings.proPaletteSeed ?? DEFAULT_PALETTE_SEED,
     layerGap: settings.layerGap ?? DEFAULT_LAYER_GAP,
     mixSteps: settings.mixSteps ?? DEFAULT_MIX_STEPS,
-    includeTransparency: settings.includeTransparency ?? DEFAULT_INCLUDE_TRANSPARENCY,
     skipEmptySuppressSteps: settings.skipEmptySuppressSteps ?? DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
     markSuppressLoadSpotsInSchematic:
       settings.markSuppressLoadSpotsInSchematic ?? DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
@@ -811,6 +809,11 @@ async function runFixtureCase(
       : 0;
 
   const twoLayerHasLateVoidNeed = (imageStats.voidShadowStats.dominant ?? 0) > 0;
+  const includeTransparentBlocks = shouldIncludeTransparentBlocks(
+    testCase.preset.blocks,
+    derivedImageStats.hasTransparency,
+    testCase.settings.buildMode,
+  );
 
   const shapeMap = generateShapeMap(
     colorGrid,
@@ -821,7 +824,7 @@ async function runFixtureCase(
     {
       layerGap: testCase.settings.layerGap,
       mixSteps: showMixStepsToggle && testCase.settings.mixSteps,
-      includeTransparentBlocks: testCase.settings.includeTransparency,
+      includeTransparentBlocks,
       paletteSeed: paletteSeedOffset,
       waterSetting: activeWaterSetting,
       enableWaterConvenience: testCase.settings.supportMode !== SupportMode.None,

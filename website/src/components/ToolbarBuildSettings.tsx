@@ -34,7 +34,7 @@ type ToolbarBuildModeOption = {
 // Callers:
 // - src/components/ToolbarPresetSettings.tsx
 export type ToolbarBuildSettingsProps = {
-  isFlatShape: boolean;
+  lockFlatBuildMode: boolean;
   visibleWaterLevelControls: VisibleWaterLevelControl[];
   setNormalizedWaterDrop: (shade: WaterDropShade, value: number) => void;
   minLayerGap: number;
@@ -43,9 +43,6 @@ export type ToolbarBuildSettingsProps = {
   showMixStepsToggle: boolean;
   mixSteps: boolean;
   setMixSteps: (value: boolean) => void;
-  showIncludeTransparencyToggle: boolean;
-  includeTransparency: boolean;
-  setIncludeTransparency: (value: boolean) => void;
   showPaletteSeedToggle: boolean;
   proPaletteSeed: boolean;
   setProPaletteSeed: (value: boolean) => void;
@@ -94,7 +91,7 @@ function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirec
 // Callers:
 // - src/components/ToolbarPresetSettings.tsx
 export function ToolbarBuildSettings({
-  isFlatShape,
+  lockFlatBuildMode,
   visibleWaterLevelControls,
   setNormalizedWaterDrop,
   minLayerGap,
@@ -103,9 +100,6 @@ export function ToolbarBuildSettings({
   showMixStepsToggle,
   mixSteps,
   setMixSteps,
-  showIncludeTransparencyToggle,
-  includeTransparency,
-  setIncludeTransparency,
   showPaletteSeedToggle,
   proPaletteSeed,
   setProPaletteSeed,
@@ -123,11 +117,10 @@ export function ToolbarBuildSettings({
   shadingMethodTooltip,
 }: ToolbarBuildSettingsProps) {
   const showAnyWaterDropControl = visibleWaterLevelControls.length > 0;
-  const showLayerGapControl = !isFlatShape && buildModeUsesLayerGap(buildMode);
-  const showMixStepsControl = !isFlatShape && showMixStepsToggle;
-  const showIncludeTransparencyControl = !isFlatShape && showIncludeTransparencyToggle;
-  const showPaletteSeedControl = !isFlatShape && showPaletteSeedToggle;
-  const showBuildModeControl = !isFlatShape;
+  const showLayerGapControl = !lockFlatBuildMode && buildModeUsesLayerGap(buildMode);
+  const showMixStepsControl = !lockFlatBuildMode && showMixStepsToggle;
+  const showPaletteSeedControl = !lockFlatBuildMode && showPaletteSeedToggle;
+  const showBuildModeControl = !lockFlatBuildMode;
   const groups: { key: string; node: ReactNode }[] = [];
 
   if (showAnyWaterDropControl) {
@@ -247,27 +240,6 @@ export function ToolbarBuildSettings({
             checked={buildAtWorldMinY}
             onChange={e => setBuildAtWorldMinY(e.target.checked)}
             title={messages.buildMode.buildAtWorldMinYTooltip}
-            className="h-3.5 w-3.5 accent-primary"
-          />
-        </label>
-      ),
-    });
-  }
-
-  if (showIncludeTransparencyControl) {
-    groups.push({
-      key: "include-transparency",
-      node: (
-        <label
-          className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
-          title={messages.buildMode.includeTransparencyTooltip}
-        >
-          <span title={messages.buildMode.includeTransparencyTooltip}>{messages.buildMode.includeTransparencyLabel}</span>
-          <input
-            type="checkbox"
-            checked={includeTransparency}
-            onChange={e => setIncludeTransparency(e.target.checked)}
-            title={messages.buildMode.includeTransparencyTooltip}
             className="h-3.5 w-3.5 accent-primary"
           />
         </label>

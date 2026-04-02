@@ -3,6 +3,7 @@
  * - WaterDrops
  * - ColorFrequencyMap
  * - ColorGridStats
+ * - FlatModeBehavior
  * - PixelParity
  * - getPixelParity()
  * - hasStepMixOpportunity()
@@ -41,12 +42,22 @@ export type ColorFrequencyMap = Map<ColorRef, Map<Shade, number>>;
 export interface ColorGridStats {
   allSameShade?: Shade;
   colorFrequencyMap: ColorFrequencyMap;
+  flatModeBehavior: FlatModeBehavior;
   voidShadowStats: {
     dominant: number;
     recessive: number;
     flatEligible: number;
     lightEligible: number;
   };
+}
+
+// Callers:
+// - src/Index.tsx
+// - tests/run.mts
+export enum FlatModeBehavior {
+  None = "none",
+  Plain = "plain",
+  ToggleableBuildAtWorldMinY = "toggleable_build_at_world_min_y",
 }
 
 // Callers:
@@ -151,6 +162,46 @@ function findAllSameShade(colorFrequencyMap: ColorFrequencyMap): Shade | undefin
   return allSameShade;
 }
 
+function analyzeFlatModeBehavior(colorGrid: ColorGrid): FlatModeBehavior {
+  let hasAnyFlatSouthOfTransparency = false;
+  let hasAnyLightSouthOfTransparency = false;
+
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      const color = colorGrid[x][z];
+      if (isTransparentColor(color)) continue;
+      if (isWaterColor(color)) {
+        if (color.shade !== Shade.Light) return FlatModeBehavior.None;
+        continue;
+      }
+
+      const northIsTransparent = z > 0 && isTransparentColor(colorGrid[x][z - 1]);
+      if (!northIsTransparent) {
+        if (color.shade !== Shade.Flat) return FlatModeBehavior.None;
+        continue;
+      }
+
+      switch (color.shade) {
+        case Shade.Flat:
+          hasAnyFlatSouthOfTransparency = true;
+          break;
+        case Shade.Light:
+          hasAnyLightSouthOfTransparency = true;
+          break;
+        default:
+          return FlatModeBehavior.None;
+      }
+
+      if (hasAnyFlatSouthOfTransparency && hasAnyLightSouthOfTransparency) {
+        return FlatModeBehavior.None;
+      }
+    }
+  }
+
+  if (hasAnyFlatSouthOfTransparency) return FlatModeBehavior.ToggleableBuildAtWorldMinY;
+  return FlatModeBehavior.Plain;
+}
+
 // Callers:
 // - src/Index.tsx
 // - tests/run.mts
@@ -159,6 +210,7 @@ export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
   return {
     allSameShade: findAllSameShade(colorFrequencyMap),
     colorFrequencyMap,
+    flatModeBehavior: analyzeFlatModeBehavior(colorGrid),
     voidShadowStats: analyzeVoidShadows(colorGrid),
   };
 }

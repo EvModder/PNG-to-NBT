@@ -35,7 +35,7 @@ function buildPistonClearPreset(): BlockPreset {
   return {
     name: "PistonClear",
     blocks: {
-      0: "tripwire",
+      0: "",
       1: "",
       2: "birch_pressure_plate",
       3: "white_candle",
@@ -114,7 +114,7 @@ function buildFullblockPreset(): BlockPreset {
   return {
     name: "Fullblock",
     blocks: {
-      0: "glass",
+      0: "",
       1: "slime_block",
       2: "sandstone",
       3: "mushroom_stem",

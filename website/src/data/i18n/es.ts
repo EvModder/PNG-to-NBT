@@ -90,9 +90,6 @@ export const esCatalog = {
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
       "Permite que pasos adyacentes de supresión compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
-    includeTransparencyLabel: "Incluir id=0:",
-    includeTransparencyTooltip:
-      "Incluye en el esquema un bloque color_id=0 seleccionado para los píxeles transparentes, en vez de asumir que construirás encima o debajo de una plataforma separada de vidrio.",
     buildAtWorldMinYLabel: "Construir en minY mundial:",
     buildAtWorldMinYTooltip:
       "Optimización para mapas planos: construye el mapa en la Y mínima del mundo para que los píxeles de tono plano justo al sur de transparencia dentro de la cuadrícula no requieran rellenos de sombra de vacío.",

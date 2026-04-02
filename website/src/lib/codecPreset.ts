@@ -25,7 +25,6 @@ interface FullPreset {
   suppress2LayerLateFillerBlock?: string;
   proPaletteSeed?: boolean;
   mixSteps?: boolean;
-  includeTransparency?: boolean;
   buildAtWorldMinY?: boolean;
   suppressStepDirection?: SuppressStepDirection;
   dominateVoidFillerBlock?: string;
@@ -35,12 +34,12 @@ interface FullPreset {
 function serializeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: ColorRgbCustom[], convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, includeTransparency: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
-  const parts = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => {
-    const block = preset.blocks[i + 1] || "";
-    const idx = BASE_COLORS[i + 1].blocks.indexOf(block);
+  const parts = Array.from({ length: BASE_COLORS.length }, (_, i) => {
+    const block = preset.blocks[i] || "";
+    const idx = BASE_COLORS[i].blocks.indexOf(block);
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
   const customColorString = customColors.length > 0
@@ -60,7 +59,6 @@ function serializeFullPreset(
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
     mixSteps ? "1" : "0",
-    includeTransparency ? "1" : "0",
     buildAtWorldMinY ? "1" : "0",
     suppressStepDirection,
   ].join("|");
@@ -75,8 +73,8 @@ function parseFullPreset(serialized: string): FullPreset | null {
 
   const blocks: Record<number, string> = {};
   for (const [i, part] of sections[1].split(",").entries()) {
-    if (i >= BASE_COLORS.length - 1) break;
-    const baseIndex = i + 1;
+    if (i >= BASE_COLORS.length) break;
+    const baseIndex = i;
     blocks[baseIndex] =
       part === "-" || part === ""
         ? ""
@@ -110,9 +108,8 @@ function parseFullPreset(serialized: string): FullPreset | null {
   const dominateVoidFillerBlock = sections[10] || undefined;
   const recessiveVoidFillerBlock = sections[11] || undefined;
   const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
-  const includeTransparency = sections[13] === "1" ? true : sections[13] === "0" ? false : undefined;
-  const buildAtWorldMinY = sections[14] === "1" ? true : sections[14] === "0" ? false : undefined;
-  const suppressStepDirection = sections[15] && isSuppressStepDirection(sections[15]) ? sections[15] : undefined;
+  const buildAtWorldMinY = sections[13] === "1" ? true : sections[13] === "0" ? false : undefined;
+  const suppressStepDirection = sections[14] && isSuppressStepDirection(sections[14]) ? sections[14] : undefined;
 
   return {
     blockPreset: { name: sections[0], blocks },
@@ -124,7 +121,6 @@ function parseFullPreset(serialized: string): FullPreset | null {
     convertUnsupported,
     proPaletteSeed,
     mixSteps,
-    includeTransparency,
     buildAtWorldMinY,
     suppressStepDirection,
     suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock || undefined,
@@ -138,7 +134,7 @@ function parseFullPreset(serialized: string): FullPreset | null {
 export async function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: ColorRgbCustom[], convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, includeTransparency: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): Promise<string> {
   return encodeUrlParamText(
@@ -153,7 +149,6 @@ export async function encodeFullPreset(
       suppress2LayerLateFillerBlock,
       proPaletteSeed,
       mixSteps,
-      includeTransparency,
       buildAtWorldMinY,
       suppressStepDirection,
       dominateVoidFillerBlock,

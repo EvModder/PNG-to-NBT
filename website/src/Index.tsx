@@ -15,7 +15,6 @@ import {
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_FLAT_WATER_DROP,
   DEFAULT_FORCE_Z129,
-  DEFAULT_INCLUDE_TRANSPARENCY,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
@@ -49,7 +48,12 @@ import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { convertFileToColorGrid, convertImageToColorGrid } from "@/lib/colorGridParsing";
-import { computeColorGridStats, hasStepMixOpportunity, type ColorGridStats } from "@/lib/colorGridAnalysis";
+import {
+  computeColorGridStats,
+  FlatModeBehavior,
+  hasStepMixOpportunity,
+  type ColorGridStats,
+} from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
 import { createImageDataFromColorGrid, getHue, getShadedRgb } from "@/utils/color";
 import type { ColorGrid, ColorRgbCustom } from "@/types/color";
@@ -86,6 +90,7 @@ import {
   isStaircaseBuildMode,
   isSuppressBuildMode,
   getVisibleSuppressBuildModes,
+  shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
 import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
@@ -121,6 +126,7 @@ const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
 type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 type DerivedImageStats = {
   allSameShade?: Shade;
+  flatModeBehavior: FlatModeBehavior;
   hasTransparency: boolean;
   paletteUsageInfo: {
     uniqueShadeCount: number;
@@ -199,6 +205,7 @@ function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
   return {
     hasTransparency,
     allSameShade: imageStats.allSameShade,
+    flatModeBehavior: imageStats.flatModeBehavior,
     paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
     usedBaseColors,
     usedShadesByBase,
@@ -294,7 +301,6 @@ const Index = () => {
   const calcLayerGap = useDeferredValue(layerGap);
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
-  const [includeTransparency, setIncludeTransparency] = useState(() => loadCached(LS_KEYS.includeTransparency, DEFAULT_INCLUDE_TRANSPARENCY));
   const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
   const [suppressStepDirection, setSuppressStepDirection] = useState<SuppressStepDirection>(() => {
     const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
@@ -481,7 +487,6 @@ const Index = () => {
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.mixSteps]: mixSteps,
-      [LS_KEYS.includeTransparency]: includeTransparency,
       [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
       [LS_KEYS.lightWaterDrop]: lightWaterDrop,
@@ -520,7 +525,6 @@ const Index = () => {
       sortDir,
       layerGap,
       mixSteps,
-      includeTransparency,
       buildAtWorldMinY,
       suppressStepDirection,
       lightWaterDrop,
@@ -613,12 +617,10 @@ const Index = () => {
     [buildMode, imageColorGrid, imageValid, activeWaterDrops],
   );
   const twoLayerHasLateVoidNeed = (imageStats?.voidShadowStats.dominant ?? 0) > 0;
-  const showIncludeTransparencyToggle =
-    imageValid &&
-    !!derivedImageStats?.hasTransparency &&
-    showTransparentRow &&
-    !isSuppressBuildMode(buildMode);
-  const activeIncludeTransparency = showIncludeTransparencyToggle && includeTransparency;
+  const activeIncludeTransparency = useMemo(
+    () => shouldIncludeTransparentBlocks(preset.blocks, derivedImageStats?.hasTransparency ?? false, buildMode),
+    [preset.blocks, derivedImageStats?.hasTransparency, buildMode],
+  );
   const isSuppressStepDirectionSelectable = useCallback(
     (direction: SuppressStepDirection) => {
       if (buildMode !== BuildMode.SuppressStepChecker) return false;
@@ -680,29 +682,59 @@ const Index = () => {
   );
   const hasVoidShadow = ((imageStats?.voidShadowStats.dominant ?? 0) + (imageStats?.voidShadowStats.recessive ?? 0)) > 0;
   const baseNorthlineShape = baseShapeMap?.[BuildMode.StaircaseNorthline] ?? null;
+  const flatModeBehavior =
+    activeIncludeTransparency
+      ? (derivedImageStats?.flatModeBehavior ?? FlatModeBehavior.None)
+      : FlatModeBehavior.None;
   const isFlatShape = useMemo(
-    () => !!baseNorthlineShape && !generatedShapeHasNonWaterColorHeightVariance(baseNorthlineShape),
-    [baseNorthlineShape],
+    () => !!baseNorthlineShape &&
+      (
+        !generatedShapeHasNonWaterColorHeightVariance(baseNorthlineShape) ||
+        flatModeBehavior !== FlatModeBehavior.None
+      ),
+    [baseNorthlineShape, flatModeBehavior],
   );
-  const effectiveBuildMode = isFlatShape ? BuildMode.Flat : buildMode;
-  const baseSelectedShape = useMemo(
+  const currentSelectedShape = useMemo(
     () =>
-      effectiveBuildMode === BuildMode.Flat
+      buildMode === BuildMode.Flat
         ? baseNorthlineShape
-        : (baseShapeMap?.[effectiveBuildMode] ?? null),
-    [effectiveBuildMode, baseNorthlineShape, baseShapeMap],
+        : (baseShapeMap?.[buildMode] ?? null),
+    [buildMode, baseNorthlineShape, baseShapeMap],
   );
-  const buildAtWorldMinYEligible = useMemo(
+  const flatBuildAtWorldMinYEligible = useMemo(
     () =>
       !!imageColorGrid &&
-      !!baseSelectedShape &&
-      isStaircaseBuildMode(effectiveBuildMode) &&
+      !!baseNorthlineShape &&
       (supportMode === SupportMode.None || applySupportFloorYs) &&
-      hasBuildAtWorldMinYOpportunity(imageColorGrid, baseSelectedShape, applySupportFloorYs),
-    [imageColorGrid, baseSelectedShape, effectiveBuildMode, supportMode, applySupportFloorYs],
+      hasBuildAtWorldMinYOpportunity(imageColorGrid, baseNorthlineShape, applySupportFloorYs),
+    [imageColorGrid, baseNorthlineShape, supportMode, applySupportFloorYs],
+  );
+  const buildAtWorldMinYEligible = useMemo(
+    () => {
+      if (isFlatShape) return flatBuildAtWorldMinYEligible;
+      return !!imageColorGrid &&
+        !!currentSelectedShape &&
+        isStaircaseBuildMode(buildMode) &&
+        (supportMode === SupportMode.None || applySupportFloorYs) &&
+        hasBuildAtWorldMinYOpportunity(imageColorGrid, currentSelectedShape, applySupportFloorYs);
+    },
+    [
+      isFlatShape,
+      flatBuildAtWorldMinYEligible,
+      imageColorGrid,
+      currentSelectedShape,
+      buildMode,
+      supportMode,
+      applySupportFloorYs,
+    ],
   );
   const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
   const activeBuildAtWorldMinY = showBuildAtWorldMinYToggle && buildAtWorldMinY;
+  const flatRequiresVsFillers =
+    flatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
+    !activeBuildAtWorldMinY;
+  const lockFlatBuildMode = isFlatShape && !flatRequiresVsFillers;
+  const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
   const shapeMap = useMemo(
     () => {
       if (!activeBuildAtWorldMinY || !imageColorGrid || !imageValid) return baseShapeMap;
@@ -881,10 +913,12 @@ const Index = () => {
     );
   }, [imageData, supportShape, preset.blocks, customColors, applySupportFloorYs]);
   const staircaseModeOptions = useMemo((): ModeOption[] => {
-    if (!shapeMap || !imageValid || isFlatShape) {
+    if (!shapeMap || !imageValid) {
       return DEFAULT_STAIRCASE_OPTIONS;
     }
-    return DEFAULT_STAIRCASE_OPTIONS.filter(option => option.value !== BuildMode.Flat && !!shapeMap[option.value]);
+    return DEFAULT_STAIRCASE_OPTIONS.filter(option =>
+      option.value === BuildMode.Flat ? isFlatShape : !!shapeMap[option.value],
+    );
   }, [shapeMap, imageValid, isFlatShape]);
 
   const suppressModeOptions = useMemo((): ModeOption[] => {
@@ -894,12 +928,12 @@ const Index = () => {
   const showSuppressStepDirectionControl =
     !!imageData &&
     imageValid &&
-    !isFlatShape &&
+    !lockFlatBuildMode &&
     isSuppressStepsBuildMode(buildMode);
   const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
   const supportModeTooltip = messages.supportMode.tooltip(supportMode);
   const toolbarBuildSettingsProps = imageData ? {
-    isFlatShape,
+    lockFlatBuildMode,
     visibleWaterLevelControls,
     setNormalizedWaterDrop,
     minLayerGap,
@@ -908,9 +942,6 @@ const Index = () => {
     showMixStepsToggle,
     mixSteps,
     setMixSteps,
-    showIncludeTransparencyToggle,
-    includeTransparency,
-    setIncludeTransparency,
     showPaletteSeedToggle,
     proPaletteSeed,
     setProPaletteSeed,
@@ -1095,7 +1126,6 @@ const Index = () => {
         }
         if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
         if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
-        if (decodedPreset.includeTransparency !== undefined) setIncludeTransparency(decodedPreset.includeTransparency);
         if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
         if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
           setSuppressStepDirection(decodedPreset.suppressStepDirection);
@@ -1143,7 +1173,7 @@ const Index = () => {
   }, [imageData, imageValid, isFlatShape, hasVoidShadow, buildMode]);
 
   useEffect(() => {
-    if (!imageData || isFlatShape) return;
+    if (!imageData || lockFlatBuildMode) return;
     const visible = new Set<BuildMode>([
       ...staircaseModeOptions.map(o => o.value),
       ...suppressModeOptions.map(o => o.value),
@@ -1159,7 +1189,7 @@ const Index = () => {
         setBuildMode(staircaseModeOptions[0]?.value ?? BuildMode.StaircaseClassic);
       }
     }
-  }, [imageData, isFlatShape, buildMode, staircaseModeOptions, suppressModeOptions]);
+  }, [imageData, lockFlatBuildMode, buildMode, staircaseModeOptions, suppressModeOptions]);
 
   useEffect(() => {
     if (!imageData) return;
@@ -1317,7 +1347,7 @@ const Index = () => {
 
   const buildShareUrl = useCallback(async (includePreset: boolean, includeImage: boolean) => {
     const params = new URLSearchParams();
-    const includePresetInUrl = includePreset || (includeImage && imageUsesCustomColors);
+    const includePresetInUrl = includePreset || (includeImage && (imageUsesCustomColors || (derivedImageStats?.hasTransparency ?? false)));
     if (includePresetInUrl) {
       params.set(
         "preset",
@@ -1332,7 +1362,6 @@ const Index = () => {
           suppress2LayerLateFillerBlock,
           proPaletteSeed,
           mixSteps,
-          includeTransparency,
           buildAtWorldMinY,
           suppressStepDirection,
           dominateVoidFillerBlock,
@@ -1356,7 +1385,6 @@ const Index = () => {
     suppress2LayerLateFillerBlock,
     proPaletteSeed,
     mixSteps,
-    includeTransparency,
     buildAtWorldMinY,
     suppressStepDirection,
     dominateVoidFillerBlock,
@@ -1364,6 +1392,7 @@ const Index = () => {
     imageColorGrid,
     imageValid,
     imageUsesCustomColors,
+    derivedImageStats?.hasTransparency,
   ]);
 
   const copyImageShareUrl = useCallback(async () => {
