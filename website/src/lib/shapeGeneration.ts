@@ -60,6 +60,8 @@ type StaircaseWaterSetting =
 type StepwiseBuildMode = BuildMode.SuppressStepPairs | BuildMode.SuppressStepChecker;
 type TwoLayerSuppressBuildMode = BuildMode.Suppress2LayerLateFillers | BuildMode.Suppress2LayerLatePairs;
 type InternalBuildMode =
+  | BuildMode.InclineUp
+  | BuildMode.InclineDown
   | BuildMode.StaircaseNorthline
   | BuildMode.StaircaseSouthline
   | BuildMode.StaircaseClassic
@@ -80,16 +82,15 @@ type CachedGeneratedShape = {
 };
 // Alias build modes are canonicalized before staircase-mode dispatch.
 type StaircaseInternalBuildMode =
+  | BuildMode.InclineUp
+  | BuildMode.InclineDown
   | BuildMode.StaircaseNorthline
   | BuildMode.StaircaseSouthline
   | BuildMode.StaircaseClassic
   | BuildMode.StaircaseValley
   | BuildMode.StaircaseGroup
   | BuildMode.StaircaseParty;
-type TransparentPlacementBuildMode =
-  | BuildMode.InclineUp
-  | BuildMode.InclineDown
-  | StaircaseInternalBuildMode;
+type TransparentPlacementBuildMode = StaircaseInternalBuildMode;
 
 type ColumnPixelCell = { shade: Shade; isWater: boolean };
 type ColumnCoordKey = number;
@@ -120,14 +121,18 @@ function assertUnhandledBuildMode(buildMode: never, context: string): never {
 function getCanonicalBuildMode(buildMode: BuildMode): InternalBuildMode {
   switch (buildMode) {
     case BuildMode.Flat:
-    case BuildMode.InclineUp:
-    case BuildMode.InclineDown:
       return BuildMode.StaircaseNorthline;
     case BuildMode.Suppress2Layer:
       return BuildMode.Suppress2LayerLateFillers;
     default:
       return buildMode;
   }
+}
+
+function buildModeUsesWorldMinYGeometry(buildMode: BuildMode): boolean {
+  return isStaircaseBuildMode(buildMode) &&
+    buildMode !== BuildMode.InclineUp &&
+    buildMode !== BuildMode.InclineDown;
 }
 
 function toColumnCoordKey(x: number, z: number): ColumnCoordKey {
@@ -790,30 +795,14 @@ function buildTransparentStaircaseBlocks(
     }
 
     let northSeenY: number | undefined;
-    let inclinePlacedY: number | undefined;
     for (let z = 0; z < MAP_SIZE; ++z) {
       const color = colorGrid[x][z];
       const topY = rowTopY.get(z);
-      if (topY !== undefined) {
-        northSeenY = topY;
-        inclinePlacedY = topY;
-      }
+      if (topY !== undefined) northSeenY = topY;
       if (!isTransparentColor(color)) continue;
 
       let preferredY: number;
       switch (buildMode) {
-        case BuildMode.InclineUp:
-        case BuildMode.InclineDown: {
-          const yDelta = buildMode === BuildMode.InclineUp ? -1 : 1;
-          if (inclinePlacedY !== undefined) {
-            preferredY = inclinePlacedY + yDelta;
-          } else if (nextSeenY[z] !== undefined && nextSeenZ[z] !== undefined) {
-            preferredY = nextSeenY[z] - (yDelta * (nextSeenZ[z] - z));
-          } else {
-            preferredY = 0;
-          }
-          break;
-        }
         case BuildMode.StaircaseValley:
           preferredY = 0;
           break;
@@ -835,11 +824,47 @@ function buildTransparentStaircaseBlocks(
         z,
         ref: { kind: "color", color },
       });
-      if (buildMode === BuildMode.InclineUp || buildMode === BuildMode.InclineDown) inclinePlacedY = y;
     }
   }
 
   return transparentBlocks;
+}
+
+function buildInclineBlocks(
+  colorGrid: ColorGrid,
+  buildMode: BuildMode.InclineUp | BuildMode.InclineDown,
+  includeTransparentBlocks: boolean,
+): ShapeBlock[] {
+  const blocks: ShapeBlock[] = [];
+  const yDelta = buildMode === BuildMode.InclineUp ? -1 : 1;
+  const expectedShade = buildMode === BuildMode.InclineUp ? Shade.Dark : Shade.Light;
+  const startY = buildMode === BuildMode.InclineUp ? 63 : 64;
+
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    let y = startY;
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      const color = colorGrid[x][z];
+      if (isTransparentColor(color)) {
+        if (includeTransparentBlocks) {
+          blocks.push({ x, y, z, ref: { kind: "color", color } });
+          y += yDelta;
+        }
+        continue;
+      }
+
+      if (isWaterColor(color)) {
+        throw new Error(`Unexpected water pixel in ${buildMode}`);
+      }
+      if (color.shade !== expectedShade) {
+        throw new Error(`Unexpected non-${expectedShade} incline shade in ${buildMode}: ${color.shade}`);
+      }
+
+      blocks.push({ x, y, z, ref: { kind: "color", color } });
+      y += yDelta;
+    }
+  }
+
+  return blocks;
 }
 
 function addStaircaseWaterConvenienceFillers(
@@ -2534,7 +2559,7 @@ function getShapeCacheKeyId(
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
   else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
-  if (buildAtWorldMinY && isStaircaseBuildMode(buildMode)) id += "|world-min-y:1";
+  if (buildAtWorldMinY && buildModeUsesWorldMinYGeometry(buildMode)) id += "|world-min-y:1";
   if (includeTransparentBlocks && isStaircaseBuildMode(buildMode)) id += "|id0:1";
   if (includeTransparentBlocks && transparentPlacementMode !== buildMode) id += `|id0mode:${transparentPlacementMode}`;
   if (isStaircaseBuildMode(buildMode)) id += `|waterconv:${enableWaterConvenience ? 1 : 0}`;
@@ -2594,6 +2619,9 @@ function getCachedStaircaseVariantBlocks(
     : getCachedStaircaseBaseBlocks(colorGrid, cache, excludeWater, topAlignedWater, buildAtWorldMinY);
   const blocks = cloneShapeBlocks(baseBlocks);
   switch (buildMode) {
+    case BuildMode.InclineUp:
+    case BuildMode.InclineDown:
+      throw new Error(`Unexpected incline mode in getCachedStaircaseVariantBlocks: ${buildMode}`);
     case BuildMode.StaircaseNorthline:
       break;
     case BuildMode.StaircaseSouthline:
@@ -2649,6 +2677,11 @@ function getCachedStaircaseParts(
     transparentPlacementMode,
   );
   return getCachedRawParts(cache, keyId, () => {
+    if (buildMode === BuildMode.InclineUp || buildMode === BuildMode.InclineDown) {
+      const blocks = buildInclineBlocks(colorGrid, buildMode, includeTransparentBlocks);
+      return [buildShapePart(blocks)];
+    }
+
     const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, sourceBuildMode, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY));
     const waterConvenienceFillerCandidates =
       belowPlatformWater || sourceBuildMode === BuildMode.StaircaseParty || topAlignedWater || !enableWaterConvenience
