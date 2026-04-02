@@ -127,7 +127,6 @@ function analyzePartMaterialNeeds(
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
 
     if (isShapeColorCell(cell)) {
-      if (!cell.isCustom && cell.id === TRANSPARENCY_BASE_INDEX) continue;
       const blockName = resolveShapeColorBlockName(cell, options);
       if (!blockName) continue;
       if (!cell.isCustom && cell.id === WATER_BASE_INDEX && isRealWaterBlockName(blockName)) {
@@ -137,7 +136,7 @@ function analyzePartMaterialNeeds(
       }
       const displayName = toDisplayName(blockName);
       addCount(blockCounts, displayName);
-      if (!cell.isCustom && cell.id !== TRANSPARENCY_BASE_INDEX) {
+      if (!cell.isCustom) {
         baseColorCounts[cell.id] = (baseColorCounts[cell.id] || 0) + 1;
       }
       const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);

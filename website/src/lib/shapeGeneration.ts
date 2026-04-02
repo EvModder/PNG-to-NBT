@@ -86,11 +86,15 @@ type StaircaseInternalBuildMode =
   | BuildMode.StaircaseValley
   | BuildMode.StaircaseGroup
   | BuildMode.StaircaseParty;
+type TransparentPlacementBuildMode =
+  | BuildMode.InclineUp
+  | BuildMode.InclineDown
+  | StaircaseInternalBuildMode;
 
 type ColumnPixelCell = { shade: Shade; isWater: boolean };
 type ColumnCoordKey = number;
 
-const DEFAULT_STAIRCASE_BUILD_MODES: InternalBuildMode[] = [
+const DEFAULT_STAIRCASE_BUILD_MODES: StaircaseInternalBuildMode[] = [
   BuildMode.StaircaseNorthline,
   BuildMode.StaircaseSouthline,
   BuildMode.StaircaseClassic,
@@ -698,6 +702,144 @@ function buildStaircaseBlocks(
   }
 
   return blocks;
+}
+
+function buildTransparentStaircaseBlocks(
+  colorGrid: ColorGrid,
+  blocks: ShapeBlock[],
+  buildMode: TransparentPlacementBuildMode,
+  paletteSeed: number,
+  occupiedExtraBlocks: ShapeBlock[] = [],
+): ShapeBlock[] {
+  let hasTransparency = false;
+  for (let x = 0; x < MAP_SIZE && !hasTransparency; ++x) {
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      if (isTransparentColor(colorGrid[x][z])) {
+        hasTransparency = true;
+        break;
+      }
+    }
+  }
+  if (!hasTransparency) return [];
+
+  const occupiedYsByCell = new Map<ColumnCoordKey, Set<number>>();
+  const rowTopYByColumn = Array.from({ length: MAP_SIZE }, () => new Map<number, number>());
+  let globalMinY = Infinity;
+  let globalMaxY = -Infinity;
+
+  const markOccupied = (entry: PositionedEntry) => {
+    const coord = toColumnCoordKey(entry.x, entry.z);
+    let occupiedYs = occupiedYsByCell.get(coord);
+    if (!occupiedYs) {
+      occupiedYs = new Set<number>();
+      occupiedYsByCell.set(coord, occupiedYs);
+    }
+    occupiedYs.add(entry.y);
+  };
+
+  for (const block of [...blocks, ...occupiedExtraBlocks]) {
+    markOccupied(block);
+    if (block.ref.kind !== "color" || isTransparentColor(block.ref.color)) continue;
+    const rowTopY = rowTopYByColumn[block.x];
+    const currentTopY = rowTopY.get(block.z);
+    if (currentTopY === undefined || block.y > currentTopY) rowTopY.set(block.z, block.y);
+    if (block.y < globalMinY) globalMinY = block.y;
+    if (block.y > globalMaxY) globalMaxY = block.y;
+  }
+
+  if (!Number.isFinite(globalMinY) || !Number.isFinite(globalMaxY)) {
+    globalMinY = 0;
+    globalMaxY = 0;
+  }
+
+  const claimTransparentY = (x: number, z: number, preferredY: number): number => {
+    const coord = toColumnCoordKey(x, z);
+    let occupiedYs = occupiedYsByCell.get(coord);
+    if (!occupiedYs) {
+      occupiedYs = new Set<number>();
+      occupiedYsByCell.set(coord, occupiedYs);
+    }
+    let y = preferredY;
+    while (occupiedYs.has(y)) ++y;
+    occupiedYs.add(y);
+    return y;
+  };
+
+  const randomFor = (x: number, z: number) => {
+    let t = (((x + 1) * 73856093) ^ ((z + 1) * 19349663) ^ ((paletteSeed + 1) * 83492791)) >>> 0;
+    t = (t + 0x6d2b79f5) >>> 0;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const transparentBlocks: ShapeBlock[] = [];
+
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    const rowTopY = rowTopYByColumn[x];
+    const nextSeenY = new Array<number | undefined>(MAP_SIZE);
+    const nextSeenZ = new Array<number | undefined>(MAP_SIZE);
+    let southSeenY: number | undefined;
+    let southSeenZ: number | undefined;
+    for (let z = MAP_SIZE - 1; z >= 0; --z) {
+      const topY = rowTopY.get(z);
+      if (topY !== undefined) southSeenY = topY;
+      if (topY !== undefined) southSeenZ = z;
+      nextSeenY[z] = southSeenY;
+      nextSeenZ[z] = southSeenZ;
+    }
+
+    let northSeenY: number | undefined;
+    let inclinePlacedY: number | undefined;
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      const color = colorGrid[x][z];
+      const topY = rowTopY.get(z);
+      if (topY !== undefined) {
+        northSeenY = topY;
+        inclinePlacedY = topY;
+      }
+      if (!isTransparentColor(color)) continue;
+
+      let preferredY: number;
+      switch (buildMode) {
+        case BuildMode.InclineUp:
+        case BuildMode.InclineDown: {
+          const yDelta = buildMode === BuildMode.InclineUp ? -1 : 1;
+          if (inclinePlacedY !== undefined) {
+            preferredY = inclinePlacedY + yDelta;
+          } else if (nextSeenY[z] !== undefined && nextSeenZ[z] !== undefined) {
+            preferredY = nextSeenY[z] - (yDelta * (nextSeenZ[z] - z));
+          } else {
+            preferredY = 0;
+          }
+          break;
+        }
+        case BuildMode.StaircaseValley:
+          preferredY = 0;
+          break;
+        case BuildMode.StaircaseGroup:
+          preferredY = Math.max(0, northSeenY ?? nextSeenY[z] ?? 0);
+          break;
+        case BuildMode.StaircaseParty:
+          preferredY = globalMinY + Math.floor(randomFor(x, z) * (globalMaxY - globalMinY + 1));
+          break;
+        default:
+          preferredY = northSeenY ?? nextSeenY[z] ?? 0;
+          break;
+      }
+
+      const y = claimTransparentY(x, z, preferredY);
+      transparentBlocks.push({
+        x,
+        y,
+        z,
+        ref: { kind: "color", color },
+      });
+      if (buildMode === BuildMode.InclineUp || buildMode === BuildMode.InclineDown) inclinePlacedY = y;
+    }
+  }
+
+  return transparentBlocks;
 }
 
 function addStaircaseWaterConvenienceFillers(
@@ -2381,6 +2523,8 @@ function getShapeCacheKeyId(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
+  includeTransparentBlocks = false,
+  transparentPlacementMode: BuildMode = buildMode,
 ): ShapeCacheKeyId {
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
@@ -2391,6 +2535,8 @@ function getShapeCacheKeyId(
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
   else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
   if (buildAtWorldMinY && isStaircaseBuildMode(buildMode)) id += "|world-min-y:1";
+  if (includeTransparentBlocks && isStaircaseBuildMode(buildMode)) id += "|id0:1";
+  if (includeTransparentBlocks && transparentPlacementMode !== buildMode) id += `|id0mode:${transparentPlacementMode}`;
   if (isStaircaseBuildMode(buildMode)) id += `|waterconv:${enableWaterConvenience ? 1 : 0}`;
   return id as ShapeCacheKeyId;
 }
@@ -2480,6 +2626,8 @@ function getCachedStaircaseParts(
   topAlignedWater = false,
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
+  includeTransparentBlocks = false,
+  transparentPlacementMode: TransparentPlacementBuildMode = buildMode,
 ): RawShapePart[] {
   const belowPlatformWater = waterDrops !== undefined;
   const sourceBuildMode =
@@ -2496,6 +2644,9 @@ function getCachedStaircaseParts(
     topAlignedWater,
     enableWaterConvenience,
     buildAtWorldMinY,
+    true,
+    includeTransparentBlocks,
+    transparentPlacementMode,
   );
   return getCachedRawParts(cache, keyId, () => {
     const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, sourceBuildMode, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY));
@@ -2516,7 +2667,13 @@ function getCachedStaircaseParts(
 
     if (belowPlatformWater) {
       const { loweredWaterBlocks, supportFloorYs } = buildBelowPlatformWaterBlocks(blocks, colorGrid, waterDrops);
+      if (includeTransparentBlocks) {
+        blocks.push(...buildTransparentStaircaseBlocks(colorGrid, blocks, transparentPlacementMode, paletteSeed, loweredWaterBlocks));
+      }
       return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
+    }
+    if (includeTransparentBlocks) {
+      blocks.push(...buildTransparentStaircaseBlocks(colorGrid, blocks, transparentPlacementMode, paletteSeed));
     }
     return [buildShapePart(blocks, waterConvenienceFillerCandidates)];
   });
@@ -2585,6 +2742,8 @@ function buildRawShapeParts(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
+  includeTransparentBlocks = false,
+  transparentPlacementMode: BuildMode = buildMode,
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
@@ -2600,7 +2759,18 @@ function buildRawShapeParts(
     case BuildMode.Suppress2LayerLatePairs:
       return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs, waterDrops);
     default: {
-      return getCachedStaircaseParts(colorGrid, cache, buildMode, paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience, buildAtWorldMinY);
+      return getCachedStaircaseParts(
+        colorGrid,
+        cache,
+        buildMode,
+        paletteSeed,
+        waterDrops,
+        topAlignedWater,
+        enableWaterConvenience,
+        buildAtWorldMinY,
+        includeTransparentBlocks,
+        transparentPlacementMode as TransparentPlacementBuildMode,
+      );
     }
   }
 }
@@ -2617,6 +2787,8 @@ function getGeneratedShape(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
+  includeTransparentBlocks = false,
+  transparentPlacementMode: BuildMode = buildMode,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
   const cacheKeyId = getShapeCacheKeyId(
@@ -2630,6 +2802,8 @@ function getGeneratedShape(
     enableWaterConvenience,
     buildAtWorldMinY,
     skipEmptySuppressSteps,
+    includeTransparentBlocks,
+    transparentPlacementMode,
   );
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
@@ -2647,6 +2821,8 @@ function getGeneratedShape(
     enableWaterConvenience,
     buildAtWorldMinY,
     skipEmptySuppressSteps,
+    includeTransparentBlocks,
+    transparentPlacementMode,
   );
   const parts = rawParts.map(finalizeShapePart);
   const splitExportNames =
@@ -2687,6 +2863,7 @@ export function generateShapeMap(
     enableWaterConvenience?: boolean;
     buildAtWorldMinY?: boolean;
     skipEmptySuppressSteps?: boolean;
+    includeTransparentBlocks?: boolean;
     selectedMode?: BuildMode | null;
     selectedStepDirection: SuppressStepDirection;
   },
@@ -2699,8 +2876,9 @@ export function generateShapeMap(
   const enableWaterConvenience = options.enableWaterConvenience ?? true;
   const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
   const skipEmptySuppressSteps = options.skipEmptySuppressSteps ?? true;
-  const staircaseVisibleModes: BuildMode[] =
-    !hasTransparency && !hasWater &&
+  const includeTransparentBlocks = options.includeTransparentBlocks ?? false;
+  const staircaseVisibleModes: TransparentPlacementBuildMode[] =
+    (!hasTransparency || includeTransparentBlocks) && !hasWater &&
     (allSameShade === Shade.Dark || allSameShade === Shade.Light)
       ? [allSameShade === Shade.Dark ? BuildMode.InclineUp : BuildMode.InclineDown]
       : [...DEFAULT_STAIRCASE_BUILD_MODES];
@@ -2724,6 +2902,8 @@ export function generateShapeMap(
       enableWaterConvenience,
       buildAtWorldMinY,
       skipEmptySuppressSteps,
+      includeTransparentBlocks,
+      buildMode,
     );
     if (seenShapeSignatures.has(signatureId)) continue;
     seenShapeSignatures.add(signatureId);
@@ -2744,6 +2924,7 @@ export function generateShapeMap(
       enableWaterConvenience,
       buildAtWorldMinY,
       skipEmptySuppressSteps,
+      includeTransparentBlocks,
     );
     if (!seenShapeSignatures.has(signatureId)) {
       seenShapeSignatures.add(signatureId);

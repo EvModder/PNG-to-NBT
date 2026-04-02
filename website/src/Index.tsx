@@ -15,6 +15,7 @@ import {
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_FLAT_WATER_DROP,
   DEFAULT_FORCE_Z129,
+  DEFAULT_INCLUDE_TRANSPARENCY,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
@@ -334,6 +335,7 @@ const Index = () => {
   const calcLayerGap = useDeferredValue(layerGap);
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
+  const [includeTransparency, setIncludeTransparency] = useState(() => loadCached(LS_KEYS.includeTransparency, DEFAULT_INCLUDE_TRANSPARENCY));
   const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
   const [suppressStepDirection, setSuppressStepDirection] = useState<SuppressStepDirection>(() => {
     const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
@@ -520,6 +522,7 @@ const Index = () => {
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.mixSteps]: mixSteps,
+      [LS_KEYS.includeTransparency]: includeTransparency,
       [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
       [LS_KEYS.lightWaterDrop]: lightWaterDrop,
@@ -558,6 +561,7 @@ const Index = () => {
       sortDir,
       layerGap,
       mixSteps,
+      includeTransparency,
       buildAtWorldMinY,
       suppressStepDirection,
       lightWaterDrop,
@@ -650,6 +654,12 @@ const Index = () => {
     [buildMode, imageColorGrid, imageValid, activeWaterDrops],
   );
   const twoLayerHasLateVoidNeed = (imageStats?.voidShadowStats.dominant ?? 0) > 0;
+  const showIncludeTransparencyToggle =
+    imageValid &&
+    !!derivedImageStats?.hasTransparency &&
+    showTransparentRow &&
+    !isSuppressBuildMode(buildMode);
+  const activeIncludeTransparency = showIncludeTransparencyToggle && includeTransparency;
   const isSuppressStepDirectionSelectable = useCallback(
     (direction: SuppressStepDirection) => {
       if (buildMode !== BuildMode.SuppressStepChecker) return false;
@@ -680,6 +690,7 @@ const Index = () => {
           {
           layerGap: calcLayerGap,
           mixSteps: showMixStepsToggle && calcMixSteps,
+          includeTransparentBlocks: activeIncludeTransparency,
           paletteSeed: paletteSeedOffset,
           waterSetting: activeWaterSetting,
           enableWaterConvenience: supportMode !== SupportMode.None,
@@ -702,6 +713,7 @@ const Index = () => {
       suppressStepDirection,
       supportMode,
       skipEmptySuppressSteps,
+      activeIncludeTransparency,
       derivedImageStats,
       imageHasWater,
       twoLayerHasLateVoidNeed,
@@ -744,6 +756,7 @@ const Index = () => {
         {
           layerGap: calcLayerGap,
           mixSteps: showMixStepsToggle && calcMixSteps,
+          includeTransparentBlocks: activeIncludeTransparency,
           paletteSeed: paletteSeedOffset,
           waterSetting: activeWaterSetting,
           enableWaterConvenience: supportMode !== SupportMode.None,
@@ -770,6 +783,7 @@ const Index = () => {
       suppressStepDirection,
       supportMode,
       skipEmptySuppressSteps,
+      activeIncludeTransparency,
       twoLayerHasLateVoidNeed,
     ],
   );
@@ -935,6 +949,9 @@ const Index = () => {
     showMixStepsToggle,
     mixSteps,
     setMixSteps,
+    showIncludeTransparencyToggle,
+    includeTransparency,
+    setIncludeTransparency,
     showPaletteSeedToggle,
     proPaletteSeed,
     setProPaletteSeed,
@@ -1119,6 +1136,7 @@ const Index = () => {
         }
         if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
         if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
+        if (decodedPreset.includeTransparency !== undefined) setIncludeTransparency(decodedPreset.includeTransparency);
         if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
         if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
           setSuppressStepDirection(decodedPreset.suppressStepDirection);
@@ -1231,13 +1249,11 @@ const Index = () => {
 
   const { usedIndices, unusedIndices } = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
-    const effectiveUsed = new Set<number>(usedBaseColors);
-    if (showTransparentRow) effectiveUsed.add(0);
     return {
-      usedIndices: sortedIndices.filter(i => effectiveUsed.has(i)),
-      unusedIndices: sortedIndices.filter(i => !effectiveUsed.has(i)),
+      usedIndices: sortedIndices.filter(i => usedBaseColors.has(i)),
+      unusedIndices: sortedIndices.filter(i => !usedBaseColors.has(i)),
     };
-  }, [sortedIndices, imageValid, usedBaseColors, showTransparentRow]);
+  }, [sortedIndices, imageValid, usedBaseColors]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -1357,6 +1373,7 @@ const Index = () => {
           suppress2LayerLateFillerBlock,
           proPaletteSeed,
           mixSteps,
+          includeTransparency,
           buildAtWorldMinY,
           suppressStepDirection,
           dominateVoidFillerBlock,
@@ -1380,6 +1397,7 @@ const Index = () => {
     suppress2LayerLateFillerBlock,
     proPaletteSeed,
     mixSteps,
+    includeTransparency,
     buildAtWorldMinY,
     suppressStepDirection,
     dominateVoidFillerBlock,

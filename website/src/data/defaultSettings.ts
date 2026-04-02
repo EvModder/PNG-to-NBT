@@ -25,6 +25,7 @@ export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
 export const DEFAULT_PALETTE_SEED = false;
 export const DEFAULT_LAYER_GAP = 5;
 export const DEFAULT_MIX_STEPS = false;
+export const DEFAULT_INCLUDE_TRANSPARENCY = false;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;
 export const DEFAULT_DARK_WATER_DROP = 4;
