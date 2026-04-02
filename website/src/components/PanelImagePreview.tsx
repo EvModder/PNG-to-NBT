@@ -1,3 +1,10 @@
+/**
+ * Public API:
+ * - PanelImagePreview()
+ *
+ * Callers:
+ * - src/Index.tsx
+ */
 import type { MutableRefObject, RefObject } from "react";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
 import { BuildMode } from "@/types/conversion";
@@ -80,6 +87,8 @@ function WarningBanner({
   );
 }
 
+// Callers:
+// - src/Index.tsx
 export function PanelImagePreview({
   fileRef,
   imageData,

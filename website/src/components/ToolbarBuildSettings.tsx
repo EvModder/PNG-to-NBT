@@ -1,3 +1,11 @@
+/**
+ * Public API:
+ * - ToolbarBuildSettingsProps
+ * - ToolbarBuildSettings()
+ *
+ * Callers:
+ * - src/components/ToolbarPresetSettings.tsx
+ */
 import { Fragment, type ReactNode } from "react";
 import { Droplets, ArrowDownToLine } from "lucide-react";
 import { Shade } from "@/data/mapColors";
@@ -11,18 +19,20 @@ import {
 
 type WaterDropShade = Shade.Dark | Shade.Flat | Shade.Light;
 
-export type VisibleWaterLevelControl = {
+type VisibleWaterLevelControl = {
   shade: WaterDropShade;
   value: number;
 };
 
-export type ToolbarBuildModeOption = {
+type ToolbarBuildModeOption = {
   value: BuildMode;
   label: string;
   disabled?: boolean;
   muted?: boolean;
 };
 
+// Callers:
+// - src/components/ToolbarPresetSettings.tsx
 export type ToolbarBuildSettingsProps = {
   isFlatShape: boolean;
   visibleWaterLevelControls: VisibleWaterLevelControl[];
@@ -81,6 +91,8 @@ function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirec
   );
 }
 
+// Callers:
+// - src/components/ToolbarPresetSettings.tsx
 export function ToolbarBuildSettings({
   isFlatShape,
   visibleWaterLevelControls,

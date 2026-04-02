@@ -8,6 +8,8 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelCustomColors.tsx
+ * - src/components/ToolbarBuildSettings.tsx
  * - src/data/colorSortOrder.ts
  * - src/data/i18n/*
  * - src/data/mapColorsExcluded.ts
@@ -25,6 +27,7 @@
  */
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarBuildSettings.tsx
 // - src/data/colorSortOrder.ts
 // - src/data/i18n/*
 // - src/lib/colorGridAnalysis.ts
@@ -89,14 +92,17 @@ export const WATER_BASE_INDEX = 12;
 // Callers:
 // - src/Index.tsx
 // - src/data/colorSortOrder.ts
+// - src/components/PanelCustomColors.tsx
 // - src/data/mapColorsExcluded.ts
 // - src/data/presets.ts
 // - src/lib/blockId.ts
 // - src/lib/colorGridParsing.ts
-// - src/lib/fillerRules.ts
+// - src/lib/codecColorGrid.ts
+// - src/lib/codecPreset.ts
+// - src/lib/paletteSeed.ts
 // - src/lib/previewImageEdits.ts
-// - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
+// - src/utils/color.ts
 // - tests/run.mts
 export const BASE_COLORS: ColorRgbBase[] = [
   { name: "NONE", r: 0, g: 0, b: 0, blocks: ["glass", "glass_pane", "iron_bars", "chain", "end_rod", "ladder", "rail", "powered_rail", "detector_rail", "activator_rail", "lever", "torch", "wall_torch", "soul_torch", "soul_wall_torch", "redstone_wire", "repeater", "comparator", "tripwire_hook", "tripwire", "flower_pot", "cake"] },

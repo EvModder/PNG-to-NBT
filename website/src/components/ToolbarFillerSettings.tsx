@@ -1,3 +1,10 @@
+/**
+ * Public API:
+ * - ToolbarFillerSettings()
+ *
+ * Callers:
+ * - src/Index.tsx
+ */
 import { Fragment, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import {
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
@@ -20,7 +27,7 @@ type FillerFieldProps = {
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 };
 
-export type ToolbarFillerSettingsProps = {
+type ToolbarFillerSettingsProps = {
   toolbarRef: MutableRefObject<HTMLElement | null>;
   isStackedLayout: boolean;
   hasImageData: boolean;
@@ -100,6 +107,8 @@ function FillerField({
   );
 }
 
+// Callers:
+// - src/Index.tsx
 export function ToolbarFillerSettings({
   toolbarRef,
   isStackedLayout,

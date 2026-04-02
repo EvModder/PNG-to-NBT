@@ -14,7 +14,7 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/nbtExport.ts
+ * - src/components/ToolbarBuildSettings.tsx
  * - src/lib/codecPreset.ts
  * - src/lib/shapeGeneration.ts
  * - tests/run.mts
@@ -50,7 +50,7 @@ function getDirectionSuffix(direction: SuppressStepDirection): string {
 }
 
 // Callers:
-// - src/lib/nbtExport.ts
+// - src/Index.tsx
 export function getBuildModeDownloadSuffix(
   buildMode: BuildMode,
   direction: SuppressStepDirection,
@@ -90,7 +90,7 @@ export function getBuildModeDownloadSuffix(
 }
 
 // Callers:
-// - src/Index.tsx
+// - src/components/ToolbarBuildSettings.tsx
 export function getSuppressStepDirectionRotationDegrees(direction: SuppressStepDirection): number {
   switch (direction) {
     case SuppressStepDirection.SouthToNorth:
@@ -106,6 +106,7 @@ export function getSuppressStepDirectionRotationDegrees(direction: SuppressStepD
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/shapeGeneration.ts
 export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Flat:
@@ -144,7 +145,7 @@ export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
 }
 
 // Callers:
-// - src/Index.tsx
+// - src/components/ToolbarBuildSettings.tsx
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {
@@ -201,6 +202,7 @@ export function getVisibleSuppressBuildModes(hasTwoLayerLateVoidNeed: boolean): 
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarBuildSettings.tsx
 export function cycleSuppressStepDirection(
   stepDirection: SuppressStepDirection,
   isSelectable: (direction: SuppressStepDirection) => boolean = () => true,

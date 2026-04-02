@@ -2,19 +2,23 @@
  * Public API:
  * - toBlockIconKey()
  * - getBlockIconAtlasEntry()
+ * - renderBlockIconAtlasEntryToCanvas()
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PackedBlockIcon.tsx
  */
 import { BLOCK_ICON_ATLASES, type BlockIconAtlasName } from "@/data/blockIconAtlases";
 import { stripDefaultBlockNamespace } from "@/lib/blockId";
 
+const atlasImageCache = new Map<string, HTMLImageElement>();
+const atlasImageLoadCache = new Map<string, Promise<HTMLImageElement>>();
+
 interface BlockIconAtlasEntry {
   atlasSrc: string;
-  columns: number;
-  rows: number;
-  col: number;
-  row: number;
+  cellSize: number;
+  offsetX: number;
+  offsetY: number;
 }
 
 // Callers:
@@ -30,7 +34,7 @@ export function toBlockIconKey(raw: string): string {
 }
 
 // Callers:
-// - src/Index.tsx
+// - src/components/PackedBlockIcon.tsx
 export function getBlockIconAtlasEntry(
   atlasName: BlockIconAtlasName,
   iconKey: string,
@@ -43,9 +47,78 @@ export function getBlockIconAtlasEntry(
   const row = Math.floor(index / atlas.columns);
   return {
     atlasSrc: atlas.src,
-    columns: atlas.columns,
-    rows: atlas.rows,
-    col,
-    row,
+    cellSize: atlas.cellSize,
+    offsetX: col * atlas.cellSize,
+    offsetY: row * atlas.cellSize,
   };
+}
+
+function loadBlockIconAtlasImage(atlasSrc: string): Promise<HTMLImageElement> {
+  const cachedImage = atlasImageCache.get(atlasSrc);
+  if (cachedImage) return Promise.resolve(cachedImage);
+
+  const cachedLoad = atlasImageLoadCache.get(atlasSrc);
+  if (cachedLoad) return cachedLoad;
+
+  const src = `${import.meta.env.BASE_URL}${atlasSrc}`;
+  const image = new Image();
+  image.decoding = "async";
+  image.src = src;
+
+  const loadPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+    image.onload = () => {
+      atlasImageLoadCache.delete(atlasSrc);
+      atlasImageCache.set(atlasSrc, image);
+      resolve(image);
+    };
+    image.onerror = () => {
+      atlasImageLoadCache.delete(atlasSrc);
+      reject(new Error(`Failed to load atlas image: ${src}`));
+    };
+  });
+
+  atlasImageLoadCache.set(atlasSrc, loadPromise);
+  return loadPromise;
+}
+
+function drawBlockIconAtlasImageToCanvas(
+  canvas: HTMLCanvasElement,
+  atlasImage: CanvasImageSource,
+  entry: BlockIconAtlasEntry,
+  devicePixelRatio = window.devicePixelRatio || 1,
+): void {
+  const renderSize = Math.max(1, Math.round(entry.cellSize * devicePixelRatio));
+  if (canvas.width !== renderSize || canvas.height !== renderSize) {
+    canvas.width = renderSize;
+    canvas.height = renderSize;
+  }
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D context unavailable");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    atlasImage,
+    entry.offsetX,
+    entry.offsetY,
+    entry.cellSize,
+    entry.cellSize,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+}
+
+// Callers:
+// - src/components/PackedBlockIcon.tsx
+export async function renderBlockIconAtlasEntryToCanvas(
+  canvas: HTMLCanvasElement,
+  entry: BlockIconAtlasEntry,
+  signal?: AbortSignal,
+): Promise<void> {
+  const atlasImage = await loadBlockIconAtlasImage(entry.atlasSrc);
+  if (signal?.aborted) return;
+  drawBlockIconAtlasImageToCanvas(canvas, atlasImage, entry);
 }

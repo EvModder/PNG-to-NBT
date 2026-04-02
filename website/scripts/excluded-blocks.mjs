@@ -27,6 +27,9 @@ export const EXCLUDED_BLOCK_PATTERNS = [
   /lightning_rod$/,
 ];
 
+// Callers:
+// - scripts/audit-mapcolors.mjs
+// - scripts/build-block-icon-files.mjs
 export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "dragon_egg",
   "nether_portal",
@@ -85,6 +88,9 @@ export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "weathered_cut_copper_slab",
 ]);
 
+// Callers:
+// - scripts/audit-mapcolors.mjs
+// - scripts/build-block-icon-files.mjs
 export const EXCLUDED_BLOCK_IDS_UNOBTAINABLE = new Set([
   "barrier",
   "structure_void",

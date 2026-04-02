@@ -6,6 +6,11 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelCustomColors.tsx
+ * - src/components/PanelImagePreview.tsx
+ * - src/components/ToolbarBuildSettings.tsx
+ * - src/components/ToolbarFillerSettings.tsx
+ * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/colorGridParsing.ts
  *
  * Notes:
@@ -91,7 +96,7 @@ function formatBlockIdList(blockIds: readonly string[]): string {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/colorGridParsing.ts
+// - src/components/PanelImagePreview.tsx
 export enum PaletteNoticeKind {
   Freeform = "freeform",
   SizeError = "size_error",
@@ -103,6 +108,7 @@ export enum PaletteNoticeKind {
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PanelImagePreview.tsx
 // - src/lib/colorGridParsing.ts
 export type PaletteNotice =
   | { kind: PaletteNoticeKind.Freeform; tone: "info" | "warning" | "error"; text: string }
@@ -114,6 +120,11 @@ export type PaletteNotice =
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PanelCustomColors.tsx
+// - src/components/PanelImagePreview.tsx
+// - src/components/ToolbarBuildSettings.tsx
+// - src/components/ToolbarFillerSettings.tsx
+// - src/components/ToolbarPresetSettings.tsx
 // - src/lib/colorGridParsing.ts
 export const messages = {
   common: catalog.common,

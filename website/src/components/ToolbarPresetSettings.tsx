@@ -1,3 +1,10 @@
+/**
+ * Public API:
+ * - ToolbarPresetSettings()
+ *
+ * Callers:
+ * - src/Index.tsx
+ */
 import type { RefObject } from "react";
 import { messages } from "@/lib/messages";
 import { type BlockPreset } from "@/data/presets";
@@ -31,6 +38,8 @@ type ToolbarPresetSettingsProps = {
   buildSettingsProps: ToolbarBuildSettingsProps | null;
 };
 
+// Callers:
+// - src/Index.tsx
 export function ToolbarPresetSettings({
   toolbarRef,
   isStackedLayout,

@@ -1,9 +1,16 @@
+/**
+ * Public API:
+ * - PanelCustomColors()
+ *
+ * Callers:
+ * - src/Index.tsx
+ */
 import type { Dispatch, SetStateAction } from "react";
 import { BASE_COLORS } from "@/data/mapColors";
 import { messages } from "@/lib/messages";
 import type { ColorRgbCustom } from "@/types/color";
 
-export type NewCustomColorDraft = {
+type NewCustomColorDraft = {
   r: string;
   g: string;
   b: string;
@@ -20,6 +27,8 @@ type PanelCustomColorsProps = {
   addCustomColor: () => void;
 };
 
+// Callers:
+// - src/Index.tsx
 export function PanelCustomColors({
   customColors,
   setCustomColors,

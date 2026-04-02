@@ -8,6 +8,7 @@
  * - src/data/i18n/*
  * - src/data/defaultSettings.ts
  * - src/Index.tsx
+ * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
  * - src/lib/codecPreset.ts
@@ -18,6 +19,7 @@
 // - src/data/i18n/*
 // - src/data/defaultSettings.ts
 // - src/Index.tsx
+// - src/components/ToolbarPresetSettings.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/messages.ts
 // - src/lib/codecPreset.ts

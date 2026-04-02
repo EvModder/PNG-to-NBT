@@ -2,6 +2,7 @@
 website/tests/failures/
 website/reports/
 website/.tmp*
+work_files/
 sample_imgs/
 upstream-compare-*/
 

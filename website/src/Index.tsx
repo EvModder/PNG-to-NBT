@@ -73,7 +73,7 @@ import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages"
 import { decodeFullPreset, encodeFullPreset } from "@/lib/codecPreset";
 import { usePreviewVisiblePixelMask, useVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
-import { getBlockIconAtlasEntry, toBlockIconKey } from "@/lib/blockIconAtlas";
+import { toBlockIconKey } from "@/lib/blockIconAtlas";
 import { getSupportedColorAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
 import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
 import {
@@ -105,6 +105,7 @@ import { ToolbarPresetSettings } from "@/components/ToolbarPresetSettings";
 import { ToolbarFillerSettings } from "@/components/ToolbarFillerSettings";
 import { PanelCustomColors } from "@/components/PanelCustomColors";
 import { PanelImagePreview } from "@/components/PanelImagePreview";
+import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 
 function loadCached<T>(key: string, fallback: T): T {
   try {
@@ -212,48 +213,6 @@ type ShapeWarning = {
 const DEFAULT_SWATCH_SHADES: Shade[] = [Shade.Light, Shade.Flat, Shade.Dark];
 const KNOWN_PRIMARY_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.primary.entries));
 const KNOWN_UNUSED_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.unused.entries));
-
-type PackedBlockIconProps = {
-  atlasKey: string;
-  atlasName: "primary" | "unused";
-  fallbackSrc: string;
-  alt: string;
-  className?: string;
-};
-
-function PackedBlockIcon({ atlasKey, atlasName, fallbackSrc, alt, className }: PackedBlockIconProps) {
-  const atlasEntry = getBlockIconAtlasEntry(atlasName, atlasKey);
-  if (!atlasEntry) {
-    return (
-      <img
-        src={fallbackSrc}
-        alt={alt}
-        className={className}
-        decoding="async"
-        style={{ imageRendering: "pixelated" }}
-      />
-    );
-  }
-
-  return (
-    <span className={`relative block overflow-hidden ${className ?? ""}`}>
-      <img
-        src={`${import.meta.env.BASE_URL}${atlasEntry.atlasSrc}`}
-        alt={alt}
-        decoding="async"
-        className="absolute max-w-none block"
-        style={{
-          left: `${-atlasEntry.col * 100}%`,
-          top: `${-atlasEntry.row * 100}%`,
-          width: `${atlasEntry.columns * 100}%`,
-          height: `${atlasEntry.rows * 100}%`,
-          imageRendering: "pixelated",
-        }}
-      />
-    </span>
-  );
-}
-
 
 type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 type SortDir = "asc" | "desc";

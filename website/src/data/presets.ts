@@ -10,6 +10,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/codecPreset.ts
  * - tests/run.mts
  */
@@ -18,6 +19,7 @@ import { STORAGE_KEYS } from "@/data/storageKeys";
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarPresetSettings.tsx
 // - src/lib/codecPreset.ts
 // - tests/run.mts
 export interface BlockPreset {

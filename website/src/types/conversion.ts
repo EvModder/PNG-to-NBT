@@ -7,9 +7,10 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelImagePreview.tsx
+ * - src/components/ToolbarBuildSettings.tsx
  * - src/data/defaultSettings.ts
  * - src/data/i18n/*
- * - src/lib/colorGridParsing.ts
  * - src/utils/conversion.ts
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
@@ -19,18 +20,23 @@
  * - src/lib/shapeModel.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/suppressLoadMarkers.ts
  * - src/types/shape.ts
  * - tests/run.mts
  */
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PanelImagePreview.tsx
+// - src/components/ToolbarBuildSettings.tsx
 // - src/data/defaultSettings.ts
 // - src/data/i18n/*
 // - src/utils/conversion.ts
 // - src/lib/messages.ts
 // - src/lib/codecPreset.ts
+// - src/lib/nbtExport.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressLoadMarkers.ts
 // - tests/run.mts
 export enum BuildMode {
   Flat = "flat",
@@ -53,12 +59,15 @@ export enum BuildMode {
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarBuildSettings.tsx
 // - src/data/defaultSettings.ts
 // - src/data/i18n/*
 // - src/utils/conversion.ts
 // - src/lib/messages.ts
 // - src/lib/codecPreset.ts
+// - src/lib/nbtExport.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressLoadMarkers.ts
 // - tests/run.mts
 export enum SuppressStepDirection {
   EastToWest = "east_to_west",
