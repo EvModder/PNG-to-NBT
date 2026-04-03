@@ -124,6 +124,8 @@ function loadCached<T>(key: string, fallback: T): T {
 
 const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
 type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
+type ColumnDropSide = "before" | "after";
+type ColumnDragIndicator = { target: ColumnId; side: ColumnDropSide };
 type DerivedImageStats = {
   allSameShade?: Shade;
   flatModeBehavior: FlatModeBehavior;
@@ -136,6 +138,33 @@ type DerivedImageStats = {
   usedShadesByBase: Map<number, Set<Shade>>;
   usedWaterShades: Set<Shade>;
 };
+
+function reorderColumnOrder(order: ColumnId[], from: ColumnId, target: ColumnId, side: ColumnDropSide): ColumnId[] {
+  if (from === target) return order;
+  const next = order.filter(col => col !== from);
+  const targetIndex = next.indexOf(target);
+  if (targetIndex === -1) return order;
+  next.splice(targetIndex + (side === "after" ? 1 : 0), 0, from);
+  return next;
+}
+
+function normalizeColumnDropTarget(
+  order: ColumnId[],
+  target: ColumnId,
+  side: ColumnDropSide,
+): ColumnDragIndicator | null {
+  const index = order.indexOf(target);
+  if (index === -1) return null;
+  if (side === "after" && index < order.length - 1) {
+    return { target: order[index + 1], side: "before" };
+  }
+  return { target, side };
+}
+
+function wouldReorderColumnOrder(order: ColumnId[], from: ColumnId, indicator: ColumnDragIndicator): boolean {
+  const next = reorderColumnOrder(order, from, indicator.target, indicator.side);
+  return next.length === order.length && next.some((col, index) => col !== order[index]);
+}
 
 function normalizeUsedWaterDrops(
   rawDrops: Record<WaterDropShade, number>,
@@ -375,6 +404,8 @@ const Index = () => {
     [imageColorGrid],
   );
   const dragColRef = useRef<ColumnId | null>(null);
+  const dragColumnIndicatorRef = useRef<ColumnDragIndicator | null>(null);
+  const [dragColumnIndicator, setDragColumnIndicator] = useState<ColumnDragIndicator | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const swatchTooltipRafRef = useRef<number | null>(null);
   const swatchTooltipPendingRef = useRef<{ text: string; x: number; y: number } | null>(null);
@@ -1863,7 +1894,7 @@ const Index = () => {
     const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
     const blockColWidthPx = textureCollapsed ? blockTextureCollapsedWidthPx : blockColMinWidthPx;
     // 6 columns + 5 grid gaps (`gap-1` = 4px).
-    const fixedColsPx = 24 + 24 + 135 + 46 + requiredColWidth;
+    const fixedColsPx = 24 + 24 + 135 + 48 + requiredColWidth;
     const gapsPx = 5 * 4;
     // Section wrapper uses `p-2` (8px each side) and `border` (1px each side).
     const sectionInsetsPx = 8 * 2 + 1 * 2;
@@ -2015,11 +2046,14 @@ const Index = () => {
     const measure = () => {
       const root = layoutRootRef.current;
       if (!root) return;
-      const rootRect = root.getBoundingClientRect();
       const rootStyle = getComputedStyle(root);
+      const paddingInline =
+        parseFloat(rootStyle.paddingLeft || "0") +
+        parseFloat(rootStyle.paddingRight || "0");
+      const availableWidth = root.clientWidth - paddingInline;
       const gap = parseFloat(rootStyle.columnGap || rootStyle.gap || "0") || LAYOUT_GAP_PX;
-      const threshold = Math.round(leftColumnMinWidthPx + rightColumnMinWidthPx + gap);
-      const stackCalc = rootRect.width < threshold;
+      const threshold = Math.ceil(leftColumnMinWidthPx + rightColumnMinWidthPx + gap);
+      const stackCalc = availableWidth <= threshold;
       if (stackCalc !== isStackedLayout) setIsStackedLayout(stackCalc);
     };
 
@@ -2059,21 +2093,51 @@ const Index = () => {
     gridTemplateColumns: visibleColumns.map(c => colWidthMap[c]).join(" "),
   };
 
+  const updateDragColumnIndicator = useCallback((next: ColumnDragIndicator | null) => {
+    dragColumnIndicatorRef.current = next;
+    setDragColumnIndicator(prev =>
+      prev?.target === next?.target && prev?.side === next?.side ? prev : next,
+    );
+  }, []);
+
+  const commitColumnReorder = useCallback((from: ColumnId, indicator: ColumnDragIndicator) => {
+    setColumnOrder(prev =>
+      wouldReorderColumnOrder(prev, from, indicator)
+        ? reorderColumnOrder(prev, from, indicator.target, indicator.side)
+        : prev,
+    );
+  }, []);
+
   const colDragProps = (col: ColumnId) => ({
     draggable: true,
-    onDragStart: () => { dragColRef.current = col; },
-    onDragOver: (e: React.DragEvent) => {
-      e.preventDefault();
-      const from = dragColRef.current;
-      if (!from || from === col) return;
-      setColumnOrder(prev => {
-        const next = prev.filter(c => c !== from);
-        const idx = next.indexOf(col);
-        next.splice(idx, 0, from);
-        return next;
-      });
+    onDragStart: (e: React.DragEvent) => {
+      dragColRef.current = col;
+      updateDragColumnIndicator(null);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", col);
     },
-    onDragEnd: () => { dragColRef.current = null; },
+    onDragOver: (e: React.DragEvent) => {
+      const from = dragColRef.current;
+      if (!from) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const rect = e.currentTarget.getBoundingClientRect();
+      const side: ColumnDropSide = e.clientX >= rect.left + rect.width / 2 ? "after" : "before";
+      const normalized = normalizeColumnDropTarget(columnOrder, col, side);
+      const nextIndicator = normalized && wouldReorderColumnOrder(columnOrder, from, normalized)
+        ? normalized
+        : null;
+      updateDragColumnIndicator(nextIndicator);
+    },
+    onDragEnd: () => {
+      const from = dragColRef.current;
+      const indicator = dragColumnIndicatorRef.current;
+      if (from && indicator) {
+        commitColumnReorder(from, indicator);
+      }
+      dragColRef.current = null;
+      updateDragColumnIndicator(null);
+    },
   });
 
   const getAllBlocks = (idx: number) => {
@@ -2405,7 +2469,7 @@ const Index = () => {
         {/* LEFT COLUMN */}
         <div
           ref={leftColumnRef}
-          className={`${isStackedLayout ? "contents" : "block flex-[3_1_0%] min-w-[var(--left-column-min-width)]"} min-w-0`}
+          className={isStackedLayout ? "contents" : "block flex-[3_1_0%] min-w-[var(--left-column-min-width)]"}
           style={{
             ["--color-table-min-width" as any]: `${colorTableMinWidthPx}px`,
             ["--left-column-min-width" as any]: `${leftColumnMinWidthPx}px`,
@@ -2556,7 +2620,6 @@ const Index = () => {
                         className="cursor-pointer select-none whitespace-nowrap"
                         onClick={() => toggleSort("color")}
                         title={messages.table.columnSortTitle("clr")}
-                        {...colDragProps("clr")}
                       >
                         {messages.table.columnLabel("clr")}{sortArrow("color")}
                       </span>
@@ -2567,7 +2630,6 @@ const Index = () => {
                         className="cursor-pointer select-none whitespace-nowrap pl-0.5"
                         onClick={() => toggleSort("id")}
                         title={messages.table.columnSortTitle("id")}
-                        {...colDragProps("id")}
                       >
                         {messages.table.columnLabel("id")}{sortArrow("id")}
                       </span>
@@ -2578,7 +2640,6 @@ const Index = () => {
                         className="cursor-pointer select-none"
                         onClick={() => toggleSort("name")}
                         title={messages.table.columnSortTitle("name")}
-                        {...colDragProps("name")}
                       >
                         {messages.table.columnLabel("name")}{sortArrow("name")}
                       </span>
@@ -2588,7 +2649,6 @@ const Index = () => {
                         key="block"
                         className="inline-flex items-center gap-1 min-w-0 w-full"
                         title={messages.table.columnSortTitle("block")}
-                        {...colDragProps("block")}
                       >
                         <button
                           ref={blockHeaderCollapseBtnRef}
@@ -2613,7 +2673,6 @@ const Index = () => {
                         className="cursor-pointer select-none whitespace-nowrap pl-0.5"
                         onClick={() => toggleSort("options")}
                         title={messages.table.columnSortTitle("options")}
-                        {...colDragProps("options")}
                       >
                         {messages.table.columnLabel("options")}
                         {sortKey === "options" ? sortArrow("options") : <span className="invisible"> ▲</span>}
@@ -2622,16 +2681,25 @@ const Index = () => {
                     required: (
                       <span
                         key="required"
-                        className="cursor-pointer select-none whitespace-nowrap text-right pr-2"
+                        className="block w-full cursor-pointer select-none whitespace-nowrap text-right pr-2"
                         onClick={() => toggleSort("required")}
                         title={messages.table.columnSortTitle("required")}
-                        {...colDragProps("required")}
                       >
                         {messages.table.columnLabel("required")}{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
                       </span>
                     ),
                   };
-                  return headerMap[col];
+                  const dropIndicatorSide = dragColumnIndicator?.target === col ? dragColumnIndicator.side : null;
+                  return (
+                    <div key={col} className="relative min-w-0" {...colDragProps(col)}>
+                      {dropIndicatorSide && (
+                        <div
+                          className={`absolute top-0 bottom-0 z-10 w-0.5 bg-primary pointer-events-none ${dropIndicatorSide === "after" ? "right-0" : "left-0"}`}
+                        />
+                      )}
+                      {headerMap[col]}
+                    </div>
+                  );
                 })}
               </div>
               <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>

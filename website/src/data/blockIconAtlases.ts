@@ -48,7 +48,6 @@ export const BLOCK_ICON_ATLASES = {
       "azalea_leaves": 13,
       "azalea_leaves__lb__waterlogged__eq__true__rb__": 14,
       "bamboo_planks": 15,
-      "bamboo_sapling": 16,
       "barrel": 17,
       "basalt": 18,
       "beacon": 19,

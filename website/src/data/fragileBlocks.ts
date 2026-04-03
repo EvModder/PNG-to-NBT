@@ -56,7 +56,7 @@ const FRAGILE_BLOCKS = new Set([
   "twisting_vines", "weeping_vines",
   "crimson_fungus", "warped_fungus",
   "hanging_roots", "sea_pickle", "nether_wart",
-  "bamboo_sapling", "brown_mushroom", "red_mushroom",
+  "brown_mushroom", "red_mushroom",
   "chorus_plant", "chorus_flower",
 
     // Other blocks with placement conditions
@@ -138,7 +138,6 @@ export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ["fern", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["short_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["tall_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
-  ["bamboo_sapling", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["open_eyeblossom", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["closed_eyeblossom", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   // Intentionally omitted for simplicity, but perfectly valid supports: [sand, red_sand, and terracotta variants].
