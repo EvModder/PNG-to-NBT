@@ -228,6 +228,7 @@ export const messages = {
   },
   table: {
     title: catalog.table.title,
+    titleTooltip: catalog.table.titleTooltip,
     toggleIds: catalog.table.toggleIds,
     toggleNames: catalog.table.toggleNames,
     toggleOptions: catalog.table.toggleOptions,
@@ -236,6 +237,7 @@ export const messages = {
       return getLookupValue(catalog.table.blockDisplayLabels, mode, mode);
     },
     mcUnitsLabel: catalog.table.mcUnitsLabel,
+    mcUnitsTooltip: catalog.table.mcUnitsTooltip,
     columnLabel(column: ColumnId | string): string {
       return getLookupValue(catalog.table.columnLabels, column, column);
     },

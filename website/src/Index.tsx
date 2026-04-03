@@ -123,6 +123,7 @@ function loadCached<T>(key: string, fallback: T): T {
 }
 
 const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
+const COLOR_TABLE_HEADER_GROUP_GAP_PX = 6;
 type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 type ColumnDropSide = "before" | "after";
 type ColumnDragIndicator = { target: ColumnId; side: ColumnDropSide };
@@ -417,12 +418,14 @@ const Index = () => {
   const [blockTextureCollapsedWidthPx, setBlockTextureCollapsedWidthPx] = useState(44);
   const presetToolbarSectionRef = useRef<HTMLElement>(null);
   const fillerToolbarSectionRef = useRef<HTMLElement>(null);
+  const colorTableHeaderRef = useRef<HTMLDivElement>(null);
   const leftColumnRef = useRef<HTMLDivElement>(null);
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const layoutRootRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
   const [presetToolbarMinWidthPx, setPresetToolbarMinWidthPx] = useState(0);
   const [fillerToolbarMinWidthPx, setFillerToolbarMinWidthPx] = useState(0);
+  const [colorTableHeaderMinWidthPx, setColorTableHeaderMinWidthPx] = useState(0);
   const [rightColumnMinWidthPx, setRightColumnMinWidthPx] = useState(320);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
   const [creditsFloatGapPx, setCreditsFloatGapPx] = useState(0);
@@ -1893,13 +1896,23 @@ const Index = () => {
   const colorTableMinWidthPx = useMemo(() => {
     const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
     const blockColWidthPx = textureCollapsed ? blockTextureCollapsedWidthPx : blockColMinWidthPx;
+    const sectionInsetsPx = 8 * 2 + 1 * 2;
     // 6 columns + 5 grid gaps (`gap-1` = 4px).
     const fixedColsPx = 24 + 24 + 135 + 48 + requiredColWidth;
     const gapsPx = 5 * 4;
-    // Section wrapper uses `p-2` (8px each side) and `border` (1px each side).
-    const sectionInsetsPx = 8 * 2 + 1 * 2;
-    return fixedColsPx + blockColWidthPx + gapsPx + sectionInsetsPx;
-  }, [blockColMinWidthPx, blockTextureCollapsedWidthPx, requiredColWidth, blockDisplayMode, blockColExpanded]);
+    const gridMinWidthPx = fixedColsPx + blockColWidthPx + gapsPx + sectionInsetsPx;
+    return Math.max(
+      gridMinWidthPx,
+      colorTableHeaderMinWidthPx + COLOR_TABLE_HEADER_GROUP_GAP_PX + sectionInsetsPx,
+    );
+  }, [
+    blockColMinWidthPx,
+    blockTextureCollapsedWidthPx,
+    requiredColWidth,
+    blockDisplayMode,
+    blockColExpanded,
+    colorTableHeaderMinWidthPx,
+  ]);
 
   const effectiveBlockColWidthPx = useMemo(
     () => (blockDisplayMode === "textures" && !blockColExpanded ? blockTextureCollapsedWidthPx : blockColMinWidthPx),
@@ -1923,10 +1936,13 @@ const Index = () => {
   const measureToolbarMinWidths = useCallback(() => {
     const presetEl = presetToolbarSectionRef.current;
     const fillerEl = fillerToolbarSectionRef.current;
+    const colorTableHeaderEl = colorTableHeaderRef.current;
     const presetMeasured = presetEl ? measureNoWrapSectionWidth(presetEl) : 0;
     const fillerMeasured = fillerEl ? measureNoWrapSectionWidth(fillerEl) : 0;
+    const colorTableHeaderMeasured = colorTableHeaderEl ? measureNoWrapSectionWidth(colorTableHeaderEl) : 0;
     setPresetToolbarMinWidthPx(prev => (Math.abs(prev - presetMeasured) > 1 ? presetMeasured : prev));
     setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerMeasured) > 1 ? fillerMeasured : prev));
+    setColorTableHeaderMinWidthPx(prev => (Math.abs(prev - colorTableHeaderMeasured) > 1 ? colorTableHeaderMeasured : prev));
   }, []);
 
   const recalcCreditsFloatGap = useCallback(() => {
@@ -1979,6 +1995,7 @@ const Index = () => {
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
     if (presetToolbarSectionRef.current) ro?.observe(presetToolbarSectionRef.current);
     if (fillerToolbarSectionRef.current) ro?.observe(fillerToolbarSectionRef.current);
+    if (colorTableHeaderRef.current) ro?.observe(colorTableHeaderRef.current);
     window.addEventListener("resize", scheduleMeasure);
     return () => {
       window.removeEventListener("resize", scheduleMeasure);
@@ -2455,6 +2472,7 @@ const Index = () => {
           onClick={toggleTheme}
           className="p-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
           aria-label={messages.common.toggleThemeAriaLabel}
+          title={messages.common.toggleThemeAriaLabel}
         >
           {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
         </button>
@@ -2545,9 +2563,9 @@ const Index = () => {
           <section
             className={`bg-card border border-border rounded-md p-2 w-full ${isStackedLayout ? "" : "min-w-[var(--color-table-min-width)]"}`}
           >
-            <div className="flex items-center justify-between mb-1">
+            <div ref={colorTableHeaderRef} className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5">
-                <h2 className="text-sm font-semibold text-accent">{messages.table.title}</h2>
+                <h2 className="text-sm font-semibold text-accent cursor-help whitespace-nowrap" title={messages.table.titleTooltip}>{messages.table.title}</h2>
                 <span className="h-3 border-l border-border/70" />
                 <button
                   className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
@@ -2583,7 +2601,10 @@ const Index = () => {
                 </button>
               </div>
               {paletteUsageInfo && imageValid && (
-                <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+                <label
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none whitespace-nowrap"
+                  title={messages.table.mcUnitsTooltip}
+                >
                   <span className="font-semibold text-accent">{messages.table.mcUnitsLabel}</span>
                   <input
                     type="checkbox"
@@ -2595,114 +2616,116 @@ const Index = () => {
               )}
             </div>
             <div key={`${showIds}-${showNames}-${showOptions}-${columnOrder.join(",")}`} className="relative">
-              {hasRequiredCol && usedIndices.length > 0 && visibleColumns.includes("required") && (
+              <div className="relative">
+                {hasRequiredCol && usedIndices.length > 0 && visibleColumns.includes("required") && (
+                  <div
+                    className="absolute inset-0 pointer-events-none grid gap-1"
+                    style={gridColsStyle}
+                  >
+                    {visibleColumns.map(col => (
+                      <div
+                        key={`required-outline-${col}`}
+                        className={col === "required" ? "mx-px border-2 border-primary/60 bg-primary/10 rounded" : ""}
+                      />
+                    ))}
+                  </div>
+                )}
                 <div
-                  className="absolute inset-0 pointer-events-none grid gap-1"
+                  className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
                   style={gridColsStyle}
                 >
-                  {visibleColumns.map(col => (
-                    <div
-                      key={`required-outline-${col}`}
-                      className={col === "required" ? "border-2 border-primary/60 bg-primary/10 rounded" : ""}
-                    />
-                  ))}
-                </div>
-              )}
-              <div
-                className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
-                style={gridColsStyle}
-              >
-                {visibleColumns.map(col => {
-                  const headerMap: Record<ColumnId, React.ReactNode> = {
-                    clr: (
-                      <span
-                        key="clr"
-                        className="cursor-pointer select-none whitespace-nowrap"
-                        onClick={() => toggleSort("color")}
-                        title={messages.table.columnSortTitle("clr")}
-                      >
-                        {messages.table.columnLabel("clr")}{sortArrow("color")}
-                      </span>
-                    ),
-                    id: (
-                      <span
-                        key="id"
-                        className="cursor-pointer select-none whitespace-nowrap pl-0.5"
-                        onClick={() => toggleSort("id")}
-                        title={messages.table.columnSortTitle("id")}
-                      >
-                        {messages.table.columnLabel("id")}{sortArrow("id")}
-                      </span>
-                    ),
-                    name: (
-                      <span
-                        key="name"
-                        className="cursor-pointer select-none"
-                        onClick={() => toggleSort("name")}
-                        title={messages.table.columnSortTitle("name")}
-                      >
-                        {messages.table.columnLabel("name")}{sortArrow("name")}
-                      </span>
-                    ),
-                    block: (
-                      <span
-                        key="block"
-                        className="inline-flex items-center gap-1 min-w-0 w-full"
-                        title={messages.table.columnSortTitle("block")}
-                      >
-                        <button
-                          ref={blockHeaderCollapseBtnRef}
-                          type="button"
-                          className="shrink-0 inline-flex items-center gap-0.5 cursor-pointer select-none whitespace-nowrap text-left"
-                          title={messages.table.blockColumnResizeTitle(blockColExpanded)}
-                          aria-label={messages.table.blockColumnResizeAriaLabel(blockColExpanded)}
-                          onClick={e => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setBlockColExpanded(v => !v);
-                          }}
+                  {visibleColumns.map(col => {
+                    const headerMap: Record<ColumnId, React.ReactNode> = {
+                      clr: (
+                        <span
+                          key="clr"
+                          className="cursor-pointer select-none whitespace-nowrap"
+                          onClick={() => toggleSort("color")}
+                          title={messages.table.columnSortTitle("clr")}
                         >
-                          {blockColExpanded ? <Minus size={10} /> : <Plus size={10} />}
-                          <span>{messages.table.columnLabel("block")}</span>
-                        </button>
-                      </span>
-                    ),
-                    options: (
-                      <span
-                        key="options"
-                        className="cursor-pointer select-none whitespace-nowrap pl-0.5"
-                        onClick={() => toggleSort("options")}
-                        title={messages.table.columnSortTitle("options")}
-                      >
-                        {messages.table.columnLabel("options")}
-                        {sortKey === "options" ? sortArrow("options") : <span className="invisible"> ▲</span>}
-                      </span>
-                    ),
-                    required: (
-                      <span
-                        key="required"
-                        className="block w-full cursor-pointer select-none whitespace-nowrap text-right pr-2"
-                        onClick={() => toggleSort("required")}
-                        title={messages.table.columnSortTitle("required")}
-                      >
-                        {messages.table.columnLabel("required")}{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
-                      </span>
-                    ),
-                  };
-                  const dropIndicatorSide = dragColumnIndicator?.target === col ? dragColumnIndicator.side : null;
-                  return (
-                    <div key={col} className="relative min-w-0" {...colDragProps(col)}>
-                      {dropIndicatorSide && (
-                        <div
-                          className={`absolute top-0 bottom-0 z-10 w-0.5 bg-primary pointer-events-none ${dropIndicatorSide === "after" ? "right-0" : "left-0"}`}
-                        />
-                      )}
-                      {headerMap[col]}
-                    </div>
-                  );
-                })}
+                          {messages.table.columnLabel("clr")}{sortArrow("color")}
+                        </span>
+                      ),
+                      id: (
+                        <span
+                          key="id"
+                          className="cursor-pointer select-none whitespace-nowrap pl-0.5"
+                          onClick={() => toggleSort("id")}
+                          title={messages.table.columnSortTitle("id")}
+                        >
+                          {messages.table.columnLabel("id")}{sortArrow("id")}
+                        </span>
+                      ),
+                      name: (
+                        <span
+                          key="name"
+                          className="cursor-pointer select-none"
+                          onClick={() => toggleSort("name")}
+                          title={messages.table.columnSortTitle("name")}
+                        >
+                          {messages.table.columnLabel("name")}{sortArrow("name")}
+                        </span>
+                      ),
+                      block: (
+                        <span
+                          key="block"
+                          className="inline-flex items-center gap-1 min-w-0 w-full"
+                          title={messages.table.columnSortTitle("block")}
+                        >
+                          <button
+                            ref={blockHeaderCollapseBtnRef}
+                            type="button"
+                            className="shrink-0 inline-flex items-center gap-0.5 cursor-pointer select-none whitespace-nowrap text-left"
+                            title={messages.table.blockColumnResizeTitle(blockColExpanded)}
+                            aria-label={messages.table.blockColumnResizeAriaLabel(blockColExpanded)}
+                            onClick={e => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setBlockColExpanded(v => !v);
+                            }}
+                          >
+                            {blockColExpanded ? <Minus size={10} /> : <Plus size={10} />}
+                            <span>{messages.table.columnLabel("block")}</span>
+                          </button>
+                        </span>
+                      ),
+                      options: (
+                        <span
+                          key="options"
+                          className="cursor-pointer select-none whitespace-nowrap pl-0.5"
+                          onClick={() => toggleSort("options")}
+                          title={messages.table.columnSortTitle("options")}
+                        >
+                          {messages.table.columnLabel("options")}
+                          {sortKey === "options" ? sortArrow("options") : <span className="invisible"> ▲</span>}
+                        </span>
+                      ),
+                      required: (
+                        <span
+                          key="required"
+                          className="block w-full cursor-pointer select-none whitespace-nowrap text-right pr-2"
+                          onClick={() => toggleSort("required")}
+                          title={messages.table.columnSortTitle("required")}
+                        >
+                          {messages.table.columnLabel("required")}{sortKey === "required" ? sortArrow("required") : <span className="invisible"> ▲</span>}
+                        </span>
+                      ),
+                    };
+                    const dropIndicatorSide = dragColumnIndicator?.target === col ? dragColumnIndicator.side : null;
+                    return (
+                      <div key={col} className="relative min-w-0" {...colDragProps(col)}>
+                        {dropIndicatorSide && (
+                          <div
+                            className={`absolute top-0 bottom-0 z-10 w-0.5 bg-primary pointer-events-none ${dropIndicatorSide === "after" ? "right-0" : "left-0"}`}
+                          />
+                        )}
+                        {headerMap[col]}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>
               </div>
-              <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>
 
               {imageValid && unusedIndices.length > 0 && (
                 <div>

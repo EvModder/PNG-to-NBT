@@ -192,6 +192,7 @@ export const enCatalog = {
   },
   table: {
     title: "Color → Block",
+    titleTooltip: "Select which block to use for each color.",
     toggleIds: "IDs",
     toggleNames: "Names",
     toggleOptions: "#Options",
@@ -201,6 +202,7 @@ export const enCatalog = {
       textures: "textures",
     } as const satisfies Record<BlockDisplayMode, string>,
     mcUnitsLabel: "MC units:",
+    mcUnitsTooltip: "Show material counts in terms of shulker boxes and item stacks.",
     columnLabels: {
       clr: "Clr",
       id: "ID",

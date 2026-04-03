@@ -188,6 +188,7 @@ export const esCatalog = {
   },
   table: {
     title: "Color → Bloque",
+    titleTooltip: "Selecciona qué bloque usar para cada color.",
     toggleIds: "IDs",
     toggleNames: "Nombres",
     toggleOptions: "#Opc.",
@@ -197,6 +198,7 @@ export const esCatalog = {
       textures: "texturas",
     } as const satisfies Record<BlockDisplayMode, string>,
     mcUnitsLabel: "Unid. MC:",
+    mcUnitsTooltip: "Muestra los recuentos de materiales en cajas de shulker y montones de objetos.",
     columnLabels: {
       clr: "Clr",
       id: "ID",
