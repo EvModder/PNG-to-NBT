@@ -121,7 +121,7 @@ function buildFullblockPreset(): BlockPreset {
       4: "tnt",
       5: "packed_ice",
       6: "lodestone",
-      7: "oak_leaves",
+      7: "bamboo_block[axis=x]",
       8: "white_glazed_terracotta",
       9: "clay",
       10: "brown_mushroom_block",
