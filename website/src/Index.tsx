@@ -109,7 +109,9 @@ import {
 import { ToolbarPresetSettings } from "@/components/ToolbarPresetSettings";
 import { ToolbarFillerSettings } from "@/components/ToolbarFillerSettings";
 import { PanelCustomColors } from "@/components/PanelCustomColors";
+import { PanelCredits } from "@/components/PanelCredits";
 import { PanelImagePreview } from "@/components/PanelImagePreview";
+import { SecretsSettingsDialog } from "@/components/SecretsSettingsDialog";
 import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 
 function loadCached<T>(key: string, fallback: T): T {
@@ -1114,7 +1116,6 @@ const Index = () => {
   const usedShadesByBase = materialNeedStats?.usedShadesByBase ?? fullImageUsedShadesByBase;
   const formatRequiredCount = (count: number) => (showStacks ? formatStacks(count) : count);
   const colorRequiredMap = materialNeedStats?.baseColorCounts ?? ({} as Record<number, number>);
-  const [rebaneRolePrefix, rebaneRoleSuffix] = messages.credits.rebaneRoleParts();
   const numColorBlockTypesForPart = Object.values(colorRequiredMap).filter(count => count > 0).length;
 
   const builtinPreset = getBuiltinPreset(preset.name);
@@ -2811,173 +2812,37 @@ const Index = () => {
             />
           </div>
 
-          {/* Credits */}
-          <div
-            ref={creditsRef}
-            className={`${isStackedLayout ? "order-4" : ""} text-[11px] text-muted-foreground text-left space-y-0.5 px-1 pt-4`}
-            style={creditsFloatGapPx > 0 ? { transform: `translateY(${creditsFloatGapPx}px)` } : undefined}
-          >
-            <h3 className="text-xs font-semibold text-accent mb-1">{messages.credits.title}</h3>
-            <p>
-              <a
-                href={messages.credits.evModderUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                {messages.credits.evModderName}
-              </a>{" "}
-              — {messages.credits.evModderRole}
-            </p>
-            <p>
-              <a
-                href={messages.credits.rebaneUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                {messages.credits.rebaneName}
-              </a>{" "}
-              — {rebaneRolePrefix}
-              <a
-                href={messages.credits.mapArtCraftUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                {messages.credits.mapArtCraftName}
-              </a>
-              {rebaneRoleSuffix}
-            </p>
-            <p>
-              <a
-                href={messages.credits.gu2t4vUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-foreground"
-              >
-                {messages.credits.gu2t4vName}
-              </a>{" "}
-              — {messages.credits.gu2t4vRole}
-            </p>
-            <p>{messages.credits.gptNote}</p>
-          </div>
+          <PanelCredits
+            creditsRef={creditsRef}
+            isStackedLayout={isStackedLayout}
+            creditsFloatGapPx={creditsFloatGapPx}
+          />
         </div>
       </div>
-      {showSecretsDialog && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-          onClick={() => setShowSecretsDialog(false)}
-        >
-          <div
-            className="w-full max-w-md bg-card border border-border rounded-md p-3 shadow-lg"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-accent">{messages.dialogs.secretSettingsTitle}</h2>
-              <button
-                type="button"
-                className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
-                onClick={() => setShowSecretsDialog(false)}
-              >
-                {messages.common.close}
-              </button>
-            </div>
-            <div className="space-y-2 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showTransparentRow}
-                  onChange={e => setShowTransparentRow(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.showTransparentRow}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showExcludedBlocks}
-                  onChange={e => setShowExcludedBlocks(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.showExcludedBlocks}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={forceZ129}
-                  onChange={e => setForceZ129(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.forceZ129}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={applySupportFloorYs}
-                  onChange={e => setApplySupportFloorYs(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.assumeFloor}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={belowPlatformWater}
-                  onChange={e => setBelowPlatformWater(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.belowPlatformWater}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={skipEmptySuppressSteps}
-                  onChange={e => setSkipEmptySuppressSteps(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.skipEmptySuppressSteps}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={markSuppressLoadSpotsInSchematic}
-                  onChange={e => setMarkSuppressLoadSpotsInSchematic(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.markSuppressLoadSpotsInSchematic}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showAlignmentReminder}
-                  onChange={e => setShowAlignmentReminder(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.showAlignmentReminder}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showNooblineWarnings}
-                  onChange={e => setShowNooblineWarnings(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.showNooblineWarnings}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showVsFillerWarnings}
-                  onChange={e => setShowVsFillerWarnings(e.target.checked)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{messages.dialogs.options.showVsFillerWarnings}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-      )}
+      <SecretsSettingsDialog
+        open={showSecretsDialog}
+        onClose={() => setShowSecretsDialog(false)}
+        showTransparentRow={showTransparentRow}
+        setShowTransparentRow={setShowTransparentRow}
+        showExcludedBlocks={showExcludedBlocks}
+        setShowExcludedBlocks={setShowExcludedBlocks}
+        forceZ129={forceZ129}
+        setForceZ129={setForceZ129}
+        applySupportFloorYs={applySupportFloorYs}
+        setApplySupportFloorYs={setApplySupportFloorYs}
+        belowPlatformWater={belowPlatformWater}
+        setBelowPlatformWater={setBelowPlatformWater}
+        skipEmptySuppressSteps={skipEmptySuppressSteps}
+        setSkipEmptySuppressSteps={setSkipEmptySuppressSteps}
+        markSuppressLoadSpotsInSchematic={markSuppressLoadSpotsInSchematic}
+        setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
+        showAlignmentReminder={showAlignmentReminder}
+        setShowAlignmentReminder={setShowAlignmentReminder}
+        showNooblineWarnings={showNooblineWarnings}
+        setShowNooblineWarnings={setShowNooblineWarnings}
+        showVsFillerWarnings={showVsFillerWarnings}
+        setShowVsFillerWarnings={setShowVsFillerWarnings}
+      />
       {swatchTooltip && (
         <div
           className="fixed z-50 pointer-events-none px-1.5 py-1 rounded border border-border bg-popover text-popover-foreground text-[10px] font-mono whitespace-nowrap"
