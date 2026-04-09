@@ -135,6 +135,29 @@ function buildModeUsesWorldMinYGeometry(buildMode: BuildMode): boolean {
     buildMode !== BuildMode.InclineDown;
 }
 
+function getRequestedStaircaseModes(
+  selectedMode: BuildMode | null,
+  allSameShade: Shade | undefined,
+  hasWater: boolean,
+  hasTransparency: boolean,
+  includeTransparentBlocks: boolean,
+  collapseStaircaseModes: boolean,
+  includeFlatNorthline: boolean,
+): TransparentPlacementBuildMode[] {
+  if ((!hasTransparency || includeTransparentBlocks) && !hasWater &&
+    (allSameShade === Shade.Dark || allSameShade === Shade.Light)) {
+    return [allSameShade === Shade.Dark ? BuildMode.InclineUp : BuildMode.InclineDown];
+  }
+  if (collapseStaircaseModes) return [...DEFAULT_STAIRCASE_BUILD_MODES];
+
+  const requested = new Set<TransparentPlacementBuildMode>();
+  if (includeFlatNorthline) requested.add(BuildMode.StaircaseNorthline);
+  if (selectedMode && isStaircaseBuildMode(selectedMode)) {
+    requested.add(getCanonicalBuildMode(selectedMode) as TransparentPlacementBuildMode);
+  }
+  return [...requested];
+}
+
 function toColumnCoordKey(x: number, z: number): ColumnCoordKey {
   return (x + 1) * COLUMN_COORD_Z_SIZE + (z + COLUMN_COORD_Z_OFFSET);
 }
@@ -2897,6 +2920,8 @@ export function generateShapeMap(
     buildAtWorldMinY?: boolean;
     skipEmptySuppressSteps?: boolean;
     includeTransparentBlocks?: boolean;
+    collapseStaircaseModes?: boolean;
+    includeFlatNorthline?: boolean;
     selectedMode?: BuildMode | null;
     selectedStepDirection: SuppressStepDirection;
   },
@@ -2910,11 +2935,18 @@ export function generateShapeMap(
   const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
   const skipEmptySuppressSteps = options.skipEmptySuppressSteps ?? true;
   const includeTransparentBlocks = options.includeTransparentBlocks ?? false;
-  const staircaseVisibleModes: TransparentPlacementBuildMode[] =
-    (!hasTransparency || includeTransparentBlocks) && !hasWater &&
-    (allSameShade === Shade.Dark || allSameShade === Shade.Light)
-      ? [allSameShade === Shade.Dark ? BuildMode.InclineUp : BuildMode.InclineDown]
-      : [...DEFAULT_STAIRCASE_BUILD_MODES];
+  const collapseStaircaseModes = options.collapseStaircaseModes ?? true;
+  const includeFlatNorthline = options.includeFlatNorthline ?? false;
+  const selectedMode = options.selectedMode ?? null;
+  const staircaseVisibleModes = getRequestedStaircaseModes(
+    selectedMode,
+    allSameShade,
+    hasWater,
+    hasTransparency,
+    includeTransparentBlocks,
+    collapseStaircaseModes,
+    includeFlatNorthline,
+  );
   const suppressVisibleModes: BuildMode[] = hasTwoLayerLateVoidNeed
     ? [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]
     : [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2Layer];
@@ -2943,7 +2975,6 @@ export function generateShapeMap(
     shapes[buildMode] = shape;
   }
 
-  const selectedMode = options.selectedMode ?? null;
   if (selectedMode && suppressVisibleModes.includes(selectedMode)) {
     const { shape, signatureId } = getGeneratedShape(
       colorGrid,

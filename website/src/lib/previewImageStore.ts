@@ -5,32 +5,56 @@
  * Callers:
  * - src/Index.tsx
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PreviewPixelMask, PreviewPixelReplacement } from "./previewImageEdits";
 
 type PreviewImageSessionOptions = {
   imageData: ImageData;
   pixelReplacements?: readonly PreviewPixelReplacement[];
-  xColumnRange?: readonly [number, number];
   visiblePixelMask?: PreviewPixelMask | null;
   onPreviewUrl: (url: string | null) => void;
 };
 
 type UsePreviewImageUrlOptions = {
+  enabled?: boolean;
   imageData: ImageData | null;
   pixelReplacements?: readonly PreviewPixelReplacement[];
-  xColumnRange?: readonly [number, number];
   visiblePixelMask?: PreviewPixelMask | null;
 };
+
+type PreviewImageRequest = {
+  key: string;
+  imageData: ImageData;
+  pixelReplacements?: readonly PreviewPixelReplacement[];
+  visiblePixelMask?: PreviewPixelMask;
+};
+
+const objectIdCache = new WeakMap<object, number>();
+let nextObjectId = 1;
+
+function getObjectId(value: object): number {
+  const cached = objectIdCache.get(value);
+  if (cached !== undefined) return cached;
+  const id = nextObjectId++;
+  objectIdCache.set(value, id);
+  return id;
+}
+
+function getPixelReplacementSignature(
+  pixelReplacements?: readonly PreviewPixelReplacement[],
+): string {
+  if (!pixelReplacements || pixelReplacements.length === 0) return "";
+  return pixelReplacements
+    .map(({ x, z, r, g, b }) => `${x},${z},${r},${g},${b}`)
+    .join(";");
+}
 
 function isPreviewPixelVisible(
   x: number,
   z: number,
   width: number,
-  xColumnRange?: readonly [number, number],
   visiblePixelMask?: PreviewPixelMask | null,
 ): boolean {
-  if (xColumnRange && (x < xColumnRange[0] || x > xColumnRange[1])) return false;
   if (visiblePixelMask && visiblePixelMask[z * width + x] === 0) return false;
   return true;
 }
@@ -38,7 +62,6 @@ function isPreviewPixelVisible(
 function createPreviewCanvas(
   imageData: ImageData,
   pixelReplacements: readonly PreviewPixelReplacement[] = [],
-  xColumnRange?: readonly [number, number],
   visiblePixelMask?: PreviewPixelMask | null,
 ): HTMLCanvasElement | null {
   const canvas = document.createElement("canvas");
@@ -47,17 +70,17 @@ function createPreviewCanvas(
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   const previewImageData = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
-  if (xColumnRange || visiblePixelMask) {
+  if (visiblePixelMask) {
     for (let z = 0; z < previewImageData.height; ++z) {
       for (let x = 0; x < previewImageData.width; ++x) {
-        if (isPreviewPixelVisible(x, z, previewImageData.width, xColumnRange, visiblePixelMask)) continue;
+        if (isPreviewPixelVisible(x, z, previewImageData.width, visiblePixelMask)) continue;
         previewImageData.data[(z * previewImageData.width + x) * 4 + 3] = 0;
       }
     }
   }
   for (const { x, z, r, g, b } of pixelReplacements) {
     if (x < 0 || x >= previewImageData.width || z < 0 || z >= previewImageData.height) continue;
-    if (!isPreviewPixelVisible(x, z, previewImageData.width, xColumnRange, visiblePixelMask)) continue;
+    if (!isPreviewPixelVisible(x, z, previewImageData.width, visiblePixelMask)) continue;
     const offset = (z * previewImageData.width + x) * 4;
     previewImageData.data[offset] = r;
     previewImageData.data[offset + 1] = g;
@@ -69,58 +92,75 @@ function createPreviewCanvas(
 }
 
 function startPreviewImageSession(
-  { imageData, pixelReplacements, xColumnRange, visiblePixelMask, onPreviewUrl }: PreviewImageSessionOptions,
+  { imageData, pixelReplacements, visiblePixelMask, onPreviewUrl }: PreviewImageSessionOptions,
 ): () => void {
-  const canvas = createPreviewCanvas(imageData, pixelReplacements, xColumnRange, visiblePixelMask);
+  const canvas = createPreviewCanvas(imageData, pixelReplacements, visiblePixelMask);
   if (!canvas) {
     onPreviewUrl(null);
     return () => {};
   }
-
+  let objectUrl: string | null = null;
   let cancelled = false;
-  let currentUrl: string | null = null;
-
-  const updatePreviewUrl = (nextUrl: string | null) => {
-    if (cancelled) {
-      if (nextUrl?.startsWith("blob:")) URL.revokeObjectURL(nextUrl);
+  canvas.toBlob(blob => {
+    if (cancelled) return;
+    if (!blob) {
+      onPreviewUrl(null);
       return;
     }
-    if (currentUrl?.startsWith("blob:")) URL.revokeObjectURL(currentUrl);
-    currentUrl = nextUrl;
-    onPreviewUrl(nextUrl);
-  };
-
-  canvas.toBlob(blob => {
-    if (!blob) return;
-    updatePreviewUrl(URL.createObjectURL(blob));
+    objectUrl = URL.createObjectURL(blob);
+    onPreviewUrl(objectUrl);
   }, "image/png");
-
   return () => {
     cancelled = true;
-    if (currentUrl?.startsWith("blob:")) URL.revokeObjectURL(currentUrl);
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
   };
 }
 
 // Callers:
 // - src/Index.tsx
 export function usePreviewImageUrl(
-  { imageData, pixelReplacements, xColumnRange, visiblePixelMask }: UsePreviewImageUrlOptions,
+  { enabled = true, imageData, pixelReplacements, visiblePixelMask }: UsePreviewImageUrlOptions,
 ): string | null {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const activePixelReplacements = pixelReplacements && pixelReplacements.length > 0 ? pixelReplacements : undefined;
+  const activeVisiblePixelMask = visiblePixelMask ?? undefined;
+  const request = useMemo<PreviewImageRequest | null>(
+    () => {
+      if (!enabled || !imageData) return null;
+      return {
+        key: [
+          getObjectId(imageData),
+          getPixelReplacementSignature(activePixelReplacements),
+          activeVisiblePixelMask ? getObjectId(activeVisiblePixelMask) : "",
+        ].join("|"),
+        imageData,
+        pixelReplacements: activePixelReplacements,
+        visiblePixelMask: activeVisiblePixelMask,
+      };
+    },
+    [
+      enabled,
+      imageData,
+      activePixelReplacements,
+      activeVisiblePixelMask,
+    ],
+  );
+  const requestRef = useRef<PreviewImageRequest | null>(request);
+  requestRef.current = request;
 
   useEffect(() => {
-    if (!imageData) {
+    const activeRequest = requestRef.current;
+    if (!activeRequest) {
       setPreviewImageUrl(null);
       return;
     }
     return startPreviewImageSession({
-      imageData,
-      pixelReplacements,
-      xColumnRange,
-      visiblePixelMask,
+      imageData: activeRequest.imageData,
+      pixelReplacements: activeRequest.pixelReplacements,
+      visiblePixelMask: activeRequest.visiblePixelMask,
       onPreviewUrl: setPreviewImageUrl,
     });
-  }, [imageData, pixelReplacements, xColumnRange, visiblePixelMask]);
+  }, [request?.key]);
 
   return previewImageUrl;
 }

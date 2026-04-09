@@ -9,7 +9,7 @@ import {
   DEFAULT_APPLY_SUPPORT_FLOOR_YS,
   DEFAULT_BELOW_PLATFORM_WATER,
   DEFAULT_BUILD_MODE,
-  DEFAULT_CONVERT_UNSUPPORTED,
+  DEFAULT_CONVERT_UNSUPPORTED_COLORS,
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_FLAT_WATER_DROP,
@@ -704,7 +704,7 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     applySupportFloorYs: settings.applySupportFloorYs ?? DEFAULT_APPLY_SUPPORT_FLOOR_YS,
     forceZ129: settings.forceZ129 ?? DEFAULT_FORCE_Z129,
     belowPlatformWater: settings.belowPlatformWater ?? DEFAULT_BELOW_PLATFORM_WATER,
-    convertUnsupported: settings.convertUnsupported ?? DEFAULT_CONVERT_UNSUPPORTED,
+    convertUnsupported: settings.convertUnsupported ?? DEFAULT_CONVERT_UNSUPPORTED_COLORS,
     customColors,
     presetOverrides: presetOverrides as Record<string, string>,
   };

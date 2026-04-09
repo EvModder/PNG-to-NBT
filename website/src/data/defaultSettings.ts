@@ -8,7 +8,7 @@
  * - tests/run.mts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
+import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, SupportMode } from "@/types/ui";
 
 // Callers:
 // - src/Index.tsx
@@ -43,9 +43,10 @@ export const DEFAULT_SHOW_IDS = false;
 export const DEFAULT_SHOW_OPTIONS = false;
 export const DEFAULT_BLOCK_DISPLAY_MODE: BlockDisplayMode = "textures";
 export const DEFAULT_BLOCK_COLUMN_EXPANDED = true;
-export const DEFAULT_SORT_KEY = "default";
-export const DEFAULT_SORT_DIR = "asc";
+export const DEFAULT_SORT_KEY: SortKey = "default";
+export const DEFAULT_SORT_DIR: SortDir = "asc";
 export const DEFAULT_MC_UNITS = false;
+export const DEFAULT_MAX_PER_SPLIT = false;
 export const DEFAULT_COLUMN_ORDER: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 export const DEFAULT_SHOW_TRANSPARENT_ROW = false;
 export const DEFAULT_SHOW_EXCLUDED_BLOCKS = false;
@@ -61,5 +62,6 @@ export const DEFAULT_SHOW_NOOBLINE_WARNINGS = false;
 // Callers:
 // - src/Index.tsx
 // - tests/run.mts
-export const DEFAULT_CONVERT_UNSUPPORTED = true;
-export const AUTO_SWITCH_TO_SUPPRESS_STEPS_IF_CONTAINS_VOID_SHADOWS = false;
+export const DEFAULT_CONVERT_UNSUPPORTED_COLORS = true;
+export const DEFAULT_CROP_IMAGE = true;
+export const DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS = false;

@@ -6,8 +6,11 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
+ * - src/components/PanelCredits.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/PanelImagePreview.tsx
+ * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/components/ToolbarFillerSettings.tsx
  * - src/components/ToolbarPresetSettings.tsx
@@ -94,6 +97,26 @@ function formatBlockIdList(blockIds: readonly string[]): string {
   return `[${formatted[0]}, ${formatted[1]}, ... +${formatted.length - 2}]`;
 }
 
+function formatCropRemovalAxis(
+  countA: number,
+  sideA: string,
+  countB: number,
+  sideB: string,
+  pairedSides: string,
+): string | null {
+  if (countA <= 0 && countB <= 0) return null;
+  if (countA > 0 && countB > 0) {
+    return formatTemplate(catalog.parsing.cropRemovedPairedSides, {
+      count: Math.min(countA, countB),
+      sides: pairedSides,
+    });
+  }
+  return formatTemplate(catalog.parsing.cropRemovedSingleSide, {
+    count: countA > 0 ? countA : countB,
+    side: countA > 0 ? sideA : sideB,
+  });
+}
+
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelImagePreview.tsx
@@ -102,6 +125,8 @@ export enum PaletteNoticeKind {
   SizeError = "size_error",
   UnsupportedPaletteColors = "unsupported_palette_colors",
   ConvertedPaletteColors = "converted_palette_colors",
+  CroppedImage = "cropped_image",
+  CroppedImageRemovedPixels = "cropped_image_removed_pixels",
   ReducedUniqueColors = "reduced_unique_colors",
   LossyFormatHint = "lossy_format_hint",
 }
@@ -115,13 +140,18 @@ export type PaletteNotice =
   | { kind: PaletteNoticeKind.SizeError; width: number; height: number }
   | { kind: PaletteNoticeKind.UnsupportedPaletteColors; colors: number[] }
   | { kind: PaletteNoticeKind.ConvertedPaletteColors; convertedCount: number; totalInputColorCount: number }
+  | { kind: PaletteNoticeKind.CroppedImage; width: number; height: number }
+  | { kind: PaletteNoticeKind.CroppedImageRemovedPixels; left: number; right: number; top: number; bottom: number }
   | { kind: PaletteNoticeKind.ReducedUniqueColors; fewerOutputColorCount: number }
   | { kind: PaletteNoticeKind.LossyFormatHint; formatLabel: string };
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
+// - src/components/PanelCredits.tsx
 // - src/components/PanelCustomColors.tsx
 // - src/components/PanelImagePreview.tsx
+// - src/components/SecretsSettingsDialog.tsx
 // - src/components/ToolbarBuildSettings.tsx
 // - src/components/ToolbarFillerSettings.tsx
 // - src/components/ToolbarPresetSettings.tsx
@@ -238,6 +268,8 @@ export const messages = {
     },
     mcUnitsLabel: catalog.table.mcUnitsLabel,
     mcUnitsTooltip: catalog.table.mcUnitsTooltip,
+    maxPerSplitLabel: catalog.table.maxPerSplitLabel,
+    maxPerSplitTooltip: catalog.table.maxPerSplitTooltip,
     columnLabel(column: ColumnId | string): string {
       return getLookupValue(catalog.table.columnLabels, column, column);
     },
@@ -274,9 +306,29 @@ export const messages = {
     copiedImageUrlAlert: catalog.upload.copiedImageUrlAlert,
     sharedImageName: catalog.upload.sharedImageName,
     removeButton: catalog.upload.removeButton,
+    cancelButton: catalog.upload.cancelButton,
+    parsing: catalog.upload.parsing,
+    parsingProgress(completed: number, total: number): string {
+      return formatTemplate(catalog.upload.parsingProgress, { completed, total });
+    },
+    analyzing: catalog.upload.analyzing,
+    analyzingProgress(completed: number, total: number): string {
+      return formatTemplate(catalog.upload.analyzingProgress, { completed, total });
+    },
+    fillerAnalysis: catalog.upload.fillerAnalysis,
+    fillerAnalysisProgress(completed: number, total: number): string {
+      return formatTemplate(catalog.upload.fillerAnalysisProgress, { completed, total });
+    },
+    materialAnalysis: catalog.upload.materialAnalysis,
+    materialAnalysisProgress(completed: number, total: number): string {
+      return formatTemplate(catalog.upload.materialAnalysisProgress, { completed, total });
+    },
     convertButton(isConverting: boolean, isZip: boolean): string {
       if (isConverting) return catalog.upload.convertButtonConverting;
       return isZip ? catalog.upload.convertButtonZip : catalog.upload.convertButtonNbt;
+    },
+    convertButtonZipCount(count: number): string {
+      return formatTemplate(catalog.upload.convertButtonZipCount, { count });
     },
   },
   preview: {
@@ -394,6 +446,12 @@ export const messages = {
     convertedPaletteColorsNotice(convertedCount: number, totalInputColorCount: number): PaletteNotice {
       return { kind: PaletteNoticeKind.ConvertedPaletteColors, convertedCount, totalInputColorCount };
     },
+    croppedImageNotice(width: number, height: number): PaletteNotice {
+      return { kind: PaletteNoticeKind.CroppedImage, width, height };
+    },
+    croppedImageRemovedPixelsNotice(left: number, right: number, top: number, bottom: number): PaletteNotice {
+      return { kind: PaletteNoticeKind.CroppedImageRemovedPixels, left, right, top, bottom };
+    },
     reducedUniqueColorsNotice(fewerOutputColorCount: number): PaletteNotice {
       return { kind: PaletteNoticeKind.ReducedUniqueColors, fewerOutputColorCount };
     },
@@ -420,7 +478,7 @@ export const messages = {
           });
         }
         case PaletteNoticeKind.ConvertedPaletteColors:
-          return notice.convertedCount === notice.totalInputColorCount
+          return notice.convertedCount === notice.totalInputColorCount || notice.totalInputColorCount >= 1000
             ? formatPlural(catalog.parsing.conversionSummaryAll, notice.convertedCount, {
                 convertedCount: notice.convertedCount,
               })
@@ -428,6 +486,30 @@ export const messages = {
                 convertedCount: notice.convertedCount,
                 totalInputColorCount: notice.totalInputColorCount,
               });
+        case PaletteNoticeKind.CroppedImage:
+          return formatTemplate(catalog.parsing.croppedImage, {
+            width: notice.width,
+            height: notice.height,
+          });
+        case PaletteNoticeKind.CroppedImageRemovedPixels: {
+          const lines = [
+            formatCropRemovalAxis(
+              notice.left,
+              catalog.parsing.cropSideLeft,
+              notice.right,
+              catalog.parsing.cropSideRight,
+              catalog.parsing.cropSidesLeftRight,
+            ),
+            formatCropRemovalAxis(
+              notice.top,
+              catalog.parsing.cropSideTop,
+              notice.bottom,
+              catalog.parsing.cropSideBottom,
+              catalog.parsing.cropSidesTopBottom,
+            ),
+          ].filter((line): line is string => !!line);
+          return lines.join("\n");
+        }
         case PaletteNoticeKind.ReducedUniqueColors:
           return formatPlural(catalog.parsing.reducedUniqueColors, notice.fewerOutputColorCount, {
             count: notice.fewerOutputColorCount,
@@ -442,8 +524,10 @@ export const messages = {
           return notice.tone;
         case PaletteNoticeKind.SizeError:
         case PaletteNoticeKind.UnsupportedPaletteColors:
+        case PaletteNoticeKind.CroppedImageRemovedPixels:
         case PaletteNoticeKind.ReducedUniqueColors:
           return "error";
+        case PaletteNoticeKind.CroppedImage:
         case PaletteNoticeKind.ConvertedPaletteColors:
         case PaletteNoticeKind.LossyFormatHint:
           return "warning";

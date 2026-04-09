@@ -7,17 +7,23 @@
  */
 import type { MutableRefObject, RefObject } from "react";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
-import { BuildMode } from "@/types/conversion";
+import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
 type PreviewWarning = {
   text: string;
   invalid: boolean;
 };
 
+type PaletteNoticeGroup = {
+  notices: PaletteNotice[];
+  containerTone: "info" | "warning" | "error";
+};
+
 type PanelImagePreviewProps = {
   fileRef: RefObject<HTMLInputElement | null>;
   imageData: ImageData | null;
   previewImageUrl: string | null;
+  fallbackPreviewImageUrl: string | null;
   imageName: string;
   handleFile: (file: File) => void;
   canCopyImageShareUrl: boolean;
@@ -41,11 +47,19 @@ type PanelImagePreviewProps = {
   clearImage: () => void;
   handleConvertAndDownload: () => void;
   converting: boolean;
-  buildMode: BuildMode;
+  generateButtonLabel: string;
+  busy: boolean;
+  busyText: string | null;
   showUsageInfo: boolean;
   numUniqueColorShadesForPart: number;
   numColorBlockTypesForPart: number;
   vsFillerSpotCount: number;
+  showRangeControls: boolean;
+  showTileSelection: boolean;
+  tileRows: number;
+  tileCols: number;
+  selectedTileIndices: ReadonlySet<number>;
+  onTileSelection: (tileIndex: number, modifiers: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => void;
   colRangeEnabled: boolean;
   setColRangeEnabled: (value: boolean | ((value: boolean) => boolean)) => void;
   isStepRangeMode: boolean;
@@ -87,12 +101,54 @@ function WarningBanner({
   );
 }
 
+function getPaletteNoticeGroupContainerTone(notices: readonly PaletteNotice[]): "info" | "warning" | "error" {
+  if (notices[0]?.kind === PaletteNoticeKind.CroppedImage) return "warning";
+  return messages.parsing.bannerTone([...notices]);
+}
+
+function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteNoticeGroup[] {
+  const groups: PaletteNoticeGroup[] = [];
+  let currentNonCropGroup: PaletteNotice[] = [];
+
+  const flushCurrentNonCropGroup = () => {
+    if (currentNonCropGroup.length === 0) return;
+    groups.push({
+      notices: currentNonCropGroup,
+      containerTone: getPaletteNoticeGroupContainerTone(currentNonCropGroup),
+    });
+    currentNonCropGroup = [];
+  };
+
+  for (let index = 0; index < paletteNotices.length; ++index) {
+    const notice = paletteNotices[index];
+    if (
+      notice?.kind === PaletteNoticeKind.CroppedImage &&
+      paletteNotices[index + 1]?.kind === PaletteNoticeKind.CroppedImageRemovedPixels
+    ) {
+      flushCurrentNonCropGroup();
+      const notices = [notice, paletteNotices[index + 1]];
+      groups.push({
+        notices,
+        containerTone: getPaletteNoticeGroupContainerTone(notices),
+      });
+      ++index;
+      continue;
+    }
+
+    currentNonCropGroup.push(notice);
+  }
+
+  flushCurrentNonCropGroup();
+  return groups;
+}
+
 // Callers:
 // - src/Index.tsx
 export function PanelImagePreview({
   fileRef,
   imageData,
   previewImageUrl,
+  fallbackPreviewImageUrl,
   imageName,
   handleFile,
   canCopyImageShareUrl,
@@ -116,11 +172,19 @@ export function PanelImagePreview({
   clearImage,
   handleConvertAndDownload,
   converting,
-  buildMode,
+  generateButtonLabel,
+  busy,
+  busyText,
   showUsageInfo,
   numUniqueColorShadesForPart,
   numColorBlockTypesForPart,
   vsFillerSpotCount,
+  showRangeControls,
+  showTileSelection,
+  tileRows,
+  tileCols,
+  selectedTileIndices,
+  onTileSelection,
   colRangeEnabled,
   setColRangeEnabled,
   isStepRangeMode,
@@ -132,20 +196,24 @@ export function PanelImagePreview({
   setColStart,
   setColEnd,
 }: PanelImagePreviewProps) {
+  const previewAspectRatio = imageData ? `${imageData.width} / ${imageData.height}` : "1 / 1";
+  const activePreviewImageUrl = previewImageUrl ?? fallbackPreviewImageUrl;
+  const paletteNoticeGroups = groupPaletteNotices(paletteNotices);
+
   return (
-    <section className="bg-card border border-border rounded-md p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <section className="bg-card border border-border rounded-md px-3 pb-3 pt-3">
+      <div className="mb-1 flex items-center justify-between gap-2">
         {canCopyImageShareUrl ? (
           <button
             type="button"
-            className="bg-transparent p-0 border-0 text-sm font-semibold text-accent text-left hover:underline decoration-dotted underline-offset-2"
+            className={`bg-transparent p-0 border-0 ${PANEL_TITLE_TEXT_CLASS} text-left hover:underline decoration-dotted underline-offset-2`}
             onClick={() => { void copyImageShareUrl(); }}
             title={messages.upload.copyImageUrlTitle}
           >
             {messages.upload.title}
           </button>
         ) : (
-          <h2 className="text-sm font-semibold text-accent">{messages.upload.title}</h2>
+          <h2 className={PANEL_TITLE_TEXT_CLASS}>{messages.upload.title}</h2>
         )}
         {showVsFillersInPreviewToggle && (
           <label
@@ -172,11 +240,23 @@ export function PanelImagePreview({
           if (file) handleFile(file);
         }}
       />
-      {imageName && <p className="text-xs text-primary font-mono truncate mb-1">{imageName}</p>}
+      <p
+        className={`flex items-center text-[11px] leading-none text-primary font-mono truncate mb-1 min-h-[0.75rem] ${
+          imageName ? "" : "invisible"
+        }`}
+        aria-hidden={imageName ? undefined : true}
+      >
+        {imageName || "\u00A0"}
+      </p>
       <div className="w-full max-w-[516px] mx-auto">
         <div
-          className="rounded-md w-full aspect-square cursor-pointer border-2 border-dashed border-border hover:border-primary/50 transition-colors overflow-hidden flex items-center justify-center"
-          onClick={() => fileRef.current?.click()}
+          className={`relative rounded-md w-full border-2 border-dashed border-border transition-colors overflow-hidden flex items-center justify-center ${
+            showTileSelection ? "" : "cursor-pointer hover:border-primary/50"
+          }`}
+          style={{ aspectRatio: previewAspectRatio }}
+          onClick={() => {
+            if (!showTileSelection) fileRef.current?.click();
+          }}
           onDragOver={e => e.preventDefault()}
           onDrop={e => {
             e.preventDefault();
@@ -184,32 +264,84 @@ export function PanelImagePreview({
             if (file) handleFile(file);
           }}
         >
-          {imageData && previewImageUrl ? (
-            <img
-              src={previewImageUrl}
-              alt={imageName || messages.upload.title}
-              className="w-full h-full"
-              style={{ imageRendering: "pixelated" }}
-            />
+          {imageData && activePreviewImageUrl ? (
+            <>
+              <img
+                src={activePreviewImageUrl}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 w-full h-full"
+                style={{ imageRendering: "pixelated" }}
+              />
+              {busy && busyText && (
+                <div className="absolute inset-0 bg-card/35 backdrop-blur-[1px] pointer-events-none flex items-center justify-center">
+                  <div className="inline-flex items-center gap-2 rounded-md border border-border/80 bg-card/90 px-3 py-1.5 text-[11px] text-foreground shadow-sm">
+                    <span className="h-3.5 w-3.5 rounded-full border border-primary/25 border-t-primary animate-spin" />
+                    {busyText}
+                  </div>
+                </div>
+              )}
+              {showTileSelection && tileRows > 0 && tileCols > 0 && (
+                <div
+                  className="absolute inset-0 grid"
+                  style={{
+                    gridTemplateColumns: `repeat(${tileCols}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${tileRows}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {Array.from({ length: tileRows * tileCols }, (_, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      className={`border border-black/15 transition-colors ${
+                        selectedTileIndices.has(index)
+                          ? "bg-primary/10 shadow-[inset_0_0_0_2px_hsl(var(--primary))]"
+                          : "hover:bg-primary/5"
+                      }`}
+                      aria-label={`Tile ${index + 1}`}
+                      aria-pressed={selectedTileIndices.has(index)}
+                      onClick={e => {
+                        e.stopPropagation();
+                        onTileSelection(index, {
+                          shiftKey: e.shiftKey,
+                          metaKey: e.metaKey,
+                          ctrlKey: e.ctrlKey,
+                        });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
-            <p className="text-sm text-muted-foreground text-center px-2">{messages.upload.placeholder}</p>
+            <div className="flex flex-col items-center justify-center gap-2 px-3 text-center">
+              {busy && busyText ? (
+                <>
+                  <span className="h-4 w-4 rounded-full border border-primary/25 border-t-primary animate-spin" />
+                  <p className="text-xs text-muted-foreground">{busyText}</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{messages.upload.placeholder}</p>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      {paletteNotices.length > 0 && (
+      {paletteNoticeGroups.map((group, groupIndex) => (
         <div
+          key={groupIndex}
           className={`mt-2 rounded p-2 ${
-            messages.parsing.bannerTone(paletteNotices) === "error"
+            group.containerTone === "error"
               ? "bg-destructive/25 border-2 border-destructive/50"
-              : messages.parsing.bannerTone(paletteNotices) === "warning"
+              : group.containerTone === "warning"
                 ? "bg-warning/20 border-2 border-warning/40"
                 : "bg-primary/10 border-2 border-primary/30"
           }`}
         >
-          {paletteNotices.map((notice, index) => (
+          {group.notices.map((notice, noticeIndex) => (
             <p
-              key={index}
+              key={`${groupIndex}-${noticeIndex}`}
               className={`text-xs whitespace-pre-wrap ${
                 messages.parsing.noticeTone(notice) === "error"
                   ? notice.kind === PaletteNoticeKind.ReducedUniqueColors
@@ -224,7 +356,7 @@ export function PanelImagePreview({
             </p>
           ))}
         </div>
-      )}
+      ))}
 
       {imageValid && missingBlocks.length > 0 && (
         <WarningBanner
@@ -247,20 +379,15 @@ export function PanelImagePreview({
             className="text-xs px-2 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/20 whitespace-nowrap"
             onClick={clearImage}
           >
-            {messages.common.remove}
+            {busy ? messages.upload.cancelButton : messages.upload.removeButton}
           </button>
           {canGenerate && (
             <button
               onClick={handleConvertAndDownload}
-              disabled={converting}
+              disabled={converting || busy}
               className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {converting
-                ? messages.upload.convertButton(true, false)
-                : messages.upload.convertButton(
-                    false,
-                    buildMode === BuildMode.SuppressSplitRow || buildMode === BuildMode.SuppressSplitChecker,
-                  )}
+              {converting ? messages.upload.convertButton(true, false) : generateButtonLabel}
             </button>
           )}
         </div>
@@ -283,15 +410,17 @@ export function PanelImagePreview({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 mt-1">
-            <button
-              className={`text-[10px] px-1.5 py-0.5 rounded border ${colRangeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setColRangeEnabled(value => !value)}
-            >
-              {messages.preview.rangeButtonLabel(isStepRangeMode)}
-            </button>
-          </div>
-          {colRangeEnabled && (
+          {showRangeControls && (
+            <div className="flex items-center gap-1 mt-1">
+              <button
+                className={`text-[10px] px-1.5 py-0.5 rounded border ${colRangeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setColRangeEnabled(value => !value)}
+              >
+                {messages.preview.rangeButtonLabel(isStepRangeMode)}
+              </button>
+            </div>
+          )}
+          {showRangeControls && colRangeEnabled && (
             <div className="mt-1 border border-border rounded p-1.5 bg-muted/30">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono text-foreground w-6 text-right">{colStart}</span>

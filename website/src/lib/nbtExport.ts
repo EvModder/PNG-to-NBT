@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - convertToNbt()
+ * - convertToNbtEntries()
  *
  * Callers:
  * - src/Index.tsx
@@ -38,6 +39,13 @@ interface ExportOptions {
   buildMode: BuildMode;
   suppressStepDirection: SuppressStepDirection;
   markSuppressLoadSpotsInSchematic?: boolean;
+}
+
+// Callers:
+// - src/Index.tsx
+export interface NbtExportEntry {
+  name: string;
+  data: Uint8Array;
 }
 
 type ExportBoundsOptions = Pick<
@@ -194,33 +202,28 @@ function normalizeAndMeasure(
   };
 }
 
-async function buildSplitZip(
+async function buildSplitEntries(
   parts: BlockEntry[][],
   options: ExportOptions,
   names: [string, string],
-): Promise<{ data: Uint8Array; isZip: boolean }> {
+): Promise<NbtExportEntry[]> {
   const toNbt = async (blocks: BlockEntry[]) => {
     const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
     return gzipCompress(writeStructureNbt(blocks, sizeX, sizeY, sizeZ));
   };
 
   const [firstData, secondData] = await Promise.all([toNbt(parts[0] ?? []), toNbt(parts[1] ?? [])]);
-  const zipEntries = [
+  return [
     { name: `${options.baseName}-${names[0]}.nbt`, data: firstData },
     { name: `${options.baseName}-${names[1]}.nbt`, data: secondData },
   ];
-  return { data: createZip(zipEntries), isZip: true };
 }
 
-// Callers:
-// - src/Index.tsx
-export async function convertToNbt(
+async function buildSingleEntry(
   shape: GeneratedShape,
+  parts: BlockEntry[][],
   options: ExportOptions,
-): Promise<{ data: Uint8Array; isZip: boolean }> {
-  const parts = materializeShapeParts(shape, options);
-  if (shape.splitExportNames) return buildSplitZip(parts, options, shape.splitExportNames);
-
+): Promise<NbtExportEntry> {
   const blocks = parts.flat();
   for (const marker of buildSuppressLoadSpotMarkers(
     shape,
@@ -231,5 +234,30 @@ export async function convertToNbt(
     blocks.push(marker);
   }
   const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
-  return { data: await gzipCompress(writeStructureNbt(blocks, sizeX, sizeY, sizeZ)), isZip: false };
+  return {
+    name: `${options.baseName}.nbt`,
+    data: await gzipCompress(writeStructureNbt(blocks, sizeX, sizeY, sizeZ)),
+  };
+}
+
+// Callers:
+// - src/Index.tsx
+export async function convertToNbtEntries(
+  shape: GeneratedShape,
+  options: ExportOptions,
+): Promise<NbtExportEntry[]> {
+  const parts = materializeShapeParts(shape, options);
+  if (shape.splitExportNames) return buildSplitEntries(parts, options, shape.splitExportNames);
+  return [await buildSingleEntry(shape, parts, options)];
+}
+
+// Callers:
+// - src/Index.tsx
+export async function convertToNbt(
+  shape: GeneratedShape,
+  options: ExportOptions,
+): Promise<{ data: Uint8Array; isZip: boolean }> {
+  const entries = await convertToNbtEntries(shape, options);
+  if (entries.length === 1) return { data: entries[0].data, isZip: false };
+  return { data: createZip(entries), isZip: true };
 }
