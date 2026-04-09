@@ -10,6 +10,7 @@ import { messages } from "@/lib/messages";
 import { type BlockPreset } from "@/data/presets";
 import { SupportMode } from "@/types/ui";
 import { ToolbarBuildSettings, type ToolbarBuildSettingsProps } from "@/components/ToolbarBuildSettings";
+import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
 
 type ToolbarPresetSettingsProps = {
   toolbarRef: RefObject<HTMLElement | null>;
@@ -69,12 +70,12 @@ export function ToolbarPresetSettings({
   const canDeletePreset = activeIdx >= builtInPresetCount && presets.length > builtInPresetCount;
 
   return (
-    <section ref={toolbarRef} className="bg-card border border-border rounded-md p-1.5">
+    <section ref={toolbarRef} className="bg-card border border-border rounded-md py-1.5 pr-1.5 pl-2">
       <div
         className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
       >
         <div className="inline-flex items-center gap-1.5 shrink-0">
-          <span className="text-xs font-semibold text-accent">{messages.presets.label}</span>
+          <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>{messages.presets.label}</span>
           <div className="inline-flex items-center gap-1">
             <select
               className="bg-input border border-border rounded px-2 h-6 text-foreground text-xs"
@@ -133,7 +134,7 @@ export function ToolbarPresetSettings({
           <>
             <span className="h-4 border-l border-border/70" />
             <div className="inline-flex items-center gap-1 shrink-0">
-              <span className="text-xs font-semibold text-accent whitespace-nowrap">{messages.supportMode.label}</span>
+              <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>{messages.supportMode.label}</span>
               <select
                 className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs cursor-help"
                 value={supportMode}

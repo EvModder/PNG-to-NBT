@@ -16,6 +16,7 @@ import {
   cycleSuppressStepDirection,
   getSuppressStepDirectionRotationDegrees,
 } from "@/utils/conversion";
+import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
 
 type WaterDropShade = Shade.Dark | Shade.Flat | Shade.Light;
 
@@ -139,7 +140,7 @@ export function ToolbarBuildSettings({
               >
                 <span
                   aria-hidden="true"
-                  className="text-xs font-semibold text-accent whitespace-nowrap inline-flex items-center gap-0.5"
+                  className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} inline-flex items-center gap-0.5`}
                 >
                   <Droplets className="h-3 w-3" />
                   <span>{shade}</span>
@@ -169,7 +170,7 @@ export function ToolbarBuildSettings({
       node: (
         <>
           <span
-            className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+            className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} cursor-help`}
             title={messages.buildMode.layerGapTooltip}
           >
             {messages.buildMode.layerGapLabel}
@@ -193,7 +194,7 @@ export function ToolbarBuildSettings({
       key: "mix-steps",
       node: (
         <label
-          className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
+          className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
           title={messages.buildMode.mixStepsTooltip}
         >
           <span title={messages.buildMode.mixStepsTooltip}>{messages.buildMode.mixStepsLabel}</span>
@@ -213,7 +214,7 @@ export function ToolbarBuildSettings({
     groups.push({
       key: "palette-seed",
       node: (
-        <label className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer">
+        <label className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}>
           <span>{messages.buildMode.paletteSeedLabel}</span>
           <input
             type="checkbox"
@@ -231,7 +232,7 @@ export function ToolbarBuildSettings({
       key: "build-at-world-min-y",
       node: (
         <label
-          className="text-xs font-semibold text-accent whitespace-nowrap flex items-center gap-1 cursor-pointer"
+          className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
           title={messages.buildMode.buildAtWorldMinYTooltip}
         >
           <span>{messages.buildMode.buildAtWorldMinYLabel}</span>
@@ -268,7 +269,7 @@ export function ToolbarBuildSettings({
               <span className="h-4 border-l border-border/70" />
             </>
           )}
-          <span className="text-xs font-semibold text-accent whitespace-nowrap">
+          <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>
             {messages.buildMode.label}
           </span>
           <select

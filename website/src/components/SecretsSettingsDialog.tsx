@@ -7,6 +7,7 @@
  */
 import type { Dispatch, SetStateAction } from "react";
 import { messages } from "@/lib/messages";
+import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
 type SecretsSettingsDialogProps = {
   open: boolean;
@@ -91,7 +92,7 @@ export function SecretsSettingsDialog({
         onClick={event => event.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-accent">{messages.dialogs.secretSettingsTitle}</h2>
+          <h2 className={PANEL_TITLE_TEXT_CLASS}>{messages.dialogs.secretSettingsTitle}</h2>
           <button
             type="button"
             className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"

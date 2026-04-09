@@ -5,7 +5,7 @@
  * - renderBlockIconAtlasEntryToCanvas()
  *
  * Callers:
- * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
  * - src/components/PackedBlockIcon.tsx
  */
 import { BLOCK_ICON_ATLASES, type BlockIconAtlasName } from "@/data/blockIconAtlases";
@@ -22,7 +22,7 @@ interface BlockIconAtlasEntry {
 }
 
 // Callers:
-// - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
 export function toBlockIconKey(raw: string): string {
   return stripDefaultBlockNamespace(raw)
     .replace(/__/g, "__us__")

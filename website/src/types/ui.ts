@@ -3,11 +3,14 @@
  * - SupportMode
  * - ColumnId
  * - BlockDisplayMode
+ * - SortKey
+ * - SortDir
  *
  * Callers:
  * - src/data/i18n/*
  * - src/data/defaultSettings.ts
  * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
  * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
@@ -36,6 +39,7 @@ export enum SupportMode {
 // - src/data/i18n/*
 // - src/data/defaultSettings.ts
 // - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
 // - src/lib/messages.ts
 export type ColumnId = "clr" | "id" | "name" | "block" | "options" | "required";
 
@@ -43,5 +47,18 @@ export type ColumnId = "clr" | "id" | "name" | "block" | "options" | "required";
 // - src/data/i18n/*
 // - src/data/defaultSettings.ts
 // - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
 // - src/lib/messages.ts
 export type BlockDisplayMode = "names" | "textures";
+
+// Callers:
+// - src/data/defaultSettings.ts
+// - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
+export type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
+
+// Callers:
+// - src/data/defaultSettings.ts
+// - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
+export type SortDir = "asc" | "desc";

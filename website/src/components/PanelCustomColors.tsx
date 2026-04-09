@@ -9,6 +9,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { BASE_COLORS } from "@/data/mapColors";
 import { messages } from "@/lib/messages";
 import type { ColorRgbCustom } from "@/types/color";
+import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
 type NewCustomColorDraft = {
   r: string;
@@ -40,9 +41,9 @@ export function PanelCustomColors({
 }: PanelCustomColorsProps) {
   return (
     <section className="bg-card border border-border rounded-md p-2">
-      <div className="flex items-center gap-1 mb-1">
+      <div className="flex items-center gap-1 mb-2">
         <h2
-          className="text-sm font-semibold text-accent cursor-help"
+          className={`${PANEL_TITLE_TEXT_CLASS} cursor-help`}
           title={messages.customColors.tooltip}
           aria-label={messages.customColors.ariaLabel}
         >

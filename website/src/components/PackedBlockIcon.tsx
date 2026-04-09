@@ -3,9 +3,9 @@
  * - PackedBlockIcon()
  *
  * Callers:
- * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getBlockIconAtlasEntry, renderBlockIconAtlasEntryToCanvas } from "@/lib/blockIconAtlas";
 import type { BlockIconAtlasName } from "@/data/blockIconAtlases";
 
@@ -18,7 +18,7 @@ type PackedBlockIconProps = {
 };
 
 // Callers:
-// - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
 export function PackedBlockIcon({
   atlasKey,
   atlasName,
@@ -26,7 +26,10 @@ export function PackedBlockIcon({
   alt,
   className,
 }: PackedBlockIconProps) {
-  const atlasEntry = getBlockIconAtlasEntry(atlasName, atlasKey);
+  const atlasEntry = useMemo(
+    () => getBlockIconAtlasEntry(atlasName, atlasKey),
+    [atlasName, atlasKey],
+  );
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 

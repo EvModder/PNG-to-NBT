@@ -5,7 +5,7 @@
  * Callers:
  * - src/Index.tsx
  */
-import { Fragment, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type MutableRefObject, type ReactNode } from "react";
 import {
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
@@ -14,17 +14,18 @@ import {
   DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
 } from "@/data/defaultSettings";
 import { messages } from "@/lib/messages";
+import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
 
 type FillerFieldProps = {
   label: string;
   tooltip: string;
   value: string;
   setValue: (value: string) => void;
+  onCommit?: (value: string) => void;
   placeholder: string;
   showRequiredBadge: boolean;
   requiredTooltip: string;
   requiredCountLabel: ReactNode;
-  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 };
 
 type ToolbarFillerSettingsProps = {
@@ -66,16 +67,27 @@ function FillerField({
   tooltip,
   value,
   setValue,
+  onCommit,
   placeholder,
   showRequiredBadge,
   requiredTooltip,
   requiredCountLabel,
-  onKeyDown,
 }: FillerFieldProps) {
+  const [draftValue, setDraftValue] = useState(value);
+
+  useEffect(() => {
+    setDraftValue(value);
+  }, [value]);
+
+  const commitValue = (nextValue: string) => {
+    if (nextValue !== value) setValue(nextValue);
+    onCommit?.(nextValue);
+  };
+
   return (
     <div className="inline-flex items-center gap-1 shrink-0">
       <span
-        className="text-xs font-semibold text-accent whitespace-nowrap cursor-help"
+        className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} cursor-help`}
         title={tooltip}
       >
         {label}
@@ -83,9 +95,20 @@ function FillerField({
       <div className="inline-flex items-center gap-0 shrink-0">
         <input
           type="text"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={onKeyDown}
+          value={draftValue}
+          onChange={e => setDraftValue(e.target.value)}
+          onBlur={() => commitValue(draftValue)}
+          onKeyDown={e => {
+            if (e.key === "Enter") {
+              commitValue(draftValue);
+              e.currentTarget.blur();
+              return;
+            }
+            if (e.key === "Escape") {
+              setDraftValue(value);
+              e.currentTarget.blur();
+            }
+          }}
           placeholder={placeholder}
           title={tooltip}
           className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
@@ -156,13 +179,11 @@ export function ToolbarFillerSettings({
           tooltip={messages.fillers.supportTooltip}
           value={supportFillerBlock}
           setValue={setSupportFillerBlock}
+          onCommit={commitSupportFillerBlock}
           placeholder={DEFAULT_SUPPORT_FILLER_BLOCK}
           showRequiredBadge={hasImageData && !supportFillerDisabled && supportFillerRequiredCount > 0}
           requiredTooltip={messages.fillers.supportRequiredTooltip}
           requiredCountLabel={formatRequiredCount(supportFillerRequiredCount)}
-          onKeyDown={e => {
-            if (e.key === "Enter") commitSupportFillerBlock(e.currentTarget.value);
-          }}
         />
       ),
     });
@@ -245,7 +266,7 @@ export function ToolbarFillerSettings({
   return (
     <section
       ref={toolbarRef}
-      className={`bg-card border border-border rounded-md p-1.5 flex items-center gap-1.5 ${
+      className={`bg-card border border-border rounded-md py-1.5 pr-1.5 pl-2 flex items-center gap-1.5 ${
         isStackedLayout ? "flex-wrap" : "flex-nowrap"
       }`}
     >
