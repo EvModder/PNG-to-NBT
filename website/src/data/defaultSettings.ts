@@ -45,8 +45,8 @@ export const DEFAULT_BLOCK_DISPLAY_MODE: BlockDisplayMode = "textures";
 export const DEFAULT_BLOCK_COLUMN_EXPANDED = true;
 export const DEFAULT_SORT_KEY: SortKey = "default";
 export const DEFAULT_SORT_DIR: SortDir = "asc";
-export const DEFAULT_MC_UNITS = false;
-export const DEFAULT_MAX_PER_SPLIT = false;
+export const DEFAULT_MC_UNITS = true;
+export const DEFAULT_MAX_PER_SPLIT = true;
 export const DEFAULT_COLUMN_ORDER: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 export const DEFAULT_SHOW_TRANSPARENT_ROW = false;
 export const DEFAULT_SHOW_EXCLUDED_BLOCKS = false;
@@ -57,7 +57,7 @@ export const DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS = true;
 export const DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC = false;
 export const DEFAULT_SHOW_VS_FILLER_WARNINGS = true;
 export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
-export const DEFAULT_SHOW_NOOBLINE_WARNINGS = false;
+export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;
 
 // Callers:
 // - src/Index.tsx
