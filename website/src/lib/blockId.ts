@@ -9,6 +9,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
  * - src/lib/blockIconAtlas.ts
  * - src/lib/fillerRules.ts
  * - src/lib/nbtExport.ts
@@ -25,13 +26,13 @@ const DEFAULT_NAMESPACE = "minecraft:";
 
 // Callers:
 // - src/lib/blockIconAtlas.ts
-// - src/lib/blockId.ts
 export function stripDefaultBlockNamespace(raw: string): string {
   return raw.trim().replace(/^minecraft:/i, "");
 }
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeModel.ts

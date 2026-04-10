@@ -42,9 +42,21 @@ type ColumnDropSide = "before" | "after";
 type ColumnDragIndicator = { target: ColumnId; side: ColumnDropSide };
 type SwatchTooltip = { text: string; x: number; y: number };
 
+const BELOW_PLATFORM_WATER_BLOCK_OPTIONS = [
+  "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]",
+  "iron_bars[east=true,north=true,south=true,west=true,waterlogged=true]",
+] as const;
+
+function getConditionalBaseBlocks(baseIndex: number, belowPlatformWater: boolean): readonly string[] {
+  return baseIndex === WATER_BASE_INDEX && belowPlatformWater
+    ? BELOW_PLATFORM_WATER_BLOCK_OPTIONS
+    : [];
+}
+
 type PanelColorBlockTableProps = {
   isStackedLayout: boolean;
   imageValid: boolean;
+  belowPlatformWater: boolean;
   hasRequiredCol: boolean;
   showUsageInfo: boolean;
   showIds: boolean;
@@ -129,6 +141,7 @@ function measureNoWrapSectionWidth(el: HTMLElement): number {
 export function PanelColorBlockTable({
   isStackedLayout,
   imageValid,
+  belowPlatformWater,
   hasRequiredCol,
   showUsageInfo,
   showIds,
@@ -209,13 +222,14 @@ export function PanelColorBlockTable({
       const excluded = showExcludedBlocks ? EXCLUDED_BLOCKS[idx] ?? [] : [];
       const extra = customBlocksByBase[idx] || [];
       for (const block of BASE_COLORS[idx].blocks) if (block.length > longest.length) longest = block;
+      for (const block of getConditionalBaseBlocks(idx, belowPlatformWater)) if (block.length > longest.length) longest = block;
       for (const block of excluded) if (block.length > longest.length) longest = block;
       for (const block of extra) if (block.length > longest.length) longest = block;
       const selected = selectedBlocks[idx] || "";
       if (selected.length > longest.length) longest = selected;
     }
     return longest;
-  }, [customBlocksByBase, selectedBlocks, showExcludedBlocks]);
+  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks]);
 
   const sortedIndices = useMemo(() => {
     const base = showTransparentRow ? [TRANSPARENCY_BASE_INDEX, ...DEFAULT_COLOR_ROW_ORDER] : [...DEFAULT_COLOR_ROW_ORDER];
@@ -404,9 +418,16 @@ export function PanelColorBlockTable({
       ...BASE_COLORS[idx].blocks,
       ...excluded.filter(block => !BASE_COLORS[idx].blocks.includes(block)),
     ];
-    const withCustom = [...withExcluded, ...extra.filter(block => !withExcluded.includes(block))];
+    const withBelowPlatformWater = [
+      ...withExcluded,
+      ...getConditionalBaseBlocks(idx, belowPlatformWater).filter(block => !withExcluded.includes(block)),
+    ];
+    const withCustom = [
+      ...withBelowPlatformWater,
+      ...extra.filter(block => !withBelowPlatformWater.includes(block)),
+    ];
     return selected && !withCustom.includes(selected) ? [...withCustom, selected] : withCustom;
-  }, [customBlocksByBase, selectedBlocks, showExcludedBlocks]);
+  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks]);
 
   const getColorSwatchShades = useCallback((idx: number): Shade[] => {
     if (!imageValid) return DEFAULT_SWATCH_SHADES;

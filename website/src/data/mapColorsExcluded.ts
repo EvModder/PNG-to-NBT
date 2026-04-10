@@ -3,7 +3,8 @@
  * - EXCLUDED_BLOCKS
  *
  * Callers:
- * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
+ * - src/lib/previewImageEdits.ts
  */
 import { BASE_COLORS } from "./mapColors";
 
@@ -264,5 +265,6 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
 };
 
 // Callers:
-// - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
+// - src/lib/previewImageEdits.ts
 export const EXCLUDED_BLOCKS: string[][] = BASE_COLORS.map((_, idx) => EXCLUDED_BY_ID[idx] ?? []);

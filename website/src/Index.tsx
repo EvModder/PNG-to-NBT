@@ -2886,6 +2886,7 @@ const Index = () => {
           <PanelColorBlockTable
             isStackedLayout={isStackedLayout}
             imageValid={imageValid}
+            belowPlatformWater={belowPlatformWater}
             hasRequiredCol={hasRequiredCol}
             showUsageInfo={!!paletteUsageInfo && imageValid}
             showIds={showIds}
