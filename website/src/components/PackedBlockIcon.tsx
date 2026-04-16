@@ -6,13 +6,13 @@
  * - src/components/PanelColorBlockTable.tsx
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { messages } from "@/lib/messages";
 import { getBlockIconAtlasEntry, renderBlockIconAtlasEntryToCanvas } from "@/lib/blockIconAtlas";
 import type { BlockIconAtlasName } from "@/data/blockIconAtlases";
 
 type PackedBlockIconProps = {
   atlasKey: string;
   atlasName: BlockIconAtlasName;
-  fallbackSrc: string;
   alt: string;
   className?: string;
 };
@@ -22,7 +22,6 @@ type PackedBlockIconProps = {
 export function PackedBlockIcon({
   atlasKey,
   atlasName,
-  fallbackSrc,
   alt,
   className,
 }: PackedBlockIconProps) {
@@ -52,13 +51,13 @@ export function PackedBlockIcon({
 
   if (!atlasEntry || loadFailed) {
     return (
-      <img
-        src={fallbackSrc}
-        alt={alt}
-        className={className}
-        decoding="async"
-        style={{ imageRendering: "pixelated" }}
-      />
+      <span
+        className={`inline-flex items-center justify-center text-[9px] text-muted-foreground ${className ?? ""}`}
+        role="img"
+        aria-label={alt}
+      >
+        {messages.common.missingTextureSymbol}
+      </span>
     );
   }
 

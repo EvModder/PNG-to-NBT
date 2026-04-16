@@ -24,7 +24,7 @@ import { STORAGE_KEYS } from "@/data/storageKeys";
 // - tests/run.mts
 export interface BlockPreset {
   name: string;
-  blocks: Record<number, string>;
+  selectedBlocks: Record<number, string>;
 }
 
 // Callers:
@@ -34,7 +34,7 @@ export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear"] as c
 function buildPistonClearPreset(): BlockPreset {
   return {
     name: "PistonClear",
-    blocks: {
+    selectedBlocks: {
       0: "",
       1: "",
       2: "birch_pressure_plate",
@@ -102,18 +102,21 @@ function buildPistonClearPreset(): BlockPreset {
 }
 
 function buildCarpetsPreset(): BlockPreset {
-  const blocks: Record<number, string> = {};
-  for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const carpet = BASE_COLORS[i].blocks.find(b => b.endsWith("_carpet"));
-    blocks[i] = carpet ?? "";
-  }
-  return { name: "Carpets", blocks };
+  return {
+    name: "Carpets",
+    selectedBlocks: Object.fromEntries(
+      BASE_COLORS.map((color, index) => [
+        index,
+        color.blocks.find(block => block.endsWith("_carpet")) ?? "",
+      ]),
+    ),
+  };
 }
 
 function buildFullblockPreset(): BlockPreset {
   return {
     name: "Fullblock",
-    blocks: {
+    selectedBlocks: {
       0: "",
       1: "slime_block",
       2: "sandstone",
@@ -192,12 +195,7 @@ export function arePresetBlocksEqual(
   left: Record<number, string>,
   right: Record<number, string>,
 ): boolean {
-  for (let baseIndex = 0; baseIndex < BASE_COLORS.length; ++baseIndex) {
-    const leftBlock = left[baseIndex] ?? "";
-    const rightBlock = right[baseIndex] ?? "";
-    if (leftBlock !== rightBlock) return false;
-  }
-  return true;
+  return BASE_COLORS.every((_, baseIndex) => (left[baseIndex] ?? "") === (right[baseIndex] ?? ""));
 }
 
 // Callers:
@@ -209,12 +207,11 @@ export const getBuiltinPreset = (name: string): BlockPreset | null => BUILTIN_BU
 export const isAutoCustomPresetName = (name: string): boolean => /^Custom(?: \d+)?$/.test(name);
 // Callers:
 // - src/Index.tsx
-export function findMatchingBuiltinPresetName(blocks: Record<number, string>): string | null {
-  for (const name of BUILTIN_PRESET_NAMES) {
+export function findMatchingBuiltinPresetName(selectedBlocks: Record<number, string>): string | null {
+  return BUILTIN_PRESET_NAMES.find(name => {
     const builtin = BUILTIN_BUILDERS[name]();
-    if (arePresetBlocksEqual(blocks, builtin.blocks)) return name;
-  }
-  return null;
+    return arePresetBlocksEqual(selectedBlocks, builtin.selectedBlocks);
+  }) ?? null;
 }
 
 // Callers:
@@ -224,10 +221,15 @@ export function loadPresets(): BlockPreset[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.presets);
     if (raw) {
-      const parsed: BlockPreset[] = JSON.parse(raw);
+      const parsed: Array<{ name: string; selectedBlocks?: Record<number, string>; blocks?: Record<number, string> }> = JSON.parse(raw);
       return [
         ...builtins,
-        ...parsed.filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number])),
+        ...parsed
+          .filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number]))
+          .map(p => ({
+            name: p.name,
+            selectedBlocks: p.selectedBlocks ?? p.blocks ?? {},
+          })),
       ];
     }
   } catch {

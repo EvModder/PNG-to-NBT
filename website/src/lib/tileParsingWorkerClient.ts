@@ -16,7 +16,7 @@ import type {
   TileParsingWorkerTile,
   TileParsingWorkerTileResult,
 } from "@/lib/tileParsingWorkerTypes";
-import type { ColorRgbCustom } from "@/types/color";
+import type { ColorRgb } from "@/types/color";
 import { MAP_SIZE } from "@/utils/color";
 
 type WorkerSlot = {
@@ -206,7 +206,7 @@ function buildTileBatches(tileRows: number, tileCols: number, batchCount: number
 // - src/lib/colorGridParsing.ts
 export async function parseColorGridTilesInWorkers(
   imageData: ImageData,
-  customColors: ColorRgbCustom[],
+  customColors: ColorRgb[],
   convertUnsupported: boolean,
   tileRows: number,
   tileCols: number,

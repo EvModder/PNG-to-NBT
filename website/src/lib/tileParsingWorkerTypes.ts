@@ -14,7 +14,7 @@
  */
 import type { PaletteNotice } from "@/lib/messages";
 import type { ColorGridStats } from "@/lib/colorGridAnalysis";
-import type { ColorGrid, ColorRgbCustom } from "@/types/color";
+import type { ColorGrid, ColorRgb } from "@/types/color";
 
 // Callers:
 // - src/lib/tileParsing.worker.ts
@@ -57,7 +57,7 @@ export type TileParsingWorkerInput = {
   imageData: ImageData;
   originX: number;
   originZ: number;
-  customColors: ColorRgbCustom[];
+  customColors: ColorRgb[];
   convertUnsupported: boolean;
   tiles: TileParsingWorkerTile[];
 };

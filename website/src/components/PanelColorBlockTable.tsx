@@ -16,15 +16,29 @@ import {
   type SetStateAction,
 } from "react";
 import { Glasses, Minus, Plus } from "lucide-react";
-import { BLOCK_ICON_ATLASES } from "@/data/blockIconAtlases";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { BASE_COLORS, Shade, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
-import { toBlockIconKey } from "@/lib/blockIconAtlas";
+import { getBlockIconAsset } from "@/lib/blockIconAtlas";
 import { normalizeBlockId } from "@/lib/blockId";
 import { messages } from "@/lib/messages";
 import type { SortDir, SortKey, BlockDisplayMode, ColumnId } from "@/types/ui";
 import { getHue, getShadedRgb } from "@/utils/color";
+import {
+  SWATCH_TOOLTIP_OFFSET_PX,
+  formatSwatchHex,
+  getMultiShadeSwatchStyle,
+  getOrderedSwatchShades,
+  getShadeAtPointer,
+} from "@/utils/colorSwatch";
+import {
+  APPROX_TABLE_MONO_CHAR_WIDTH_PX,
+  COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX,
+  COLOR_TABLE_GRID_GAP_PX,
+  COLOR_TABLE_SECTION_HORIZONTAL_INSETS_PX,
+  INITIAL_BLOCK_SELECT_HORIZONTAL_INSETS_PX,
+  MIN_REQUIRED_COLUMN_WIDTH_PX,
+} from "@/utils/colorTableLayout";
 import { formatStacks } from "@/utils/minecraft";
 import {
   MUTED_INLINE_TOGGLE_CONTROL_CLASS,
@@ -32,10 +46,7 @@ import {
 } from "@/utils/uiTypography";
 import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 
-const KNOWN_PRIMARY_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.primary.entries));
-const KNOWN_UNUSED_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.unused.entries));
 const COLOR_TABLE_HEADER_GROUP_GAP_PX = 6;
-const DEFAULT_SWATCH_SHADES: Shade[] = [Shade.Light, Shade.Flat, Shade.Dark];
 
 type ColumnDropSide = "before" | "after";
 type ColumnDragIndicator = { target: ColumnId; side: ColumnDropSide };
@@ -188,19 +199,19 @@ export function PanelColorBlockTable({
   const blockHeaderCollapseBtnRef = useRef<HTMLButtonElement | null>(null);
   const colorTableHeaderRef = useRef<HTMLDivElement>(null);
   const [blockMeasureFont, setBlockMeasureFont] = useState("11px monospace");
-  const [blockMeasureInsetsPx, setBlockMeasureInsetsPx] = useState(10);
+  const [blockMeasureInsetsPx, setBlockMeasureInsetsPx] = useState(INITIAL_BLOCK_SELECT_HORIZONTAL_INSETS_PX);
   const [blockTextureCollapsedWidthPx, setBlockTextureCollapsedWidthPx] = useState(44);
   const [colorTableHeaderMinWidthPx, setColorTableHeaderMinWidthPx] = useState(0);
 
   const requiredColWidth = useMemo(() => {
-    if (!hasRequiredCol) return 70;
+    if (!hasRequiredCol) return MIN_REQUIRED_COLUMN_WIDTH_PX;
     const maxLen = Math.max(
       0,
       ...Object.values(colorRequiredMap)
         .filter(count => count > 0)
         .map(count => (showStacks ? formatStacks(count) : String(count)).length),
     );
-    return Math.max(70, maxLen * 6 + 16);
+    return Math.max(MIN_REQUIRED_COLUMN_WIDTH_PX, maxLen * 6 + 16);
   }, [colorRequiredMap, hasRequiredCol, showStacks]);
 
   const visibleColumns = useMemo(
@@ -272,7 +283,7 @@ export function PanelColorBlockTable({
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (ctx) ctx.font = blockMeasureFont;
-    const textWidth = ctx ? ctx.measureText(longestBlockName).width : longestBlockName.length * 6.15;
+    const textWidth = ctx ? ctx.measureText(longestBlockName).width : longestBlockName.length * APPROX_TABLE_MONO_CHAR_WIDTH_PX;
     return Math.ceil(textWidth + Math.max(0, blockMeasureInsetsPx));
   }, [blockMeasureFont, blockMeasureInsetsPx, longestBlockName]);
 
@@ -335,9 +346,14 @@ export function PanelColorBlockTable({
   const colorTableMinWidthPx = useMemo(() => {
     const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
     const blockColWidthPx = textureCollapsed ? blockTextureCollapsedWidthPx : blockColMinWidthPx;
-    const sectionInsetsPx = 8 * 2 + 1 * 2;
-    const fixedColsPx = 24 + 24 + 135 + 48 + requiredColWidth;
-    const gapsPx = 5 * 4;
+    const sectionInsetsPx = COLOR_TABLE_SECTION_HORIZONTAL_INSETS_PX;
+    const fixedColsPx =
+      COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.clr +
+      COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.id +
+      COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.name +
+      COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.options +
+      requiredColWidth;
+    const gapsPx = 5 * COLOR_TABLE_GRID_GAP_PX;
     const gridMinWidthPx = fixedColsPx + blockColWidthPx + gapsPx + sectionInsetsPx;
     return Math.max(
       gridMinWidthPx,
@@ -366,11 +382,11 @@ export function PanelColorBlockTable({
       gridTemplateColumns: visibleColumns
         .map(column => {
           const columnWidthMap: Record<ColumnId, string> = {
-            clr: "24px",
-            id: "24px",
-            name: "135px",
+            clr: `${COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.clr}px`,
+            id: `${COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.id}px`,
+            name: `${COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.name}px`,
             block: blockColExpanded ? `minmax(${effectiveBlockColWidthPx}px,1fr)` : `${effectiveBlockColWidthPx}px`,
-            options: "48px",
+            options: `${COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX.options}px`,
             required: `${requiredColWidth}px`,
           };
           return columnWidthMap[column];
@@ -429,47 +445,13 @@ export function PanelColorBlockTable({
   }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks]);
 
   const getColorSwatchShades = useCallback((idx: number): Shade[] => {
-    if (!imageValid) return DEFAULT_SWATCH_SHADES;
-    const used = usedShadesByBase.get(idx);
-    if (!used || used.size === 0) return DEFAULT_SWATCH_SHADES;
-    return [...used].sort((a, b) => b - a) as Shade[];
+    return [...getOrderedSwatchShades(imageValid, usedShadesByBase.get(idx))] as Shade[];
   }, [imageValid, usedShadesByBase]);
 
   const getColorSwatchStyle = useCallback((idx: number): CSSProperties => {
     const shades = getColorSwatchShades(idx);
-    if (shades.length <= 1) {
-      const shade = shades[0] ?? Shade.Light;
-      const [r, g, b] = getShadedRgb({ id: idx, shade });
-      return { backgroundColor: `rgb(${r},${g},${b})` };
-    }
-
-    const stops: string[] = [];
-    for (let i = 0; i < shades.length; ++i) {
-      const shade = shades[i];
-      const [r, g, b] = getShadedRgb({ id: idx, shade });
-      const color = `rgb(${r},${g},${b})`;
-      const start = (i * 100) / shades.length;
-      const end = ((i + 1) * 100) / shades.length;
-      stops.push(`${color} ${start}%`, `${color} ${end}%`);
-    }
-    return { backgroundImage: `linear-gradient(to bottom, ${stops.join(", ")})` };
+    return getMultiShadeSwatchStyle(shades.map(shade => getShadedRgb({ id: idx, shade })));
   }, [getColorSwatchShades]);
-
-  const getBlockIconAsset = useCallback((block: string) => {
-    const atlasKey = toBlockIconKey(block);
-    if (KNOWN_UNUSED_ICON_KEYS.has(atlasKey)) {
-      return {
-        atlasKey,
-        atlasName: "unused" as const,
-        fallbackSrc: `${import.meta.env.BASE_URL}block-icons/unused/${atlasKey}.png`,
-      };
-    }
-    return {
-      atlasKey,
-      atlasName: "primary" as const,
-      fallbackSrc: `${import.meta.env.BASE_URL}block-icons/primary/${atlasKey}.png`,
-    };
-  }, []);
 
   const queueSwatchTooltip = useCallback((next: SwatchTooltip | null) => {
     swatchTooltipPendingRef.current = next;
@@ -492,28 +474,20 @@ export function PanelColorBlockTable({
     });
   }, []);
 
-  const getSwatchShadeAtPointer = useCallback((event: React.MouseEvent<HTMLDivElement>, swatchShades: Shade[]): Shade => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const y = Math.min(rect.height - 0.001, Math.max(0, event.clientY - rect.top));
-    const bandHeight = rect.height / swatchShades.length;
-    const bandIndex = Math.min(swatchShades.length - 1, Math.max(0, Math.floor(y / bandHeight)));
-    return swatchShades[bandIndex] ?? swatchShades[0] ?? Shade.Light;
-  }, []);
-
   const getShadeTooltip = useCallback((idx: number, shade: Shade): string => {
     const [r, g, b] = getShadedRgb({ id: idx, shade });
-    const hex = `#${[r, g, b].map(channel => channel.toString(16).padStart(2, "0")).join("")}`;
+    const hex = formatSwatchHex(r, g, b);
     return messages.swatches.shadeTooltip(hex, shade);
   }, []);
 
   const handleSwatchTooltip = useCallback((event: React.MouseEvent<HTMLDivElement>, idx: number, swatchShades: Shade[]) => {
-    const shade = getSwatchShadeAtPointer(event, swatchShades);
+    const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
     queueSwatchTooltip({
       text: getShadeTooltip(idx, shade),
-      x: event.clientX + 12,
-      y: event.clientY + 12,
+      x: event.clientX + SWATCH_TOOLTIP_OFFSET_PX,
+      y: event.clientY + SWATCH_TOOLTIP_OFFSET_PX,
     });
-  }, [getShadeTooltip, getSwatchShadeAtPointer, queueSwatchTooltip]);
+  }, [getShadeTooltip, queueSwatchTooltip]);
 
   useLayoutEffect(() => {
     return () => {
@@ -541,15 +515,15 @@ export function PanelColorBlockTable({
           onMouseEnter={event =>
             queueSwatchTooltip({
               text: messages.swatches.transparent,
-              x: event.clientX + 12,
-              y: event.clientY + 12,
+              x: event.clientX + SWATCH_TOOLTIP_OFFSET_PX,
+              y: event.clientY + SWATCH_TOOLTIP_OFFSET_PX,
             })
           }
           onMouseMove={event =>
             queueSwatchTooltip({
               text: messages.swatches.transparent,
-              x: event.clientX + 12,
-              y: event.clientY + 12,
+              x: event.clientX + SWATCH_TOOLTIP_OFFSET_PX,
+              y: event.clientY + SWATCH_TOOLTIP_OFFSET_PX,
             })
           }
           onMouseLeave={() => queueSwatchTooltip(null)}
@@ -557,7 +531,6 @@ export function PanelColorBlockTable({
           <PackedBlockIcon
             atlasKey="world_border"
             atlasName="primary"
-            fallbackSrc={`${import.meta.env.BASE_URL}block-icons/primary/world_border.png`}
             alt={messages.swatches.transparent}
             className="w-full h-full"
           />
@@ -571,7 +544,7 @@ export function PanelColorBlockTable({
           onMouseMove={event => handleSwatchTooltip(event, idx, swatchShades)}
           onMouseLeave={() => queueSwatchTooltip(null)}
           onClick={event => {
-            const shade = getSwatchShadeAtPointer(event, swatchShades);
+            const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
             const [r, g, b] = getShadedRgb({ id: idx, shade });
             onCopyColorToClipboard(r, g, b);
           }}
@@ -605,7 +578,7 @@ export function PanelColorBlockTable({
           }
         >
           <option value="">{messages.common.none}</option>
-          {[...allBlocks].sort().map(block => (
+          {allBlocks.toSorted().map(block => (
             <option
               key={block}
               value={block}
@@ -642,9 +615,6 @@ export function PanelColorBlockTable({
               const selected = selectedBlock === block;
               const isIceWaterOption = idx === WATER_BASE_INDEX && normalizeBlockId(block) === "ice";
               const iconAsset = getBlockIconAsset(block);
-              const hasIcon = iconAsset.atlasName === "unused"
-                ? KNOWN_UNUSED_ICON_KEYS.has(iconAsset.atlasKey)
-                : KNOWN_PRIMARY_ICON_KEYS.has(iconAsset.atlasKey);
               return (
                 <button
                   key={block}
@@ -663,17 +633,12 @@ export function PanelColorBlockTable({
                   title={isIceWaterOption ? messages.blocks.iceWaterOptionTitle(block) : block}
                   onClick={() => onUpdateBlock(idx, block)}
                 >
-                  {hasIcon ? (
-                    <PackedBlockIcon
-                      atlasKey={iconAsset.atlasKey}
-                      atlasName={iconAsset.atlasName}
-                      fallbackSrc={iconAsset.fallbackSrc}
-                      alt={block}
-                      className="w-full h-full"
-                    />
-                  ) : (
-                    <span className="text-[9px] text-muted-foreground">{messages.common.missingTextureSymbol}</span>
-                  )}
+                  <PackedBlockIcon
+                    atlasKey={iconAsset.atlasKey}
+                    atlasName={iconAsset.atlasName}
+                    alt={block}
+                    className="w-full h-full"
+                  />
                 </button>
               );
             })}
@@ -711,7 +676,6 @@ export function PanelColorBlockTable({
     getBlockIconAsset,
     getColorSwatchShades,
     getColorSwatchStyle,
-    getSwatchShadeAtPointer,
     gridColsStyle,
     handleSwatchTooltip,
     missingBlocks,

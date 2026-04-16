@@ -8,7 +8,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { BASE_COLORS } from "@/data/mapColors";
 import { messages } from "@/lib/messages";
-import type { ColorRgbCustom } from "@/types/color";
+import type { ColorRgb } from "@/types/color";
 import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
 type NewCustomColorDraft = {
@@ -19,8 +19,8 @@ type NewCustomColorDraft = {
 };
 
 type PanelCustomColorsProps = {
-  customColors: ColorRgbCustom[];
-  setCustomColors: Dispatch<SetStateAction<ColorRgbCustom[]>>;
+  customColors: ColorRgb[];
+  setCustomColors: Dispatch<SetStateAction<ColorRgb[]>>;
   customMode: "custom" | number;
   setCustomMode: Dispatch<SetStateAction<"custom" | number>>;
   newCustom: NewCustomColorDraft;

@@ -16,10 +16,10 @@
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
  */
-import { BASE_COLORS, SHADE_MULTIPLIERS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
-import { packRgb, unpackRgb, MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
+import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
+import { getShadedRgb, packRgb, unpackRgb, MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { messages, type PaletteNotice } from "@/lib/messages";
-import { type ColorGrid, Shade, type ColorRgbCustom, type ShadedColorRef } from "@/types/color";
+import { type ColorGrid, Shade, type ColorRgb, type ShadedColorRef } from "@/types/color";
 import { FlatModeBehavior, PixelParity, type ColorFrequencyMap, type ColorGridStats } from "@/lib/colorGridAnalysis";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 
@@ -45,6 +45,17 @@ export type PaletteConversionSummary = {
 let baseColorLookup: Map<number, ShadedColorRef> | null = null;
 let nearestBasePaletteColors: { r: number; g: number; b: number }[] | null = null;
 
+function addShadedLookupEntries(
+  lookup: Map<number, ShadedColorRef>,
+  color: Pick<ColorRgb, "r" | "g" | "b">,
+  buildRef: (shade: Shade.Dark | Shade.Flat | Shade.Light) => ShadedColorRef,
+): void {
+  for (const shade of [Shade.Dark, Shade.Flat, Shade.Light] as const) {
+    const key = packRgb(...getShadedRgb(color, shade));
+    if (!lookup.has(key)) lookup.set(key, buildRef(shade));
+  }
+}
+
 // Callers:
 // - src/lib/colorGridParsing.ts
 // - src/lib/tileParsing.worker.ts
@@ -52,13 +63,7 @@ export function getBaseColorLookup(): Map<number, ShadedColorRef> {
   if (baseColorLookup) return baseColorLookup;
   baseColorLookup = new Map();
   for (let i = 1; i < BASE_COLORS.length; ++i) {
-    const { r, g, b } = BASE_COLORS[i];
-    for (const shade of [Shade.Dark, Shade.Flat, Shade.Light] as const) {
-      const mr = Math.floor((r * SHADE_MULTIPLIERS[shade]) / 255);
-      const mg = Math.floor((g * SHADE_MULTIPLIERS[shade]) / 255);
-      const mb = Math.floor((b * SHADE_MULTIPLIERS[shade]) / 255);
-      baseColorLookup.set(packRgb(mr, mg, mb), { isCustom: false, id: i, shade });
-    }
+    addShadedLookupEntries(baseColorLookup, BASE_COLORS[i], shade => ({ isCustom: false, id: i, shade }));
   }
   return baseColorLookup;
 }
@@ -82,17 +87,11 @@ export function createEmptyColorGrid(): ColorGrid {
 // Callers:
 // - src/lib/colorGridParsing.ts
 // - src/lib/tileParsing.worker.ts
-export function buildCustomShadeLookup(customColors: ColorRgbCustom[]): Map<number, ShadedColorRef> {
+export function buildCustomShadeLookup(customColors: ColorRgb[]): Map<number, ShadedColorRef> {
   const lookup = new Map<number, ShadedColorRef>();
   for (const [customIndex, color] of customColors.entries()) {
     if (!color.blocks.some(block => block.trim() !== "")) continue;
-    for (const shade of [Shade.Dark, Shade.Flat, Shade.Light] as const) {
-      const r = Math.floor((color.r * SHADE_MULTIPLIERS[shade]) / 255);
-      const g = Math.floor((color.g * SHADE_MULTIPLIERS[shade]) / 255);
-      const b = Math.floor((color.b * SHADE_MULTIPLIERS[shade]) / 255);
-      const key = packRgb(r, g, b);
-      if (!lookup.has(key)) lookup.set(key, { isCustom: true, id: customIndex, shade });
-    }
+    addShadedLookupEntries(lookup, color, shade => ({ isCustom: true, id: customIndex, shade }));
   }
   return lookup;
 }

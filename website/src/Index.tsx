@@ -55,7 +55,7 @@ import {
 import { computeColorGridStats, FlatModeBehavior, hasStepMixOpportunity, type ColorGridStats } from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
 import { createImageDataFromColorGrid, MAP_SIZE } from "@/utils/color";
-import type { ColorGrid, ColorRgbCustom } from "@/types/color";
+import type { ColorGrid, ColorRgb } from "@/types/color";
 import {
   analyzeFragileSupportOverrideNeeds,
   analyzeMaterialNeeds,
@@ -591,7 +591,7 @@ const Index = () => {
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
     loadCached(LS_KEYS.supportMode, DEFAULT_SUPPORT_MODE),
   );
-  const [customColors, setCustomColors] = useState<ColorRgbCustom[]>([]);
+  const [customColors, setCustomColors] = useState<ColorRgb[]>([]);
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
   const [imageData, setImageData] = useState<ImageData | null>(null);
@@ -734,40 +734,40 @@ const Index = () => {
     ? messages.presets.builtinTooltip(preset.name)
     : undefined;
 
-  const [savedBlocks, setSavedBlocks] = useState<Record<number, string> | null>(null);
+  const [savedSelectedBlocks, setSavedSelectedBlocks] = useState<Record<number, string> | null>(null);
 
   // Compute dirty by comparing current blocks to saved snapshot
   const presetDirty = useMemo(() => {
-    if (!savedBlocks) return false;
-    const current = preset.blocks;
-    const allKeys = new Set([...Object.keys(savedBlocks), ...Object.keys(current)]);
+    if (!savedSelectedBlocks) return false;
+    const current = preset.selectedBlocks;
+    const allKeys = new Set([...Object.keys(savedSelectedBlocks), ...Object.keys(current)]);
     for (const k of allKeys) {
-      if ((savedBlocks[Number(k)] ?? "") !== (current[Number(k)] ?? "")) return true;
+      if ((savedSelectedBlocks[Number(k)] ?? "") !== (current[Number(k)] ?? "")) return true;
     }
     return false;
-  }, [preset.blocks, savedBlocks]);
+  }, [preset.selectedBlocks, savedSelectedBlocks]);
   const currentPresetIsUnsavedAuto = useMemo(
     () => activeIdx >= BUILTIN_PRESET_NAMES.length && isAutoCustomPresetName(preset.name) && presetDirty,
     [activeIdx, preset.name, presetDirty],
   );
 
   const markSavedDeferred = useCallback(() => {
-    setSavedBlocks(null);
+    setSavedSelectedBlocks(null);
     markSavedNextRef.current = true;
   }, []);
 
   const markSavedImmediate = useCallback(() => {
-    setSavedBlocks({ ...preset.blocks });
-  }, [preset.blocks]);
+    setSavedSelectedBlocks({ ...preset.selectedBlocks });
+  }, [preset.selectedBlocks]);
 
   const markSavedNextRef = useRef(true);
 
   useEffect(() => {
     if (markSavedNextRef.current) {
-      setSavedBlocks({ ...preset.blocks });
+      setSavedSelectedBlocks({ ...preset.selectedBlocks });
       markSavedNextRef.current = false;
     }
-  }, [preset.blocks]);
+  }, [preset.selectedBlocks]);
 
   // Persist settings to localStorage
   useEffect(() => {
@@ -870,8 +870,8 @@ const Index = () => {
 
   const showPaletteSeedToggle = buildModeUsesPaletteSeed(buildMode);
   const paletteSeedOffset = useMemo(
-    () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(preset.blocks) : 0),
-    [showPaletteSeedToggle, calcProPaletteSeed, preset.blocks],
+    () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(preset.selectedBlocks) : 0),
+    [showPaletteSeedToggle, calcProPaletteSeed, preset.selectedBlocks],
   );
   const tileImageStats = useMemo(
     () => (parsedTiles.length > 0 && imageValid ? parsedTiles.map(tile => tile.imageStats) : []),
@@ -934,7 +934,7 @@ const Index = () => {
   const showMaxPerSplitOption = hasMultipleTiles && selectedTileCount !== 1;
   const analysisBusy = isParsingImage || isAnalyzingTiles;
   const previewBusy = analysisBusy || isAnalyzingMaterials;
-  const selectedWaterBlock = preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
+  const selectedWaterBlock = preset.selectedBlocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
   const effectiveSupportFillerBlock = supportFillerBlock.trim() || DEFAULT_SUPPORT_FILLER_BLOCK;
@@ -1041,8 +1041,8 @@ const Index = () => {
     ],
   );
   const transparentBlockMapping = useMemo(
-    () => ({ [TRANSPARENCY_BASE_INDEX]: preset.blocks[TRANSPARENCY_BASE_INDEX] ?? "" }),
-    [preset.blocks[TRANSPARENCY_BASE_INDEX]],
+    () => ({ [TRANSPARENCY_BASE_INDEX]: preset.selectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "" }),
+    [preset.selectedBlocks[TRANSPARENCY_BASE_INDEX]],
   );
   useEffect(() => {
     if (!imageValid || parsedTiles.length === 0) {
@@ -1341,7 +1341,7 @@ const Index = () => {
     let cancelled = false;
     const totalTiles = tileGeometryAnalyses.length;
     const materialAnalysisOptions = {
-      blockMapping: preset.blocks,
+      blockMapping: preset.selectedBlocks,
       fillerAssignments: uiFillerAssignments,
       applySupportFloorYs,
       customColors,
@@ -1393,7 +1393,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [tileGeometryAnalyses, preset.blocks, uiFillerAssignments, applySupportFloorYs, customColors, supportMode]);
+  }, [tileGeometryAnalyses, preset.selectedBlocks, uiFillerAssignments, applySupportFloorYs, customColors, supportMode]);
   const tileAnalyses = tileAnalysesState;
 
   const setNormalizedWaterDrop = useCallback((shade: WaterDropShade, rawValue: number) => {
@@ -1415,8 +1415,8 @@ const Index = () => {
 
   const missingBlocks = useMemo(() => {
     if (!imageValid || usedBaseColors.size === 0) return [];
-    return [...usedBaseColors].filter(idx => idx > 0 && !preset.blocks[idx]);
-  }, [imageValid, usedBaseColors, preset.blocks]);
+    return [...usedBaseColors].filter(idx => idx > 0 && !preset.selectedBlocks[idx]);
+  }, [imageValid, usedBaseColors, preset.selectedBlocks]);
 
   const activeSingleTileIndex = hasMultipleTiles ? selectedTileIndex : (tileAnalyses.length > 0 ? 0 : null);
   const selectedTileAnalysis = activeSingleTileIndex === null ? null : (tileAnalyses[activeSingleTileIndex] ?? null);
@@ -1437,7 +1437,7 @@ const Index = () => {
   const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
   const enableStepsSupportOption = !imageData || tileAnalyses.some(tile =>
     !!tile.supportShape?.parts.some(part =>
-      [...part.cells.entries()].some(([coord, cell]) => {
+      part.cells.entries().some(([coord, cell]) => {
         if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
         const [x, y, z] = parseShapeCoordKey(coord);
         const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
@@ -1448,11 +1448,11 @@ const Index = () => {
   const enableFragileSupportOption = useMemo(() => {
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
-      return Object.values(preset.blocks).some(hasFragileMappedBlock) || customColors.some(color => hasFragileMappedBlock(color.blocks[0] ?? ""));
+      return Object.values(preset.selectedBlocks).some(hasFragileMappedBlock) || customColors.some(color => hasFragileMappedBlock(color.blocks[0] ?? ""));
     }
     return tileAnalyses.some(tile =>
       !!tile.supportShape?.parts.some(part =>
-        [...part.cells.entries()].some(([coord, cell]) => {
+        part.cells.entries().some(([coord, cell]) => {
           if (!isShapeFillerCell(cell)) return false;
           const [x, y, z] = parseShapeCoordKey(coord);
           const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
@@ -1462,12 +1462,12 @@ const Index = () => {
           if (!color) return false;
           const mapped = color.isCustom
             ? (customColors[color.id]?.blocks[0] ?? "")
-            : (preset.blocks[color.id] || BASE_COLORS[color.id].blocks[0] || "");
+            : (preset.selectedBlocks[color.id] || BASE_COLORS[color.id].blocks[0] || "");
           return hasFragileMappedBlock(mapped);
         }),
       ),
     );
-  }, [imageData, tileAnalyses, preset.blocks, customColors, applySupportFloorYs]);
+  }, [imageData, tileAnalyses, preset.selectedBlocks, customColors, applySupportFloorYs]);
   const staircaseModeOptions = useMemo((): ModeOption[] => {
     if (!imageValid) {
       return DEFAULT_STAIRCASE_OPTIONS;
@@ -1583,7 +1583,7 @@ const Index = () => {
   );
   const buildMaterialAnalysisOptions = useCallback(
     (fillerAssignments: FillerAssignment[], includeRange: boolean) => ({
-      blockMapping: preset.blocks,
+      blockMapping: preset.selectedBlocks,
       fillerAssignments,
       applySupportFloorYs,
       customColors,
@@ -1591,7 +1591,7 @@ const Index = () => {
         ? (isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] })
         : {}),
     }),
-    [preset.blocks, applySupportFloorYs, customColors, colRangeEnabled, isStepRangeMode, colStart, colEnd],
+    [preset.selectedBlocks, applySupportFloorYs, customColors, colRangeEnabled, isStepRangeMode, colStart, colEnd],
   );
 
   const selectedTileMaterialNeedStats = useMemo(() => {
@@ -1677,7 +1677,7 @@ const Index = () => {
   const numColorBlockTypesForPart = Object.values(colorRequiredMap).filter(count => count > 0).length;
 
   const builtinPreset = getBuiltinPreset(preset.name);
-  const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.blocks, preset.blocks) : false;
+  const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.selectedBlocks, preset.selectedBlocks) : false;
 
   useEffect(() => {
     const clampedStart = Math.max(0, Math.min(colStart, maxRangeIndex));
@@ -1833,16 +1833,16 @@ const Index = () => {
 
   const updateBlock = (baseIndex: number, block: string) => {
     const nextBlock = sanitizeUserBlockEntry(block);
-    const currentBlock = preset.blocks[baseIndex] ?? "";
+    const currentBlock = preset.selectedBlocks[baseIndex] ?? "";
     if (nextBlock === currentBlock) return;
 
     const isBuiltin = activeIdx < BUILTIN_PRESET_NAMES.length;
-    const nextBlocks = { ...preset.blocks, [baseIndex]: nextBlock };
+    const nextBlocks = { ...preset.selectedBlocks, [baseIndex]: nextBlock };
     const matchingBuiltinName = findMatchingBuiltinPresetName(nextBlocks);
 
     if (isBuiltin) {
       // Spawn a new "Custom" preset instead of mutating the builtin
-      setSavedBlocks({ ...preset.blocks });
+      setSavedSelectedBlocks({ ...preset.selectedBlocks });
       setPresets(prev => {
         let customName: string = messages.presets.customGroupLabel;
         const existingNames = new Set(prev.map(p => p.name));
@@ -1850,7 +1850,7 @@ const Index = () => {
         while (existingNames.has(customName)) {
           customName = `Custom ${suffix++}`;
         }
-        return [...prev, { name: customName, blocks: nextBlocks }];
+        return [...prev, { name: customName, selectedBlocks: nextBlocks }];
       });
       setActiveIdx(presets.length);
       return;
@@ -1866,7 +1866,7 @@ const Index = () => {
 
     setPresets(prev => {
       const n = [...prev];
-      n[activeIdx] = { ...n[activeIdx], blocks: nextBlocks };
+      n[activeIdx] = { ...n[activeIdx], selectedBlocks: nextBlocks };
       return n;
     });
   };
@@ -1898,12 +1898,12 @@ const Index = () => {
     if (currentPresetIsUnsavedAuto) {
       setPresets(prev => {
         const next = [...prev];
-        next[activeIdx] = { name, blocks: { ...preset.blocks } };
+        next[activeIdx] = { name, selectedBlocks: { ...preset.selectedBlocks } };
         return next;
       });
       setActiveIdx(activeIdx);
     } else {
-      setPresets(prev => [...prev, { name, blocks: { ...preset.blocks } }]);
+      setPresets(prev => [...prev, { name, selectedBlocks: { ...preset.selectedBlocks } }]);
       setActiveIdx(presets.length);
     }
     markSavedDeferred();
@@ -2185,7 +2185,7 @@ const Index = () => {
       for (const tile of exportTileAnalyses) {
         if (!tile.supportShape) throw new Error(messages.parsing.conversionFailed);
         const tileEntries = await convertToNbtEntries(tile.supportShape, {
-          blockMapping: preset.blocks,
+          blockMapping: preset.selectedBlocks,
           fillerAssignments: uiFillerAssignments,
           applySupportFloorYs,
           forceZ129,
@@ -2905,7 +2905,7 @@ const Index = () => {
             showExcludedBlocks={showExcludedBlocks}
             columnOrder={columnOrder}
             setColumnOrder={setColumnOrder}
-            selectedBlocks={preset.blocks}
+            selectedBlocks={preset.selectedBlocks}
             customBlocksByBase={customBlocksByBase}
             usedBaseColors={usedBaseColors}
             usedShadesByBase={usedShadesByBase}

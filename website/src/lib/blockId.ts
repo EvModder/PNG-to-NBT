@@ -20,7 +20,7 @@
  * - tests/run.mts
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import type { ColorRef, ColorRgbCustom } from "@/types/color";
+import type { ColorRef, ColorRgb } from "@/types/color";
 
 const DEFAULT_NAMESPACE = "minecraft:";
 
@@ -118,7 +118,7 @@ export function toDisplayName(blockName: string): string {
 // - src/lib/shapeAnalysis.ts
 export function resolveShapeColorBlockName(
   color: ColorRef,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgbCustom[] },
+  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
 ): string | null {
   if (color.isCustom) {
     const block = options.customColors[color.id]?.blocks[0] ?? "";

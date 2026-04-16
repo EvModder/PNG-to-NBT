@@ -8,7 +8,7 @@
  * - tests/run.mts
  */
 import { MAP_SIZE } from "@/utils/color";
-import type { ColorRef, ColorRgbCustom } from "@/types/color";
+import type { ColorRef, ColorRgb } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
@@ -32,7 +32,7 @@ interface ExportOptions {
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
   forceZ129?: boolean;
-  customColors: ColorRgbCustom[];
+  customColors: ColorRgb[];
   xColumnRange?: [number, number];
   phaseRange?: [number, number];
   baseName: string;

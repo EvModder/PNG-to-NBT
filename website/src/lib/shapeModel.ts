@@ -19,7 +19,7 @@
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
-import type { ColorRef, ColorRgbCustom } from "@/types/color";
+import type { ColorRef, ColorRgb } from "@/types/color";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
@@ -66,7 +66,7 @@ export function parseShapeCoordKey(key: ShapeCoordKey): [number, number, number]
 
 function getMappedShapeColorBlockId(
   color: ColorRef,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgbCustom[] },
+  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
 ): string | null {
   if (color.isCustom) {
     const block = options.customColors[color.id]?.blocks[0] ?? "";
@@ -113,7 +113,7 @@ export function shouldIncludeFragileSupportCell(
   coord: number,
   roles: readonly FillerRole[],
   activeRole: FillerRole | null,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgbCustom[] },
+  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
 ): boolean {
   if (activeRole !== FillerRole.SupportFragile || !roles.includes(FillerRole.SupportFragile)) return true;
   const fragileColor = getSupportedColorAbove(part, coord);
@@ -138,7 +138,7 @@ export function getFragileSupportOverride(
   coord: number,
   activeRole: FillerRole | null,
   assignedSupportBlock: string | null,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgbCustom[] },
+  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
 ): FragileSupportOverride | null {
   if (
     activeRole !== FillerRole.SupportAll &&

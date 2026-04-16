@@ -13,7 +13,7 @@
  * - src/lib/previewImageEdits.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
-import { type ColorGrid, type ColorRgbCustom, Shade } from "@/types/color";
+import { type ColorGrid, type ColorRgb, Shade } from "@/types/color";
 import type { ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
@@ -54,7 +54,7 @@ interface FragileSupportOverrideNeedStats {
 
 type MaterialAnalysisOptions = {
   blockMapping: Record<number, string>;
-  customColors: ColorRgbCustom[];
+  customColors: ColorRgb[];
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
   xColumnRange?: [number, number];

@@ -14,7 +14,7 @@
 import * as UTIF from "utif";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { MAP_SIZE } from "@/utils/color";
-import { type ColorGrid, type ColorRgbCustom } from "@/types/color";
+import { type ColorGrid, type ColorRgb } from "@/types/color";
 import { type ColorGridStats } from "@/lib/colorGridAnalysis";
 import {
   buildConversionNotices,
@@ -205,7 +205,7 @@ function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[]): Palette
 // - tests/run.mts
 export function convertImageToColorGrid(
   imageData: ImageData,
-  customColors: ColorRgbCustom[],
+  customColors: ColorRgb[],
   convertUnsupported = false,
   cropImage = false,
 ): ColorGridParseResult {
@@ -263,7 +263,7 @@ export function convertImageToColorGrid(
 // - src/Index.tsx
 export async function convertFileToColorGrid(
   file: File,
-  customColors: ColorRgbCustom[],
+  customColors: ColorRgb[],
   convertUnsupported = false,
   cropImage = false,
 ): Promise<ColorGridParseResult> {
@@ -275,7 +275,7 @@ export async function convertFileToColorGrid(
 // - src/Index.tsx
 export function convertImageToColorGridSet(
   imageData: ImageData,
-  customColors: ColorRgbCustom[],
+  customColors: ColorRgb[],
   convertUnsupported = false,
   cropImage = false,
 ): ColorGridSetParseResult {
@@ -367,7 +367,7 @@ export function convertImageToColorGridSet(
 // - src/Index.tsx
 export async function convertImageToColorGridSetAsync(
   imageData: ImageData,
-  customColors: ColorRgbCustom[],
+  customColors: ColorRgb[],
   convertUnsupported = false,
   cropImage = false,
   onProgress?: (completed: number, total: number) => void,
@@ -428,7 +428,7 @@ export async function convertImageToColorGridSetAsync(
 // - src/Index.tsx
 export async function convertFileToColorGridSet(
   file: File,
-  customColors: ColorRgbCustom[],
+  customColors: ColorRgb[],
   convertUnsupported = false,
   cropImage = false,
 ): Promise<ColorGridSetParseResult> {

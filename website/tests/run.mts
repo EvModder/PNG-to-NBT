@@ -38,7 +38,7 @@ import {
   isSuppressStepsBuildMode,
   shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
-import type { ColorRgbCustom } from "@/types/color";
+import type { ColorRgb } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { createFillerAssignments, isFillerDisabled } from "@/lib/fillerRules";
 import { convertToNbt } from "@/lib/nbtExport";
@@ -94,7 +94,7 @@ type ExportFixtureSettings = {
   forceZ129: boolean;
   belowPlatformWater: boolean;
   convertUnsupported: boolean;
-  customColors: ColorRgbCustom[];
+  customColors: ColorRgb[];
   presetOverrides: Record<string, string>;
 };
 
@@ -624,7 +624,7 @@ function buildPreset(presetName: string, presetOverrides: Record<string, string>
   const basePreset = getBuiltinPreset(presetName);
   if (!basePreset) throw new Error(`Unknown builtin preset "${presetName}"`);
 
-  const blocks = { ...basePreset.blocks };
+  const selectedBlocks = { ...basePreset.selectedBlocks };
   for (const [rawBaseIndex, rawBlock] of Object.entries(presetOverrides)) {
     const baseIndex = Number(rawBaseIndex);
     if (!Number.isInteger(baseIndex) || baseIndex < 0 || baseIndex >= BASE_COLORS.length) {
@@ -633,10 +633,10 @@ function buildPreset(presetName: string, presetOverrides: Record<string, string>
     if (typeof rawBlock !== "string") {
       throw new Error(`Preset override for base color ${rawBaseIndex} must be a string`);
     }
-    blocks[baseIndex] = sanitizeUserBlockEntry(rawBlock);
+    selectedBlocks[baseIndex] = sanitizeUserBlockEntry(rawBlock);
   }
 
-  return { name: basePreset.name, blocks };
+  return { name: basePreset.name, selectedBlocks };
 }
 
 function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): ExportFixtureSettings {
@@ -659,7 +659,7 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
 
   const rawCustomColors = settings.customColors ?? [];
   if (!Array.isArray(rawCustomColors)) throw new Error(`customColors must be an array`);
-  const customColors = rawCustomColors.map((color, index): ColorRgbCustom => {
+  const customColors = rawCustomColors.map((color, index): ColorRgb => {
     const rawColor = color as RawFixtureCustomColor;
     const blocks = Array.isArray(rawColor.blocks)
       ? rawColor.blocks
@@ -768,7 +768,7 @@ async function runFixtureCase(
   const usedWaterShades = derivedImageStats.usedWaterShades;
   const imageHasWater = derivedImageStats.imageHasWater;
   const imageHasNonLightWater = derivedImageStats.imageHasNonLightWater;
-  const selectedWaterBlock = testCase.preset.blocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
+  const selectedWaterBlock = testCase.preset.selectedBlocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
 
@@ -805,12 +805,12 @@ async function runFixtureCase(
 
   const paletteSeedOffset =
     buildModeUsesPaletteSeed(testCase.settings.buildMode) && testCase.settings.proPaletteSeed
-      ? getPaletteSeedOffset(testCase.preset.blocks)
+      ? getPaletteSeedOffset(testCase.preset.selectedBlocks)
       : 0;
 
   const twoLayerHasLateVoidNeed = (imageStats.voidShadowStats.dominant ?? 0) > 0;
   const includeTransparentBlocks = shouldIncludeTransparentBlocks(
-    testCase.preset.blocks,
+    testCase.preset.selectedBlocks,
     derivedImageStats.hasTransparency,
     testCase.settings.buildMode,
   );
@@ -896,7 +896,7 @@ async function runFixtureCase(
   );
 
   const generated = await convertToNbt(effectiveShape, {
-    blockMapping: testCase.preset.blocks,
+    blockMapping: testCase.preset.selectedBlocks,
     fillerAssignments,
     applySupportFloorYs: testCase.settings.applySupportFloorYs,
     forceZ129: testCase.settings.forceZ129,

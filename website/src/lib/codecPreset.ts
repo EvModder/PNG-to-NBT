@@ -8,7 +8,7 @@
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import { type BlockPreset } from "@/data/presets";
-import type { ColorRgbCustom } from "@/types/color";
+import type { ColorRgb } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { isSuppressStepDirection } from "@/utils/conversion";
 import { SupportMode } from "@/types/ui";
@@ -20,7 +20,7 @@ interface FullPreset {
   shadeFiller?: string;
   supportMode?: SupportMode;
   buildMode?: BuildMode;
-  customColors?: ColorRgbCustom[];
+  customColors?: ColorRgb[];
   convertUnsupported?: boolean;
   suppress2LayerLateFillerBlock?: string;
   proPaletteSeed?: boolean;
@@ -33,12 +33,12 @@ interface FullPreset {
 
 function serializeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: ColorRgbCustom[], convertUnsupported: boolean,
+  buildMode: BuildMode, customColors: ColorRgb[], convertUnsupported: boolean,
   suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length }, (_, i) => {
-    const block = preset.blocks[i] || "";
+    const block = preset.selectedBlocks[i] || "";
     const idx = BASE_COLORS[i].blocks.indexOf(block);
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
@@ -71,11 +71,11 @@ function parseFullPreset(serialized: string): FullPreset | null {
 
   const supportMode = (sections[4] || SupportMode.None) as SupportMode;
 
-  const blocks: Record<number, string> = {};
+  const selectedBlocks: Record<number, string> = {};
   for (const [i, part] of sections[1].split(",").entries()) {
     if (i >= BASE_COLORS.length) break;
     const baseIndex = i;
-    blocks[baseIndex] =
+    selectedBlocks[baseIndex] =
       part === "-" || part === ""
         ? ""
         : part.startsWith("=")
@@ -112,7 +112,7 @@ function parseFullPreset(serialized: string): FullPreset | null {
   const suppressStepDirection = sections[14] && isSuppressStepDirection(sections[14]) ? sections[14] : undefined;
 
   return {
-    blockPreset: { name: sections[0], blocks },
+    blockPreset: { name: sections[0], selectedBlocks },
     supportFiller: sections[2] || undefined,
     shadeFiller: sections[3] || undefined,
     supportMode,
@@ -133,7 +133,7 @@ function parseFullPreset(serialized: string): FullPreset | null {
 // - src/Index.tsx
 export async function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: ColorRgbCustom[], convertUnsupported: boolean,
+  buildMode: BuildMode, customColors: ColorRgb[], convertUnsupported: boolean,
   suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): Promise<string> {

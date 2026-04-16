@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - toBlockIconKey()
+ * - getBlockIconAsset()
  * - getBlockIconAtlasEntry()
  * - renderBlockIconAtlasEntryToCanvas()
  *
@@ -21,8 +22,15 @@ interface BlockIconAtlasEntry {
   offsetY: number;
 }
 
+type BlockIconAsset = {
+  atlasKey: string;
+  atlasName: "primary" | "unused";
+};
+
+const KNOWN_UNUSED_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.unused.entries));
+
 // Callers:
-// - src/components/PanelColorBlockTable.tsx
+// - src/lib/blockIconAtlas.ts
 export function toBlockIconKey(raw: string): string {
   return stripDefaultBlockNamespace(raw)
     .replace(/__/g, "__us__")
@@ -31,6 +39,16 @@ export function toBlockIconKey(raw: string): string {
     .replace(/=/g, "__eq__")
     .replace(/,/g, "__cm__")
     .replace(/:/g, "__cl__");
+}
+
+// Callers:
+// - src/components/PanelColorBlockTable.tsx
+export function getBlockIconAsset(block: string): BlockIconAsset {
+  const atlasKey = toBlockIconKey(block);
+  return {
+    atlasKey,
+    atlasName: KNOWN_UNUSED_ICON_KEYS.has(atlasKey) ? "unused" : "primary",
+  };
 }
 
 // Callers:
