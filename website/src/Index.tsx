@@ -201,7 +201,7 @@ function buildTileSelectionRange(anchorIndex: number, targetIndex: number): numb
 function normalizeTileSelection(selection: readonly number[], tileCount: number): number[] {
   const next = [...new Set(selection)]
     .filter(index => index >= 0 && index < tileCount)
-    .sort((a, b) => a - b);
+    .toSorted((a, b) => a - b);
   return next.length === 0 || next.length === tileCount ? [] : next;
 }
 
@@ -211,12 +211,12 @@ function getEffectiveTileSelection(selection: readonly number[], tileCount: numb
 }
 
 function mergeTileSelections(current: readonly number[], next: readonly number[]): number[] {
-  return [...new Set([...current, ...next])].sort((a, b) => a - b);
+  return [...new Set([...current, ...next])].toSorted((a, b) => a - b);
 }
 
 function toggleTileSelectionIndex(current: readonly number[], tileIndex: number): number[] {
   if (current.includes(tileIndex)) return current.filter(index => index !== tileIndex);
-  return [...current, tileIndex].sort((a, b) => a - b);
+  return [...current, tileIndex].toSorted((a, b) => a - b);
 }
 
 function normalizeUsedWaterDrops(
@@ -501,6 +501,11 @@ const DEFAULT_STAIRCASE_OPTIONS: ModeOption[] = [
 const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
 const MAIN_THREAD_PROGRESS_INTERVAL_MS = 32;
+const PREVIEW_PAGE_COLUMN_MIN_WIDTH_PX = 320;
+// Approximates the non-preview vertical chrome on the page (header, layout padding, and panel text/buttons)
+// so the square preview can expand with viewport height on wide displays without forcing obvious vertical overflow.
+const PREVIEW_PAGE_COLUMN_VERTICAL_OFFSET_PX = 120;
+const PREVIEW_PAGE_COLUMN_MAX_WIDTH_CSS = `calc(100vh - ${PREVIEW_PAGE_COLUMN_VERTICAL_OFFSET_PX}px)`;
 
 const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: BuildMode.SuppressSplitRow, label: messages.buildMode.optionLabel(BuildMode.SuppressSplitRow), disabled: true, muted: true },
@@ -692,13 +697,11 @@ const Index = () => {
   const presetToolbarSectionRef = useRef<HTMLElement>(null);
   const fillerToolbarSectionRef = useRef<HTMLElement>(null);
   const leftColumnRef = useRef<HTMLDivElement>(null);
-  const rightColumnRef = useRef<HTMLDivElement>(null);
   const layoutRootRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
   const [presetToolbarMinWidthPx, setPresetToolbarMinWidthPx] = useState(0);
   const [fillerToolbarMinWidthPx, setFillerToolbarMinWidthPx] = useState(0);
   const [colorTableMinWidthPx, setColorTableMinWidthPx] = useState(0);
-  const [rightColumnMinWidthPx, setRightColumnMinWidthPx] = useState(320);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
   const [creditsFloatGapPx, setCreditsFloatGapPx] = useState(0);
   const creditsFloatGapRef = useRef(0);
@@ -2656,16 +2659,6 @@ const Index = () => {
   }, [isStackedLayout]);
 
   useLayoutEffect(() => {
-    if (isStackedLayout) return;
-    const rightCol = rightColumnRef.current;
-    if (!rightCol) return;
-    const min = parseFloat(getComputedStyle(rightCol).minWidth || "0");
-    if (Number.isFinite(min) && min > 0) {
-      setRightColumnMinWidthPx(prev => (Math.abs(prev - min) > 1 ? min : prev));
-    }
-  }, [isStackedLayout]);
-
-  useLayoutEffect(() => {
     measureToolbarMinWidths();
     let rafId = 0;
     const scheduleMeasure = () => {
@@ -2747,7 +2740,7 @@ const Index = () => {
         parseFloat(rootStyle.paddingRight || "0");
       const availableWidth = root.clientWidth - paddingInline;
       const gap = parseFloat(rootStyle.columnGap || rootStyle.gap || "0") || LAYOUT_GAP_PX;
-      const threshold = Math.ceil(leftColumnMinWidthPx + rightColumnMinWidthPx + gap);
+      const threshold = Math.ceil(leftColumnMinWidthPx + PREVIEW_PAGE_COLUMN_MIN_WIDTH_PX + gap);
       const stackCalc = availableWidth <= threshold;
       if (stackCalc !== isStackedLayout) setIsStackedLayout(stackCalc);
     };
@@ -2760,7 +2753,6 @@ const Index = () => {
     };
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
     if (layoutRootRef.current) ro?.observe(layoutRootRef.current);
-    if (rightColumnRef.current) ro?.observe(rightColumnRef.current);
     window.addEventListener("resize", schedule);
     return () => {
       window.removeEventListener("resize", schedule);
@@ -2769,7 +2761,6 @@ const Index = () => {
     };
   }, [
     leftColumnMinWidthPx,
-    rightColumnMinWidthPx,
     isStackedLayout,
     colorTableMinWidthPx,
     presetToolbarMinWidthPx,
@@ -2939,12 +2930,12 @@ const Index = () => {
 
         {/* RIGHT COLUMN */}
         <div
-          ref={rightColumnRef}
           className={
             isStackedLayout
               ? "contents"
-              : "flex-[1_1_0%] min-w-[320px] max-w-[542px] flex flex-col"
+              : "flex-[1_1_0%] flex flex-col"
           }
+          style={isStackedLayout ? undefined : { minWidth: PREVIEW_PAGE_COLUMN_MIN_WIDTH_PX, maxWidth: PREVIEW_PAGE_COLUMN_MAX_WIDTH_CSS }}
         >
           <div className={isStackedLayout ? "order-2" : ""}>
             <PanelImagePreview

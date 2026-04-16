@@ -70,7 +70,6 @@ export function PackedBlockIcon({
       className={`block ${className ?? ""}`}
       role="img"
       aria-label={alt}
-      title={alt}
       style={{ imageRendering: "pixelated" }}
     />
   );

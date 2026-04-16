@@ -7,7 +7,7 @@
  */
 import type { MutableRefObject, RefObject } from "react";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
-import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
+import { MUTED_INLINE_TOGGLE_CONTROL_CLASS, PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
 type PreviewWarning = {
   text: string;
@@ -202,7 +202,7 @@ export function PanelImagePreview({
 
   return (
     <section className="bg-card border border-border rounded-md px-3 pb-3 pt-3">
-      <div className="mb-1 flex items-center justify-between gap-2">
+      <div className="mb-1 flex min-h-3.5 items-center justify-between gap-2">
         {canCopyImageShareUrl ? (
           <button
             type="button"
@@ -217,16 +217,16 @@ export function PanelImagePreview({
         )}
         {showVsFillersInPreviewToggle && (
           <label
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none"
+            className={MUTED_INLINE_TOGGLE_CONTROL_CLASS}
             title={messages.upload.showVsFillersTooltip}
           >
+            <span>{messages.upload.showVsFillersToggle}</span>
             <input
               type="checkbox"
               checked={showVsFillersInPreview}
               onChange={e => setShowVsFillersInPreview(e.target.checked)}
               className="h-3.5 w-3.5"
             />
-            <span>{messages.upload.showVsFillersToggle}</span>
           </label>
         )}
       </div>
@@ -248,7 +248,7 @@ export function PanelImagePreview({
       >
         {imageName || "\u00A0"}
       </p>
-      <div className="w-full max-w-[516px] mx-auto">
+      <div className="w-full mx-auto">
         <div
           className={`relative rounded-md w-full border-2 border-dashed border-border transition-colors overflow-hidden flex items-center justify-center ${
             showTileSelection ? "" : "cursor-pointer hover:border-primary/50"

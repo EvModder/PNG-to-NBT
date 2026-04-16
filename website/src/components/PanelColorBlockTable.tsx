@@ -27,8 +27,7 @@ import type { SortDir, SortKey, BlockDisplayMode, ColumnId } from "@/types/ui";
 import { getHue, getShadedRgb } from "@/utils/color";
 import { formatStacks } from "@/utils/minecraft";
 import {
-  ACCENT_SMALL_LABEL_TEXT_CLASS,
-  INLINE_SMALL_LABEL_CONTROL_CLASS,
+  MUTED_INLINE_TOGGLE_CONTROL_CLASS,
   PANEL_TITLE_TEXT_CLASS,
 } from "@/utils/uiTypography";
 import { PackedBlockIcon } from "@/components/PackedBlockIcon";
@@ -245,7 +244,7 @@ export function PanelColorBlockTable({
       id: (a, b) => dir * (a - b),
       required: (a, b) => dir * ((colorRequiredMap[a] || 0) - (colorRequiredMap[b] || 0)),
     };
-    return sorters[sortKey] ? base.sort(sorters[sortKey]) : base;
+    return sorters[sortKey] ? base.toSorted(sorters[sortKey]) : base;
   }, [sortKey, sortDir, colorRequiredMap, showTransparentRow]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
@@ -775,29 +774,29 @@ export function PanelColorBlockTable({
             <div className="flex items-center gap-1.5">
               {showMaxPerSplitOption && (
                 <label
-                  className={INLINE_SMALL_LABEL_CONTROL_CLASS}
+                  className={MUTED_INLINE_TOGGLE_CONTROL_CLASS}
                   title={messages.table.maxPerSplitTooltip}
                 >
-                  <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>{messages.table.maxPerSplitLabel}</span>
+                  <span>{messages.table.maxPerSplitLabel}</span>
                   <input
                     type="checkbox"
                     checked={showMaxPerSplit}
                     onChange={event => setShowMaxPerSplit(event.target.checked)}
-                    className="h-3 w-3"
+                    className="h-3.5 w-3.5"
                   />
                 </label>
               )}
               {showMaxPerSplitOption && <span className="h-3 border-l border-border/70" />}
               <label
-                className={INLINE_SMALL_LABEL_CONTROL_CLASS}
+                className={MUTED_INLINE_TOGGLE_CONTROL_CLASS}
                 title={messages.table.mcUnitsTooltip}
               >
-                <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>{messages.table.mcUnitsLabel}</span>
+                <span>{messages.table.mcUnitsLabel}</span>
                 <input
                   type="checkbox"
                   checked={showStacks}
                   onChange={event => setShowStacks(event.target.checked)}
-                  className="h-3 w-3"
+                  className="h-3.5 w-3.5"
                 />
               </label>
             </div>
@@ -816,7 +815,7 @@ export function PanelColorBlockTable({
               </div>
             )}
             <div
-              className="grid gap-1 text-[10px] font-semibold text-muted-foreground bg-card py-0.5 border-b border-border"
+              className="grid gap-1 text-[10px] font-semibold leading-none text-muted-foreground bg-card pt-1 pb-1"
               style={gridColsStyle}
             >
               {visibleColumns.map(column => {
@@ -944,13 +943,15 @@ export function PanelColorBlockTable({
                 );
               })}
             </div>
+            <div className="border-t border-border mb-[3px]" />
             <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>
           </div>
 
           {imageValid && unusedIndices.length > 0 && (
             <div>
+              <div className="border-t border-border mt-[3px]" />
               <button
-                className="w-full flex items-center gap-1 py-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors border-t border-border mt-1"
+                className="w-full flex items-center gap-1 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setShowUnusedColors(value => !value)}
               >
                 <span className={`inline-block transition-transform ${showUnusedColors ? "rotate-180" : ""}`}>▼</span>

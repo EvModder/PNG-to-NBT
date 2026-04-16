@@ -1,13 +1,13 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
+import { defineConfig, type Plugin } from "vite";
 import path from "path";
 
 const BLOCK_ICON_CACHE_CONTROL = "public, max-age=604800, stale-while-revalidate=86400";
 
-const blockIconCachePlugin = {
+const blockIconCachePlugin: Plugin = {
   name: "block-icon-cache",
-  configureServer(server: any) {
-    server.middlewares.use((req: any, res: any, next: any) => {
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
       const url = req.url || "";
       if (url.includes("/block-icons/precomputed/") && url.endsWith(".png")) {
         res.setHeader("Cache-Control", BLOCK_ICON_CACHE_CONTROL);
@@ -15,8 +15,8 @@ const blockIconCachePlugin = {
       next();
     });
   },
-  configurePreviewServer(server: any) {
-    server.middlewares.use((req: any, res: any, next: any) => {
+  configurePreviewServer(server) {
+    server.middlewares.use((req, res, next) => {
       const url = req.url || "";
       if (url.includes("/block-icons/precomputed/") && url.endsWith(".png")) {
         res.setHeader("Cache-Control", BLOCK_ICON_CACHE_CONTROL);

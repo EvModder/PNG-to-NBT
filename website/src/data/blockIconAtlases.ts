@@ -602,7 +602,7 @@ export const BLOCK_ICON_ATLASES = {
     },
     "height": 384,
     "rows": 24,
-    "src": "block-icons/packed/primary.3085248c549f.png",
+    "src": "block-icons/packed/primary.003405b2f659.png",
     "width": 384
   },
   "unused": {
