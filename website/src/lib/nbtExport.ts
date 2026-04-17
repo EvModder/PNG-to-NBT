@@ -8,10 +8,10 @@
  * - tests/run.mts
  */
 import { MAP_SIZE } from "@/utils/color";
-import type { ColorRef, ColorRgb } from "@/types/color";
+import type { ColorRef } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
-import { resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
+import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
 import { type BlockEntry, gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { createZip } from "@/utils/zip";
 import { BuildMode, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
@@ -27,12 +27,10 @@ import {
 } from "./shapeModel";
 import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
 
-interface ExportOptions {
-  blockMapping: Record<number, string>;
+interface ExportOptions extends ColorBlockSelections {
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
   forceZ129?: boolean;
-  customColors: ColorRgb[];
   xColumnRange?: [number, number];
   phaseRange?: [number, number];
   baseName: string;

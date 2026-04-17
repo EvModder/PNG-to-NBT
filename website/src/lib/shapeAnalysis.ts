@@ -13,12 +13,13 @@
  * - src/lib/previewImageEdits.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
-import { type ColorGrid, type ColorRgb, Shade } from "@/types/color";
+import { type ColorGrid, Shade } from "@/types/color";
 import type { ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
-import { resolveExportBlockName, resolveShapeColorBlockName, toDisplayName } from "./blockId";
+import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName, toDisplayName } from "./blockId";
+import { addColorRefCount, getColorRefKey } from "./colorRefs";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import {
   getFragileSupportOverride,
@@ -42,9 +43,8 @@ interface FillerRolePixel {
 
 interface MaterialNeedStats {
   blockCounts: Record<string, number>;
-  baseColorCounts: Record<number, number>;
+  colorCounts: Record<string, number>;
   numUniqueColorShadesForPart: number;
-  usedShadesByBase: Map<number, Set<Shade>>;
   fillerRoleCounts: Map<FillerRole, number>;
 }
 
@@ -52,9 +52,7 @@ interface FragileSupportOverrideNeedStats {
   overrideCounts: Record<string, number>;
 }
 
-type MaterialAnalysisOptions = {
-  blockMapping: Record<number, string>;
-  customColors: ColorRgb[];
+type MaterialAnalysisOptions = ColorBlockSelections & {
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
   xColumnRange?: [number, number];
@@ -63,9 +61,8 @@ type MaterialAnalysisOptions = {
 
 interface PartMaterialNeedStats {
   blockCounts: Record<string, number>;
-  baseColorCounts: Record<number, number>;
-  visibleColorKeys: Set<string>;
-  usedShadesByBase: Map<number, Set<Shade>>;
+  colorCounts: Record<string, number>;
+  visibleColorKeys: Set<number>;
   fillerRoleCounts: Map<FillerRole, number>;
 }
 
@@ -79,15 +76,6 @@ function maximizeCounts(into: Record<string, number>, from: Record<string, numbe
   }
 }
 
-function addUsedShade(usedShadesByBase: Map<number, Set<Shade>>, baseIndex: number, shade: Shade): void {
-  let shades = usedShadesByBase.get(baseIndex);
-  if (!shades) {
-    shades = new Set<Shade>();
-    usedShadesByBase.set(baseIndex, shades);
-  }
-  shades.add(shade);
-}
-
 function maximizeRoleCounts(into: Map<FillerRole, number>, from: Map<FillerRole, number>): void {
   for (const [role, count] of from) {
     into.set(role, Math.max(into.get(role) ?? 0, count));
@@ -98,10 +86,10 @@ function addRoleCount(map: Map<FillerRole, number>, role: FillerRole, amount = 1
   map.set(role, (map.get(role) ?? 0) + amount);
 }
 
-function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): string | null {
+function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): number | null {
   const color = z >= 0 && z < MAP_SIZE ? colorGrid[x][z] : TRANSPARENT_COLOR;
   if (isTransparentColor(color)) return null;
-  return `${color.isCustom ? 1 : 0}:${color.id}:${color.shade}`;
+  return getColorRefKey(color) * 4 + color.shade;
 }
 
 function isRealWaterBlockName(blockName: string): boolean {
@@ -117,31 +105,33 @@ function analyzePartMaterialNeeds(
   supportFloorYs: ReadonlySet<number>,
 ): PartMaterialNeedStats {
   const blockCounts: Record<string, number> = {};
-  const baseColorCounts: Record<number, number> = {};
-  const visibleColorKeys = new Set<string>();
-  const usedShadesByBase = new Map<number, Set<Shade>>();
+  const colorCounts: Record<string, number> = {};
+  const visibleColorKeys = new Set<number>();
   const fillerRoleCounts = new Map<FillerRole, number>();
-  const countedWaterColumns = new Set<number>();
+  const countedVisibleWaterColumns = new Set<number>();
+  const countedRealWaterColumns = new Set<number>();
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
 
     if (isShapeColorCell(cell)) {
+      const isWaterColorCell = !cell.isCustom && cell.id === WATER_BASE_INDEX;
+      const waterColumnKey = isWaterColorCell ? (x * 128 + z) : -1;
+      if (!isWaterColorCell || !countedVisibleWaterColumns.has(waterColumnKey)) {
+        if (isWaterColorCell) countedVisibleWaterColumns.add(waterColumnKey);
+        addColorRefCount(colorCounts, cell);
+        const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);
+        if (visibleKey !== null) visibleColorKeys.add(visibleKey);
+      }
+
       const blockName = resolveShapeColorBlockName(cell, options);
       if (!blockName) continue;
-      if (!cell.isCustom && cell.id === WATER_BASE_INDEX && isRealWaterBlockName(blockName)) {
-        const waterColumnKey = x*128 + z;
-        if (countedWaterColumns.has(waterColumnKey)) continue;
-        countedWaterColumns.add(waterColumnKey);
+      if (isWaterColorCell && isRealWaterBlockName(blockName)) {
+        if (countedRealWaterColumns.has(waterColumnKey)) continue;
+        countedRealWaterColumns.add(waterColumnKey);
       }
       const displayName = toDisplayName(blockName);
       addCount(blockCounts, displayName);
-      if (!cell.isCustom) {
-        baseColorCounts[cell.id] = (baseColorCounts[cell.id] || 0) + 1;
-      }
-      const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);
-      if (visibleKey !== null) visibleColorKeys.add(visibleKey);
-      if (!cell.isCustom) addUsedShade(usedShadesByBase, cell.id, colorGrid[x][z].shade);
       continue;
     }
 
@@ -167,7 +157,7 @@ function analyzePartMaterialNeeds(
     addCount(blockCounts, displayName);
   }
 
-  return { blockCounts, baseColorCounts, visibleColorKeys, usedShadesByBase, fillerRoleCounts };
+  return { blockCounts, colorCounts, visibleColorKeys, fillerRoleCounts };
 }
 
 // Callers:
@@ -337,9 +327,8 @@ export function analyzeMaterialNeeds(
   if (shape.partType === ShapePartType.SuppressStepPhases) {
     const [start, end] = options.phaseRange ?? [0, shape.parts.length - 1];
     const blockCounts: Record<string, number> = {};
-    const baseColorCounts: Record<number, number> = {};
-    const visibleColorKeys = new Set<string>();
-    const usedShadesByBase = new Map<number, Set<Shade>>();
+    const colorCounts: Record<string, number> = {};
+    const visibleColorKeys = new Set<number>();
     const fillerRoleCounts = new Map<FillerRole, number>();
 
     for (let i = start; i <= end && i < shape.parts.length; ++i) {
@@ -354,29 +343,22 @@ export function analyzeMaterialNeeds(
         supportFloorYs,
       );
       maximizeCounts(blockCounts, step.blockCounts);
-      for (const [key, count] of Object.entries(step.baseColorCounts)) {
-        baseColorCounts[Number(key)] = Math.max(baseColorCounts[Number(key)] || 0, count);
-      }
+      maximizeCounts(colorCounts, step.colorCounts);
       for (const key of step.visibleColorKeys) visibleColorKeys.add(key);
-      for (const [baseIndex, shades] of step.usedShadesByBase) {
-        for (const shade of shades) addUsedShade(usedShadesByBase, baseIndex, shade);
-      }
       maximizeRoleCounts(fillerRoleCounts, step.fillerRoleCounts);
     }
 
     return {
       blockCounts,
-      baseColorCounts,
+      colorCounts,
       numUniqueColorShadesForPart: visibleColorKeys.size,
-      usedShadesByBase,
       fillerRoleCounts,
     };
   }
 
   const blockCounts: Record<string, number> = {};
-  const baseColorCounts: Record<number, number> = {};
-  const visibleColorKeys = new Set<string>();
-  const usedShadesByBase = new Map<number, Set<Shade>>();
+  const colorCounts: Record<string, number> = {};
+  const visibleColorKeys = new Set<number>();
   const fillerRoleCounts = new Map<FillerRole, number>();
 
   for (const part of shape.parts) {
@@ -390,21 +372,15 @@ export function analyzeMaterialNeeds(
       supportFloorYs,
     );
     for (const [key, count] of Object.entries(stats.blockCounts)) addCount(blockCounts, key, count);
-    for (const [key, count] of Object.entries(stats.baseColorCounts)) {
-      baseColorCounts[Number(key)] = (baseColorCounts[Number(key)] || 0) + count;
-    }
+    for (const [key, count] of Object.entries(stats.colorCounts)) addCount(colorCounts, key, count);
     for (const key of stats.visibleColorKeys) visibleColorKeys.add(key);
-    for (const [baseIndex, shades] of stats.usedShadesByBase) {
-      for (const shade of shades) addUsedShade(usedShadesByBase, baseIndex, shade);
-    }
     for (const [role, count] of stats.fillerRoleCounts) addRoleCount(fillerRoleCounts, role, count);
   }
 
   return {
     blockCounts,
-    baseColorCounts,
+    colorCounts,
     numUniqueColorShadesForPart: visibleColorKeys.size,
-    usedShadesByBase,
     fillerRoleCounts,
   };
 }

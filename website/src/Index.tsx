@@ -52,16 +52,43 @@ import {
   type ParsedColorGridTile,
   loadImageDataFromFile,
 } from "@/lib/colorGridParsing";
-import { computeColorGridStats, FlatModeBehavior, hasStepMixOpportunity, type ColorGridStats } from "@/lib/colorGridAnalysis";
+import {
+  collectShadeCountsByColorRefKey,
+  type ColorFrequencyMap,
+  computeColorGridStats,
+  FlatModeBehavior,
+  hasStepMixOpportunity,
+  type ColorGridStats,
+} from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
 import { createImageDataFromColorGrid, MAP_SIZE } from "@/utils/color";
+import {
+  areCustomColorsEqual,
+  areCustomSelectedBlocksEqual,
+  buildCustomBlocksByBase,
+  cloneCustomColors,
+  getParseRelevantCustomColorsKey,
+  getSelectedCustomColorBlock,
+  normalizeCustomSelectedBlocks,
+  removeCustomColorBlock,
+  sanitizeCustomRgbDraftValue,
+  selectCustomColorBlock,
+  upsertCustomColorBlock,
+} from "@/utils/customColors";
 import type { ColorGrid, ColorRgb } from "@/types/color";
 import {
   analyzeFragileSupportOverrideNeeds,
   analyzeMaterialNeeds,
 } from "@/lib/shapeAnalysis";
 import { getCachedShapeFillerNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
-import { sanitizeUserBlockEntry, normalizeBlockId } from "@/lib/blockId";
+import {
+  type ColorBlockSelections,
+  hasAssignedColorBlock,
+  normalizeBlockId,
+  resolveAssignedColorBlock,
+  sanitizeUserBlockEntry,
+} from "@/lib/blockId";
+import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import {
   createFillerAssignments,
   getSupportModeFillerRoles,
@@ -70,7 +97,7 @@ import {
   isWaterSideSupportFillerValid,
 } from "@/lib/fillerRules";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
-import { decodeFullPreset, encodeFullPreset } from "@/lib/codecPreset";
+import { decodeFullPreset, encodeFullPreset, loadPresets } from "@/lib/codecPreset";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
 import {
@@ -83,6 +110,7 @@ import {
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { getSupportedColorAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
 import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, SupportMode } from "@/types/ui";
+import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
 import {
   getBuildModeDownloadSuffix,
   isSuppressStepsBuildMode,
@@ -106,7 +134,6 @@ import {
   findMatchingBuiltinPresetName,
   getBuiltinPreset,
   isAutoCustomPresetName,
-  loadPresets,
   type BlockPreset,
 } from "@/data/presets";
 import { ToolbarPresetSettings } from "@/components/ToolbarPresetSettings";
@@ -147,13 +174,11 @@ type DerivedImageStats = {
     uniqueShadeCount: number;
     uniqueBaseColorCount: number;
   };
-  usedBaseColors: Set<number>;
-  usedShadesByBase: Map<number, Set<Shade>>;
-  usedWaterShades: Set<Shade>;
+  usedShadesByColorKey: Map<ColorRefKey, Set<Shade>>;
 };
 type MaterialCountsLike = Pick<
   ReturnType<typeof analyzeMaterialNeeds>,
-  "blockCounts" | "baseColorCounts" | "usedShadesByBase" | "fillerRoleCounts"
+  "blockCounts" | "colorCounts" | "fillerRoleCounts"
 >;
 type TileBaseAnalysis = {
   tile: ParsedColorGridTile;
@@ -187,10 +212,14 @@ type AnalysisProgress = {
 };
 type TileAnalysisPhase = "generating" | "fillerAnalysis";
 
-const EMPTY_USED_SHADES_BY_BASE = new Map<number, Set<Shade>>();
-const EMPTY_USED_BASE_COLORS = new Set<number>();
+const EMPTY_USED_SHADES_BY_COLOR_KEY = new Map<ColorRefKey, Set<Shade>>();
+const EMPTY_USED_COLOR_KEYS = new Set<ColorRefKey>();
 const EMPTY_USED_WATER_SHADES = new Set<Shade>();
 const EMPTY_FILLER_ROLE_COUNTS = new Map<FillerRole, number>();
+
+function areTileAnalysesShallowEqual(left: readonly TileAnalysis[], right: readonly TileAnalysis[]): boolean {
+  return left.length === right.length && left.every((tile, index) => tile === right[index]);
+}
 
 function buildTileSelectionRange(anchorIndex: number, targetIndex: number): number[] {
   const start = Math.min(anchorIndex, targetIndex);
@@ -253,110 +282,88 @@ function buildWaterDropInputs(dark: number, flat: number, light: number): Record
   };
 }
 
-function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
-  const usedShadesByBase = new Map<number, Set<Shade>>();
-  const usedBaseColors = new Set<number>();
+function hasAnySharedValue<T>(values: Iterable<T>, target: ReadonlySet<T>): boolean {
+  for (const value of values) {
+    if (target.has(value)) return true;
+  }
+  return false;
+}
+
+function collectUsedShadesByColorKey(colorFrequencyMap: ColorFrequencyMap): Map<ColorRefKey, Set<Shade>> {
+  const usedShadesByColorKey = new Map<ColorRefKey, Set<Shade>>();
+  for (const [colorKey, shadeFrequencyMap] of colorFrequencyMap) {
+    usedShadesByColorKey.set(getColorRefKey(colorKey), new Set(shadeFrequencyMap.keys()));
+  }
+  return usedShadesByColorKey;
+}
+
+function summarizeUsedShadesByColorKey(
+  usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>,
+): Pick<DerivedImageStats, "hasTransparency" | "paletteUsageInfo"> {
   let hasTransparency = false;
   let uniqueShadeCount = 0;
   let uniqueBaseColorCount = 0;
 
-  for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
-    if (colorKey.isCustom) {
-      uniqueShadeCount += shadeFrequencyMap.size;
+  for (const [colorKey, shades] of usedShadesByColorKey) {
+    const color = parseColorRefKey(colorKey);
+    if (color.isCustom) {
+      uniqueShadeCount += shades.size;
       continue;
     }
 
-    if (colorKey.id === TRANSPARENCY_BASE_INDEX) {
-      if ((shadeFrequencyMap.get(Shade.Dark) ?? 0) > 0) {
+    if (color.id === TRANSPARENCY_BASE_INDEX) {
+      if (shades.has(Shade.Dark)) {
         hasTransparency = true;
-        usedBaseColors.add(TRANSPARENCY_BASE_INDEX);
       }
       continue;
     }
 
-    usedBaseColors.add(colorKey.id);
     ++uniqueBaseColorCount;
-
-    const shades = new Set<Shade>(shadeFrequencyMap.keys());
     uniqueShadeCount += shades.size;
-    usedShadesByBase.set(colorKey.id, shades);
   }
-
-  const usedWaterShades = usedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>();
 
   return {
     hasTransparency,
+    paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
+  };
+}
+
+function getUsedWaterShades(
+  usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>,
+): ReadonlySet<Shade> {
+  return usedShadesByColorKey.get(getColorRefKey({ id: WATER_BASE_INDEX, isCustom: false })) ?? EMPTY_USED_WATER_SHADES;
+}
+
+function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
+  const usedShadesByColorKey = collectUsedShadesByColorKey(imageStats.colorFrequencyMap);
+  return {
     allSameShade: imageStats.allSameShade,
     flatModeBehavior: imageStats.flatModeBehavior,
-    paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
-    usedBaseColors,
-    usedShadesByBase,
-    usedWaterShades,
+    usedShadesByColorKey,
+    ...summarizeUsedShadesByColorKey(usedShadesByColorKey),
   };
 }
 
 function aggregateDerivedImageStats(tileImageStats: readonly ColorGridStats[]): DerivedImageStats {
-  const usedBaseColors = new Set<number>();
-  const usedShadesByBase = new Map<number, Set<Shade>>();
-  const uniqueShadeKeys = new Set<string>();
-  const uniqueBaseColorIds = new Set<number>();
-  let hasTransparency = false;
-
+  const usedShadesByColorKey = new Map<ColorRefKey, Set<Shade>>();
   for (const imageStats of tileImageStats) {
     for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
-      if (colorKey.isCustom) {
-        for (const shade of shadeFrequencyMap.keys()) uniqueShadeKeys.add(`c:${colorKey.id}:${shade}`);
-        continue;
-      }
-
-      if (colorKey.id === TRANSPARENCY_BASE_INDEX) {
-        if ((shadeFrequencyMap.get(Shade.Dark) ?? 0) > 0) {
-          hasTransparency = true;
-          usedBaseColors.add(TRANSPARENCY_BASE_INDEX);
-        }
-        continue;
-      }
-
-      usedBaseColors.add(colorKey.id);
-      uniqueBaseColorIds.add(colorKey.id);
-      let shades = usedShadesByBase.get(colorKey.id);
+      const stableKey = getColorRefKey(colorKey);
+      let shades = usedShadesByColorKey.get(stableKey);
       if (!shades) {
         shades = new Set<Shade>();
-        usedShadesByBase.set(colorKey.id, shades);
+        usedShadesByColorKey.set(stableKey, shades);
       }
-      for (const shade of shadeFrequencyMap.keys()) {
-        shades.add(shade);
-        uniqueShadeKeys.add(`b:${colorKey.id}:${shade}`);
-      }
+      for (const shade of shadeFrequencyMap.keys()) shades.add(shade);
     }
   }
 
   return {
     allSameShade: undefined,
     flatModeBehavior: FlatModeBehavior.None,
-    hasTransparency,
-    paletteUsageInfo: {
-      uniqueShadeCount: uniqueShadeKeys.size,
-      uniqueBaseColorCount: uniqueBaseColorIds.size,
-    },
-    usedBaseColors,
-    usedShadesByBase,
-    usedWaterShades: usedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>(),
+    usedShadesByColorKey,
+    ...summarizeUsedShadesByColorKey(usedShadesByColorKey),
   };
-}
-
-function mergeUsedShadesByBase(
-  target: Map<number, Set<Shade>>,
-  source: ReadonlyMap<number, ReadonlySet<Shade>>,
-): void {
-  for (const [baseIndex, shades] of source) {
-    let targetShades = target.get(baseIndex);
-    if (!targetShades) {
-      targetShades = new Set<Shade>();
-      target.set(baseIndex, targetShades);
-    }
-    for (const shade of shades) targetShades.add(shade);
-  }
 }
 
 function aggregateMaterialCounts(
@@ -364,8 +371,7 @@ function aggregateMaterialCounts(
   mode: "sum" | "max",
 ): MaterialCountsLike {
   const blockCounts: Record<string, number> = {};
-  const baseColorCounts: Record<number, number> = {};
-  const usedShadesByBase = new Map<number, Set<Shade>>();
+  const colorCounts: Record<string, number> = {};
   const fillerRoleCounts = new Map<FillerRole, number>();
 
   for (const stat of stats) {
@@ -374,13 +380,11 @@ function aggregateMaterialCounts(
         ? (blockCounts[blockName] || 0) + count
         : Math.max(blockCounts[blockName] || 0, count);
     }
-    for (const [baseIndexRaw, count] of Object.entries(stat.baseColorCounts)) {
-      const baseIndex = Number(baseIndexRaw);
-      baseColorCounts[baseIndex] = mode === "sum"
-        ? (baseColorCounts[baseIndex] || 0) + count
-        : Math.max(baseColorCounts[baseIndex] || 0, count);
+    for (const [colorKey, count] of Object.entries(stat.colorCounts)) {
+      colorCounts[colorKey] = mode === "sum"
+        ? (colorCounts[colorKey] || 0) + count
+        : Math.max(colorCounts[colorKey] || 0, count);
     }
-    mergeUsedShadesByBase(usedShadesByBase, stat.usedShadesByBase);
     for (const [role, count] of stat.fillerRoleCounts) {
       fillerRoleCounts.set(role, mode === "sum"
         ? (fillerRoleCounts.get(role) ?? 0) + count
@@ -389,7 +393,7 @@ function aggregateMaterialCounts(
     }
   }
 
-  return { blockCounts, baseColorCounts, usedShadesByBase, fillerRoleCounts };
+  return { blockCounts, colorCounts, fillerRoleCounts };
 }
 
 function aggregateOverrideCounts(
@@ -544,21 +548,11 @@ const Index = () => {
     const idx = loadPresets().findIndex(p => p.name === DEFAULT_ACTIVE_PRESET_NAME);
     return idx >= 0 ? idx : 0;
   });
-  const [supportFillerBlock, setSupportFillerBlock] = useState(() =>
-    sanitizeUserBlockEntry(loadCached(LS_KEYS.supportFiller, DEFAULT_SUPPORT_FILLER_BLOCK)),
-  );
-  const [shadeFillerBlock, setShadeFillerBlock] = useState(() =>
-    sanitizeUserBlockEntry(loadCached(LS_KEYS.shadeFiller, DEFAULT_SHADE_FILLER_BLOCK)),
-  );
-  const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() =>
-    sanitizeUserBlockEntry(loadCached(LS_KEYS.suppress2LayerLateFiller, DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK)),
-  );
-  const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() =>
-    sanitizeUserBlockEntry(loadCached(LS_KEYS.dominateVoidFiller, DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK)),
-  );
-  const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() =>
-    sanitizeUserBlockEntry(loadCached(LS_KEYS.recessiveVoidFiller, DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK)),
-  );
+  const [supportFillerBlock, setSupportFillerBlock] = useState(() => loadCached(LS_KEYS.supportFiller, DEFAULT_SUPPORT_FILLER_BLOCK));
+  const [shadeFillerBlock, setShadeFillerBlock] = useState(() => loadCached(LS_KEYS.shadeFiller, DEFAULT_SHADE_FILLER_BLOCK));
+  const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() => loadCached(LS_KEYS.suppress2LayerLateFiller, DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK));
+  const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() => loadCached(LS_KEYS.dominateVoidFiller, DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK));
+  const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() => loadCached(LS_KEYS.recessiveVoidFiller, DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK));
   const [buildMode, setBuildMode] = useState<BuildMode>(() => {
     const storedBuildMode = loadCached(LS_KEYS.buildMode, DEFAULT_BUILD_MODE);
     return Object.values(BuildMode).includes(storedBuildMode as BuildMode) ? storedBuildMode : DEFAULT_BUILD_MODE;
@@ -592,6 +586,7 @@ const Index = () => {
     loadCached(LS_KEYS.supportMode, DEFAULT_SUPPORT_MODE),
   );
   const [customColors, setCustomColors] = useState<ColorRgb[]>([]);
+  const [selectedBlocksCustom, setSelectedBlocksCustom] = useState<Record<number, string>>({});
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
   const [imageData, setImageData] = useState<ImageData | null>(null);
@@ -635,6 +630,12 @@ const Index = () => {
   const [selectedTileIndices, setSelectedTileIndices] = useState<number[]>([]);
   const [tileSelectionAnchorIndex, setTileSelectionAnchorIndex] = useState<number | null>(null);
   const [imageLossyFormatLabel, setImageLossyFormatLabel] = useState<string | null>(null);
+  const previousMaterialInputsRef = useRef<{
+    colorAssignmentsByKey: Map<ColorRefKey, string>;
+    fillerAssignmentsByRole: Map<FillerRole, string>;
+    applySupportFloorYs: boolean;
+    supportModeEnabled: boolean;
+  } | null>(null);
   const decodedImageSet = useMemo<ColorGridSetParseResult | null>(
     () => decodedColorGrid
       ? {
@@ -680,10 +681,7 @@ const Index = () => {
   const hasMultipleTiles = tileCount > 1;
   const displayImageData = hasBlockingSizeError ? null : (parsedImageSet?.imageData ?? imageData);
   const imageColorGrid = tileCount === 1 ? (parsedTiles[0]?.colorGrid ?? null) : null;
-  const imageUsesCustomColors = useMemo(
-    () => parsedTiles.some(tile => tile.colorGrid.some(column => column.some(color => color.isCustom))),
-    [parsedTiles],
-  );
+  const parseRelevantCustomColorKey = useMemo(() => getParseRelevantCustomColorsKey(customColors), [customColors]);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadedPreviewUrlRef = useRef<string | null>(null);
   const fileLoadRequestIdRef = useRef(0);
@@ -702,6 +700,7 @@ const Index = () => {
   const [presetToolbarMinWidthPx, setPresetToolbarMinWidthPx] = useState(0);
   const [fillerToolbarMinWidthPx, setFillerToolbarMinWidthPx] = useState(0);
   const [colorTableMinWidthPx, setColorTableMinWidthPx] = useState(0);
+  const [colorTableLayout, setColorTableLayout] = useState<ColorTableLayout>(INITIAL_COLOR_TABLE_LAYOUT);
   const [isStackedLayout, setIsStackedLayout] = useState(false);
   const [creditsFloatGapPx, setCreditsFloatGapPx] = useState(0);
   const creditsFloatGapRef = useRef(0);
@@ -734,44 +733,79 @@ const Index = () => {
     ? messages.presets.builtinTooltip(preset.name)
     : undefined;
 
-  const [savedSelectedBlocks, setSavedSelectedBlocks] = useState<Record<number, string> | null>(null);
+  const [savedPresetSnapshot, setSavedPresetSnapshot] = useState<{
+    selectedBlocks: Record<number, string>;
+    customColors: ColorRgb[];
+    selectedBlocksCustom: Record<number, string>;
+  } | null>(null);
+  const activePresetCustomColors = preset.customColors ?? [];
+  const activePresetCustomSelectedBlocks = useMemo(
+    () => normalizeCustomSelectedBlocks(activePresetCustomColors, preset.selectedBlocksCustom),
+    [activePresetCustomColors, preset.selectedBlocksCustom],
+  );
 
-  // Compute dirty by comparing current blocks to saved snapshot
+  const capturePresetSnapshot = useCallback(
+    () => ({
+      selectedBlocks: { ...preset.selectedBlocks },
+      customColors: cloneCustomColors(customColors),
+      selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
+    }),
+    [preset.selectedBlocks, customColors, selectedBlocksCustom],
+  );
+
+  // Compute dirty by comparing current preset-owned state to saved snapshot
   const presetDirty = useMemo(() => {
-    if (!savedSelectedBlocks) return false;
+    if (!savedPresetSnapshot) return false;
     const current = preset.selectedBlocks;
-    const allKeys = new Set([...Object.keys(savedSelectedBlocks), ...Object.keys(current)]);
+    const allKeys = new Set([...Object.keys(savedPresetSnapshot.selectedBlocks), ...Object.keys(current)]);
     for (const k of allKeys) {
-      if ((savedSelectedBlocks[Number(k)] ?? "") !== (current[Number(k)] ?? "")) return true;
+      if ((savedPresetSnapshot.selectedBlocks[Number(k)] ?? "") !== (current[Number(k)] ?? "")) return true;
     }
-    return false;
-  }, [preset.selectedBlocks, savedSelectedBlocks]);
+    return (
+      !areCustomColorsEqual(customColors, savedPresetSnapshot.customColors) ||
+      !areCustomSelectedBlocksEqual(selectedBlocksCustom, savedPresetSnapshot.selectedBlocksCustom, customColors)
+    );
+  }, [preset.selectedBlocks, customColors, selectedBlocksCustom, savedPresetSnapshot]);
   const currentPresetIsUnsavedAuto = useMemo(
     () => activeIdx >= BUILTIN_PRESET_NAMES.length && isAutoCustomPresetName(preset.name) && presetDirty,
     [activeIdx, preset.name, presetDirty],
   );
 
   const markSavedDeferred = useCallback(() => {
-    setSavedSelectedBlocks(null);
+    setSavedPresetSnapshot(null);
     markSavedNextRef.current = true;
   }, []);
 
   const markSavedImmediate = useCallback(() => {
-    setSavedSelectedBlocks({ ...preset.selectedBlocks });
-  }, [preset.selectedBlocks]);
+    setSavedPresetSnapshot(capturePresetSnapshot());
+  }, [capturePresetSnapshot]);
 
   const markSavedNextRef = useRef(true);
 
   useEffect(() => {
     if (markSavedNextRef.current) {
-      setSavedSelectedBlocks({ ...preset.selectedBlocks });
+      if (!areCustomColorsEqual(customColors, activePresetCustomColors)) return;
+      if (!areCustomSelectedBlocksEqual(selectedBlocksCustom, activePresetCustomSelectedBlocks, activePresetCustomColors)) return;
+      setSavedPresetSnapshot(capturePresetSnapshot());
       markSavedNextRef.current = false;
     }
-  }, [preset.selectedBlocks]);
+  }, [activePresetCustomColors, activePresetCustomSelectedBlocks, capturePresetSnapshot, customColors, selectedBlocksCustom]);
+
+  useEffect(() => {
+    setCustomColors(current =>
+      areCustomColorsEqual(current, activePresetCustomColors) ? current : cloneCustomColors(activePresetCustomColors),
+    );
+    setSelectedBlocksCustom(current =>
+      areCustomSelectedBlocksEqual(current, activePresetCustomSelectedBlocks, activePresetCustomColors)
+        ? current
+        : normalizeCustomSelectedBlocks(activePresetCustomColors, activePresetCustomSelectedBlocks),
+    );
+  }, [activeIdx, activePresetCustomColors, activePresetCustomSelectedBlocks]);
 
   // Persist settings to localStorage
   useEffect(() => {
     const persistedPresets = presets.filter((p, idx) => {
+      if (getBuiltinPreset(p.name)) return false;
       if (!isAutoCustomPresetName(p.name)) return true;
       if (idx !== activeIdx) return true;
       // Reuse yellow-dot logic: active auto-Custom with unsaved changes is discarded.
@@ -885,6 +919,13 @@ const Index = () => {
     () => (tileImageStats.length > 0 ? aggregateDerivedImageStats(tileImageStats) : null),
     [tileImageStats],
   );
+  const shadeCountsByColorKey = useMemo(() => collectShadeCountsByColorRefKey(tileImageStats), [tileImageStats]);
+  const usedShadesByColorKey = derivedImageStats?.usedShadesByColorKey ?? EMPTY_USED_SHADES_BY_COLOR_KEY;
+  const usedColorKeys = useMemo(() => new Set(usedShadesByColorKey.keys()), [usedShadesByColorKey]);
+  const imageUsesCustomColors = useMemo(
+    () => [...usedColorKeys].some(key => parseColorRefKey(key).isCustom),
+    [usedColorKeys],
+  );
   const voidShadowSummary = useMemo(() => {
     let hasDominantVoidShadow = false;
     let hasAnyVoidShadow = false;
@@ -912,8 +953,7 @@ const Index = () => {
       southToNorthSelectable,
     };
   }, [tileImageStats]);
-  const fullImageUsedShadesByBase = derivedImageStats?.usedShadesByBase ?? EMPTY_USED_SHADES_BY_BASE;
-  const usedWaterShades = derivedImageStats?.usedWaterShades ?? EMPTY_USED_WATER_SHADES;
+  const usedWaterShades = getUsedWaterShades(usedShadesByColorKey);
   const imageHasWater = usedWaterShades.size > 0;
   const paletteUsageInfo = derivedImageStats?.paletteUsageInfo ?? null;
   const [analysisResult, setAnalysisResult] = useState<TileAnalysisResult | null>(null);
@@ -934,7 +974,7 @@ const Index = () => {
   const showMaxPerSplitOption = hasMultipleTiles && selectedTileCount !== 1;
   const analysisBusy = isParsingImage || isAnalyzingTiles;
   const previewBusy = analysisBusy || isAnalyzingMaterials;
-  const selectedWaterBlock = preset.selectedBlocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
+  const selectedWaterBlock = preset.selectedBlocks[WATER_BASE_INDEX] ?? BASE_COLORS[WATER_BASE_INDEX].blocks[0] ?? "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
   const effectiveSupportFillerBlock = supportFillerBlock.trim() || DEFAULT_SUPPORT_FILLER_BLOCK;
@@ -960,10 +1000,11 @@ const Index = () => {
   const flatBuildModeSelected = buildMode === BuildMode.Flat;
   const getTileWaterSetting = useCallback(
     (tileDerivedImageStats: DerivedImageStats): TileWaterSetting => {
-      const tileHasWater = tileDerivedImageStats.usedWaterShades.size > 0;
+      const tileUsedWaterShades = getUsedWaterShades(tileDerivedImageStats.usedShadesByColorKey);
+      const tileHasWater = tileUsedWaterShades.size > 0;
       const tileHasNonLightWater =
-        tileDerivedImageStats.usedWaterShades.has(Shade.Dark) ||
-        tileDerivedImageStats.usedWaterShades.has(Shade.Flat);
+        tileUsedWaterShades.has(Shade.Dark) ||
+        tileUsedWaterShades.has(Shade.Flat);
       if (flatBuildModeSelected) return undefined;
       if (belowPlatformWater && tileHasWater) {
         return { kind: "below-platform", drops: normalizedDeferredWaterDrops };
@@ -1011,9 +1052,31 @@ const Index = () => {
   const supportFillerIsFragile =
     normalizedSupportFillerBlockId.length > 0 && isFragileBlock(normalizedSupportFillerBlockId);
   const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(effectiveSupportFillerBlock);
+  const sanitizeCommittedBlockEntry = useCallback((value: string) => sanitizeUserBlockEntry(value), []);
+  const setCommittedSupportFillerBlock = useCallback(
+    (value: string) => setSupportFillerBlock(sanitizeCommittedBlockEntry(value)),
+    [sanitizeCommittedBlockEntry],
+  );
+  const setCommittedShadeFillerBlock = useCallback(
+    (value: string) => setShadeFillerBlock(sanitizeCommittedBlockEntry(value)),
+    [sanitizeCommittedBlockEntry],
+  );
+  const setCommittedSuppress2LayerLateFillerBlock = useCallback(
+    (value: string) => setSuppress2LayerLateFillerBlock(sanitizeCommittedBlockEntry(value)),
+    [sanitizeCommittedBlockEntry],
+  );
+  const setCommittedDominateVoidFillerBlock = useCallback(
+    (value: string) => setDominateVoidFillerBlock(sanitizeCommittedBlockEntry(value)),
+    [sanitizeCommittedBlockEntry],
+  );
+  const setCommittedRecessiveVoidFillerBlock = useCallback(
+    (value: string) => setRecessiveVoidFillerBlock(sanitizeCommittedBlockEntry(value)),
+    [sanitizeCommittedBlockEntry],
+  );
   const commitSupportFillerBlock = useCallback((value: string) => {
-    if (isFillerDisabled(value)) setSupportMode(SupportMode.None);
-  }, []);
+    const nextValue = sanitizeCommittedBlockEntry(value);
+    if (isFillerDisabled(nextValue)) setSupportMode(SupportMode.None);
+  }, [sanitizeCommittedBlockEntry]);
   const shadeFillerShadingDisabled = isShadeFillerDisabled(effectiveShadeFillerBlock);
   const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock || effectiveShadeFillerBlock);
   const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock || effectiveShadeFillerBlock);
@@ -1040,9 +1103,12 @@ const Index = () => {
       usesIceForWater,
     ],
   );
+  const activeTransparentBlock = derivedImageStats?.hasTransparency
+    ? (preset.selectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "")
+    : "";
   const transparentBlockMapping = useMemo(
-    () => ({ [TRANSPARENCY_BASE_INDEX]: preset.selectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "" }),
-    [preset.selectedBlocks[TRANSPARENCY_BASE_INDEX]],
+    () => ({ [TRANSPARENCY_BASE_INDEX]: activeTransparentBlock }),
+    [activeTransparentBlock],
   );
   useEffect(() => {
     if (!imageValid || parsedTiles.length === 0) {
@@ -1090,7 +1156,7 @@ const Index = () => {
 
         const nextBaseAnalyses = await Promise.all(parsedTiles.map(async (tile, index) => {
           const tileDerivedStats = tileDerivedImageStats[index];
-          const hasWater = tileDerivedStats.usedWaterShades.size > 0;
+          const hasWater = getUsedWaterShades(tileDerivedStats.usedShadesByColorKey).size > 0;
           const includeTransparentBlocks = shouldIncludeTransparentBlocks(
             transparentBlockMapping,
             tileDerivedStats.hasTransparency,
@@ -1297,7 +1363,25 @@ const Index = () => {
     !activeBuildAtWorldMinY;
   const lockFlatBuildMode = isFlatShape && !flatRequiresVsFillers;
   const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
-  const usedBaseColors = derivedImageStats?.usedBaseColors ?? EMPTY_USED_BASE_COLORS;
+  const colorBlockSelections = useMemo<ColorBlockSelections>(
+    () => ({ selectedBlocks: preset.selectedBlocks, selectedBlocksCustom, customColors }),
+    [preset.selectedBlocks, selectedBlocksCustom, customColors],
+  );
+  const usedMaterialColorAssignments = useMemo(
+    () => [...usedColorKeys]
+      .toSorted((a, b) => a - b)
+      .map(key => `${key}=${resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections)}`)
+      .join("|"),
+    [usedColorKeys, colorBlockSelections],
+  );
+  const usedMaterialFillerAssignments = useMemo(() => {
+    if (aggregateFillerRoleCounts.size === 0) return "";
+    const assignmentByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, assignment.block]));
+    return [...aggregateFillerRoleCounts.keys()]
+      .toSorted()
+      .map(role => `${role}=${assignmentByRole.get(role) ?? ""}`)
+      .join("|");
+  }, [aggregateFillerRoleCounts, uiFillerAssignments]);
   const visibleWaterLevelControls = useMemo(
     () => {
       if (!imageValid || !belowPlatformWater || flatBuildModeSelected) return [];
@@ -1332,6 +1416,7 @@ const Index = () => {
 
   useEffect(() => {
     if (tileGeometryAnalyses.length === 0) {
+      previousMaterialInputsRef.current = null;
       setTileAnalysesState(current => (current.length === 0 ? current : []));
       setIsAnalyzingMaterials(false);
       setMaterialAnalysisProgress(current => (current === null ? current : null));
@@ -1340,12 +1425,92 @@ const Index = () => {
 
     let cancelled = false;
     const totalTiles = tileGeometryAnalyses.length;
+    const previousMaterialInputs = previousMaterialInputsRef.current;
     const materialAnalysisOptions = {
-      blockMapping: preset.selectedBlocks,
+      selectedBlocks: preset.selectedBlocks,
+      selectedBlocksCustom,
       fillerAssignments: uiFillerAssignments,
       applySupportFloorYs,
       customColors,
     };
+    const currentColorAssignmentsByKey = new Map(
+      [...usedColorKeys].map(key => [key, resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections)] as const),
+    );
+    const currentFillerAssignmentsByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, assignment.block]));
+    const currentSupportModeEnabled = supportMode !== SupportMode.None;
+    const changedColorKeys = previousMaterialInputs
+      ? new Set(
+          [...usedColorKeys].filter(key =>
+            previousMaterialInputs.colorAssignmentsByKey.get(key) !== currentColorAssignmentsByKey.get(key),
+          ),
+        )
+      : EMPTY_USED_COLOR_KEYS;
+    const changedFillerRoles = previousMaterialInputs
+      ? new Set(
+          [...aggregateFillerRoleCounts.keys()].filter(role =>
+            (previousMaterialInputs.fillerAssignmentsByRole.get(role) ?? "") !== (currentFillerAssignmentsByRole.get(role) ?? ""),
+          ),
+        )
+      : new Set<FillerRole>();
+    const canReuseMaterialStats = (
+      previousTile: TileAnalysis | undefined,
+      tile: TileGeometryAnalysis,
+    ): previousTile is TileAnalysis => {
+      if (!previousTile?.materialNeedStats || !tile.supportShape) return false;
+      if (previousTile.tile.cacheKey !== tile.tile.cacheKey || previousTile.supportShape !== tile.supportShape) return false;
+      if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== applySupportFloorYs) return false;
+      if (hasAnySharedValue(tile.derivedImageStats.usedShadesByColorKey.keys(), changedColorKeys)) return false;
+      if (hasAnySharedValue(tile.fillerNeedStats?.roleCounts.keys() ?? [], changedFillerRoles)) return false;
+      return true;
+    };
+    const canReuseFragileStats = (
+      previousTile: TileAnalysis | undefined,
+      tile: TileGeometryAnalysis,
+    ): previousTile is TileAnalysis => {
+      if (!currentSupportModeEnabled || !previousTile?.fragileSupportOverrideNeedStats) return false;
+      if (!previousMaterialInputs?.supportModeEnabled) return false;
+      return canReuseMaterialStats(previousTile, tile);
+    };
+    const reusableTileAnalyses = tileGeometryAnalyses.map((tile, index) => {
+      if (!tile.supportShape) {
+        return {
+          ...tile,
+          materialNeedStats: null,
+          fragileSupportOverrideNeedStats: null,
+        } satisfies TileAnalysis;
+      }
+      const previousTile = tileAnalysesState[index];
+      if (!canReuseMaterialStats(previousTile, tile)) return null;
+      return {
+        ...tile,
+        materialNeedStats: previousTile.materialNeedStats,
+        fragileSupportOverrideNeedStats: canReuseFragileStats(previousTile, tile)
+          ? previousTile.fragileSupportOverrideNeedStats
+          : null,
+      } satisfies TileAnalysis;
+    });
+
+    if (
+      reusableTileAnalyses.every((tile): tile is TileAnalysis => tile !== null) &&
+      (
+        !currentSupportModeEnabled ||
+        reusableTileAnalyses.every((tile, index) =>
+          !tileGeometryAnalyses[index]?.supportShape || tile.fragileSupportOverrideNeedStats !== null,
+        )
+      )
+    ) {
+      previousMaterialInputsRef.current = {
+        colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
+        fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
+        applySupportFloorYs,
+        supportModeEnabled: currentSupportModeEnabled,
+      };
+      setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, reusableTileAnalyses) ? current : reusableTileAnalyses));
+      setIsAnalyzingMaterials(false);
+      setMaterialAnalysisProgress(current => (current === null ? current : null));
+      return;
+    }
+
     setIsAnalyzingMaterials(true);
     setMaterialAnalysisProgress(totalTiles > 1 ? { completed: 0, total: totalTiles } : null);
 
@@ -1355,18 +1520,32 @@ const Index = () => {
       const nextTileAnalyses: TileAnalysis[] = [];
 
       for (const [index, tile] of tileGeometryAnalyses.entries()) {
-        const materialNeedStats = tile.supportShape
-          ? analyzeMaterialNeeds(tile.tile.colorGrid, tile.supportShape, materialAnalysisOptions)
-          : null;
-        const fragileSupportOverrideNeedStats =
-          tile.supportShape && supportMode !== SupportMode.None
-            ? analyzeFragileSupportOverrideNeeds(tile.supportShape, materialAnalysisOptions)
-            : null;
-        nextTileAnalyses.push({
-          ...tile,
-          materialNeedStats,
-          fragileSupportOverrideNeedStats,
-        });
+        const reusableTileAnalysis = reusableTileAnalyses[index];
+        if (reusableTileAnalysis && (!currentSupportModeEnabled || reusableTileAnalysis.fragileSupportOverrideNeedStats !== null)) {
+          nextTileAnalyses.push(reusableTileAnalysis);
+        } else if (!tile.supportShape) {
+          nextTileAnalyses.push({
+            ...tile,
+            materialNeedStats: null,
+            fragileSupportOverrideNeedStats: null,
+          });
+        } else {
+          const previousTile = tileAnalysesState[index];
+          const materialNeedStats =
+            reusableTileAnalysis?.materialNeedStats ??
+            (canReuseMaterialStats(previousTile, tile) ? previousTile.materialNeedStats : analyzeMaterialNeeds(tile.tile.colorGrid, tile.supportShape, materialAnalysisOptions));
+          const fragileSupportOverrideNeedStats =
+            currentSupportModeEnabled
+              ? canReuseFragileStats(previousTile, tile)
+                ? previousTile.fragileSupportOverrideNeedStats
+                : analyzeFragileSupportOverrideNeeds(tile.supportShape, materialAnalysisOptions)
+              : null;
+          nextTileAnalyses.push({
+            ...tile,
+            materialNeedStats,
+            fragileSupportOverrideNeedStats,
+          });
+        }
 
         if (cancelled) return;
         if (totalTiles > 1) {
@@ -1385,7 +1564,13 @@ const Index = () => {
       }
 
       if (cancelled) return;
-      setTileAnalysesState(nextTileAnalyses);
+      previousMaterialInputsRef.current = {
+        colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
+        fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
+        applySupportFloorYs,
+        supportModeEnabled: currentSupportModeEnabled,
+      };
+      setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, nextTileAnalyses) ? current : nextTileAnalyses));
       setIsAnalyzingMaterials(false);
       setMaterialAnalysisProgress(null);
     })();
@@ -1393,7 +1578,13 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [tileGeometryAnalyses, preset.selectedBlocks, uiFillerAssignments, applySupportFloorYs, customColors, supportMode]);
+  }, [
+    tileGeometryAnalyses,
+    usedMaterialColorAssignments,
+    usedMaterialFillerAssignments,
+    applySupportFloorYs,
+    supportMode,
+  ]);
   const tileAnalyses = tileAnalysesState;
 
   const setNormalizedWaterDrop = useCallback((shade: WaterDropShade, rawValue: number) => {
@@ -1413,10 +1604,16 @@ const Index = () => {
     setDarkWaterDrop(nextDrops[Shade.Dark]);
   }, [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades]);
 
-  const missingBlocks = useMemo(() => {
-    if (!imageValid || usedBaseColors.size === 0) return [];
-    return [...usedBaseColors].filter(idx => idx > 0 && !preset.selectedBlocks[idx]);
-  }, [imageValid, usedBaseColors, preset.selectedBlocks]);
+  const missingColorKeys = useMemo(() => {
+    if (!imageValid || usedColorKeys.size === 0) return EMPTY_USED_COLOR_KEYS;
+    return new Set(
+      [...usedColorKeys].filter(key => {
+        const color = parseColorRefKey(key);
+        return (color.isCustom || color.id !== TRANSPARENCY_BASE_INDEX) && !hasAssignedColorBlock(color, colorBlockSelections);
+      }),
+    );
+  }, [imageValid, usedColorKeys, colorBlockSelections]);
+  const missingBlockCount = missingColorKeys.size;
 
   const activeSingleTileIndex = hasMultipleTiles ? selectedTileIndex : (tileAnalyses.length > 0 ? 0 : null);
   const selectedTileAnalysis = activeSingleTileIndex === null ? null : (tileAnalyses[activeSingleTileIndex] ?? null);
@@ -1448,7 +1645,10 @@ const Index = () => {
   const enableFragileSupportOption = useMemo(() => {
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
-      return Object.values(preset.selectedBlocks).some(hasFragileMappedBlock) || customColors.some(color => hasFragileMappedBlock(color.blocks[0] ?? ""));
+      return Object.values(preset.selectedBlocks).some(hasFragileMappedBlock) ||
+        customColors.some((_, customIndex) =>
+          hasFragileMappedBlock(getSelectedCustomColorBlock(selectedBlocksCustom, customIndex, customColors))
+        );
     }
     return tileAnalyses.some(tile =>
       !!tile.supportShape?.parts.some(part =>
@@ -1460,14 +1660,12 @@ const Index = () => {
           if (!cell.includes(FillerRole.SupportFragile)) return false;
           const color = getSupportedColorAbove(part, coord);
           if (!color) return false;
-          const mapped = color.isCustom
-            ? (customColors[color.id]?.blocks[0] ?? "")
-            : (preset.selectedBlocks[color.id] || BASE_COLORS[color.id].blocks[0] || "");
+          const mapped = resolveAssignedColorBlock(color, colorBlockSelections);
           return hasFragileMappedBlock(mapped);
         }),
       ),
     );
-  }, [imageData, tileAnalyses, preset.selectedBlocks, customColors, applySupportFloorYs]);
+  }, [imageData, tileAnalyses, colorBlockSelections, applySupportFloorYs]);
   const staircaseModeOptions = useMemo((): ModeOption[] => {
     if (!imageValid) {
       return DEFAULT_STAIRCASE_OPTIONS;
@@ -1478,12 +1676,12 @@ const Index = () => {
       const flatVisible = tileDerivedImageStats.every(tile => tile.flatModeBehavior !== FlatModeBehavior.None);
       const inclineUpVisible = tileDerivedImageStats.every(tile =>
         tile.allSameShade === Shade.Dark &&
-        tile.usedWaterShades.size === 0 &&
+        getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
         (!tile.hasTransparency || includeTransparentBlocksForStaircase),
       );
       const inclineDownVisible = tileDerivedImageStats.every(tile =>
         tile.allSameShade === Shade.Light &&
-        tile.usedWaterShades.size === 0 &&
+        getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
         (!tile.hasTransparency || includeTransparentBlocksForStaircase),
       );
       return DEFAULT_STAIRCASE_OPTIONS.filter(option => {
@@ -1583,15 +1781,16 @@ const Index = () => {
   );
   const buildMaterialAnalysisOptions = useCallback(
     (fillerAssignments: FillerAssignment[], includeRange: boolean) => ({
-      blockMapping: preset.selectedBlocks,
+      selectedBlocks: preset.selectedBlocks,
       fillerAssignments,
       applySupportFloorYs,
       customColors,
+      selectedBlocksCustom,
       ...(includeRange && colRangeEnabled
         ? (isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] })
         : {}),
     }),
-    [preset.selectedBlocks, applySupportFloorYs, customColors, colRangeEnabled, isStepRangeMode, colStart, colEnd],
+    [preset.selectedBlocks, applySupportFloorYs, customColors, selectedBlocksCustom, colRangeEnabled, isStepRangeMode, colStart, colEnd],
   );
 
   const selectedTileMaterialNeedStats = useMemo(() => {
@@ -1671,10 +1870,8 @@ const Index = () => {
   const numUniqueColorShadesForPart =
     selectedTileMaterialNeedStats?.numUniqueColorShadesForPart ??
     (paletteUsageInfo?.uniqueShadeCount ?? 0);
-  const usedShadesByBase = fullImageUsedShadesByBase;
   const formatRequiredCount = (count: number) => (showStacks ? formatStacks(count) : count);
-  const colorRequiredMap = materialCountsView.baseColorCounts;
-  const numColorBlockTypesForPart = Object.values(colorRequiredMap).filter(count => count > 0).length;
+  const numColorBlockTypesForPart = Object.values(materialCountsView.colorCounts).filter(count => count > 0).length;
 
   const builtinPreset = getBuiltinPreset(preset.name);
   const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.selectedBlocks, preset.selectedBlocks) : false;
@@ -1715,22 +1912,28 @@ const Index = () => {
 
       if (decodedPreset) {
         setPresets(prev => {
+          const decodedBlockPreset: BlockPreset = {
+            ...decodedPreset.blockPreset,
+            customColors: decodedPreset.customColors ? cloneCustomColors(decodedPreset.customColors) : undefined,
+            selectedBlocksCustom: decodedPreset.selectedBlocksCustom,
+          };
           const exists = prev.findIndex(p => p.name === decodedPreset.blockPreset.name);
           if (exists >= 0) {
             const n = [...prev];
-            n[exists] = decodedPreset.blockPreset;
+            n[exists] = decodedBlockPreset;
             setActiveIdx(exists);
             return n;
           }
           setActiveIdx(prev.length);
-          return [...prev, decodedPreset.blockPreset];
+          return [...prev, decodedBlockPreset];
         });
-        if (decodedPreset.supportFiller) setSupportFillerBlock(decodedPreset.supportFiller);
-        if (decodedPreset.shadeFiller) setShadeFillerBlock(decodedPreset.shadeFiller);
+        if (decodedPreset.supportFiller !== undefined) setSupportFillerBlock(decodedPreset.supportFiller);
+        if (decodedPreset.shadeFiller !== undefined) setShadeFillerBlock(decodedPreset.shadeFiller);
         if (decodedPreset.supportMode !== undefined) setSupportMode(decodedPreset.supportMode);
         if (decodedPreset.buildMode) setBuildMode(decodedPreset.buildMode);
-        if (decodedPreset.customColors) setCustomColors(decodedPreset.customColors);
-        if (decodedPreset.suppress2LayerLateFillerBlock) {
+        setCustomColors(decodedPreset.customColors ?? []);
+        setSelectedBlocksCustom(decodedPreset.selectedBlocksCustom ?? {});
+        if (decodedPreset.suppress2LayerLateFillerBlock !== undefined) {
           setSuppress2LayerLateFillerBlock(decodedPreset.suppress2LayerLateFillerBlock);
         }
         if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
@@ -1739,8 +1942,8 @@ const Index = () => {
         if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
           setSuppressStepDirection(decodedPreset.suppressStepDirection);
         }
-        if (decodedPreset.dominateVoidFillerBlock) setDominateVoidFillerBlock(decodedPreset.dominateVoidFillerBlock);
-        if (decodedPreset.recessiveVoidFillerBlock) setRecessiveVoidFillerBlock(decodedPreset.recessiveVoidFillerBlock);
+        if (decodedPreset.dominateVoidFillerBlock !== undefined) setDominateVoidFillerBlock(decodedPreset.dominateVoidFillerBlock);
+        if (decodedPreset.recessiveVoidFillerBlock !== undefined) setRecessiveVoidFillerBlock(decodedPreset.recessiveVoidFillerBlock);
         // if (decodedPreset.convertUnsupported !== undefined) setConvertUnsupported(decodedPreset.convertUnsupported);
       }
 
@@ -1816,47 +2019,55 @@ const Index = () => {
     if ((supportMode === SupportMode.Fragile || supportMode === SupportMode.All) && layerGap < 3) setLayerGap(3);
   }, [supportMode, layerGap]);
 
-  const customBlocksByBase = useMemo(() => {
-    const map: Record<number, string[]> = {};
-    for (const cc of customColors) {
-      for (let i = 0; i < BASE_COLORS.length; ++i) {
-        const bc = BASE_COLORS[i];
-        if (bc.r === cc.r && bc.g === cc.g && bc.b === cc.b) {
-          for (const block of cc.blocks) {
-            (map[i] ??= []).includes(block) || map[i].push(block);
-          }
-        }
-      }
-    }
-    return map;
-  }, [customColors]);
+  const customBlocksByBase = useMemo(() => buildCustomBlocksByBase(customColors), [customColors]);
 
-  const updateBlock = (baseIndex: number, block: string) => {
-    const nextBlock = sanitizeUserBlockEntry(block);
-    const currentBlock = preset.selectedBlocks[baseIndex] ?? "";
-    if (nextBlock === currentBlock) return;
+  const getNextCustomPresetName = useCallback((existingPresets: readonly BlockPreset[]): string => {
+    let customName: string = messages.presets.customGroupLabel;
+    const existingNames = new Set(existingPresets.map(existingPreset => existingPreset.name));
+    let suffix = 2;
+    while (existingNames.has(customName)) {
+      customName = `Custom ${suffix++}`;
+    }
+    return customName;
+  }, []);
+
+  const applyPresetAndCustomColorUpdate = useCallback((
+    nextBlocks: Record<number, string>,
+    nextCustomColors: readonly ColorRgb[],
+    nextCustomSelectedBlocks: Record<number, string>,
+  ) => {
+    const normalizedCustomColors = cloneCustomColors(nextCustomColors);
+    const normalizedCustomSelectedBlocks = normalizeCustomSelectedBlocks(normalizedCustomColors, nextCustomSelectedBlocks);
+    if (
+      arePresetBlocksEqual(nextBlocks, preset.selectedBlocks) &&
+      areCustomColorsEqual(normalizedCustomColors, customColors) &&
+      areCustomSelectedBlocksEqual(normalizedCustomSelectedBlocks, selectedBlocksCustom, normalizedCustomColors)
+    ) return;
 
     const isBuiltin = activeIdx < BUILTIN_PRESET_NAMES.length;
-    const nextBlocks = { ...preset.selectedBlocks, [baseIndex]: nextBlock };
     const matchingBuiltinName = findMatchingBuiltinPresetName(nextBlocks);
 
     if (isBuiltin) {
-      // Spawn a new "Custom" preset instead of mutating the builtin
-      setSavedSelectedBlocks({ ...preset.selectedBlocks });
-      setPresets(prev => {
-        let customName: string = messages.presets.customGroupLabel;
-        const existingNames = new Set(prev.map(p => p.name));
-        let suffix = 2;
-        while (existingNames.has(customName)) {
-          customName = `Custom ${suffix++}`;
-        }
-        return [...prev, { name: customName, selectedBlocks: nextBlocks }];
-      });
+      setSavedPresetSnapshot(capturePresetSnapshot());
+      setPresets(prev => [
+        ...prev,
+        {
+          name: getNextCustomPresetName(prev),
+          selectedBlocks: nextBlocks,
+          customColors: normalizedCustomColors.length > 0 ? normalizedCustomColors : undefined,
+          selectedBlocksCustom: normalizedCustomColors.length > 0 ? normalizedCustomSelectedBlocks : undefined,
+        },
+      ]);
+      setCustomColors(normalizedCustomColors);
+      setSelectedBlocksCustom(normalizedCustomSelectedBlocks);
       setActiveIdx(presets.length);
       return;
     }
 
-    if (matchingBuiltinName) {
+    setCustomColors(normalizedCustomColors);
+    setSelectedBlocksCustom(normalizedCustomSelectedBlocks);
+
+    if (matchingBuiltinName && normalizedCustomColors.length === 0) {
       const matchingBuiltinIdx = BUILTIN_PRESET_NAMES.findIndex(name => name === matchingBuiltinName);
       setPresets(prev => prev.filter((_, idx) => idx !== activeIdx));
       setActiveIdx(matchingBuiltinIdx);
@@ -1865,10 +2076,48 @@ const Index = () => {
     }
 
     setPresets(prev => {
-      const n = [...prev];
-      n[activeIdx] = { ...n[activeIdx], selectedBlocks: nextBlocks };
-      return n;
+      const next = [...prev];
+      next[activeIdx] = {
+        ...next[activeIdx],
+        selectedBlocks: nextBlocks,
+        customColors: normalizedCustomColors.length > 0 ? normalizedCustomColors : undefined,
+        selectedBlocksCustom: normalizedCustomColors.length > 0 ? normalizedCustomSelectedBlocks : undefined,
+      };
+      return next;
     });
+  }, [
+    activeIdx,
+    capturePresetSnapshot,
+    customColors,
+    selectedBlocksCustom,
+    getNextCustomPresetName,
+    markSavedDeferred,
+    preset.selectedBlocks,
+    presets.length,
+  ]);
+
+  const applyCustomColorUpdate = useCallback((
+    updater: (current: { customColors: readonly ColorRgb[]; selectedBlocksCustom: Record<number, string> }) => {
+      customColors: readonly ColorRgb[];
+      selectedBlocksCustom: Record<number, string>;
+    },
+  ) => {
+    const nextState = updater({
+      customColors,
+      selectedBlocksCustom,
+    });
+    applyPresetAndCustomColorUpdate({ ...preset.selectedBlocks }, nextState.customColors, nextState.selectedBlocksCustom);
+  }, [applyPresetAndCustomColorUpdate, customColors, selectedBlocksCustom, preset.selectedBlocks]);
+
+  const updateBlock = (baseIndex: number, block: string) => {
+    const nextBlock = sanitizeUserBlockEntry(block);
+    const currentBlock = preset.selectedBlocks[baseIndex] ?? "";
+    if (nextBlock === currentBlock) return;
+    applyPresetAndCustomColorUpdate(
+      { ...preset.selectedBlocks, [baseIndex]: nextBlock },
+      customColors,
+      selectedBlocksCustom,
+    );
   };
 
   const selectPreset = (idx: number) => {
@@ -1882,6 +2131,11 @@ const Index = () => {
       }
       return next;
     });
+    setCustomColors(cloneCustomColors((builtin ?? presets[idx]).customColors ?? []));
+    setSelectedBlocksCustom(normalizeCustomSelectedBlocks(
+      (builtin ?? presets[idx]).customColors ?? [],
+      (builtin ?? presets[idx]).selectedBlocksCustom,
+    ));
     setActiveIdx(nextIdx);
     markSavedDeferred();
   };
@@ -1898,12 +2152,22 @@ const Index = () => {
     if (currentPresetIsUnsavedAuto) {
       setPresets(prev => {
         const next = [...prev];
-        next[activeIdx] = { name, selectedBlocks: { ...preset.selectedBlocks } };
+        next[activeIdx] = {
+          name,
+          selectedBlocks: { ...preset.selectedBlocks },
+          customColors: cloneCustomColors(customColors),
+          selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
+        };
         return next;
       });
       setActiveIdx(activeIdx);
     } else {
-      setPresets(prev => [...prev, { name, selectedBlocks: { ...preset.selectedBlocks } }]);
+      setPresets(prev => [...prev, {
+        name,
+        selectedBlocks: { ...preset.selectedBlocks },
+        customColors: cloneCustomColors(customColors),
+        selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
+      }]);
       setActiveIdx(presets.length);
     }
     markSavedDeferred();
@@ -1912,6 +2176,8 @@ const Index = () => {
   const deletePreset = () => {
     if (activeIdx < BUILTIN_PRESET_NAMES.length) return;
     setPresets(prev => prev.filter((_, i) => i !== activeIdx));
+    setCustomColors([]);
+    setSelectedBlocksCustom({});
     setActiveIdx(0);
     markSavedDeferred();
   };
@@ -1934,6 +2200,7 @@ const Index = () => {
           supportMode,
           buildMode,
           customColors,
+          selectedBlocksCustom,
           convertUnsupported,
           suppress2LayerLateFillerBlock,
           proPaletteSeed,
@@ -1957,6 +2224,7 @@ const Index = () => {
     supportMode,
     buildMode,
     customColors,
+    selectedBlocksCustom,
     convertUnsupported,
     suppress2LayerLateFillerBlock,
     proPaletteSeed,
@@ -2112,7 +2380,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [decodedColorGrid, imageData, customColors, convertUnsupported, cropImage, imageLossyFormatLabel]);
+  }, [decodedColorGrid, imageData, parseRelevantCustomColorKey, convertUnsupported, cropImage, imageLossyFormatLabel]);
 
   const handleFile = useCallback(
     (file: File) => {
@@ -2185,10 +2453,11 @@ const Index = () => {
       for (const tile of exportTileAnalyses) {
         if (!tile.supportShape) throw new Error(messages.parsing.conversionFailed);
         const tileEntries = await convertToNbtEntries(tile.supportShape, {
-          blockMapping: preset.selectedBlocks,
+          selectedBlocks: preset.selectedBlocks,
           fillerAssignments: uiFillerAssignments,
           applySupportFloorYs,
           forceZ129,
+          selectedBlocksCustom,
           customColors,
           baseName,
           buildMode: effectiveBuildMode,
@@ -2235,16 +2504,57 @@ const Index = () => {
   const addCustomColor = () => {
     const block = sanitizeUserBlockEntry(newCustom.block);
     if (!block) return;
+    let r = 0, g = 0, b = 0;
     if (customMode === "custom") {
-      const [r, g, b] = [newCustom.r, newCustom.g, newCustom.b].map(v => parseInt(v));
+      [r, g, b] = [newCustom.r, newCustom.g, newCustom.b].map(v => Number.parseInt(v, 10));
       if ([r, g, b].some(isNaN)) return;
-      setCustomColors(prev => [...prev, { r, g, b, blocks: [block] }]);
     } else {
-      const { r, g, b } = BASE_COLORS[customMode];
-      setCustomColors(prev => [...prev, { r, g, b, blocks: [block] }]);
+      ({ r, g, b } = BASE_COLORS[customMode]);
     }
-    setNewCustom({ r: "", g: "", b: "", block: "" });
+    let added = false;
+    applyCustomColorUpdate(({ customColors: prevColors, selectedBlocksCustom: prevSelections }) => {
+      const nextState = upsertCustomColorBlock(prevColors, prevSelections, { r, g, b }, block);
+      added = nextState.added;
+      return {
+        customColors: nextState.customColors,
+        selectedBlocksCustom: nextState.selectedBlocksCustom,
+      };
+    });
+    if (added) setNewCustom({ r: "", g: "", b: "", block: "" });
   };
+
+  const handleCustomChannelChange = useCallback((channel: "r" | "g" | "b", value: string) => {
+    setNewCustom(prev => ({ ...prev, [channel]: sanitizeCustomRgbDraftValue(value) }));
+  }, []);
+
+  const handleCustomBlockChange = useCallback((value: string) => {
+    setNewCustom(prev => ({ ...prev, block: value }));
+  }, []);
+  const commitCustomBlockDraft = useCallback(() => {
+    setNewCustom(prev => ({ ...prev, block: sanitizeUserBlockEntry(prev.block) }));
+  }, []);
+
+  const handleSelectCustomBlock = useCallback((customIndex: number, block: string) => {
+    applyCustomColorUpdate(({ customColors: prevColors, selectedBlocksCustom: prevSelections }) =>
+      selectCustomColorBlock(prevColors, prevSelections, customIndex, block),
+    );
+  }, [applyCustomColorUpdate]);
+
+  const handleRemoveCustomBlock = useCallback((customIndex: number, block: string, baseIndex: number | null) => {
+    const nextCustomState = removeCustomColorBlock(
+      customColors,
+      selectedBlocksCustom,
+      customIndex,
+      block,
+    );
+
+    const nextPresetBlocks =
+      baseIndex !== null && (preset.selectedBlocks[baseIndex] ?? "") === block
+        ? { ...preset.selectedBlocks, [baseIndex]: "" }
+        : { ...preset.selectedBlocks };
+
+    applyPresetAndCustomColorUpdate(nextPresetBlocks, nextCustomState.customColors, nextCustomState.selectedBlocksCustom);
+  }, [applyPresetAndCustomColorUpdate, customColors, selectedBlocksCustom, preset.selectedBlocks]);
 
   const copyColorToClipboard = (r: number, g: number, b: number) =>
     navigator.clipboard.writeText(`#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`);
@@ -2277,7 +2587,7 @@ const Index = () => {
   const aggregateShapeFillerRoleCounts = aggregateFillerRoleCounts;
   const aggregateNorthRowSingleLine = tileGeometryAnalyses.every(tile => tile.northRowSingleLine);
 
-  const canGenerate = imageValid && !previewBusy && missingBlocks.length === 0;
+  const canGenerate = imageValid && !previewBusy && missingBlockCount === 0;
   const hasRequiredCol = imageValid && tileAnalyses.length > 0;
   const northRowFillerCount = aggregateShapeFillerRoleCounts.get(FillerRole.ShadeNorthRow) ?? 0;
   const suppressFillerCount = aggregateShapeFillerRoleCounts.get(FillerRole.ShadeSuppress) ?? 0;
@@ -2606,6 +2916,15 @@ const Index = () => {
   const handleColorTableMinWidthChange = useCallback((nextWidthPx: number) => {
     setColorTableMinWidthPx(prev => (Math.abs(prev - nextWidthPx) > 1 ? nextWidthPx : prev));
   }, []);
+  const handleColorTableLayoutChange = useCallback((layout: ColorTableLayout) => {
+    setColorTableLayout(current =>
+      current.blockWidthPx === layout.blockWidthPx &&
+      current.requiredWidthPx === layout.requiredWidthPx &&
+      current.blockExpanded === layout.blockExpanded
+        ? current
+        : layout,
+    );
+  }, []);
 
   const measureToolbarMinWidths = useCallback(() => {
     const presetEl = presetToolbarSectionRef.current;
@@ -2715,7 +3034,7 @@ const Index = () => {
     imageData,
     imageValid,
     paletteNotices.length,
-    missingBlocks.length,
+    missingBlockCount,
     showNoFillerWarning,
     showNorthRowAlignmentInfo,
     colRangeEnabled,
@@ -2843,29 +3162,29 @@ const Index = () => {
             hasImageData={!!displayImageData}
             showSupportFillerInput={showSupportFillerInput}
             supportFillerBlock={supportFillerBlock}
-            setSupportFillerBlock={setSupportFillerBlock}
+            setSupportFillerBlock={setCommittedSupportFillerBlock}
             commitSupportFillerBlock={commitSupportFillerBlock}
             supportFillerDisabled={supportFillerDisabled}
             supportFillerRequiredCount={supportFillerRequiredCount}
             showShadeFillerInput={showShadeFillerInput}
             shadeFillerBlock={shadeFillerBlock}
-            setShadeFillerBlock={setShadeFillerBlock}
+            setShadeFillerBlock={setCommittedShadeFillerBlock}
             shadeFillerIsNorthRowOnly={shadeFillerIsNorthRowOnly}
             shadeFillerShadingDisabled={shadeFillerShadingDisabled}
             shadeFillerRequiredCount={shadeFillerRequiredCount}
             showDominateVoidFillerInput={showDominateVoidFillerInput}
             dominateVoidFillerBlock={dominateVoidFillerBlock}
-            setDominateVoidFillerBlock={setDominateVoidFillerBlock}
+            setDominateVoidFillerBlock={setCommittedDominateVoidFillerBlock}
             dominateVoidFillerShadingDisabled={dominateVoidFillerShadingDisabled}
             dominateVoidFillerRequiredCount={dominateVoidFillerRequiredCount}
             showRecessiveVoidFillerInput={showRecessiveVoidFillerInput}
             recessiveVoidFillerBlock={recessiveVoidFillerBlock}
-            setRecessiveVoidFillerBlock={setRecessiveVoidFillerBlock}
+            setRecessiveVoidFillerBlock={setCommittedRecessiveVoidFillerBlock}
             recessiveVoidFillerShadingDisabled={recessiveVoidFillerShadingDisabled}
             recessiveVoidFillerRequiredCount={recessiveVoidFillerRequiredCount}
             showLateFillerInput={showLateFillerInput}
             suppress2LayerLateFillerBlock={suppress2LayerLateFillerBlock}
-            setSuppress2LayerLateFillerBlock={setSuppress2LayerLateFillerBlock}
+            setSuppress2LayerLateFillerBlock={setCommittedSuppress2LayerLateFillerBlock}
             lateFillerShadingDisabled={lateFillerShadingDisabled}
             lateFillerRequiredCount={lateFillerRequiredCount}
             formatRequiredCount={formatRequiredCount}
@@ -2904,26 +3223,53 @@ const Index = () => {
             showTransparentRow={showTransparentRow}
             showExcludedBlocks={showExcludedBlocks}
             columnOrder={columnOrder}
-            setColumnOrder={setColumnOrder}
-            selectedBlocks={preset.selectedBlocks}
-            customBlocksByBase={customBlocksByBase}
-            usedBaseColors={usedBaseColors}
-            usedShadesByBase={usedShadesByBase}
-            colorRequiredMap={colorRequiredMap}
-            missingBlocks={missingBlocks}
-            onUpdateBlock={updateBlock}
-            onCopyColorToClipboard={copyColorToClipboard}
+	            setColumnOrder={setColumnOrder}
+	            selectedBlocks={preset.selectedBlocks}
+	            customBlocksByBase={customBlocksByBase}
+		            usedShadesByColorKey={usedShadesByColorKey}
+		            shadeCountsByColorKey={shadeCountsByColorKey}
+		            colorCounts={materialCountsView.colorCounts}
+		            formatRequiredCount={formatRequiredCount}
+		            missingColorKeys={missingColorKeys}
+		            onUpdateBlock={updateBlock}
+	            onCopyColorToClipboard={copyColorToClipboard}
+            onLayoutChange={handleColorTableLayoutChange}
             onMinWidthChange={handleColorTableMinWidthChange}
           />
 
           <PanelCustomColors
+            isStackedLayout={isStackedLayout}
             customColors={customColors}
-            setCustomColors={setCustomColors}
+            selectedBlocksCustom={selectedBlocksCustom}
+            selectedBlocks={preset.selectedBlocks}
+            columnOrder={columnOrder}
+            blockColumnWidthPx={colorTableLayout.blockWidthPx}
+            requiredColumnWidthPx={colorTableLayout.requiredWidthPx}
+            blockColumnExpanded={colorTableLayout.blockExpanded}
+            blockDisplayMode={blockDisplayMode}
+            sortKey={sortKey}
+            sortDir={sortDir}
             customMode={customMode}
             setCustomMode={setCustomMode}
             newCustom={newCustom}
-            setNewCustom={setNewCustom}
+            onCustomChannelChange={handleCustomChannelChange}
+            onCustomBlockChange={handleCustomBlockChange}
+            onCustomBlockCommit={commitCustomBlockDraft}
             addCustomColor={addCustomColor}
+            onUpdateBlock={updateBlock}
+	            onSelectCustomBlock={handleSelectCustomBlock}
+	            onRemoveCustomBlock={handleRemoveCustomBlock}
+	            onCopyColorToClipboard={copyColorToClipboard}
+	            colorCounts={materialCountsView.colorCounts}
+	            formatRequiredCount={formatRequiredCount}
+	            usedShadesByColorKey={usedShadesByColorKey}
+	            shadeCountsByColorKey={shadeCountsByColorKey}
+	            missingColorKeys={missingColorKeys}
+	            imageValid={imageValid}
+	            hasRequiredCol={hasRequiredCol}
+            showIds={showIds}
+            showNames={showNames}
+            showOptions={showOptions}
           />
           </div>
         </div>
@@ -2952,7 +3298,7 @@ const Index = () => {
               setShowVsFillersInPreview={setShowVsFillersInPreview}
               paletteNotices={paletteNotices}
               imageValid={imageValid}
-              missingBlocks={missingBlocks}
+              missingBlockCount={missingBlockCount}
               noFillerWarning={noFillerWarning}
               suppressStepNorthSouthWarning={suppressStepNorthSouthWarning}
               waterSideSupportWarning={waterSideSupportWarning}

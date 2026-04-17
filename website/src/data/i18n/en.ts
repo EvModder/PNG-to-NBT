@@ -238,6 +238,14 @@ export const enCatalog = {
     customRgbOption: "Custom RGB",
     blockLabel: "Block",
     blockPlaceholder: "e.g. fart_block",
+    usedInImage: {
+      one: "{count} custom RGB color is used in this image.",
+      other: "{count} custom RGB colors are used in this image.",
+    } as PluralForms,
+    unusedLabel: {
+      one: "{count} unused custom color (not in image)",
+      other: "{count} unused custom colors (not in image)",
+    } as PluralForms,
   },
   upload: {
     title: "Image Preview",
@@ -325,13 +333,7 @@ export const enCatalog = {
   },
   swatches: {
     transparent: "Transparent",
-    shadeLabels: {
-      [Shade.Dark]: "dark",
-      [Shade.Flat]: "flat",
-      [Shade.Light]: "light",
-      [Shade.Darkest]: "darkest (unobtainable)",
-    } as const satisfies Record<Shade, string>,
-    shadeTooltip: "{hex} - Click to copy ({shade})",
+    shadeTooltip: "{shadeId}: {hex} | Click to copy",
   },
   dialogs: {
     secretSettingsTitle: "Secret Settings",

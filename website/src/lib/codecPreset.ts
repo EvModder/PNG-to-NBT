@@ -2,17 +2,20 @@
  * Public API:
  * - encodeFullPreset()
  * - decodeFullPreset()
+ * - loadPresets()
  *
  * Callers:
  * - src/Index.tsx
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import { type BlockPreset } from "@/data/presets";
+import { STORAGE_KEYS } from "@/data/storageKeys";
+import { BUILTIN_PRESET_NAMES, getBuiltinPreset, type BlockPreset } from "@/data/presets";
 import type { ColorRgb } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { isSuppressStepDirection } from "@/utils/conversion";
 import { SupportMode } from "@/types/ui";
 import { decodeUrlParamText, encodeUrlParamText } from "@/lib/codecUrlParam";
+import { getSelectedCustomColorBlock } from "@/utils/customColors";
 
 interface FullPreset {
   blockPreset: BlockPreset;
@@ -21,6 +24,7 @@ interface FullPreset {
   supportMode?: SupportMode;
   buildMode?: BuildMode;
   customColors?: ColorRgb[];
+  selectedBlocksCustom?: Record<number, string>;
   convertUnsupported?: boolean;
   suppress2LayerLateFillerBlock?: string;
   proPaletteSeed?: boolean;
@@ -33,7 +37,7 @@ interface FullPreset {
 
 function serializeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: ColorRgb[], convertUnsupported: boolean,
+  buildMode: BuildMode, customColors: ColorRgb[], selectedBlocksCustom: Readonly<Record<number, string>>, convertUnsupported: boolean,
   suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
@@ -43,7 +47,13 @@ function serializeFullPreset(
     return idx >= 0 ? String(idx) : block ? `=${block}` : "-";
   });
   const customColorString = customColors.length > 0
-    ? customColors.map(color => `${color.r},${color.g},${color.b}:${color.blocks.map(encodeURIComponent).join(",")}`).join(";")
+    ? customColors
+      .map((color, customIndex) => {
+        const selectedBlock = encodeURIComponent(getSelectedCustomColorBlock(selectedBlocksCustom, customIndex, customColors));
+        const blocks = color.blocks.map(encodeURIComponent).join(",");
+        return `${color.r},${color.g},${color.b}:${selectedBlock}:${blocks}`;
+      })
+      .join(";")
     : "";
   const serialized = [
     preset.name,
@@ -70,62 +80,70 @@ function parseFullPreset(serialized: string): FullPreset | null {
   if (sections.length < 2) return null;
 
   const supportMode = (sections[4] || SupportMode.None) as SupportMode;
+  const customSection = sections[6];
 
-  const selectedBlocks: Record<number, string> = {};
-  for (const [i, part] of sections[1].split(",").entries()) {
-    if (i >= BASE_COLORS.length) break;
-    const baseIndex = i;
-    selectedBlocks[baseIndex] =
-      part === "-" || part === ""
-        ? ""
-        : part.startsWith("=")
-          ? part.slice(1)
-          : BASE_COLORS[baseIndex].blocks[parseInt(part)] || "";
-  }
+  const blocks = Object.fromEntries(
+    sections[1]
+      .split(",")
+      .slice(0, BASE_COLORS.length)
+      .map((part, baseIndex) => [
+        baseIndex,
+        part === "-" || part === ""
+          ? ""
+          : part.startsWith("=")
+            ? part.slice(1)
+            : BASE_COLORS[baseIndex].blocks[Number.parseInt(part, 10)] || "",
+      ]),
+  );
 
-  const customColors = sections[6]
-    ? sections[6]
+  const customEntries = customSection
+    ? customSection
         .split(";")
         .map(entry => {
-          const [rgb, encodedBlocks] = entry.split(":");
+          const [rgb, encodedSelectedBlock = "", encodedBlocks = ""] = entry.split(":");
           const [r, g, b] = rgb.split(",").map(Number);
           return {
             r,
             g,
             b,
-            blocks: (encodedBlocks || "")
+            selectedBlock: decodeURIComponent(encodedSelectedBlock),
+            blocks: encodedBlocks
               .split(",")
               .filter(block => block !== "")
               .map(block => decodeURIComponent(block)),
           };
         })
-        .filter(color => !isNaN(color.r) && color.blocks.length > 0)
+        .filter(entry => !isNaN(entry.r) && entry.blocks.length > 0)
+    : [];
+  const customColors = customEntries.length > 0
+    ? customEntries.map(({ r, g, b, blocks }) => ({ r, g, b, blocks }))
+    : undefined;
+  const selectedBlocksCustom = customEntries.length > 0
+    ? Object.fromEntries(customEntries.map(({ selectedBlock }, customIndex) => [customIndex, selectedBlock]))
     : undefined;
 
   const convertUnsupported = sections[7] === "1" ? true : sections[7] === "0" ? false : undefined;
-  const suppress2LayerLateFillerBlock = sections[8] || undefined;
   const proPaletteSeed = sections[9] === "1" ? true : sections[9] === "0" ? false : undefined;
-  const dominateVoidFillerBlock = sections[10] || undefined;
-  const recessiveVoidFillerBlock = sections[11] || undefined;
   const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
   const buildAtWorldMinY = sections[13] === "1" ? true : sections[13] === "0" ? false : undefined;
   const suppressStepDirection = sections[14] && isSuppressStepDirection(sections[14]) ? sections[14] : undefined;
 
   return {
-    blockPreset: { name: sections[0], selectedBlocks },
-    supportFiller: sections[2] || undefined,
-    shadeFiller: sections[3] || undefined,
+    blockPreset: { name: sections[0], selectedBlocks: blocks },
+    supportFiller: sections[2],
+    shadeFiller: sections[3],
     supportMode,
     buildMode: Object.values(BuildMode).includes(sections[5] as BuildMode) ? sections[5] as BuildMode : undefined,
     customColors,
+    selectedBlocksCustom,
     convertUnsupported,
     proPaletteSeed,
     mixSteps,
     buildAtWorldMinY,
     suppressStepDirection,
-    suppress2LayerLateFillerBlock: suppress2LayerLateFillerBlock || undefined,
-    dominateVoidFillerBlock: dominateVoidFillerBlock || undefined,
-    recessiveVoidFillerBlock: recessiveVoidFillerBlock || undefined,
+    suppress2LayerLateFillerBlock: sections[8],
+    dominateVoidFillerBlock: sections[10],
+    recessiveVoidFillerBlock: sections[11],
   };
 }
 
@@ -133,7 +151,7 @@ function parseFullPreset(serialized: string): FullPreset | null {
 // - src/Index.tsx
 export async function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
-  buildMode: BuildMode, customColors: ColorRgb[], convertUnsupported: boolean,
+  buildMode: BuildMode, customColors: ColorRgb[], selectedBlocksCustom: Readonly<Record<number, string>>, convertUnsupported: boolean,
   suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): Promise<string> {
@@ -145,6 +163,7 @@ export async function encodeFullPreset(
       supportMode,
       buildMode,
       customColors,
+      selectedBlocksCustom,
       convertUnsupported,
       suppress2LayerLateFillerBlock,
       proPaletteSeed,
@@ -167,4 +186,32 @@ export async function decodeFullPreset(encoded: string): Promise<FullPreset | nu
   } catch {
     return null;
   }
+}
+
+// Callers:
+// - src/Index.tsx
+export function loadPresets(): BlockPreset[] {
+  const builtins = BUILTIN_PRESET_NAMES.flatMap(name => {
+    const builtin = getBuiltinPreset(name);
+    return builtin ? [builtin] : [];
+  });
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.presets);
+    if (!raw) return builtins;
+    const parsed = JSON.parse(raw) as BlockPreset[];
+    return [
+      ...builtins,
+      ...parsed
+        .filter(preset => !getBuiltinPreset(preset.name))
+        .map(({ name, selectedBlocks, customColors, selectedBlocksCustom }) => ({
+          name,
+          selectedBlocks: selectedBlocks ?? {},
+          customColors,
+          selectedBlocksCustom,
+        })),
+    ];
+  } catch {
+    /* ignore */
+  }
+  return builtins;
 }

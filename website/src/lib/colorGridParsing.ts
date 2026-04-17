@@ -20,8 +20,8 @@ import {
   buildConversionNotices,
   buildCustomShadeLookup,
   cloneImageData,
-  convertUnsupportedRegionToNearestBasePalette,
-  convertUnsupportedToNearestBasePalette,
+  convertUnsupportedRegionToNearestPalette,
+  convertUnsupportedToNearestPalette,
   createEmptyColorGrid,
   getBaseColorLookup,
   scanImageRegionToColorGrid,
@@ -240,7 +240,7 @@ export function convertImageToColorGrid(
   }
 
   const convertedImageData = cloneImageData(workingImageData);
-  const conversionSummary = convertUnsupportedToNearestBasePalette(convertedImageData, baseLookup);
+  const conversionSummary = convertUnsupportedToNearestPalette(convertedImageData, baseLookup, customLookup);
   const converted = scanImageRegionToColorGrid(convertedImageData, 0, 0, baseLookup, customLookup);
   return {
     imageData: convertedImageData,
@@ -319,11 +319,12 @@ export function convertImageToColorGridSet(
       let paletteNotices: PaletteNotice[] = [];
       let tileHasBlockingIssue = analysis.unsupportedColors.length > 0;
       if (analysis.unsupportedColors.length > 0 && convertUnsupported) {
-        const conversionSummary = convertUnsupportedRegionToNearestBasePalette(
+        const conversionSummary = convertUnsupportedRegionToNearestPalette(
           ensureWorkingImageData(),
           startX,
           startZ,
           baseLookup,
+          customLookup,
         );
         analysis = scanImageRegionToColorGrid(workingImageData, startX, startZ, baseLookup, customLookup);
         if (analysis.unsupportedColors.length === 0) {

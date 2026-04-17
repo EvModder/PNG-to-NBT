@@ -7,8 +7,8 @@
  * - buildCustomShadeLookup()
  * - scanImageRegionToColorGrid()
  * - cloneImageData()
- * - convertUnsupportedToNearestBasePalette()
- * - convertUnsupportedRegionToNearestBasePalette()
+ * - convertUnsupportedToNearestPalette()
+ * - convertUnsupportedRegionToNearestPalette()
  * - buildConversionNotices()
  *
  * Callers:
@@ -22,6 +22,7 @@ import { messages, type PaletteNotice } from "@/lib/messages";
 import { type ColorGrid, Shade, type ColorRgb, type ShadedColorRef } from "@/types/color";
 import { FlatModeBehavior, PixelParity, type ColorFrequencyMap, type ColorGridStats } from "@/lib/colorGridAnalysis";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
+import { findMatchingBaseColorIndex } from "@/utils/customColors";
 
 // Callers:
 // - src/lib/colorGridParsing.ts
@@ -77,6 +78,20 @@ function getNearestBasePaletteColors(baseLookup: Map<number, ShadedColorRef>): {
   return nearestBasePaletteColors;
 }
 
+function getNearestPaletteColors(
+  baseLookup: Map<number, ShadedColorRef>,
+  customLookup: Map<number, ShadedColorRef>,
+): { r: number; g: number; b: number }[] {
+  if (customLookup.size === 0) return getNearestBasePaletteColors(baseLookup);
+
+  const availableKeys = new Set<number>(baseLookup.keys());
+  for (const key of customLookup.keys()) availableKeys.add(key);
+  return [...availableKeys].map(key => {
+    const [r, g, b] = unpackRgb(key);
+    return { r, g, b };
+  });
+}
+
 // Callers:
 // - src/lib/colorGridParsing.ts
 // - src/lib/tileParsing.worker.ts
@@ -90,7 +105,7 @@ export function createEmptyColorGrid(): ColorGrid {
 export function buildCustomShadeLookup(customColors: ColorRgb[]): Map<number, ShadedColorRef> {
   const lookup = new Map<number, ShadedColorRef>();
   for (const [customIndex, color] of customColors.entries()) {
-    if (!color.blocks.some(block => block.trim() !== "")) continue;
+    if (findMatchingBaseColorIndex(color) !== null) continue;
     addShadedLookupEntries(lookup, color, shade => ({ isCustom: true, id: customIndex, shade }));
   }
   return lookup;
@@ -262,11 +277,12 @@ export function cloneImageData(imageData: ImageData): ImageData {
 
 // Callers:
 // - src/lib/colorGridParsing.ts
-export function convertUnsupportedToNearestBasePalette(
+export function convertUnsupportedToNearestPalette(
   imageData: ImageData,
   baseLookup: Map<number, ShadedColorRef>,
+  customLookup: Map<number, ShadedColorRef>,
 ): PaletteConversionSummary {
-  const availableColors = getNearestBasePaletteColors(baseLookup);
+  const availableColors = getNearestPaletteColors(baseLookup, customLookup);
   const inputColors = new Set<number>();
   const outputColors = new Set<number>();
   const convertedColors = new Set<number>();
@@ -276,7 +292,7 @@ export function convertUnsupportedToNearestBasePalette(
     if (d[i + 3] === 0) continue;
     const key = packRgb(d[i], d[i + 1], d[i + 2]);
     inputColors.add(key);
-    if (baseLookup.has(key)) {
+    if (baseLookup.has(key) || customLookup.has(key)) {
       outputColors.add(key);
       continue;
     }
@@ -315,13 +331,14 @@ export function convertUnsupportedToNearestBasePalette(
 // Callers:
 // - src/lib/colorGridParsing.ts
 // - src/lib/tileParsing.worker.ts
-export function convertUnsupportedRegionToNearestBasePalette(
+export function convertUnsupportedRegionToNearestPalette(
   imageData: ImageData,
   startX: number,
   startZ: number,
   baseLookup: Map<number, ShadedColorRef>,
+  customLookup: Map<number, ShadedColorRef>,
 ): PaletteConversionSummary {
-  const availableColors = getNearestBasePaletteColors(baseLookup);
+  const availableColors = getNearestPaletteColors(baseLookup, customLookup);
   const inputColors = new Set<number>();
   const outputColors = new Set<number>();
   const convertedColors = new Set<number>();
@@ -333,7 +350,7 @@ export function convertUnsupportedRegionToNearestBasePalette(
       if (d[offset + 3] === 0) continue;
       const key = packRgb(d[offset], d[offset + 1], d[offset + 2]);
       inputColors.add(key);
-      if (baseLookup.has(key)) {
+      if (baseLookup.has(key) || customLookup.has(key)) {
         outputColors.add(key);
         continue;
       }

@@ -33,7 +33,7 @@ type PanelImagePreviewProps = {
   setShowVsFillersInPreview: (value: boolean) => void;
   paletteNotices: PaletteNotice[];
   imageValid: boolean;
-  missingBlocks: number[];
+  missingBlockCount: number;
   noFillerWarning: string | null;
   suppressStepNorthSouthWarning: string | null;
   waterSideSupportWarning: PreviewWarning | null;
@@ -158,7 +158,7 @@ export function PanelImagePreview({
   setShowVsFillersInPreview,
   paletteNotices,
   imageValid,
-  missingBlocks,
+  missingBlockCount,
   noFillerWarning,
   suppressStepNorthSouthWarning,
   waterSideSupportWarning,
@@ -358,9 +358,9 @@ export function PanelImagePreview({
         </div>
       ))}
 
-      {imageValid && missingBlocks.length > 0 && (
+      {imageValid && missingBlockCount > 0 && (
         <WarningBanner
-          text={messages.preview.missingBlockAssignments(missingBlocks.length)}
+          text={messages.preview.missingBlockAssignments(missingBlockCount)}
           tone="error"
         />
       )}

@@ -11,7 +11,7 @@ import { MAP_SIZE } from "@/utils/color";
 import {
   buildConversionNotices,
   buildCustomShadeLookup,
-  convertUnsupportedRegionToNearestBasePalette,
+  convertUnsupportedRegionToNearestPalette,
   getBaseColorLookup,
   scanImageRegionToColorGrid,
 } from "@/lib/colorGridParsingCore";
@@ -66,11 +66,12 @@ function parseAssignedTiles(message: TileParsingWorkerRequest): TileParsingWorke
     let tileHasBlockingIssue = analysis.unsupportedColors.length > 0;
 
     if (analysis.unsupportedColors.length > 0 && convertUnsupported) {
-      const conversionSummary = convertUnsupportedRegionToNearestBasePalette(
+      const conversionSummary = convertUnsupportedRegionToNearestPalette(
         imageData,
         localStartX,
         localStartZ,
         baseLookup,
+        customLookup,
       );
       analysis = scanImageRegionToColorGrid(imageData, localStartX, localStartZ, baseLookup, customLookup);
       if (analysis.unsupportedColors.length === 0) {

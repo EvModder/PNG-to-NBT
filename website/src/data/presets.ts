@@ -6,7 +6,6 @@
  * - findMatchingBuiltinPresetName
  * - getBuiltinPreset
  * - isAutoCustomPresetName
- * - loadPresets()
  *
  * Callers:
  * - src/Index.tsx
@@ -15,7 +14,7 @@
  * - tests/run.mts
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import { STORAGE_KEYS } from "@/data/storageKeys";
+import type { ColorRgb } from "@/types/color";
 
 // Callers:
 // - src/Index.tsx
@@ -24,7 +23,9 @@ import { STORAGE_KEYS } from "@/data/storageKeys";
 // - tests/run.mts
 export interface BlockPreset {
   name: string;
+  customColors?: ColorRgb[];
   selectedBlocks: Record<number, string>;
+  selectedBlocksCustom?: Record<number, string>;
 }
 
 // Callers:
@@ -212,28 +213,4 @@ export function findMatchingBuiltinPresetName(selectedBlocks: Record<number, str
     const builtin = BUILTIN_BUILDERS[name]();
     return arePresetBlocksEqual(selectedBlocks, builtin.selectedBlocks);
   }) ?? null;
-}
-
-// Callers:
-// - src/Index.tsx
-export function loadPresets(): BlockPreset[] {
-  const builtins = (BUILTIN_PRESET_NAMES as readonly string[]).map(n => BUILTIN_BUILDERS[n]());
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.presets);
-    if (raw) {
-      const parsed: Array<{ name: string; selectedBlocks?: Record<number, string>; blocks?: Record<number, string> }> = JSON.parse(raw);
-      return [
-        ...builtins,
-        ...parsed
-          .filter(p => !BUILTIN_PRESET_NAMES.includes(p.name as (typeof BUILTIN_PRESET_NAMES)[number]))
-          .map(p => ({
-            name: p.name,
-            selectedBlocks: p.selectedBlocks ?? p.blocks ?? {},
-          })),
-      ];
-    }
-  } catch {
-    /* ignore */
-  }
-  return builtins;
 }

@@ -3,6 +3,9 @@
  * - stripDefaultBlockNamespace()
  * - normalizeBlockId()
  * - sanitizeUserBlockEntry()
+ * - ColorBlockSelections
+ * - resolveAssignedColorBlock()
+ * - hasAssignedColorBlock()
  * - resolveExportBlockName()
  * - toDisplayName()
  * - resolveShapeColorBlockName()
@@ -21,6 +24,7 @@
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import type { ColorRef, ColorRgb } from "@/types/color";
+import { getSelectedCustomColorBlock } from "@/utils/customColors";
 
 const DEFAULT_NAMESPACE = "minecraft:";
 
@@ -68,6 +72,17 @@ export function sanitizeUserBlockEntry(raw: string): string {
 }
 
 // Callers:
+// - src/Index.tsx
+// - src/lib/nbtExport.ts
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeModel.ts
+export interface ColorBlockSelections {
+  selectedBlocks: Record<number, string>;
+  selectedBlocksCustom: Record<number, string>;
+  customColors: ColorRgb[];
+}
+
+// Callers:
 // - src/lib/fillerRules.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
@@ -103,6 +118,26 @@ export function resolveExportBlockName(block: string): string {
 }
 
 // Callers:
+// - src/Index.tsx
+// - src/lib/shapeModel.ts
+export function resolveAssignedColorBlock(
+  color: ColorRef,
+  selections: ColorBlockSelections,
+): string {
+  if (color.isCustom) return getSelectedCustomColorBlock(selections.selectedBlocksCustom, color.id, selections.customColors);
+  return selections.selectedBlocks[color.id] ?? BASE_COLORS[color.id].blocks[0] ?? "";
+}
+
+// Callers:
+// - src/Index.tsx
+export function hasAssignedColorBlock(
+  color: ColorRef,
+  selections: ColorBlockSelections,
+): boolean {
+  return resolveAssignedColorBlock(color, selections) !== "";
+}
+
+// Callers:
 // - src/lib/shapeAnalysis.ts
 export function toDisplayName(blockName: string): string {
   const stripped = stripDefaultBlockNamespace(blockName);
@@ -118,12 +153,8 @@ export function toDisplayName(blockName: string): string {
 // - src/lib/shapeAnalysis.ts
 export function resolveShapeColorBlockName(
   color: ColorRef,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
+  selections: ColorBlockSelections,
 ): string | null {
-  if (color.isCustom) {
-    const block = options.customColors[color.id]?.blocks[0] ?? "";
-    return block ? resolveExportBlockName(block) : null;
-  }
-  const mapped = options.blockMapping[color.id] || BASE_COLORS[color.id].blocks[0];
-  return mapped ? resolveExportBlockName(mapped) : null;
+  const block = resolveAssignedColorBlock(color, selections);
+  return block ? resolveExportBlockName(block) : null;
 }

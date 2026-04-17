@@ -4,7 +4,7 @@
   "settings": {
     "convertUnsupported": true,
     "preset": "Fullblock",
-    "presetOverrides": {
+    "selectedBlocksBaseOverrides": {
       "1": "slime_block",
       "12": "oak_leaves[waterlogged=true]"
     },

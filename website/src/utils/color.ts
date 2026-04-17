@@ -13,6 +13,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
+ * - src/components/PanelCustomColors.tsx
  * - src/lib/codecColorGrid.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
@@ -89,15 +90,12 @@ function resolveColorRgb(
   color: Pick<ColorRef, "id" | "isCustom">,
   customColors?: readonly ColorRgb[],
 ): [number, number, number] | null {
-  if (color.isCustom) {
-    const customColor = customColors?.[color.id];
-    return customColor ? [customColor.r, customColor.g, customColor.b] : null;
-  }
-  const baseColor = BASE_COLORS[color.id];
-  return baseColor ? [baseColor.r, baseColor.g, baseColor.b] : null;
+  const resolvedColor = color.isCustom ? customColors?.[color.id] : BASE_COLORS[color.id];
+  return resolvedColor ? [resolvedColor.r, resolvedColor.g, resolvedColor.b] : null;
 }
 
 // Callers:
+// - src/components/PanelCustomColors.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/colorGridParsingCore.ts
 export function getShadedRgb(

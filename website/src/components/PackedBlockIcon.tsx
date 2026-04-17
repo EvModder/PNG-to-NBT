@@ -4,6 +4,7 @@
  *
  * Callers:
  * - src/components/PanelColorBlockTable.tsx
+ * - src/components/PanelCustomColors.tsx
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { messages } from "@/lib/messages";
@@ -19,6 +20,7 @@ type PackedBlockIconProps = {
 
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
+// - src/components/PanelCustomColors.tsx
 export function PackedBlockIcon({
   atlasKey,
   atlasName,

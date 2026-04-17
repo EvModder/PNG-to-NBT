@@ -8,6 +8,7 @@
  * - getPixelParity()
  * - hasStepMixOpportunity()
  * - computeColorGridStats()
+ * - collectShadeCountsByColorRefKey()
  *
  * Callers:
  * - src/Index.tsx
@@ -15,6 +16,7 @@
  * - tests/run.mts
  */
 import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
+import { getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { type ColorGrid, Shade, type ColorRef } from "@/types/color";
 
@@ -213,4 +215,26 @@ export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
     flatModeBehavior: analyzeFlatModeBehavior(colorGrid),
     voidShadowStats: analyzeVoidShadows(colorGrid),
   };
+}
+
+// Callers:
+// - src/Index.tsx
+export function collectShadeCountsByColorRefKey(
+  tileImageStats: readonly ColorGridStats[],
+): Map<ColorRefKey, Map<Shade, number>> {
+  const countsByColorKey = new Map<ColorRefKey, Map<Shade, number>>();
+  for (const imageStats of tileImageStats) {
+    for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
+      const stableKey = getColorRefKey(colorKey);
+      let shadeCounts = countsByColorKey.get(stableKey);
+      if (!shadeCounts) {
+        shadeCounts = new Map<Shade, number>();
+        countsByColorKey.set(stableKey, shadeCounts);
+      }
+      for (const [shade, count] of shadeFrequencyMap) {
+        shadeCounts.set(shade, (shadeCounts.get(shade) ?? 0) + count);
+      }
+    }
+  }
+  return countsByColorKey;
 }

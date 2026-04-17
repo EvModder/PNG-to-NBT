@@ -12,9 +12,12 @@
  * - src/components/PanelCustomColors.tsx
  * - src/data/i18n/*
  * - src/data/mapColors.ts
+ * - src/data/presets.ts
  * - src/utils/color.ts
  * - src/utils/colorGridKey.ts
+ * - src/utils/customColors.ts
  * - src/lib/blockId.ts
+ * - src/lib/colorRefs.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/colorGridParsing.ts
@@ -52,12 +55,14 @@ export enum Shade {
 }
 
 // Callers:
-// - src/utils/color.ts
-// - src/lib/colorGridAnalysis.ts
 // - src/lib/blockId.ts
+// - src/lib/colorRefs.ts
+// - src/lib/colorGridAnalysis.ts
+// - src/components/PanelCustomColors.tsx
 // - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/nbtExport.ts
+// - src/utils/color.ts
 // - src/types/shape.ts
 export interface ColorRef {
   id: number;
@@ -66,7 +71,6 @@ export interface ColorRef {
 
 // Callers:
 // - src/utils/color.ts
-// - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/codecColorGrid.ts
 // - src/lib/shapeGeneration.ts
@@ -75,6 +79,7 @@ export interface ShadedColorRef extends ColorRef {
 }
 
 // Callers:
+// - src/Index.tsx
 // - src/utils/color.ts
 // - src/utils/colorGridKey.ts
 // - src/lib/colorGridAnalysis.ts
@@ -89,15 +94,13 @@ export type ColorGrid = ShadedColorRef[][];
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelCustomColors.tsx
+// - src/data/presets.ts
 // - src/utils/color.ts
+// - src/utils/customColors.ts
 // - src/lib/blockId.ts
 // - src/lib/codecPreset.ts
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
-// - src/lib/codecColorGrid.ts
-// - src/lib/nbtExport.ts
-// - src/lib/shapeAnalysis.ts
-// - src/lib/shapeModel.ts
 // - src/lib/tileParsingWorkerClient.ts
 // - src/lib/tileParsingWorkerTypes.ts
 // - tests/run.mts

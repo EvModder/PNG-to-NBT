@@ -15,11 +15,12 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { Glasses, Minus, Plus } from "lucide-react";
+import { Glasses, Minus, PanelRightClose, PanelRightOpen, Plus } from "lucide-react";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { BASE_COLORS, Shade, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { getBlockIconAsset } from "@/lib/blockIconAtlas";
+import { getColorRefCount, getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { normalizeBlockId } from "@/lib/blockId";
 import { messages } from "@/lib/messages";
 import type { SortDir, SortKey, BlockDisplayMode, ColumnId } from "@/types/ui";
@@ -30,27 +31,37 @@ import {
   getMultiShadeSwatchStyle,
   getOrderedSwatchShades,
   getShadeAtPointer,
+  getSwatchRequiredAccentText,
 } from "@/utils/colorSwatch";
-import {
-  APPROX_TABLE_MONO_CHAR_WIDTH_PX,
-  COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX,
-  COLOR_TABLE_GRID_GAP_PX,
-  COLOR_TABLE_SECTION_HORIZONTAL_INSETS_PX,
-  INITIAL_BLOCK_SELECT_HORIZONTAL_INSETS_PX,
-  MIN_REQUIRED_COLUMN_WIDTH_PX,
-} from "@/utils/colorTableLayout";
 import { formatStacks } from "@/utils/minecraft";
 import {
   MUTED_INLINE_TOGGLE_CONTROL_CLASS,
   PANEL_TITLE_TEXT_CLASS,
 } from "@/utils/uiTypography";
+import {
+  APPROX_TABLE_MONO_CHAR_WIDTH_PX,
+  COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX,
+  INITIAL_BLOCK_SELECT_HORIZONTAL_INSETS_PX,
+  MIN_REQUIRED_COLUMN_WIDTH_PX,
+  type ColorTableLayout,
+} from "@/utils/colorTableLayout";
 import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 
 const COLOR_TABLE_HEADER_GROUP_GAP_PX = 6;
+const CUSTOM_OPTION_GROUP_CLASS =
+  "shrink-0 inline-flex items-center gap-0.5 rounded bg-cyan-600/[0.08] ring-1 ring-cyan-700/55 dark:bg-cyan-300/[0.12] dark:ring-cyan-300/55";
+// Initial collapsed-width estimate before the block-header toggle button is measured.
+// This matches the current collapsed Block-header control closely enough to avoid a first-render
+// width jump while still letting the real measurement take over immediately afterward.
+const INITIAL_COLLAPSED_BLOCK_COLUMN_WIDTH_PX = 44;
+// `gap-1` in the row grid.
+const COLOR_TABLE_GRID_GAP_PX = 4;
+// Horizontal `p-2` plus the 1px left/right border of the table container.
+const COLOR_TABLE_SECTION_HORIZONTAL_INSETS_PX = 8 * 2 + 1 * 2;
 
 type ColumnDropSide = "before" | "after";
 type ColumnDragIndicator = { target: ColumnId; side: ColumnDropSide };
-type SwatchTooltip = { text: string; x: number; y: number };
+type SwatchTooltip = { text: string; accentText?: string; x: number; y: number };
 
 const BELOW_PLATFORM_WATER_BLOCK_OPTIONS = [
   "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]",
@@ -96,12 +107,14 @@ type PanelColorBlockTableProps = {
   setColumnOrder: Dispatch<SetStateAction<ColumnId[]>>;
   selectedBlocks: Record<number, string>;
   customBlocksByBase: Record<number, string[]>;
-  usedBaseColors: ReadonlySet<number>;
-  usedShadesByBase: ReadonlyMap<number, ReadonlySet<Shade>>;
-  colorRequiredMap: Record<number, number>;
-  missingBlocks: readonly number[];
+  usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>;
+  shadeCountsByColorKey: ReadonlyMap<ColorRefKey, ReadonlyMap<Shade, number>>;
+  colorCounts: Readonly<Record<string, number>>;
+  formatRequiredCount: (count: number) => string | number;
+  missingColorKeys: ReadonlySet<ColorRefKey>;
   onUpdateBlock: (baseIndex: number, block: string) => void;
   onCopyColorToClipboard: (r: number, g: number, b: number) => void;
+  onLayoutChange: (layout: ColorTableLayout) => void;
   onMinWidthChange: (widthPx: number) => void;
 };
 
@@ -181,14 +194,18 @@ export function PanelColorBlockTable({
   setColumnOrder,
   selectedBlocks,
   customBlocksByBase,
-  usedBaseColors,
-  usedShadesByBase,
-  colorRequiredMap,
-  missingBlocks,
+  usedShadesByColorKey,
+  shadeCountsByColorKey,
+  colorCounts,
+  formatRequiredCount,
+  missingColorKeys,
   onUpdateBlock,
   onCopyColorToClipboard,
+  onLayoutChange,
   onMinWidthChange,
 }: PanelColorBlockTableProps) {
+  const getBaseColorKey = useCallback((idx: number) => getColorRefKey({ id: idx, isCustom: false }), []);
+  const getBaseRequiredCount = useCallback((idx: number) => getColorRefCount(colorCounts, { id: idx, isCustom: false }), [colorCounts]);
   const dragColRef = useRef<ColumnId | null>(null);
   const dragColumnIndicatorRef = useRef<ColumnDragIndicator | null>(null);
   const [dragColumnIndicator, setDragColumnIndicator] = useState<ColumnDragIndicator | null>(null);
@@ -200,19 +217,19 @@ export function PanelColorBlockTable({
   const colorTableHeaderRef = useRef<HTMLDivElement>(null);
   const [blockMeasureFont, setBlockMeasureFont] = useState("11px monospace");
   const [blockMeasureInsetsPx, setBlockMeasureInsetsPx] = useState(INITIAL_BLOCK_SELECT_HORIZONTAL_INSETS_PX);
-  const [blockTextureCollapsedWidthPx, setBlockTextureCollapsedWidthPx] = useState(44);
+  const [blockTextureCollapsedWidthPx, setBlockTextureCollapsedWidthPx] = useState(INITIAL_COLLAPSED_BLOCK_COLUMN_WIDTH_PX);
   const [colorTableHeaderMinWidthPx, setColorTableHeaderMinWidthPx] = useState(0);
 
   const requiredColWidth = useMemo(() => {
     if (!hasRequiredCol) return MIN_REQUIRED_COLUMN_WIDTH_PX;
     const maxLen = Math.max(
       0,
-      ...Object.values(colorRequiredMap)
+      ...BASE_COLORS.map((_, baseIndex) => getBaseRequiredCount(baseIndex))
         .filter(count => count > 0)
-        .map(count => (showStacks ? formatStacks(count) : String(count)).length),
+        .map(count => String(showStacks ? formatStacks(count) : count).length),
     );
     return Math.max(MIN_REQUIRED_COLUMN_WIDTH_PX, maxLen * 6 + 16);
-  }, [colorRequiredMap, hasRequiredCol, showStacks]);
+  }, [getBaseRequiredCount, hasRequiredCol, showStacks]);
 
   const visibleColumns = useMemo(
     () =>
@@ -253,18 +270,18 @@ export function PanelColorBlockTable({
         (getHue(BASE_COLORS[a].r, BASE_COLORS[a].g, BASE_COLORS[a].b) -
           getHue(BASE_COLORS[b].r, BASE_COLORS[b].g, BASE_COLORS[b].b)),
       id: (a, b) => dir * (a - b),
-      required: (a, b) => dir * ((colorRequiredMap[a] || 0) - (colorRequiredMap[b] || 0)),
+      required: (a, b) => dir * (getBaseRequiredCount(a) - getBaseRequiredCount(b)),
     };
     return sorters[sortKey] ? base.toSorted(sorters[sortKey]) : base;
-  }, [sortKey, sortDir, colorRequiredMap, showTransparentRow]);
+  }, [sortKey, sortDir, getBaseRequiredCount, showTransparentRow]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
-    if (!imageValid || usedBaseColors.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
+    if (!imageValid || usedShadesByColorKey.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
     return {
-      usedIndices: sortedIndices.filter(index => usedBaseColors.has(index)),
-      unusedIndices: sortedIndices.filter(index => !usedBaseColors.has(index)),
+      usedIndices: sortedIndices.filter(index => usedShadesByColorKey.has(getBaseColorKey(index))),
+      unusedIndices: sortedIndices.filter(index => !usedShadesByColorKey.has(getBaseColorKey(index))),
     };
-  }, [imageValid, sortedIndices, usedBaseColors]);
+  }, [imageValid, sortedIndices, usedShadesByColorKey, getBaseColorKey]);
 
   useLayoutEffect(() => {
     const el = blockMeasureSelectRef.current;
@@ -330,7 +347,7 @@ export function PanelColorBlockTable({
   }, [
     blockColExpanded,
     blockDisplayMode,
-    colorRequiredMap,
+    colorCounts,
     columnOrder,
     hasRequiredCol,
     imageValid,
@@ -376,6 +393,14 @@ export function PanelColorBlockTable({
     () => (blockDisplayMode === "textures" && !blockColExpanded ? blockTextureCollapsedWidthPx : blockColMinWidthPx),
     [blockDisplayMode, blockColExpanded, blockColMinWidthPx, blockTextureCollapsedWidthPx],
   );
+
+  useLayoutEffect(() => {
+    onLayoutChange({
+      blockWidthPx: effectiveBlockColWidthPx,
+      requiredWidthPx: requiredColWidth,
+      blockExpanded: blockColExpanded,
+    });
+  }, [blockColExpanded, effectiveBlockColWidthPx, onLayoutChange, requiredColWidth]);
 
   const gridColsStyle = useMemo<CSSProperties>(
     () => ({
@@ -425,28 +450,32 @@ export function PanelColorBlockTable({
     );
   }, [setColumnOrder]);
 
-  const getAllBlocks = useCallback((idx: number) => {
+  const getBlockGroups = useCallback((idx: number) => {
     const excluded = showExcludedBlocks ? EXCLUDED_BLOCKS[idx] ?? [] : [];
     const extra = customBlocksByBase[idx] || [];
     const selected = selectedBlocks[idx] || "";
-    const withExcluded = [
+    const regular = [
       ...BASE_COLORS[idx].blocks,
       ...excluded.filter(block => !BASE_COLORS[idx].blocks.includes(block)),
     ];
     const withBelowPlatformWater = [
-      ...withExcluded,
-      ...getConditionalBaseBlocks(idx, belowPlatformWater).filter(block => !withExcluded.includes(block)),
+      ...regular,
+      ...getConditionalBaseBlocks(idx, belowPlatformWater).filter(block => !regular.includes(block)),
     ];
-    const withCustom = [
-      ...withBelowPlatformWater,
-      ...extra.filter(block => !withBelowPlatformWater.includes(block)),
-    ];
-    return selected && !withCustom.includes(selected) ? [...withCustom, selected] : withCustom;
+    const custom = extra.filter(block => !withBelowPlatformWater.includes(block));
+    if (selected && !withBelowPlatformWater.includes(selected) && !custom.includes(selected)) {
+      withBelowPlatformWater.push(selected);
+    }
+    return {
+      regular: withBelowPlatformWater,
+      custom,
+      all: [...withBelowPlatformWater, ...custom],
+    };
   }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks]);
 
   const getColorSwatchShades = useCallback((idx: number): Shade[] => {
-    return [...getOrderedSwatchShades(imageValid, usedShadesByBase.get(idx))] as Shade[];
-  }, [imageValid, usedShadesByBase]);
+    return [...getOrderedSwatchShades(imageValid, usedShadesByColorKey.get(getBaseColorKey(idx)))] as Shade[];
+  }, [imageValid, usedShadesByColorKey, getBaseColorKey]);
 
   const getColorSwatchStyle = useCallback((idx: number): CSSProperties => {
     const shades = getColorSwatchShades(idx);
@@ -464,6 +493,7 @@ export function PanelColorBlockTable({
         if (!pending || !prev) return pending;
         if (
           pending.text === prev.text &&
+          pending.accentText === prev.accentText &&
           Math.abs(pending.x - prev.x) < 0.5 &&
           Math.abs(pending.y - prev.y) < 0.5
         ) {
@@ -474,16 +504,22 @@ export function PanelColorBlockTable({
     });
   }, []);
 
-  const getShadeTooltip = useCallback((idx: number, shade: Shade): string => {
+  const getShadeTooltip = useCallback((idx: number, shade: Shade): { text: string; accentText?: string } => {
     const [r, g, b] = getShadedRgb({ id: idx, shade });
     const hex = formatSwatchHex(r, g, b);
-    return messages.swatches.shadeTooltip(hex, shade);
-  }, []);
+    const shadeCount = shadeCountsByColorKey.get(getBaseColorKey(idx))?.get(shade) ?? 0;
+    return {
+      text: messages.swatches.shadeTooltip(hex, shade),
+      accentText: getSwatchRequiredAccentText(imageValid, hasRequiredCol, shadeCount, formatRequiredCount),
+    };
+  }, [shadeCountsByColorKey, getBaseColorKey, imageValid, hasRequiredCol, formatRequiredCount]);
 
   const handleSwatchTooltip = useCallback((event: React.MouseEvent<HTMLDivElement>, idx: number, swatchShades: Shade[]) => {
     const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
+    const tooltip = getShadeTooltip(idx, shade);
     queueSwatchTooltip({
-      text: getShadeTooltip(idx, shade),
+      text: tooltip.text,
+      accentText: tooltip.accentText,
       x: event.clientX + SWATCH_TOOLTIP_OFFSET_PX,
       y: event.clientY + SWATCH_TOOLTIP_OFFSET_PX,
     });
@@ -501,12 +537,16 @@ export function PanelColorBlockTable({
   const renderColorRow = useCallback((idx: number) => {
     const color = BASE_COLORS[idx];
     const swatchShades = getColorSwatchShades(idx);
-    const isMissing = missingBlocks.includes(idx);
-    const allBlocks = getAllBlocks(idx);
+    const isMissing = missingColorKeys.has(getBaseColorKey(idx));
+    const { all: allBlocks, regular: regularBlocks, custom: customBlocks } = getBlockGroups(idx);
     const selectedBlock = selectedBlocks[idx] || "";
     const selectedIsIceWater = idx === WATER_BASE_INDEX && normalizeBlockId(selectedBlock) === "ice";
+    const selectedIsCustomOption = customBlocks.includes(selectedBlock);
     const textureCollapsed = blockDisplayMode === "textures" && !blockColExpanded;
-    const reqCount = colorRequiredMap[idx] || 0;
+    const displayCustomBlocks = textureCollapsed
+      ? (selectedBlock !== "" && selectedIsCustomOption ? [selectedBlock] : [])
+      : customBlocks.toSorted();
+    const reqCount = getBaseRequiredCount(idx);
     const cells: Record<ColumnId, React.ReactNode> = {
       clr: idx === TRANSPARENCY_BASE_INDEX ? (
         <div
@@ -578,7 +618,7 @@ export function PanelColorBlockTable({
           }
         >
           <option value="">{messages.common.none}</option>
-          {allBlocks.toSorted().map(block => (
+          {regularBlocks.toSorted().map(block => (
             <option
               key={block}
               value={block}
@@ -587,11 +627,17 @@ export function PanelColorBlockTable({
               {block}
             </option>
           ))}
+          {customBlocks.length > 0 && <option disabled value="__custom-divider__">──────── custom ────────</option>}
+          {customBlocks.toSorted().map(block => (
+            <option key={block} value={block} title={block}>
+              {block}
+            </option>
+          ))}
         </select>
       ) : (
         <div key="block" className="min-w-0 h-6">
           <div
-            className={`flex items-center gap-0.5 h-6 min-w-0 overflow-y-hidden px-0.5 ${
+            className={`flex items-center gap-0.5 h-6 min-w-0 px-0.5 ${
               textureCollapsed ? "justify-center overflow-x-hidden" : "overflow-x-auto"
             }`}
           >
@@ -611,7 +657,7 @@ export function PanelColorBlockTable({
                 {messages.common.clearSelectionSymbol}
               </button>
             )}
-            {(textureCollapsed ? (selectedBlock !== "" ? [selectedBlock] : []) : allBlocks).map(block => {
+            {(textureCollapsed ? (selectedBlock !== "" && !selectedIsCustomOption ? [selectedBlock] : []) : regularBlocks).map(block => {
               const selected = selectedBlock === block;
               const isIceWaterOption = idx === WATER_BASE_INDEX && normalizeBlockId(block) === "ice";
               const iconAsset = getBlockIconAsset(block);
@@ -642,6 +688,34 @@ export function PanelColorBlockTable({
                 </button>
               );
             })}
+            {displayCustomBlocks.length > 0 && (
+              <div className={CUSTOM_OPTION_GROUP_CLASS}>
+                {displayCustomBlocks.map(block => {
+                  const selected = selectedBlock === block;
+                  const iconAsset = getBlockIconAsset(block);
+                  return (
+                    <button
+                      key={block}
+                      type="button"
+                      className={`shrink-0 w-5 h-5 rounded border overflow-hidden ${
+                        selected
+                          ? "border-transparent shadow-[0_0_0_2px_hsl(var(--primary))]"
+                          : "border-border hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                      }`}
+                      title={`custom: ${block}`}
+                      onClick={() => onUpdateBlock(idx, block)}
+                    >
+                      <PackedBlockIcon
+                        atlasKey={iconAsset.atlasKey}
+                        atlasName={iconAsset.atlasName}
+                        alt={block}
+                        className="w-full h-full"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       ),
@@ -671,20 +745,21 @@ export function PanelColorBlockTable({
   }, [
     blockColExpanded,
     blockDisplayMode,
-    colorRequiredMap,
-    getAllBlocks,
+    colorCounts,
+    getBlockGroups,
+    getBaseColorKey,
+    getBaseRequiredCount,
     getBlockIconAsset,
     getColorSwatchShades,
     getColorSwatchStyle,
     gridColsStyle,
     handleSwatchTooltip,
-    missingBlocks,
+    missingColorKeys,
     onCopyColorToClipboard,
     onUpdateBlock,
     queueSwatchTooltip,
     selectedBlocks,
     showStacks,
-    usedIndices,
     visibleColumns,
   ]);
 
@@ -831,8 +906,8 @@ export function PanelColorBlockTable({
                           setBlockColExpanded(value => !value);
                         }}
                       >
-                        {blockColExpanded ? <Minus size={10} /> : <Plus size={10} />}
                         <span>{messages.table.columnLabel("block")}</span>
+                        {blockColExpanded ? <PanelRightClose size={11} /> : <PanelRightOpen size={11} />}
                       </button>
                     </span>
                   ),
@@ -931,7 +1006,8 @@ export function PanelColorBlockTable({
           className="fixed z-50 pointer-events-none px-1.5 py-1 rounded border border-border bg-popover text-popover-foreground text-[10px] font-mono whitespace-nowrap"
           style={{ left: swatchTooltip.x, top: swatchTooltip.y }}
         >
-          {swatchTooltip.text}
+          <span>{swatchTooltip.text}</span>
+          {swatchTooltip.accentText && <span className="text-primary">{swatchTooltip.accentText}</span>}
         </div>
       )}
     </>

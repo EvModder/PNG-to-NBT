@@ -293,6 +293,12 @@ export const messages = {
     customRgbOption: catalog.customColors.customRgbOption,
     blockLabel: catalog.customColors.blockLabel,
     blockPlaceholder: catalog.customColors.blockPlaceholder,
+    usedInImage(count: number): string {
+      return formatPlural(catalog.customColors.usedInImage, count);
+    },
+    unusedLabel(count: number): string {
+      return formatPlural(catalog.customColors.unusedLabel, count);
+    },
     channelLabel(channel: string): string {
       return channel.toUpperCase();
     },
@@ -415,7 +421,7 @@ export const messages = {
     shadeTooltip(hex: string, shade: Shade): string {
       return formatTemplate(catalog.swatches.shadeTooltip, {
         hex,
-        shade: catalog.swatches.shadeLabels[shade],
+        shadeId: String(shade),
       });
     },
   },

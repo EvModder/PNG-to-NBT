@@ -38,6 +38,7 @@ import {
   isSuppressStepsBuildMode,
   shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
+import { normalizeCustomSelectedBlocks } from "@/utils/customColors";
 import type { ColorRgb } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { createFillerAssignments, isFillerDisabled } from "@/lib/fillerRules";
@@ -95,7 +96,8 @@ type ExportFixtureSettings = {
   belowPlatformWater: boolean;
   convertUnsupported: boolean;
   customColors: ColorRgb[];
-  presetOverrides: Record<string, string>;
+  selectedBlocksCustom: Record<number, string>;
+  selectedBlocksBaseOverrides: Record<string, string>;
 };
 
 type RawFixtureCustomColor = {
@@ -163,8 +165,8 @@ function normalizeUsedWaterDrops(
 }
 
 function deriveImageStatsViews(imageStats: ReturnType<typeof computeColorGridStats>) {
-  const usedShadesByBase = new Map<number, Set<Shade>>();
   let hasTransparency = false;
+  let usedWaterShades = new Set<Shade>();
 
   for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
     if (colorKey.isCustom) {
@@ -176,14 +178,11 @@ function deriveImageStatsViews(imageStats: ReturnType<typeof computeColorGridSta
       continue;
     }
 
-    const shades = new Set<Shade>();
-    for (const shade of shadeFrequencyMap.keys()) {
-      shades.add(shade);
+    if (colorKey.id === WATER_BASE_INDEX) {
+      usedWaterShades = new Set(shadeFrequencyMap.keys());
     }
-    usedShadesByBase.set(colorKey.id, shades);
   }
 
-  const usedWaterShades = usedShadesByBase.get(WATER_BASE_INDEX) ?? new Set<Shade>();
   return {
     allSameShade: imageStats.allSameShade,
     hasTransparency,
@@ -620,18 +619,18 @@ function parseFixtureCaseFile(raw: unknown, sourcePath: string): FixtureCaseFile
   return parsed as FixtureCaseFile;
 }
 
-function buildPreset(presetName: string, presetOverrides: Record<string, string>): BlockPreset {
+function buildPreset(presetName: string, selectedBlocksBaseOverrides: Record<string, string>): BlockPreset {
   const basePreset = getBuiltinPreset(presetName);
   if (!basePreset) throw new Error(`Unknown builtin preset "${presetName}"`);
 
   const selectedBlocks = { ...basePreset.selectedBlocks };
-  for (const [rawBaseIndex, rawBlock] of Object.entries(presetOverrides)) {
+  for (const [rawBaseIndex, rawBlock] of Object.entries(selectedBlocksBaseOverrides)) {
     const baseIndex = Number(rawBaseIndex);
     if (!Number.isInteger(baseIndex) || baseIndex < 0 || baseIndex >= BASE_COLORS.length) {
-      throw new Error(`Invalid preset override key "${rawBaseIndex}"`);
+      throw new Error(`Invalid selectedBlocksBaseOverrides key "${rawBaseIndex}"`);
     }
     if (typeof rawBlock !== "string") {
-      throw new Error(`Preset override for base color ${rawBaseIndex} must be a string`);
+      throw new Error(`selectedBlocksBaseOverrides entry for base color ${rawBaseIndex} must be a string`);
     }
     selectedBlocks[baseIndex] = sanitizeUserBlockEntry(rawBlock);
   }
@@ -671,10 +670,15 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     }
     return { r: rawColor.r, g: rawColor.g, b: rawColor.b, blocks };
   });
+  const selectedBlocksCustom = normalizeCustomSelectedBlocks(customColors);
 
-  const presetOverrides = settings.presetOverrides ?? {};
-  if (typeof presetOverrides !== "object" || presetOverrides === null || Array.isArray(presetOverrides)) {
-    throw new Error(`presetOverrides must be an object`);
+  const selectedBlocksBaseOverrides = settings.selectedBlocksBaseOverrides ?? {};
+  if (
+    typeof selectedBlocksBaseOverrides !== "object" ||
+    selectedBlocksBaseOverrides === null ||
+    Array.isArray(selectedBlocksBaseOverrides)
+  ) {
+    throw new Error(`selectedBlocksBaseOverrides must be an object`);
   }
 
   const waterDrops = settings.waterDrops ?? {};
@@ -706,7 +710,8 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     belowPlatformWater: settings.belowPlatformWater ?? DEFAULT_BELOW_PLATFORM_WATER,
     convertUnsupported: settings.convertUnsupported ?? DEFAULT_CONVERT_UNSUPPORTED_COLORS,
     customColors,
-    presetOverrides: presetOverrides as Record<string, string>,
+    selectedBlocksCustom,
+    selectedBlocksBaseOverrides: selectedBlocksBaseOverrides as Record<string, string>,
   };
 }
 
@@ -714,7 +719,7 @@ async function loadFixtureCase(discovered: DiscoveredCase): Promise<ResolvedCase
   const raw = await readFile(discovered.caseFilePath, "utf8");
   const parsed = parseFixtureCaseFile(JSON.parse(raw), discovered.caseFilePath);
   const settings = resolveFixtureSettings(parsed.settings);
-  const preset = buildPreset(settings.preset, settings.presetOverrides);
+  const preset = buildPreset(settings.preset, settings.selectedBlocksBaseOverrides);
   const inputPath = path.resolve(CASES_ROOT, parsed.input);
   const outputPath = path.resolve(CASES_ROOT, parsed.output);
   const outputExtension = path.extname(outputPath);
@@ -896,10 +901,11 @@ async function runFixtureCase(
   );
 
   const generated = await convertToNbt(effectiveShape, {
-    blockMapping: testCase.preset.selectedBlocks,
+    selectedBlocks: testCase.preset.selectedBlocks,
     fillerAssignments,
     applySupportFloorYs: testCase.settings.applySupportFloorYs,
     forceZ129: testCase.settings.forceZ129,
+    selectedBlocksCustom: testCase.settings.selectedBlocksCustom,
     customColors: testCase.settings.customColors,
     baseName: testCase.baseName,
     buildMode: effectiveBuildMode,

@@ -17,13 +17,12 @@
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
  */
-import { BASE_COLORS } from "@/data/mapColors";
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
-import type { ColorRef, ColorRgb } from "@/types/color";
+import type { ColorRef } from "@/types/color";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { normalizeBlockId } from "@/lib/blockId";
+import { type ColorBlockSelections, normalizeBlockId, resolveAssignedColorBlock } from "@/lib/blockId";
 
 // Callers:
 // - src/lib/nbtExport.ts
@@ -66,14 +65,10 @@ export function parseShapeCoordKey(key: ShapeCoordKey): [number, number, number]
 
 function getMappedShapeColorBlockId(
   color: ColorRef,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
+  options: ColorBlockSelections,
 ): string | null {
-  if (color.isCustom) {
-    const block = options.customColors[color.id]?.blocks[0] ?? "";
-    return block ? normalizeBlockId(block) : null;
-  }
-  const mapped = options.blockMapping[color.id] || BASE_COLORS[color.id].blocks[0] || "";
-  return mapped ? normalizeBlockId(mapped) : null;
+  const block = resolveAssignedColorBlock(color, options);
+  return block ? normalizeBlockId(block) : null;
 }
 
 // Callers:
@@ -113,7 +108,7 @@ export function shouldIncludeFragileSupportCell(
   coord: number,
   roles: readonly FillerRole[],
   activeRole: FillerRole | null,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
+  options: ColorBlockSelections,
 ): boolean {
   if (activeRole !== FillerRole.SupportFragile || !roles.includes(FillerRole.SupportFragile)) return true;
   const fragileColor = getSupportedColorAbove(part, coord);
@@ -137,8 +132,8 @@ export function getFragileSupportOverride(
   part: ShapePart,
   coord: number,
   activeRole: FillerRole | null,
-  assignedSupportBlock: string | null,
-  options: { blockMapping: Record<number, string>; customColors: ColorRgb[] },
+  assignedSupportBlockName: string | null,
+  options: ColorBlockSelections,
 ): FragileSupportOverride | null {
   if (
     activeRole !== FillerRole.SupportAll &&
@@ -146,15 +141,15 @@ export function getFragileSupportOverride(
     activeRole !== FillerRole.StairStep &&
     activeRole !== FillerRole.SupportWaterSidesCovered
   ) return null;
-  const supportedColor = getSupportedColorAbove(part, coord);
-  if (!supportedColor) return null;
-  const blockId = getMappedShapeColorBlockId(supportedColor, options);
-  if (!blockId) return null;
-  const rule = FRAGILE_SUPPORT_RULES.get(blockId);
-  if (!rule) return null;
-  const normalizedAssignedSupportBlock = assignedSupportBlock ? normalizeBlockId(assignedSupportBlock) : "";
-  if (normalizedAssignedSupportBlock && rule.validSupportBlocks.includes(normalizedAssignedSupportBlock)) {
+  const fragileColor = getSupportedColorAbove(part, coord);
+  if (!fragileColor) return null;
+  const fragileBlockId = getMappedShapeColorBlockId(fragileColor, options);
+  if (!fragileBlockId) return null;
+  const fragileSupportRule = FRAGILE_SUPPORT_RULES.get(fragileBlockId);
+  if (!fragileSupportRule) return null;
+  const assignedSupportBlockId = assignedSupportBlockName ? normalizeBlockId(assignedSupportBlockName) : "";
+  if (assignedSupportBlockId && fragileSupportRule.validSupportBlocks.includes(assignedSupportBlockId)) {
     return null;
   }
-  return { blockId, replacementBlockId: rule.replacementBlock };
+  return { blockId: fragileBlockId, replacementBlockId: fragileSupportRule.replacementBlock };
 }

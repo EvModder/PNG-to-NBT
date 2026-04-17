@@ -234,6 +234,14 @@ export const esCatalog = {
     customRgbOption: "RGB personalizado",
     blockLabel: "Bloque",
     blockPlaceholder: "p. ej. fart_block",
+    usedInImage: {
+      one: "{count} color RGB personalizado se usa en esta imagen.",
+      other: "{count} colores RGB personalizados se usan en esta imagen.",
+    } as PluralForms,
+    unusedLabel: {
+      one: "{count} color personalizado sin usar (no está en la imagen)",
+      other: "{count} colores personalizados sin usar (no están en la imagen)",
+    } as PluralForms,
   },
   upload: {
     title: "Vista previa de imagen",
@@ -321,13 +329,7 @@ export const esCatalog = {
   },
   swatches: {
     transparent: "Transparente",
-    shadeLabels: {
-      [Shade.Dark]: "oscuro",
-      [Shade.Flat]: "plano",
-      [Shade.Light]: "claro",
-      [Shade.Darkest]: "más oscuro (inobtenible)",
-    } as const satisfies Record<Shade, string>,
-    shadeTooltip: "{hex} - Haz clic para copiar ({shade})",
+    shadeTooltip: "{shadeId}: {hex} | Haz clic para copiar",
   },
   dialogs: {
     secretSettingsTitle: "Configuración secreta",
