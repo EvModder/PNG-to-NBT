@@ -475,10 +475,13 @@ export function PanelCustomColors({
       <div
         key={row.customIndex}
         className={`grid gap-1 items-center py-px text-xs min-w-0 ${
-          isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""
+          isMissing ? "relative z-[1] rounded" : ""
         }`}
         style={{ gridTemplateColumns: rowGridTemplate }}
       >
+        {isMissing && (
+          <div className="pointer-events-none absolute inset-y-0 -left-[3px] -right-[2px] rounded border border-destructive/60 bg-destructive/30" />
+        )}
         {visibleColumns.map(column => cells[column])}
       </div>
     );
@@ -520,7 +523,7 @@ export function PanelCustomColors({
           </h2>
         </div>
         {baseRows.length > 0 && (
-          <div className={`${usedCustomRows.length > 0 ? "" : "mb-2"} overflow-hidden`}>
+          <div className={usedCustomRows.length > 0 ? "" : "mb-2"}>
             {baseRows.map(row => renderRow(row, false))}
           </div>
         )}
@@ -533,7 +536,7 @@ export function PanelCustomColors({
                 {messages.customColors.usedInImage(usedCustomRows.length)}
               </div>
             )}
-            <div className={`relative overflow-hidden ${unusedCustomRows.length > 0 ? "" : "mb-2"}`}>
+            <div className={`relative ${unusedCustomRows.length > 0 ? "" : "mb-2"}`}>
               {hasRequiredCol && visibleColumns.includes("required") && (
                 <div className="absolute inset-0 pointer-events-none grid gap-1" style={{ gridTemplateColumns: rowGridTemplate }}>
                   {visibleColumns.map(column => (
@@ -559,7 +562,7 @@ export function PanelCustomColors({
               <span className={`inline-block transition-transform ${showUnusedCustomColors ? "rotate-180" : ""}`}>▼</span>
               <span>{messages.customColors.unusedLabel(unusedCustomRows.length)}</span>
             </button>
-            {showUnusedCustomColors && <div className="opacity-50 overflow-hidden">{unusedCustomRows.map(row => renderRow(row, true))}</div>}
+            {showUnusedCustomColors && <div className="opacity-50">{unusedCustomRows.map(row => renderRow(row, true))}</div>}
           </div>
         )}
 

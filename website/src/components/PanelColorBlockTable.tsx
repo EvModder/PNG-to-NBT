@@ -734,11 +734,14 @@ export function PanelColorBlockTable({
     return (
       <div
         key={idx}
-        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 overflow-hidden ${
-          isMissing ? "bg-destructive/30 ring-1 ring-destructive/60 rounded" : ""
+        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 ${
+          isMissing ? "relative z-[1] rounded" : ""
         }`}
         style={gridColsStyle}
       >
+        {isMissing && (
+          <div className="pointer-events-none absolute inset-y-0 -left-[3px] -right-[2px] rounded border border-destructive/60 bg-destructive/30" />
+        )}
         {visibleColumns.map(column => cells[column])}
       </div>
     );
@@ -983,7 +986,7 @@ export function PanelColorBlockTable({
               })}
             </div>
             <div className="border-t border-border mb-[3px]" />
-            <div className="relative overflow-hidden">{usedIndices.map(renderColorRow)}</div>
+            <div className="relative">{usedIndices.map(renderColorRow)}</div>
           </div>
 
           {imageValid && unusedIndices.length > 0 && (
