@@ -1452,8 +1452,11 @@ const Index = () => {
           applySupportFloorYs,
         );
         const nextActiveBuildAtWorldMinY = nextBuildAtWorldMinYEligible && buildAtWorldMinY;
+        const canReuseBaseGeometry =
+          !nextActiveBuildAtWorldMinY &&
+          isStaircaseBuildMode(nextResolvedBuildMode);
         let nextTileGeometryAnalyses: TileGeometryAnalysis[];
-        if (!nextActiveBuildAtWorldMinY) {
+        if (canReuseBaseGeometry) {
           if (showTileAnalysisProgress) {
             completedSteps = 0;
             lastProgressUpdateAt = performance.now();
