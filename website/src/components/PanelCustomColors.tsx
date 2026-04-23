@@ -65,7 +65,8 @@ type PanelCustomColorsProps = {
   onSelectCustomBlock: (customIndex: number, block: string) => void;
   onRemoveCustomBlock: (customIndex: number, block: string, baseIndex: number | null) => void;
   onCopyColorToClipboard: (r: number, g: number, b: number) => void;
-  colorCounts: Readonly<Record<string, number>>;
+  sortColorCounts: Readonly<Record<string, number>>;
+  displayColorCounts: Readonly<Record<string, number>>;
   formatRequiredCount: (count: number) => string | number;
   usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>;
   shadeCountsByColorKey: ReadonlyMap<ColorRefKey, ReadonlyMap<Shade, number>>;
@@ -186,7 +187,8 @@ export function PanelCustomColors({
   onSelectCustomBlock,
   onRemoveCustomBlock,
   onCopyColorToClipboard,
-  colorCounts,
+  sortColorCounts,
+  displayColorCounts,
   formatRequiredCount,
   usedShadesByColorKey,
   shadeCountsByColorKey,
@@ -200,7 +202,14 @@ export function PanelCustomColors({
   const [showUnusedCustomColors, setShowUnusedCustomColors] = useState(false);
   const [swatchTooltip, setSwatchTooltip] = useState<SwatchTooltip | null>(null);
   const getRowColorKey = useCallback((row: CustomColorRow) => getColorRefKey(getRowColorRef(row)), []);
-  const getRowRequiredCount = useCallback((row: CustomColorRow) => getColorRefCount(colorCounts, getRowColorRef(row)), [colorCounts]);
+  const getRowSortRequiredCount = useCallback(
+    (row: CustomColorRow) => getColorRefCount(sortColorCounts, getRowColorRef(row)),
+    [sortColorCounts],
+  );
+  const getRowDisplayRequiredCount = useCallback(
+    (row: CustomColorRow) => getColorRefCount(displayColorCounts, getRowColorRef(row)),
+    [displayColorCounts],
+  );
   const isRowUsed = useCallback((row: CustomColorRow) => usedShadesByColorKey.has(getRowColorKey(row)), [usedShadesByColorKey, getRowColorKey]);
 
   const visibleColumns = useMemo(
@@ -232,13 +241,13 @@ export function PanelCustomColors({
       rows.filter(row => row.baseIndex !== null) as Array<CustomColorRow & { baseIndex: number }>,
       sortKey,
       sortDir,
-      getRowRequiredCount,
+      getRowSortRequiredCount,
     );
     const trueCustomRows = rows.filter(row => row.baseIndex === null);
     if (!imageValid) {
       return {
         baseRows,
-        usedCustomRows: sortCustomRows(trueCustomRows, sortKey, sortDir, getRowRequiredCount),
+        usedCustomRows: sortCustomRows(trueCustomRows, sortKey, sortDir, getRowSortRequiredCount),
         unusedCustomRows: [] as CustomColorRow[],
       };
     }
@@ -249,16 +258,16 @@ export function PanelCustomColors({
         trueCustomRows.filter(isRowUsed),
         sortKey,
         sortDir,
-        getRowRequiredCount,
+        getRowSortRequiredCount,
       ),
       unusedCustomRows: sortCustomRows(
         trueCustomRows.filter(row => !isRowUsed(row)),
         sortKey,
         sortDir,
-        getRowRequiredCount,
+        getRowSortRequiredCount,
       ),
     };
-  }, [customColors, getRowRequiredCount, imageValid, isRowUsed, sortDir, sortKey]);
+  }, [customColors, getRowSortRequiredCount, imageValid, isRowUsed, sortDir, sortKey]);
 
   const getShadeCount = useCallback(
     (row: CustomColorRow, shade: Shade) =>
@@ -339,9 +348,10 @@ export function PanelCustomColors({
         )
       : renderSwatch(row, swatchShades, shade => getShadedRgb({ id: row.baseIndex, shade }), selectedBlock || undefined);
 
+    const requiredCount = getRowDisplayRequiredCount(row);
     const requiredText =
-      showRequired && getRowRequiredCount(row) > 0
-        ? formatRequiredCount(getRowRequiredCount(row))
+      showRequired && requiredCount > 0
+        ? formatRequiredCount(requiredCount)
         : "";
     const isMissing = row.baseIndex === null && missingColorKeys.has(getRowColorKey(row));
     const displayBlocks = row.color.blocks.toSorted();
@@ -488,12 +498,12 @@ export function PanelCustomColors({
   }, [
     blockColumnExpanded,
     blockDisplayMode,
-    colorCounts,
+    displayColorCounts,
     customColors,
     selectedBlocksCustom,
     formatRequiredCount,
     getRowColorKey,
-    getRowRequiredCount,
+    getRowDisplayRequiredCount,
     imageValid,
     onUpdateBlock,
     onRemoveCustomBlock,

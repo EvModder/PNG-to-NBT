@@ -109,7 +109,8 @@ type PanelColorBlockTableProps = {
   customBlocksByBase: Record<number, string[]>;
   usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>;
   shadeCountsByColorKey: ReadonlyMap<ColorRefKey, ReadonlyMap<Shade, number>>;
-  colorCounts: Readonly<Record<string, number>>;
+  sortColorCounts: Readonly<Record<string, number>>;
+  displayColorCounts: Readonly<Record<string, number>>;
   formatRequiredCount: (count: number) => string | number;
   missingColorKeys: ReadonlySet<ColorRefKey>;
   onUpdateBlock: (baseIndex: number, block: string) => void;
@@ -196,7 +197,8 @@ export function PanelColorBlockTable({
   customBlocksByBase,
   usedShadesByColorKey,
   shadeCountsByColorKey,
-  colorCounts,
+  sortColorCounts,
+  displayColorCounts,
   formatRequiredCount,
   missingColorKeys,
   onUpdateBlock,
@@ -205,7 +207,14 @@ export function PanelColorBlockTable({
   onMinWidthChange,
 }: PanelColorBlockTableProps) {
   const getBaseColorKey = useCallback((idx: number) => getColorRefKey({ id: idx, isCustom: false }), []);
-  const getBaseRequiredCount = useCallback((idx: number) => getColorRefCount(colorCounts, { id: idx, isCustom: false }), [colorCounts]);
+  const getBaseSortRequiredCount = useCallback(
+    (idx: number) => getColorRefCount(sortColorCounts, { id: idx, isCustom: false }),
+    [sortColorCounts],
+  );
+  const getBaseDisplayRequiredCount = useCallback(
+    (idx: number) => getColorRefCount(displayColorCounts, { id: idx, isCustom: false }),
+    [displayColorCounts],
+  );
   const dragColRef = useRef<ColumnId | null>(null);
   const dragColumnIndicatorRef = useRef<ColumnDragIndicator | null>(null);
   const [dragColumnIndicator, setDragColumnIndicator] = useState<ColumnDragIndicator | null>(null);
@@ -224,12 +233,12 @@ export function PanelColorBlockTable({
     if (!hasRequiredCol) return MIN_REQUIRED_COLUMN_WIDTH_PX;
     const maxLen = Math.max(
       0,
-      ...BASE_COLORS.map((_, baseIndex) => getBaseRequiredCount(baseIndex))
+      ...BASE_COLORS.map((_, baseIndex) => getBaseSortRequiredCount(baseIndex))
         .filter(count => count > 0)
         .map(count => String(showStacks ? formatStacks(count) : count).length),
     );
     return Math.max(MIN_REQUIRED_COLUMN_WIDTH_PX, maxLen * 6 + 16);
-  }, [getBaseRequiredCount, hasRequiredCol, showStacks]);
+  }, [getBaseSortRequiredCount, hasRequiredCol, showStacks]);
 
   const visibleColumns = useMemo(
     () =>
@@ -270,10 +279,10 @@ export function PanelColorBlockTable({
         (getHue(BASE_COLORS[a].r, BASE_COLORS[a].g, BASE_COLORS[a].b) -
           getHue(BASE_COLORS[b].r, BASE_COLORS[b].g, BASE_COLORS[b].b)),
       id: (a, b) => dir * (a - b),
-      required: (a, b) => dir * (getBaseRequiredCount(a) - getBaseRequiredCount(b)),
+      required: (a, b) => dir * (getBaseSortRequiredCount(a) - getBaseSortRequiredCount(b)),
     };
     return sorters[sortKey] ? base.toSorted(sorters[sortKey]) : base;
-  }, [sortKey, sortDir, getBaseRequiredCount, showTransparentRow]);
+  }, [sortKey, sortDir, getBaseSortRequiredCount, showTransparentRow]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
     if (!imageValid || usedShadesByColorKey.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
@@ -347,7 +356,7 @@ export function PanelColorBlockTable({
   }, [
     blockColExpanded,
     blockDisplayMode,
-    colorCounts,
+    sortColorCounts,
     columnOrder,
     hasRequiredCol,
     imageValid,
@@ -546,7 +555,7 @@ export function PanelColorBlockTable({
     const displayCustomBlocks = textureCollapsed
       ? (selectedBlock !== "" && selectedIsCustomOption ? [selectedBlock] : [])
       : customBlocks.toSorted();
-    const reqCount = getBaseRequiredCount(idx);
+    const reqCount = getBaseDisplayRequiredCount(idx);
     const cells: Record<ColumnId, React.ReactNode> = {
       clr: idx === TRANSPARENCY_BASE_INDEX ? (
         <div
@@ -748,10 +757,10 @@ export function PanelColorBlockTable({
   }, [
     blockColExpanded,
     blockDisplayMode,
-    colorCounts,
+    displayColorCounts,
     getBlockGroups,
     getBaseColorKey,
-    getBaseRequiredCount,
+    getBaseDisplayRequiredCount,
     getBlockIconAsset,
     getColorSwatchShades,
     getColorSwatchStyle,
@@ -812,7 +821,7 @@ export function PanelColorBlockTable({
               {messages.table.blockDisplayMode(blockDisplayMode)}
             </button>
           </div>
-          {showUsageInfo && (
+          {showUsageInfo && hasRequiredCol && (
             <div className="flex items-center gap-1.5">
               {showMaxPerSplitOption && (
                 <label

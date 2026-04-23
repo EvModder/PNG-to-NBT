@@ -80,6 +80,7 @@ import type { ColorGrid, ColorRgb } from "@/types/color";
 import {
   analyzeFragileSupportOverrideNeeds,
   analyzeMaterialNeeds,
+  hasBuildAtWorldMinYOpportunity,
 } from "@/lib/shapeAnalysis";
 import { getCachedShapeFillerNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
 import {
@@ -188,9 +189,9 @@ type TileBaseAnalysis = {
   includeTransparentBlocks: boolean;
   waterSetting: TileWaterSetting;
   baseShapeMap: Partial<Record<BuildMode, GeneratedShape>>;
+  baseNorthlineShape: GeneratedShape | null;
   flatModeBehavior: FlatModeBehavior;
   isFlatShape: boolean;
-  buildAtWorldMinYEligible: boolean;
 };
 type TileGeometryAnalysis = TileBaseAnalysis & {
   shapeMap: Partial<Record<BuildMode, GeneratedShape>>;
@@ -217,6 +218,12 @@ const EMPTY_USED_SHADES_BY_COLOR_KEY = new Map<ColorRefKey, Set<Shade>>();
 const EMPTY_USED_COLOR_KEYS = new Set<ColorRefKey>();
 const EMPTY_USED_WATER_SHADES = new Set<Shade>();
 const EMPTY_FILLER_ROLE_COUNTS = new Map<FillerRole, number>();
+const EMPTY_COLOR_COUNTS: Readonly<Record<string, number>> = Object.freeze({});
+const EMPTY_MATERIAL_COUNTS: Readonly<MaterialCountsLike> = Object.freeze({
+  blockCounts: EMPTY_COLOR_COUNTS,
+  colorCounts: EMPTY_COLOR_COUNTS,
+  fillerRoleCounts: EMPTY_FILLER_ROLE_COUNTS,
+});
 
 function areTileAnalysesShallowEqual(left: readonly TileAnalysis[], right: readonly TileAnalysis[]): boolean {
   return left.length === right.length && left.every((tile, index) => tile === right[index]);
@@ -288,6 +295,40 @@ function hasAnySharedValue<T>(values: Iterable<T>, target: ReadonlySet<T>): bool
     if (target.has(value)) return true;
   }
   return false;
+}
+
+function useHeldValueWhilePending<T>(value: T, pending: boolean): T {
+  const heldValueRef = useRef(value);
+
+  useEffect(() => {
+    if (!pending) {
+      heldValueRef.current = value;
+    }
+  }, [pending, value]);
+
+  return pending ? heldValueRef.current : value;
+}
+
+function hasCurrentTileGeometryAnalyses(
+  parsedTiles: readonly ParsedColorGridTile[],
+  tileGeometryAnalyses: readonly TileGeometryAnalysis[],
+): boolean {
+  if (parsedTiles.length === 0 || tileGeometryAnalyses.length !== parsedTiles.length) return false;
+  return parsedTiles.every((tile, index) => tileGeometryAnalyses[index]?.tile.cacheKey === tile.cacheKey);
+}
+
+function hasCurrentMaterialAnalyses(
+  tileGeometryAnalyses: readonly TileGeometryAnalysis[],
+  tileAnalyses: readonly TileAnalysis[],
+): boolean {
+  if (tileAnalyses.length !== tileGeometryAnalyses.length) return false;
+  return tileGeometryAnalyses.every((tile, index) => {
+    const tileAnalysis = tileAnalyses[index];
+    if (!tileAnalysis) return false;
+    if (tileAnalysis.tile.cacheKey !== tile.tile.cacheKey) return false;
+    if (tileAnalysis.supportShape !== tile.supportShape) return false;
+    return !tile.supportShape || tileAnalysis.materialNeedStats !== null;
+  });
 }
 
 function collectUsedShadesByColorKey(colorFrequencyMap: ColorFrequencyMap): Map<ColorRefKey, Set<Shade>> {
@@ -429,17 +470,30 @@ function buildExportStem(
   return `${baseName}${buildModeSuffix}${splitName ? `-${splitName}` : ""}${tile ? getTilePositionSuffix(tile) : ""}`;
 }
 
-function getTileCountForDimensions(width: number, height: number): number {
-  if (width % MAP_SIZE !== 0 || height % MAP_SIZE !== 0) return 0;
-  return (width / MAP_SIZE) * (height / MAP_SIZE);
+type TileShape = {
+  tileRows: number;
+  tileCols: number;
+  tileCount: number;
+};
+
+function getTileShapeForDimensions(width: number, height: number): TileShape {
+  const tileRows = height > 0 && height % MAP_SIZE === 0 ? height / MAP_SIZE : 0;
+  const tileCols = width > 0 && width % MAP_SIZE === 0 ? width / MAP_SIZE : 0;
+  return {
+    tileRows,
+    tileCols,
+    tileCount: tileRows * tileCols,
+  };
 }
 
-function getPreprocessedTileCount(imageData: ImageData | null): number {
-  if (!imageData) return 0;
-  return getTileCountForDimensions(
-    imageData.width - (imageData.width % MAP_SIZE),
-    imageData.height - (imageData.height % MAP_SIZE),
-  );
+function getExpectedTileShape(imageData: ImageData | null, cropImage: boolean): TileShape {
+  if (!imageData) return { tileRows: 0, tileCols: 0, tileCount: 0 };
+  return cropImage
+    ? getTileShapeForDimensions(
+        imageData.width - (imageData.width % MAP_SIZE),
+        imageData.height - (imageData.height % MAP_SIZE),
+      )
+    : getTileShapeForDimensions(imageData.width, imageData.height);
 }
 
 function shouldUpdateMainThreadProgress(
@@ -522,6 +576,156 @@ const BASE_SUPPRESS_OPTIONS: ModeOption[] = [
   { value: BuildMode.Suppress2LayerLatePairs, label: messages.buildMode.optionLabel(BuildMode.Suppress2LayerLatePairs) },
 ];
 
+function getStaircaseModeOptionsForState(
+  imageValid: boolean,
+  tileBaseAnalyses: readonly TileBaseAnalysis[],
+  tileDerivedImageStats: readonly DerivedImageStats[],
+  isFlatShape: boolean,
+  hasMultipleTiles: boolean,
+  transparentBlockMapping: Record<number, string>,
+  showFlatNbtSuppressStepOptions: boolean,
+): ModeOption[] {
+  if (!imageValid) {
+    return DEFAULT_STAIRCASE_OPTIONS;
+  }
+  if (showFlatNbtSuppressStepOptions) {
+    return DEFAULT_STAIRCASE_OPTIONS.filter(option => option.value === BuildMode.Flat);
+  }
+  if (hasMultipleTiles) {
+    if (tileDerivedImageStats.length === 0) return DEFAULT_STAIRCASE_OPTIONS;
+    const includeTransparentBlocksForStaircase = (transparentBlockMapping[TRANSPARENCY_BASE_INDEX] ?? "").trim() !== "";
+    const flatVisible = tileDerivedImageStats.every(tile => tile.flatModeBehavior !== FlatModeBehavior.None);
+    const inclineUpVisible = tileDerivedImageStats.every(tile =>
+      tile.allSameShade === Shade.Dark &&
+      getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
+      (!tile.hasTransparency || includeTransparentBlocksForStaircase),
+    );
+    const inclineDownVisible = tileDerivedImageStats.every(tile =>
+      tile.allSameShade === Shade.Light &&
+      getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
+      (!tile.hasTransparency || includeTransparentBlocksForStaircase),
+    );
+    return DEFAULT_STAIRCASE_OPTIONS.filter(option => {
+      switch (option.value) {
+        case BuildMode.Flat:
+          return flatVisible;
+        case BuildMode.InclineUp:
+          return inclineUpVisible;
+        case BuildMode.InclineDown:
+          return inclineDownVisible;
+        default:
+          return true;
+      }
+    });
+  }
+  if (tileBaseAnalyses.length === 0) {
+    return DEFAULT_STAIRCASE_OPTIONS;
+  }
+  const visibleModes = new Set<BuildMode>();
+  for (const tile of tileBaseAnalyses) {
+    for (const mode of Object.keys(tile.baseShapeMap) as BuildMode[]) visibleModes.add(mode);
+  }
+  const inclineUpVisible = tileBaseAnalyses.every(tile => !!tile.baseShapeMap[BuildMode.InclineUp]);
+  const inclineDownVisible = tileBaseAnalyses.every(tile => !!tile.baseShapeMap[BuildMode.InclineDown]);
+  return DEFAULT_STAIRCASE_OPTIONS.filter(option => {
+    switch (option.value) {
+      case BuildMode.Flat:
+        return isFlatShape;
+      case BuildMode.InclineUp:
+        return inclineUpVisible;
+      case BuildMode.InclineDown:
+        return inclineDownVisible;
+      default:
+        return visibleModes.has(option.value);
+    }
+  });
+}
+
+function getSuppressModeOptionsForState(
+  twoLayerHasLateVoidNeed: boolean,
+  hasMultipleTiles: boolean,
+  showFlatNbtSuppressStepOptions: boolean,
+): ModeOption[] {
+  if (showFlatNbtSuppressStepOptions) {
+    return BASE_SUPPRESS_OPTIONS.filter(option => isSuppressStepsBuildMode(option.value));
+  }
+  const visibleModes = new Set(getVisibleSuppressBuildModes(twoLayerHasLateVoidNeed));
+  return BASE_SUPPRESS_OPTIONS.filter(option => {
+    if (hasMultipleTiles && (option.value === BuildMode.SuppressSplitRow || option.value === BuildMode.SuppressSplitChecker)) {
+      return false;
+    }
+    return visibleModes.has(option.value);
+  });
+}
+
+function getFlatBuildAtWorldMinYEligible(
+  tileBaseAnalyses: readonly TileBaseAnalysis[],
+  applySupportFloorYs: boolean,
+): boolean {
+  return tileBaseAnalyses.some(tile =>
+    tile.flatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
+    !!tile.baseNorthlineShape &&
+    hasBuildAtWorldMinYOpportunity(tile.tile.colorGrid, tile.baseNorthlineShape, applySupportFloorYs),
+  );
+}
+
+function getBuildAtWorldMinYEligibleForBuildMode(
+  tileBaseAnalyses: readonly TileBaseAnalysis[],
+  buildMode: BuildMode,
+  applySupportFloorYs: boolean,
+): boolean {
+  if (!isStaircaseBuildMode(buildMode)) return false;
+  if (buildMode === BuildMode.Flat) {
+    return getFlatBuildAtWorldMinYEligible(tileBaseAnalyses, applySupportFloorYs);
+  }
+  return tileBaseAnalyses.some(tile => {
+    const shape = getShapeForBuildMode(tile.baseShapeMap, buildMode, tile.isFlatShape);
+    return !!shape && hasBuildAtWorldMinYOpportunity(tile.tile.colorGrid, shape, applySupportFloorYs);
+  });
+}
+
+function resolveBuildModeSelection(
+  buildMode: BuildMode,
+  suppressStepDirection: SuppressStepDirection,
+  lockFlatBuildMode: boolean,
+  hasVoidShadow: boolean,
+  staircaseModeOptions: readonly ModeOption[],
+  suppressModeOptions: readonly ModeOption[],
+): { buildMode: BuildMode; suppressStepDirection: SuppressStepDirection } {
+  let nextBuildMode = buildMode;
+  let nextSuppressStepDirection = suppressStepDirection;
+
+  if (lockFlatBuildMode) {
+    return { buildMode: BuildMode.Flat, suppressStepDirection };
+  }
+
+  if (DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS && hasVoidShadow && isStaircaseBuildMode(nextBuildMode)) {
+    nextBuildMode = BuildMode.SuppressStepChecker;
+    nextSuppressStepDirection = SuppressStepDirection.EastToWest;
+  } else if (nextBuildMode === BuildMode.Flat) {
+    nextBuildMode = BuildMode.StaircaseClassic;
+  }
+
+  const visibleModes = new Set<BuildMode>([
+    ...staircaseModeOptions.map(option => option.value),
+    ...suppressModeOptions.map(option => option.value),
+  ]);
+
+  if (!visibleModes.has(nextBuildMode)) {
+    if (nextBuildMode === BuildMode.Suppress2Layer && visibleModes.has(BuildMode.Suppress2LayerLateFillers)) {
+      nextBuildMode = BuildMode.Suppress2LayerLateFillers;
+    } else if (nextBuildMode === BuildMode.Suppress2LayerLatePairs && visibleModes.has(BuildMode.Suppress2Layer)) {
+      nextBuildMode = BuildMode.Suppress2Layer;
+    } else if (nextBuildMode === BuildMode.Suppress2LayerLatePairs && visibleModes.has(BuildMode.Suppress2LayerLateFillers)) {
+      nextBuildMode = BuildMode.Suppress2LayerLateFillers;
+    } else {
+      nextBuildMode = staircaseModeOptions[0]?.value ?? BuildMode.StaircaseClassic;
+    }
+  }
+
+  return { buildMode: nextBuildMode, suppressStepDirection: nextSuppressStepDirection };
+}
+
 const getStoredTheme = (): "light" | "dark" | null => {
   const raw = localStorage.getItem(LS_KEYS.theme);
   return raw === "light" || raw === "dark" ? raw : null;
@@ -580,7 +784,6 @@ const Index = () => {
   const [colEnd, setColEnd] = useState(127);
   const colStartRef = useRef(0);
   const colEndRef = useRef(127);
-  const autoSelectedImageRef = useRef<ImageData | null>(null);
   useEffect(() => { colStartRef.current = colStart; }, [colStart]);
   useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
   const [supportMode, setSupportMode] = useState<SupportMode>(() =>
@@ -631,6 +834,7 @@ const Index = () => {
   const [decodedColorGrid, setDecodedColorGrid] = useState<ColorGrid | null>(null);
   const [parsedImageSetState, setParsedImageSetState] = useState<ColorGridSetParseResult | null>(null);
   const [isParsingImage, setIsParsingImage] = useState(false);
+  const [pendingIncomingTileCount, setPendingIncomingTileCount] = useState<number | null>(null);
   const [parseProgress, setParseProgress] = useState<AnalysisProgress | null>(null);
   const [selectedTileIndices, setSelectedTileIndices] = useState<number[]>([]);
   const [tileSelectionAnchorIndex, setTileSelectionAnchorIndex] = useState<number | null>(null);
@@ -673,24 +877,22 @@ const Index = () => {
       (parsedImageSetState?.hasBlockingIssue ?? false) ||
       paletteNotices.length > 0
     );
-  const rawTileRows = imageData && imageData.height > 0 && imageData.height % MAP_SIZE === 0
-    ? imageData.height / MAP_SIZE
-    : 0;
-  const rawTileCols = imageData && imageData.width > 0 && imageData.width % MAP_SIZE === 0
-    ? imageData.width / MAP_SIZE
-    : 0;
-  const rawTileCount = rawTileRows * rawTileCols;
-  const tileRows = parsedImageSet?.tileRows ?? rawTileRows;
-  const tileCols = parsedImageSet?.tileCols ?? rawTileCols;
-  const tileCount = parsedTiles.length > 0 ? parsedTiles.length : rawTileCount;
+  const expectedTileShape = getExpectedTileShape(imageData, cropImage);
+  const tileRows = parsedImageSet?.tileRows ?? expectedTileShape.tileRows;
+  const tileCols = parsedImageSet?.tileCols ?? expectedTileShape.tileCols;
+  const tileCount = parsedTiles.length > 0 ? parsedTiles.length : expectedTileShape.tileCount;
   const hasMultipleTiles = tileCount > 1;
-  const displayImageData = hasBlockingSizeError ? null : (parsedImageSet?.imageData ?? imageData);
+  const displayImageData =
+    hasBlockingSizeError
+      ? null
+      : pendingIncomingTileCount !== null
+        ? imageData
+        : (parsedImageSet?.imageData ?? imageData);
   const imageColorGrid = tileCount === 1 ? (parsedTiles[0]?.colorGrid ?? null) : null;
   const parseRelevantCustomColorKey = useMemo(() => getParseRelevantCustomColorsKey(customColors), [customColors]);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadedPreviewUrlRef = useRef<string | null>(null);
   const fileLoadRequestIdRef = useRef(0);
-  const previousParsedTilesRef = useRef<readonly ParsedColorGridTile[] | null>(null);
 
   const replaceUploadedPreviewUrl = useCallback((nextUrl: string | null) => {
     if (uploadedPreviewUrlRef.current) URL.revokeObjectURL(uploadedPreviewUrlRef.current);
@@ -1004,15 +1206,14 @@ const Index = () => {
     ),
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
-  const flatBuildModeSelected = buildMode === BuildMode.Flat;
   const getTileWaterSetting = useCallback(
-    (tileDerivedImageStats: DerivedImageStats): TileWaterSetting => {
+    (tileDerivedImageStats: DerivedImageStats, targetBuildMode: BuildMode): TileWaterSetting => {
       const tileUsedWaterShades = getUsedWaterShades(tileDerivedImageStats.usedShadesByColorKey);
       const tileHasWater = tileUsedWaterShades.size > 0;
       const tileHasNonLightWater =
         tileUsedWaterShades.has(Shade.Dark) ||
         tileUsedWaterShades.has(Shade.Flat);
-      if (flatBuildModeSelected) return undefined;
+      if (targetBuildMode === BuildMode.Flat) return undefined;
       if (belowPlatformWater && tileHasWater) {
         return { kind: "below-platform", drops: normalizedDeferredWaterDrops };
       }
@@ -1021,14 +1222,14 @@ const Index = () => {
       }
       return undefined;
     },
-    [belowPlatformWater, flatBuildModeSelected, normalizedDeferredWaterDrops, usesWaterForWater],
+    [belowPlatformWater, normalizedDeferredWaterDrops, usesWaterForWater],
   );
   const showMixStepsToggle = useMemo(
     () =>
       isSuppressStepsBuildMode(buildMode) &&
       imageValid &&
       parsedTiles.some((tile, index) => {
-        const waterSetting = getTileWaterSetting(tileDerivedImageStats[index]);
+        const waterSetting = getTileWaterSetting(tileDerivedImageStats[index], buildMode);
         return hasStepMixOpportunity(tile.colorGrid, {
           waterDrops: waterSetting?.kind === "below-platform" ? waterSetting.drops : undefined,
         });
@@ -1119,24 +1320,18 @@ const Index = () => {
   );
   useEffect(() => {
     if (!imageValid || parsedTiles.length === 0) {
-      previousParsedTilesRef.current = parsedTiles;
-      setAnalysisResult(current => (current === null ? current : null));
-      setIsAnalyzingTiles(current => (current ? false : current));
-      setAnalysisProgress(current => (current === null ? current : null));
-      setAnalysisPhase(current => (current === "generating" ? current : "generating"));
+      if (!isParsingImage) {
+        setAnalysisResult(current => (current === null ? current : null));
+        setIsAnalyzingTiles(current => (current ? false : current));
+        setAnalysisProgress(current => (current === null ? current : null));
+        setAnalysisPhase(current => (current === "generating" ? current : "generating"));
+      }
       return;
     }
-
-    const parsedTilesChanged = previousParsedTilesRef.current !== parsedTiles;
-    previousParsedTilesRef.current = parsedTiles;
-
     let cancelled = false;
     const totalTiles = parsedTiles.length;
     const showTileAnalysisProgress = totalTiles > 1;
 
-    if (parsedTilesChanged) {
-      setAnalysisResult(null);
-    }
     setIsAnalyzingTiles(true);
     setAnalysisPhase("generating");
     setAnalysisProgress(showTileAnalysisProgress ? { completed: 0, total: totalTiles } : null);
@@ -1144,7 +1339,6 @@ const Index = () => {
     void (async () => {
       try {
         await yieldToMainThread();
-        const supportsWorldMinYGeometry = supportMode === SupportMode.None || applySupportFloorYs;
         let completedSteps = 0;
         let lastProgressUpdateAt = performance.now();
         const advanceProgress = () => {
@@ -1164,13 +1358,13 @@ const Index = () => {
         const nextBaseAnalyses = await Promise.all(parsedTiles.map(async (tile, index) => {
           const tileDerivedStats = tileDerivedImageStats[index];
           const hasWater = getUsedWaterShades(tileDerivedStats.usedShadesByColorKey).size > 0;
-          const includeTransparentBlocks = shouldIncludeTransparentBlocks(
+          const discoveryIncludesTransparentBlocks = shouldIncludeTransparentBlocks(
             transparentBlockMapping,
             tileDerivedStats.hasTransparency,
-            buildMode,
+            BuildMode.StaircaseClassic,
           );
-          const waterSetting = getTileWaterSetting(tileDerivedStats);
-          const flatModeBehavior = includeTransparentBlocks
+          const waterSetting = getTileWaterSetting(tileDerivedStats, BuildMode.StaircaseClassic);
+          const flatModeBehavior = discoveryIncludesTransparentBlocks
             ? tileDerivedStats.flatModeBehavior
             : FlatModeBehavior.None;
           const baseGeometry = await getTileBaseGeometry(tile.cacheKey, {
@@ -1178,28 +1372,19 @@ const Index = () => {
             allSameShade: tileDerivedStats.allSameShade,
             hasWater,
             hasTransparency: tileDerivedStats.hasTransparency,
-            hasTwoLayerLateVoidNeed: twoLayerHasLateVoidNeed,
-            includeTransparentBlocks,
+            includeTransparentBlocks: discoveryIncludesTransparentBlocks,
             waterSetting,
             flatModeBehavior: tileDerivedStats.flatModeBehavior,
-            selectedBuildMode: buildMode,
             layerGap: calcLayerGap,
-            mixSteps: showMixStepsToggle && calcMixSteps,
             paletteSeed: paletteSeedOffset,
             enableWaterConvenience: supportMode !== SupportMode.None,
-            skipEmptySuppressSteps,
-            collapseStaircaseModes: !hasMultipleTiles,
-            includeFlatNorthline: hasMultipleTiles && tileDerivedStats.flatModeBehavior !== FlatModeBehavior.None,
-            selectedStepDirection: suppressStepDirection,
-            applySupportFloorYs,
-            supportsWorldMinYGeometry,
           });
           advanceProgress();
           return {
             tile,
             derivedImageStats: tileDerivedStats,
             hasWater,
-            includeTransparentBlocks,
+            includeTransparentBlocks: discoveryIncludesTransparentBlocks,
             waterSetting,
             flatModeBehavior,
             ...baseGeometry,
@@ -1210,16 +1395,63 @@ const Index = () => {
 
         const nextFlatModeBehavior = getAggregatedFlatModeBehavior(nextBaseAnalyses);
         const nextIsFlatShape = nextBaseAnalyses.length > 0 && nextBaseAnalyses.every(tile => tile.isFlatShape);
-        const nextBuildAtWorldMinYEligible = nextBaseAnalyses.some(tile => tile.buildAtWorldMinYEligible);
-        const nextActiveBuildAtWorldMinY = nextBuildAtWorldMinYEligible && buildAtWorldMinY;
+        const nextFlatBuildAtWorldMinYEligible = getFlatBuildAtWorldMinYEligible(nextBaseAnalyses, applySupportFloorYs);
+        const nextActiveFlatBuildAtWorldMinY = nextFlatBuildAtWorldMinYEligible && buildAtWorldMinY;
         const nextFlatRequiresVsFillers =
           nextFlatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
-          !nextActiveBuildAtWorldMinY;
+          !nextActiveFlatBuildAtWorldMinY;
+        const nextShowFlatNbtSuppressStepOptions =
+          nextIsFlatShape &&
+          !nextFlatRequiresVsFillers &&
+          showFlatNbtSuppressStepModes;
         const nextLockFlatBuildMode =
           nextIsFlatShape &&
           !nextFlatRequiresVsFillers &&
           !showFlatNbtSuppressStepModes;
-        const nextEffectiveBuildMode = nextLockFlatBuildMode ? BuildMode.Flat : buildMode;
+        const nextStaircaseModeOptions = getStaircaseModeOptionsForState(
+          imageValid,
+          nextBaseAnalyses,
+          tileDerivedImageStats,
+          nextIsFlatShape,
+          hasMultipleTiles,
+          transparentBlockMapping,
+          nextShowFlatNbtSuppressStepOptions,
+        );
+        const nextSuppressModeOptions = getSuppressModeOptionsForState(
+          twoLayerHasLateVoidNeed,
+          hasMultipleTiles,
+          nextShowFlatNbtSuppressStepOptions,
+        );
+        const nextResolvedBuildSelection = resolveBuildModeSelection(
+          buildMode,
+          suppressStepDirection,
+          nextLockFlatBuildMode,
+          hasVoidShadow,
+          nextStaircaseModeOptions,
+          nextSuppressModeOptions,
+        );
+        const nextResolvedBuildMode = nextResolvedBuildSelection.buildMode;
+        const nextResolvedSuppressStepDirection = nextResolvedBuildSelection.suppressStepDirection;
+
+        if (
+          nextResolvedBuildMode !== buildMode ||
+          nextResolvedSuppressStepDirection !== suppressStepDirection
+        ) {
+          startTransition(() => {
+            if (nextResolvedBuildMode !== buildMode) setBuildMode(nextResolvedBuildMode);
+            if (nextResolvedSuppressStepDirection !== suppressStepDirection) {
+              setSuppressStepDirection(nextResolvedSuppressStepDirection);
+            }
+          });
+          return;
+        }
+
+        const nextBuildAtWorldMinYEligible = getBuildAtWorldMinYEligibleForBuildMode(
+          nextBaseAnalyses,
+          nextResolvedBuildMode,
+          applySupportFloorYs,
+        );
+        const nextActiveBuildAtWorldMinY = nextBuildAtWorldMinYEligible && buildAtWorldMinY;
         let nextTileGeometryAnalyses: TileGeometryAnalysis[];
         if (!nextActiveBuildAtWorldMinY) {
           if (showTileAnalysisProgress) {
@@ -1230,15 +1462,27 @@ const Index = () => {
           }
           nextTileGeometryAnalyses = [];
           for (const [index, tile] of nextBaseAnalyses.entries()) {
+            const includeTransparentBlocks = shouldIncludeTransparentBlocks(
+              transparentBlockMapping,
+              tile.derivedImageStats.hasTransparency,
+              nextResolvedBuildMode,
+            );
+            const waterSetting = getTileWaterSetting(tile.derivedImageStats, nextResolvedBuildMode);
+            const flatModeBehavior = includeTransparentBlocks
+              ? tile.derivedImageStats.flatModeBehavior
+              : FlatModeBehavior.None;
             const shapeMap = tile.baseShapeMap;
             const northlineShape = tile.baseNorthlineShape;
-            const supportShape = nextEffectiveBuildMode === BuildMode.Flat
+            const supportShape = nextResolvedBuildMode === BuildMode.Flat
               ? northlineShape
-              : getShapeForBuildMode(shapeMap, nextEffectiveBuildMode, tile.isFlatShape);
+              : getShapeForBuildMode(shapeMap, nextResolvedBuildMode, tile.isFlatShape);
             const fillerNeedStats = supportShape ? getCachedShapeFillerNeeds(supportShape) : null;
             const northRowSingleLine = supportShape ? getCachedShapeNooblineIsSingleY(supportShape) : true;
             nextTileGeometryAnalyses.push({
               ...tile,
+              includeTransparentBlocks,
+              waterSetting,
+              flatModeBehavior,
               shapeMap,
               northlineShape,
               supportShape,
@@ -1268,31 +1512,42 @@ const Index = () => {
             setAnalysisProgress({ completed: 0, total: totalTiles });
           }
           nextTileGeometryAnalyses = await Promise.all(nextBaseAnalyses.map(async tile => {
+            const includeTransparentBlocks = shouldIncludeTransparentBlocks(
+              transparentBlockMapping,
+              tile.derivedImageStats.hasTransparency,
+              nextResolvedBuildMode,
+            );
+            const waterSetting = getTileWaterSetting(tile.derivedImageStats, nextResolvedBuildMode);
+            const flatModeBehavior = includeTransparentBlocks
+              ? tile.derivedImageStats.flatModeBehavior
+              : FlatModeBehavior.None;
             const finalGeometry = await getTileFinalGeometry(tile.tile.cacheKey, {
               colorGrid: tile.tile.colorGrid,
               allSameShade: tile.derivedImageStats.allSameShade,
               hasWater: tile.hasWater,
               hasTransparency: tile.derivedImageStats.hasTransparency,
               hasTwoLayerLateVoidNeed: twoLayerHasLateVoidNeed,
-              includeTransparentBlocks: tile.includeTransparentBlocks,
-              waterSetting: tile.waterSetting,
-              flatModeBehavior: tile.flatModeBehavior,
-              buildAtWorldMinY: true,
-              effectiveBuildMode: nextEffectiveBuildMode,
-              selectedBuildMode: buildMode,
+              includeTransparentBlocks,
+              waterSetting,
+              flatModeBehavior,
+              buildAtWorldMinY: nextActiveBuildAtWorldMinY,
+              buildMode: nextResolvedBuildMode,
               isFlatShape: tile.isFlatShape,
               layerGap: calcLayerGap,
-              mixSteps: showMixStepsToggle && calcMixSteps,
+              mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
               skipEmptySuppressSteps,
               collapseStaircaseModes: !hasMultipleTiles,
               includeFlatNorthline: hasMultipleTiles && tile.flatModeBehavior !== FlatModeBehavior.None,
-              selectedStepDirection: suppressStepDirection,
+              selectedStepDirection: nextResolvedSuppressStepDirection,
             });
             advanceProgress();
             return {
               ...tile,
+              includeTransparentBlocks,
+              waterSetting,
+              flatModeBehavior,
               ...finalGeometry,
             } satisfies TileGeometryAnalysis;
           }));
@@ -1363,15 +1618,14 @@ const Index = () => {
   );
   const isFlatShape = tileBaseAnalyses.length > 0 && tileBaseAnalyses.every(tile => tile.isFlatShape);
   const flatBuildAtWorldMinYEligible = useMemo(
-    () => tileBaseAnalyses.some(tile => tile.buildAtWorldMinYEligible),
-    [tileBaseAnalyses],
+    () => getFlatBuildAtWorldMinYEligible(tileBaseAnalyses, applySupportFloorYs),
+    [tileBaseAnalyses, applySupportFloorYs],
   );
-  const buildAtWorldMinYEligible = flatBuildAtWorldMinYEligible;
-  const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
-  const activeBuildAtWorldMinY = showBuildAtWorldMinYToggle && buildAtWorldMinY;
+  const flatShowBuildAtWorldMinYToggle = imageValid && flatBuildAtWorldMinYEligible;
+  const activeFlatBuildAtWorldMinY = flatShowBuildAtWorldMinYToggle && buildAtWorldMinY;
   const flatRequiresVsFillers =
     flatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
-    !activeBuildAtWorldMinY;
+    !activeFlatBuildAtWorldMinY;
   const showFlatNbtSuppressStepOptions =
     isFlatShape &&
     !flatRequiresVsFillers &&
@@ -1402,7 +1656,7 @@ const Index = () => {
   }, [aggregateFillerRoleCounts, uiFillerAssignments]);
   const visibleWaterLevelControls = useMemo(
     () => {
-      if (!imageValid || !belowPlatformWater || flatBuildModeSelected) return [];
+      if (!imageValid || !belowPlatformWater || buildMode === BuildMode.Flat) return [];
       const currentWaterDrops = buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
       return WATER_DROP_INPUT_ORDER
         .filter(shade => usedWaterShades.has(shade))
@@ -1411,7 +1665,7 @@ const Index = () => {
     [
       imageValid,
       belowPlatformWater,
-      flatBuildModeSelected,
+      buildMode,
       usedWaterShades,
       lightWaterDrop,
       flatWaterDrop,
@@ -1604,6 +1858,11 @@ const Index = () => {
     supportMode,
   ]);
   const tileAnalyses = tileAnalysesState;
+  const hasCurrentTileGeometryAnalysis = hasCurrentTileGeometryAnalyses(parsedTiles, tileGeometryAnalyses);
+  const hasCurrentMaterialAnalysis =
+    hasCurrentTileGeometryAnalysis &&
+    hasCurrentMaterialAnalyses(tileGeometryAnalyses, tileAnalysesState) &&
+    pendingIncomingTileCount === null;
 
   const setNormalizedWaterDrop = useCallback((shade: WaterDropShade, rawValue: number) => {
     const normalizedValue = Math.max(0, Math.trunc(rawValue) || 0);
@@ -1650,7 +1909,17 @@ const Index = () => {
     [effectiveBuildMode, isStepRangeMode, supportShape, belowPlatformWater, selectedTileAnalysis],
   );
   const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
-  const enableStepsSupportOption = !imageData || tileAnalyses.some(tile =>
+  const supportModeVisibilityPending =
+    !!imageData &&
+    (
+      isParsingImage ||
+      (
+        imageValid &&
+        parsedTiles.length > 0 &&
+        !hasCurrentTileGeometryAnalysis
+      )
+    );
+  const enableStepsSupportOption = !imageData || supportModeVisibilityPending || tileAnalyses.some(tile =>
     !!tile.supportShape?.parts.some(part =>
       part.cells.entries().some(([coord, cell]) => {
         if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
@@ -1668,6 +1937,7 @@ const Index = () => {
           hasFragileMappedBlock(getSelectedCustomColorBlock(selectedBlocksCustom, customIndex, customColors))
         );
     }
+    if (supportModeVisibilityPending) return true;
     return tileAnalyses.some(tile =>
       !!tile.supportShape?.parts.some(part =>
         part.cells.entries().some(([coord, cell]) => {
@@ -1683,84 +1953,37 @@ const Index = () => {
         }),
       ),
     );
-  }, [imageData, tileAnalyses, colorBlockSelections, applySupportFloorYs]);
-  const staircaseModeOptions = useMemo((): ModeOption[] => {
-    if (!imageValid) {
-      return DEFAULT_STAIRCASE_OPTIONS;
-    }
-    if (showFlatNbtSuppressStepOptions) {
-      return DEFAULT_STAIRCASE_OPTIONS.filter(option => option.value === BuildMode.Flat);
-    }
-    if (hasMultipleTiles) {
-      if (tileDerivedImageStats.length === 0) return DEFAULT_STAIRCASE_OPTIONS;
-      const includeTransparentBlocksForStaircase = (transparentBlockMapping[TRANSPARENCY_BASE_INDEX] ?? "").trim() !== "";
-      const flatVisible = tileDerivedImageStats.every(tile => tile.flatModeBehavior !== FlatModeBehavior.None);
-      const inclineUpVisible = tileDerivedImageStats.every(tile =>
-        tile.allSameShade === Shade.Dark &&
-        getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
-        (!tile.hasTransparency || includeTransparentBlocksForStaircase),
-      );
-      const inclineDownVisible = tileDerivedImageStats.every(tile =>
-        tile.allSameShade === Shade.Light &&
-        getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
-        (!tile.hasTransparency || includeTransparentBlocksForStaircase),
-      );
-      return DEFAULT_STAIRCASE_OPTIONS.filter(option => {
-        switch (option.value) {
-          case BuildMode.Flat:
-            return flatVisible;
-          case BuildMode.InclineUp:
-            return inclineUpVisible;
-          case BuildMode.InclineDown:
-            return inclineDownVisible;
-          default:
-            return true;
-        }
-      });
-    }
-    if (tileBaseAnalyses.length === 0) {
-      return DEFAULT_STAIRCASE_OPTIONS;
-    }
-    const visibleModes = new Set<BuildMode>();
-    for (const tile of tileBaseAnalyses) {
-      for (const mode of Object.keys(tile.baseShapeMap) as BuildMode[]) visibleModes.add(mode);
-    }
-    const inclineUpVisible = tileBaseAnalyses.every(tile => !!tile.baseShapeMap[BuildMode.InclineUp]);
-    const inclineDownVisible = tileBaseAnalyses.every(tile => !!tile.baseShapeMap[BuildMode.InclineDown]);
-    return DEFAULT_STAIRCASE_OPTIONS.filter(option => {
-      switch (option.value) {
-        case BuildMode.Flat:
-          return isFlatShape;
-        case BuildMode.InclineUp:
-          return inclineUpVisible;
-        case BuildMode.InclineDown:
-          return inclineDownVisible;
-        default:
-          return visibleModes.has(option.value);
-      }
-    });
-  }, [
-    tileBaseAnalyses,
-    imageValid,
-    isFlatShape,
-    hasMultipleTiles,
-    tileDerivedImageStats,
-    transparentBlockMapping,
-    showFlatNbtSuppressStepOptions,
-  ]);
+  }, [imageData, supportModeVisibilityPending, tileAnalyses, colorBlockSelections, applySupportFloorYs]);
+  const staircaseModeOptions = useMemo(
+    () => getStaircaseModeOptionsForState(
+      imageValid,
+      tileBaseAnalyses,
+      tileDerivedImageStats,
+      isFlatShape,
+      hasMultipleTiles,
+      transparentBlockMapping,
+      showFlatNbtSuppressStepOptions,
+    ),
+    [
+      imageValid,
+      tileBaseAnalyses,
+      tileDerivedImageStats,
+      isFlatShape,
+      hasMultipleTiles,
+      transparentBlockMapping,
+      showFlatNbtSuppressStepOptions,
+    ],
+  );
 
-  const suppressModeOptions = useMemo((): ModeOption[] => {
-    if (showFlatNbtSuppressStepOptions) {
-      return BASE_SUPPRESS_OPTIONS.filter(option => isSuppressStepsBuildMode(option.value));
-    }
-    const visibleModes = new Set(getVisibleSuppressBuildModes(twoLayerHasLateVoidNeed));
-    return BASE_SUPPRESS_OPTIONS.filter(option => {
-      if (hasMultipleTiles && (option.value === BuildMode.SuppressSplitRow || option.value === BuildMode.SuppressSplitChecker)) {
-        return false;
-      }
-      return visibleModes.has(option.value);
-    });
-  }, [twoLayerHasLateVoidNeed, hasMultipleTiles, showFlatNbtSuppressStepOptions]);
+  const suppressModeOptions = useMemo(
+    () => getSuppressModeOptionsForState(twoLayerHasLateVoidNeed, hasMultipleTiles, showFlatNbtSuppressStepOptions),
+    [twoLayerHasLateVoidNeed, hasMultipleTiles, showFlatNbtSuppressStepOptions],
+  );
+  const buildAtWorldMinYEligible = useMemo(
+    () => getBuildAtWorldMinYEligibleForBuildMode(tileBaseAnalyses, effectiveBuildMode, applySupportFloorYs),
+    [tileBaseAnalyses, effectiveBuildMode, applySupportFloorYs],
+  );
+  const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
   const showSuppressStepDirectionControl =
     !!imageData &&
     imageValid &&
@@ -1769,7 +1992,13 @@ const Index = () => {
   const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
   const supportModeTooltip = messages.supportMode.tooltip(supportMode);
   const toolbarBuildSettingsProps = displayImageData && imageValid ? {
-    lockFlatBuildMode,
+    lockFlatBuildMode: lockFlatBuildMode || (
+      !!imageData &&
+      imageValid &&
+      parsedTiles.length > 0 &&
+      !hasCurrentTileGeometryAnalysis &&
+      analysisResult === null
+    ),
     visibleWaterLevelControls,
     setNormalizedWaterDrop,
     minLayerGap,
@@ -1794,7 +2023,6 @@ const Index = () => {
     suppressModeOptions,
     shadingMethodTooltip,
   } : null;
-
   const suppressStepNorthSouthWarning = useMemo(
     () =>
       showSuppressStepDirectionControl &&
@@ -1874,13 +2102,13 @@ const Index = () => {
     () => getSupportModeFillerRoles(supportMode, usesWaterForWater, usesIceForWater),
     [supportMode, usesWaterForWater, usesIceForWater],
   );
-  const enableAllSupportOption = !imageData || getSupportModeRoleCount(
+  const enableAllSupportOption = !imageData || supportModeVisibilityPending || getSupportModeRoleCount(
     ...allSupportRoles,
   ) > 0;
-  const enableWaterSupportOption = !imageData || getSupportModeRoleCount(
+  const enableWaterSupportOption = !imageData || supportModeVisibilityPending || getSupportModeRoleCount(
     ...waterSupportRoles,
   ) > 0;
-  const showSupportModeSelector = !imageData || (
+  const showSupportModeSelector = !imageData || supportModeVisibilityPending || (
     enableAllSupportOption ||
     enableStepsSupportOption ||
     enableWaterSupportOption ||
@@ -1899,11 +2127,14 @@ const Index = () => {
       selectionMaterialCountsSum,
     ],
   );
+  const materialCountsDisplayView = hasCurrentMaterialAnalysis ? materialCountsView : EMPTY_MATERIAL_COUNTS;
+  const allTileMaterialCountsDisplaySum = hasCurrentMaterialAnalysis ? allTileMaterialCountsSum : EMPTY_MATERIAL_COUNTS;
+  const fragileSupportOverrideNeedStatsDisplay = hasCurrentMaterialAnalysis ? fragileSupportOverrideNeedStats : null;
   const numUniqueColorShadesForPart =
     selectedTileMaterialNeedStats?.numUniqueColorShadesForPart ??
     (paletteUsageInfo?.uniqueShadeCount ?? 0);
   const formatRequiredCount = (count: number) => (showStacks ? formatStacks(count) : count);
-  const numColorBlockTypesForPart = Object.values(materialCountsView.colorCounts).filter(count => count > 0).length;
+  const numColorBlockTypesForPart = Object.values(materialCountsDisplayView.colorCounts).filter(count => count > 0).length;
 
   const builtinPreset = getBuiltinPreset(preset.name);
   const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.selectedBlocks, preset.selectedBlocks) : false;
@@ -2001,43 +2232,6 @@ const Index = () => {
       cancelled = true;
     };
   }, [replaceUploadedPreviewUrl]);
-
-  // Auto-select mode when image changes
-  useEffect(() => {
-    if (!imageData) {
-      autoSelectedImageRef.current = null;
-      return;
-    }
-    if (!imageValid || previewBusy || autoSelectedImageRef.current === imageData) return;
-    autoSelectedImageRef.current = imageData;
-    if (lockFlatBuildMode) setBuildMode(BuildMode.Flat);
-    else if (DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS && hasVoidShadow) {
-      setBuildMode(prev => isStaircaseBuildMode(prev) ? BuildMode.SuppressStepChecker : prev);
-      if (isStaircaseBuildMode(buildMode)) {
-        setSuppressStepDirection(SuppressStepDirection.EastToWest);
-      }
-    }
-    else setBuildMode(prev => prev === BuildMode.Flat ? BuildMode.StaircaseClassic : prev);
-  }, [imageData, imageValid, previewBusy, lockFlatBuildMode, hasVoidShadow, buildMode]);
-
-  useEffect(() => {
-    if (!imageData || previewBusy || lockFlatBuildMode) return;
-    const visible = new Set<BuildMode>([
-      ...staircaseModeOptions.map(o => o.value),
-      ...suppressModeOptions.map(o => o.value),
-    ]);
-    if (!visible.has(buildMode)) {
-      if (buildMode === BuildMode.Suppress2Layer && visible.has(BuildMode.Suppress2LayerLateFillers)) {
-        setBuildMode(BuildMode.Suppress2LayerLateFillers);
-      } else if (buildMode === BuildMode.Suppress2LayerLatePairs && visible.has(BuildMode.Suppress2Layer)) {
-        setBuildMode(BuildMode.Suppress2Layer);
-      } else if (buildMode === BuildMode.Suppress2LayerLatePairs && visible.has(BuildMode.Suppress2LayerLateFillers)) {
-        setBuildMode(BuildMode.Suppress2LayerLateFillers);
-      } else {
-        setBuildMode(staircaseModeOptions[0]?.value ?? BuildMode.StaircaseClassic);
-      }
-    }
-  }, [imageData, previewBusy, lockFlatBuildMode, buildMode, staircaseModeOptions, suppressModeOptions]);
 
   useEffect(() => {
     if (!imageData || previewBusy) return;
@@ -2287,6 +2481,7 @@ const Index = () => {
 
   const clearImage = () => {
     fileLoadRequestIdRef.current += 1;
+    setPendingIncomingTileCount(null);
     setDecodedColorGrid(null);
     setParsedImageSetState(null);
     setImageData(null);
@@ -2332,16 +2527,22 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
-    if (decodedColorGrid || !imageData) {
-      setIsParsingImage(false);
+    if (!imageData) {
+      setPendingIncomingTileCount(null);
       setParseProgress(null);
       if (!decodedColorGrid) setParsedImageSetState(null);
       return;
     }
+    if (decodedColorGrid) {
+      setPendingIncomingTileCount(null);
+      setIsParsingImage(false);
+      setParseProgress(null);
+      return;
+    }
 
     let cancelled = false;
-    const rawTileCount = getTileCountForDimensions(imageData.width, imageData.height);
-    if (!cropImage && rawTileCount === 0) {
+    const exactTileCount = getTileShapeForDimensions(imageData.width, imageData.height).tileCount;
+    if (!cropImage && exactTileCount === 0) {
       setParsedImageSetState({
         imageData,
         tiles: [],
@@ -2352,16 +2553,15 @@ const Index = () => {
       });
       setPaletteNotices([messages.parsing.imageSizeNotice(imageData.width, imageData.height)]);
       setImageValid(false);
+      setPendingIncomingTileCount(null);
       setIsParsingImage(false);
       setParseProgress(null);
       return;
     }
-    const expectedTileCount = cropImage ? getPreprocessedTileCount(imageData) : rawTileCount;
+    const expectedTileCount = getExpectedTileShape(imageData, cropImage).tileCount;
     const singleTileImage = expectedTileCount === 1;
     setIsParsingImage(true);
     setParseProgress(!singleTileImage && expectedTileCount > 0 ? { completed: 0, total: expectedTileCount } : null);
-    setImageValid(false);
-    setPaletteNotices([]);
 
     void (async () => {
       try {
@@ -2404,6 +2604,7 @@ const Index = () => {
         });
       } finally {
         if (cancelled) return;
+        setPendingIncomingTileCount(null);
         setIsParsingImage(false);
         setParseProgress(null);
       }
@@ -2419,18 +2620,17 @@ const Index = () => {
       const requestId = fileLoadRequestIdRef.current + 1;
       fileLoadRequestIdRef.current = requestId;
       replaceUploadedPreviewUrl(URL.createObjectURL(file));
+      setPendingIncomingTileCount(null);
       setDecodedColorGrid(null);
-      setParsedImageSetState(null);
-      setPaletteNotices([]);
       setSelectedTileIndices([]);
       setTileSelectionAnchorIndex(null);
       setColRangeEnabled(false);
-      setImageValid(false);
       setIsParsingImage(true);
       setParseProgress(null);
       loadImageDataFromFile(file)
         .then(nextImageData => {
           if (fileLoadRequestIdRef.current !== requestId) return;
+          setPendingIncomingTileCount(getExpectedTileShape(nextImageData, cropImage).tileCount);
           setImageData(nextImageData);
           setImageName(file.name);
           setImageLossyFormatLabel(isLikelyLossyImageFile(file) ? getLossyImageFormatLabel(file) : null);
@@ -2442,6 +2642,7 @@ const Index = () => {
         })
         .catch((err: unknown) => {
           if (fileLoadRequestIdRef.current !== requestId) return;
+          setPendingIncomingTileCount(null);
           setDecodedColorGrid(null);
           setParsedImageSetState(null);
           setImageData(null);
@@ -2458,7 +2659,7 @@ const Index = () => {
           if (fileRef.current) fileRef.current.value = "";
         });
     },
-    [getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
+    [cropImage, getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
   );
 
   useEffect(() => {
@@ -2616,22 +2817,63 @@ const Index = () => {
     setIsDark(next === "dark");
   };
 
-  const aggregateShapeFillerRoleCounts = aggregateFillerRoleCounts;
   const aggregateNorthRowSingleLine = tileGeometryAnalyses.every(tile => tile.northRowSingleLine);
 
   const canGenerate = imageValid && !previewBusy && missingBlockCount === 0;
-  const hasRequiredCol = imageValid && tileAnalyses.length > 0;
-  const northRowFillerCount = aggregateShapeFillerRoleCounts.get(FillerRole.ShadeNorthRow) ?? 0;
-  const suppressFillerCount = aggregateShapeFillerRoleCounts.get(FillerRole.ShadeSuppress) ?? 0;
-  const lateSuppressFillerCount = aggregateShapeFillerRoleCounts.get(FillerRole.ShadeSuppressLate) ?? 0;
+  const hasRequiredCol = imageValid && hasCurrentMaterialAnalysis;
+  const preserveSingleTileMaterialUi =
+    !!imageData &&
+    (
+      pendingIncomingTileCount === null
+        ? parsedTiles.length === 1
+        : pendingIncomingTileCount === 1 && parsedTiles.length === 1
+    );
+  // Preserve material-analysis layout only for single-tile -> single-tile handoffs.
+  // If the outgoing image is multi-tile, we clear immediately.
+  // If the incoming image resolves to multi-tile, we clear as soon as its dimensions are known.
+  const colorTableDisplayPending =
+    preserveSingleTileMaterialUi &&
+    (
+      isParsingImage ||
+      !imageValid ||
+      parsedTiles.length === 0 ||
+      !hasCurrentTileGeometryAnalysis ||
+      !hasCurrentMaterialAnalysis
+    );
+  const colorTableDisplayState = useHeldValueWhilePending(
+    useMemo(
+      () => ({
+        imageValid,
+        hasRequiredCol,
+        showUsageInfo: !!paletteUsageInfo && imageValid,
+        usedShadesByColorKey,
+        shadeCountsByColorKey,
+        sortColorCounts: materialCountsDisplayView.colorCounts,
+        missingColorKeys,
+      }),
+      [
+        imageValid,
+        hasRequiredCol,
+        paletteUsageInfo,
+        usedShadesByColorKey,
+        shadeCountsByColorKey,
+        materialCountsDisplayView.colorCounts,
+        missingColorKeys,
+      ],
+    ),
+    colorTableDisplayPending,
+  );
+  const northRowFillerCount = aggregateFillerRoleCounts.get(FillerRole.ShadeNorthRow) ?? 0;
+  const suppressFillerCount = aggregateFillerRoleCounts.get(FillerRole.ShadeSuppress) ?? 0;
+  const lateSuppressFillerCount = aggregateFillerRoleCounts.get(FillerRole.ShadeSuppressLate) ?? 0;
   const getAggregateRequiredFillerRoleCount = useCallback(
     (...roles: FillerRole[]) =>
-      roles.reduce((sum, role) => sum + (allTileMaterialCountsSum.fillerRoleCounts.get(role) ?? 0), 0),
-    [allTileMaterialCountsSum],
+      roles.reduce((sum, role) => sum + (allTileMaterialCountsDisplaySum.fillerRoleCounts.get(role) ?? 0), 0),
+    [allTileMaterialCountsDisplaySum],
   );
   const getRequiredFillerRoleCount = useCallback(
-    (...roles: FillerRole[]) => roles.reduce((sum, role) => sum + (materialCountsView.fillerRoleCounts.get(role) ?? 0), 0),
-    [materialCountsView],
+    (...roles: FillerRole[]) => roles.reduce((sum, role) => sum + (materialCountsDisplayView.fillerRoleCounts.get(role) ?? 0), 0),
+    [materialCountsDisplayView],
   );
   const aggregateShadeFillerRequiredCount = getAggregateRequiredFillerRoleCount(
     FillerRole.ShadeNorthRow,
@@ -2677,6 +2919,25 @@ const Index = () => {
   const showRecessiveVoidFillerInput =
     !!imageData &&
     aggregateRecessiveVoidFillerRequiredCount > 0;
+  const fillerUiVisibilityState = useHeldValueWhilePending(
+    useMemo(
+      () => ({
+        showSupportFillerInput,
+        showShadeFillerInput,
+        showDominateVoidFillerInput,
+        showRecessiveVoidFillerInput,
+        showLateFillerInput,
+      }),
+      [
+        showDominateVoidFillerInput,
+        showLateFillerInput,
+        showRecessiveVoidFillerInput,
+        showShadeFillerInput,
+        showSupportFillerInput,
+      ],
+    ),
+    colorTableDisplayPending,
+  );
   const previewXColumnRange = useMemo<[number, number] | undefined>(
     () => (selectedTileAnalysis && colRangeEnabled && !isStepRangeMode ? [colStart, colEnd] : undefined),
     [selectedTileAnalysis, colRangeEnabled, isStepRangeMode, colStart, colEnd],
@@ -2846,13 +3107,13 @@ const Index = () => {
     };
   }, [showWaterSideSupportWarning, effectiveSupportFillerBlock, supportFillerDisabled]);
   const fragileSupportOverrideWarning = useMemo<ShapeWarning | null>(() => {
-    if (!imageValid || !fragileSupportOverrideNeedStats) return null;
+    if (!imageValid || !fragileSupportOverrideNeedStatsDisplay) return null;
     if (supportMode === SupportMode.None) return null;
 
     const warningLines: string[] = [];
 
     for (const [blockId, rule] of FRAGILE_SUPPORT_RULES) {
-      if ((fragileSupportOverrideNeedStats.overrideCounts[blockId] ?? 0) <= 0) continue;
+      if ((fragileSupportOverrideNeedStatsDisplay.overrideCounts[blockId] ?? 0) <= 0) continue;
       warningLines.push(messages.preview.fragileSupportOverrideWarning(blockId, rule.validSupportBlocks));
     }
 
@@ -2860,7 +3121,7 @@ const Index = () => {
       ? { text: warningLines.join("\n\n"), invalid: false }
       : null;
   }, [
-    fragileSupportOverrideNeedStats,
+    fragileSupportOverrideNeedStatsDisplay,
     imageValid,
     supportMode,
   ]);
@@ -3192,29 +3453,29 @@ const Index = () => {
             toolbarRef={fillerToolbarSectionRef}
             isStackedLayout={isStackedLayout}
             hasImageData={!!displayImageData}
-            showSupportFillerInput={showSupportFillerInput}
+            showSupportFillerInput={fillerUiVisibilityState.showSupportFillerInput}
             supportFillerBlock={supportFillerBlock}
             setSupportFillerBlock={setCommittedSupportFillerBlock}
             commitSupportFillerBlock={commitSupportFillerBlock}
             supportFillerDisabled={supportFillerDisabled}
             supportFillerRequiredCount={supportFillerRequiredCount}
-            showShadeFillerInput={showShadeFillerInput}
+            showShadeFillerInput={fillerUiVisibilityState.showShadeFillerInput}
             shadeFillerBlock={shadeFillerBlock}
             setShadeFillerBlock={setCommittedShadeFillerBlock}
             shadeFillerIsNorthRowOnly={shadeFillerIsNorthRowOnly}
             shadeFillerShadingDisabled={shadeFillerShadingDisabled}
             shadeFillerRequiredCount={shadeFillerRequiredCount}
-            showDominateVoidFillerInput={showDominateVoidFillerInput}
+            showDominateVoidFillerInput={fillerUiVisibilityState.showDominateVoidFillerInput}
             dominateVoidFillerBlock={dominateVoidFillerBlock}
             setDominateVoidFillerBlock={setCommittedDominateVoidFillerBlock}
             dominateVoidFillerShadingDisabled={dominateVoidFillerShadingDisabled}
             dominateVoidFillerRequiredCount={dominateVoidFillerRequiredCount}
-            showRecessiveVoidFillerInput={showRecessiveVoidFillerInput}
+            showRecessiveVoidFillerInput={fillerUiVisibilityState.showRecessiveVoidFillerInput}
             recessiveVoidFillerBlock={recessiveVoidFillerBlock}
             setRecessiveVoidFillerBlock={setCommittedRecessiveVoidFillerBlock}
             recessiveVoidFillerShadingDisabled={recessiveVoidFillerShadingDisabled}
             recessiveVoidFillerRequiredCount={recessiveVoidFillerRequiredCount}
-            showLateFillerInput={showLateFillerInput}
+            showLateFillerInput={fillerUiVisibilityState.showLateFillerInput}
             suppress2LayerLateFillerBlock={suppress2LayerLateFillerBlock}
             setSuppress2LayerLateFillerBlock={setCommittedSuppress2LayerLateFillerBlock}
             lateFillerShadingDisabled={lateFillerShadingDisabled}
@@ -3227,10 +3488,10 @@ const Index = () => {
           {/* Color → Block */}
           <PanelColorBlockTable
             isStackedLayout={isStackedLayout}
-            imageValid={imageValid}
+            imageValid={colorTableDisplayState.imageValid}
             belowPlatformWater={belowPlatformWater}
-            hasRequiredCol={hasRequiredCol}
-            showUsageInfo={!!paletteUsageInfo && imageValid}
+            hasRequiredCol={colorTableDisplayState.hasRequiredCol}
+            showUsageInfo={colorTableDisplayState.showUsageInfo}
             showIds={showIds}
             setShowIds={setShowIds}
             showNames={showNames}
@@ -3255,16 +3516,17 @@ const Index = () => {
             showTransparentRow={showTransparentRow}
             showExcludedBlocks={showExcludedBlocks}
             columnOrder={columnOrder}
-	            setColumnOrder={setColumnOrder}
-	            selectedBlocks={preset.selectedBlocks}
-	            customBlocksByBase={customBlocksByBase}
-		            usedShadesByColorKey={usedShadesByColorKey}
-		            shadeCountsByColorKey={shadeCountsByColorKey}
-		            colorCounts={materialCountsView.colorCounts}
-		            formatRequiredCount={formatRequiredCount}
-		            missingColorKeys={missingColorKeys}
-		            onUpdateBlock={updateBlock}
-	            onCopyColorToClipboard={copyColorToClipboard}
+            setColumnOrder={setColumnOrder}
+            selectedBlocks={preset.selectedBlocks}
+            customBlocksByBase={customBlocksByBase}
+            usedShadesByColorKey={colorTableDisplayState.usedShadesByColorKey}
+            shadeCountsByColorKey={colorTableDisplayState.shadeCountsByColorKey}
+            sortColorCounts={colorTableDisplayState.sortColorCounts}
+            displayColorCounts={materialCountsDisplayView.colorCounts}
+            formatRequiredCount={formatRequiredCount}
+            missingColorKeys={colorTableDisplayState.missingColorKeys}
+            onUpdateBlock={updateBlock}
+            onCopyColorToClipboard={copyColorToClipboard}
             onLayoutChange={handleColorTableLayoutChange}
             onMinWidthChange={handleColorTableMinWidthChange}
           />
@@ -3289,16 +3551,17 @@ const Index = () => {
             onCustomBlockCommit={commitCustomBlockDraft}
             addCustomColor={addCustomColor}
             onUpdateBlock={updateBlock}
-	            onSelectCustomBlock={handleSelectCustomBlock}
-	            onRemoveCustomBlock={handleRemoveCustomBlock}
-	            onCopyColorToClipboard={copyColorToClipboard}
-	            colorCounts={materialCountsView.colorCounts}
-	            formatRequiredCount={formatRequiredCount}
-	            usedShadesByColorKey={usedShadesByColorKey}
-	            shadeCountsByColorKey={shadeCountsByColorKey}
-	            missingColorKeys={missingColorKeys}
-	            imageValid={imageValid}
-	            hasRequiredCol={hasRequiredCol}
+            onSelectCustomBlock={handleSelectCustomBlock}
+            onRemoveCustomBlock={handleRemoveCustomBlock}
+            onCopyColorToClipboard={copyColorToClipboard}
+            sortColorCounts={colorTableDisplayState.sortColorCounts}
+            displayColorCounts={materialCountsDisplayView.colorCounts}
+            formatRequiredCount={formatRequiredCount}
+            usedShadesByColorKey={colorTableDisplayState.usedShadesByColorKey}
+            shadeCountsByColorKey={colorTableDisplayState.shadeCountsByColorKey}
+            missingColorKeys={colorTableDisplayState.missingColorKeys}
+            imageValid={colorTableDisplayState.imageValid}
+            hasRequiredCol={colorTableDisplayState.hasRequiredCol}
             showIds={showIds}
             showNames={showNames}
             showOptions={showOptions}

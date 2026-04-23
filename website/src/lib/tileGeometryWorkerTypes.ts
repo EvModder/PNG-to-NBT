@@ -9,6 +9,7 @@
  * - TileGeometryWorkerResponse
  *
  * Callers:
+ * - src/Index.tsx
  * - src/lib/tileGeometry.worker.ts
  * - src/lib/tileGeometryWorkerClient.ts
  */
@@ -18,6 +19,7 @@ import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion
 import { FlatModeBehavior, type WaterDrops } from "@/lib/colorGridAnalysis";
 
 // Callers:
+// - src/Index.tsx
 // - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
 export type TileWaterSetting =
@@ -33,21 +35,12 @@ export type TileBaseGeometryWorkerInput = {
   allSameShade?: Shade;
   hasWater: boolean;
   hasTransparency: boolean;
-  hasTwoLayerLateVoidNeed: boolean;
   includeTransparentBlocks: boolean;
   waterSetting: TileWaterSetting;
   flatModeBehavior: FlatModeBehavior;
-  selectedBuildMode: BuildMode;
   layerGap: number;
-  mixSteps: boolean;
   paletteSeed: number;
   enableWaterConvenience: boolean;
-  skipEmptySuppressSteps: boolean;
-  collapseStaircaseModes: boolean;
-  includeFlatNorthline: boolean;
-  selectedStepDirection: SuppressStepDirection;
-  applySupportFloorYs: boolean;
-  supportsWorldMinYGeometry: boolean;
 };
 
 // Callers:
@@ -57,7 +50,6 @@ export type TileBaseGeometryWorkerResult = {
   baseShapeMap: Partial<Record<BuildMode, GeneratedShape>>;
   baseNorthlineShape: GeneratedShape | null;
   isFlatShape: boolean;
-  buildAtWorldMinYEligible: boolean;
 };
 
 // Callers:
@@ -73,8 +65,7 @@ export type TileFinalGeometryWorkerInput = {
   waterSetting: TileWaterSetting;
   flatModeBehavior: FlatModeBehavior;
   buildAtWorldMinY: boolean;
-  effectiveBuildMode: BuildMode;
-  selectedBuildMode: BuildMode;
+  buildMode: BuildMode;
   isFlatShape: boolean;
   layerGap: number;
   mixSteps: boolean;

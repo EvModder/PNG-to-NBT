@@ -10,14 +10,12 @@
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import {
   analyzeFillerNeeds,
-  hasBuildAtWorldMinYOpportunity,
   hasNonWaterColorHeightVariance,
   nooblineIsSingleY,
 } from "@/lib/shapeAnalysis";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
 import { FlatModeBehavior } from "@/lib/colorGridAnalysis";
-import { BuildMode } from "@/types/conversion";
-import { isStaircaseBuildMode } from "@/utils/conversion";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import type {
   TileBaseGeometryWorkerInput,
   TileBaseGeometryWorkerResult,
@@ -33,49 +31,33 @@ function analyzeBaseGeometry(input: TileBaseGeometryWorkerInput): TileBaseGeomet
     input.allSameShade,
     input.hasWater,
     input.hasTransparency,
-    input.hasTwoLayerLateVoidNeed,
+    false,
     {
       layerGap: input.layerGap,
-      mixSteps: input.mixSteps,
+      mixSteps: false,
       includeTransparentBlocks: input.includeTransparentBlocks,
       paletteSeed: input.paletteSeed,
       waterSetting: input.waterSetting,
       enableWaterConvenience: input.enableWaterConvenience,
       buildAtWorldMinY: false,
-      skipEmptySuppressSteps: input.skipEmptySuppressSteps,
-      collapseStaircaseModes: input.collapseStaircaseModes,
-      includeFlatNorthline: input.includeFlatNorthline,
-      selectedMode: input.selectedBuildMode,
-      selectedStepDirection: input.selectedStepDirection,
+      skipEmptySuppressSteps: true,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: null,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
     },
   );
   const baseNorthlineShape = baseShapeMap[BuildMode.StaircaseNorthline] ?? null;
   const effectiveFlatModeBehavior = input.includeTransparentBlocks
     ? input.flatModeBehavior
     : FlatModeBehavior.None;
-  const isFlatShape = !!baseNorthlineShape &&
-    (!hasNonWaterColorHeightVariance(baseNorthlineShape) || effectiveFlatModeBehavior !== FlatModeBehavior.None);
-  const currentSelectedShape = input.selectedBuildMode === BuildMode.Flat
-    ? baseNorthlineShape
-    : getShapeForBuildMode(baseShapeMap, input.selectedBuildMode, isFlatShape);
-  const buildAtWorldMinYEligible =
-    (
-      effectiveFlatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
-      !!baseNorthlineShape &&
-      input.supportsWorldMinYGeometry &&
-      hasBuildAtWorldMinYOpportunity(input.colorGrid, baseNorthlineShape, input.applySupportFloorYs)
-    ) || (
-      !!currentSelectedShape &&
-      isStaircaseBuildMode(input.selectedBuildMode) &&
-      input.supportsWorldMinYGeometry &&
-      hasBuildAtWorldMinYOpportunity(input.colorGrid, currentSelectedShape, input.applySupportFloorYs)
-    );
+  const isFlatShape = !!baseNorthlineShape
+    && (!hasNonWaterColorHeightVariance(baseNorthlineShape) || effectiveFlatModeBehavior !== FlatModeBehavior.None);
 
   return {
     baseShapeMap,
     baseNorthlineShape,
     isFlatShape,
-    buildAtWorldMinYEligible,
   };
 }
 
@@ -97,14 +79,14 @@ function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileFinalGeo
       skipEmptySuppressSteps: input.skipEmptySuppressSteps,
       collapseStaircaseModes: input.collapseStaircaseModes,
       includeFlatNorthline: input.includeFlatNorthline,
-      selectedMode: input.selectedBuildMode,
+      selectedMode: input.buildMode,
       selectedStepDirection: input.selectedStepDirection,
     },
   );
   const northlineShape = shapeMap[BuildMode.StaircaseNorthline] ?? null;
-  const supportShape = input.effectiveBuildMode === BuildMode.Flat
+  const supportShape = input.buildMode === BuildMode.Flat
     ? northlineShape
-    : getShapeForBuildMode(shapeMap, input.effectiveBuildMode, input.isFlatShape);
+    : getShapeForBuildMode(shapeMap, input.buildMode, input.isFlatShape);
 
   return {
     shapeMap,
