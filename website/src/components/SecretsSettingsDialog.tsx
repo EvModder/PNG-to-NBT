@@ -24,6 +24,8 @@ type SecretsSettingsDialogProps = {
   setBelowPlatformWater: Dispatch<SetStateAction<boolean>>;
   skipEmptySuppressSteps: boolean;
   setSkipEmptySuppressSteps: Dispatch<SetStateAction<boolean>>;
+  showFlatNbtSuppressStepModes: boolean;
+  setShowFlatNbtSuppressStepModes: Dispatch<SetStateAction<boolean>>;
   markSuppressLoadSpotsInSchematic: boolean;
   setMarkSuppressLoadSpotsInSchematic: Dispatch<SetStateAction<boolean>>;
   showAlignmentReminder: boolean;
@@ -71,6 +73,8 @@ export function SecretsSettingsDialog({
   setBelowPlatformWater,
   skipEmptySuppressSteps,
   setSkipEmptySuppressSteps,
+  showFlatNbtSuppressStepModes,
+  setShowFlatNbtSuppressStepModes,
   markSuppressLoadSpotsInSchematic,
   setMarkSuppressLoadSpotsInSchematic,
   showAlignmentReminder,
@@ -131,6 +135,11 @@ export function SecretsSettingsDialog({
             checked={skipEmptySuppressSteps}
             onChange={setSkipEmptySuppressSteps}
             label={messages.dialogs.options.skipEmptySuppressSteps}
+          />
+          <OptionRow
+            checked={showFlatNbtSuppressStepModes}
+            onChange={setShowFlatNbtSuppressStepModes}
+            label={messages.dialogs.options.showFlatNbtSuppressStepModes}
           />
           <OptionRow
             checked={markSuppressLoadSpotsInSchematic}

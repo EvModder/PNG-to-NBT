@@ -27,6 +27,7 @@ import {
   DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
   DEFAULT_SHOW_ALIGNMENT_REMINDER,
   DEFAULT_SHOW_EXCLUDED_BLOCKS,
+  DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   DEFAULT_SHOW_IDS,
   DEFAULT_SHOW_NAMES,
   DEFAULT_SHOW_NOOBLINE_WARNINGS,
@@ -618,6 +619,10 @@ const Index = () => {
   const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.applySupportFloorYs, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
   const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, DEFAULT_BELOW_PLATFORM_WATER));
   const [skipEmptySuppressSteps, setSkipEmptySuppressSteps] = useState(() => loadCached(LS_KEYS.skipEmptySuppressSteps, DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS));
+  const [showFlatNbtSuppressStepModes, setShowFlatNbtSuppressStepModes] = useState(() => loadCached(
+    LS_KEYS.showFlatNbtSuppressStepModes,
+    DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
+  ));
   const [markSuppressLoadSpotsInSchematic, setMarkSuppressLoadSpotsInSchematic] = useState(() => loadCached(LS_KEYS.markSuppressLoadSpotsInSchematic, DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
@@ -848,6 +853,7 @@ const Index = () => {
       [LS_KEYS.applySupportFloorYs]: applySupportFloorYs,
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
       [LS_KEYS.skipEmptySuppressSteps]: skipEmptySuppressSteps,
+      [LS_KEYS.showFlatNbtSuppressStepModes]: showFlatNbtSuppressStepModes,
       [LS_KEYS.markSuppressLoadSpotsInSchematic]: markSuppressLoadSpotsInSchematic,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
@@ -887,6 +893,7 @@ const Index = () => {
       applySupportFloorYs,
       belowPlatformWater,
       skipEmptySuppressSteps,
+      showFlatNbtSuppressStepModes,
       markSuppressLoadSpotsInSchematic,
       showVsFillerWarnings,
       showAlignmentReminder,
@@ -1208,7 +1215,10 @@ const Index = () => {
         const nextFlatRequiresVsFillers =
           nextFlatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
           !nextActiveBuildAtWorldMinY;
-        const nextLockFlatBuildMode = nextIsFlatShape && !nextFlatRequiresVsFillers;
+        const nextLockFlatBuildMode =
+          nextIsFlatShape &&
+          !nextFlatRequiresVsFillers &&
+          !showFlatNbtSuppressStepModes;
         const nextEffectiveBuildMode = nextLockFlatBuildMode ? BuildMode.Flat : buildMode;
         let nextTileGeometryAnalyses: TileGeometryAnalysis[];
         if (!nextActiveBuildAtWorldMinY) {
@@ -1341,6 +1351,7 @@ const Index = () => {
     applySupportFloorYs,
     buildAtWorldMinY,
     hasMultipleTiles,
+    showFlatNbtSuppressStepModes,
   ]);
   const tileGeometryAnalyses = analysisResult?.tileGeometryAnalyses ?? [];
   const tileBaseAnalyses = tileGeometryAnalyses;
@@ -1361,7 +1372,14 @@ const Index = () => {
   const flatRequiresVsFillers =
     flatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
     !activeBuildAtWorldMinY;
-  const lockFlatBuildMode = isFlatShape && !flatRequiresVsFillers;
+  const showFlatNbtSuppressStepOptions =
+    isFlatShape &&
+    !flatRequiresVsFillers &&
+    showFlatNbtSuppressStepModes;
+  const lockFlatBuildMode =
+    isFlatShape &&
+    !flatRequiresVsFillers &&
+    !showFlatNbtSuppressStepModes;
   const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
   const colorBlockSelections = useMemo<ColorBlockSelections>(
     () => ({ selectedBlocks: preset.selectedBlocks, selectedBlocksCustom, customColors }),
@@ -1670,6 +1688,9 @@ const Index = () => {
     if (!imageValid) {
       return DEFAULT_STAIRCASE_OPTIONS;
     }
+    if (showFlatNbtSuppressStepOptions) {
+      return DEFAULT_STAIRCASE_OPTIONS.filter(option => option.value === BuildMode.Flat);
+    }
     if (hasMultipleTiles) {
       if (tileDerivedImageStats.length === 0) return DEFAULT_STAIRCASE_OPTIONS;
       const includeTransparentBlocksForStaircase = (transparentBlockMapping[TRANSPARENCY_BASE_INDEX] ?? "").trim() !== "";
@@ -1718,9 +1739,20 @@ const Index = () => {
           return visibleModes.has(option.value);
       }
     });
-  }, [tileBaseAnalyses, imageValid, isFlatShape, hasMultipleTiles, tileDerivedImageStats, transparentBlockMapping]);
+  }, [
+    tileBaseAnalyses,
+    imageValid,
+    isFlatShape,
+    hasMultipleTiles,
+    tileDerivedImageStats,
+    transparentBlockMapping,
+    showFlatNbtSuppressStepOptions,
+  ]);
 
   const suppressModeOptions = useMemo((): ModeOption[] => {
+    if (showFlatNbtSuppressStepOptions) {
+      return BASE_SUPPRESS_OPTIONS.filter(option => isSuppressStepsBuildMode(option.value));
+    }
     const visibleModes = new Set(getVisibleSuppressBuildModes(twoLayerHasLateVoidNeed));
     return BASE_SUPPRESS_OPTIONS.filter(option => {
       if (hasMultipleTiles && (option.value === BuildMode.SuppressSplitRow || option.value === BuildMode.SuppressSplitChecker)) {
@@ -1728,7 +1760,7 @@ const Index = () => {
       }
       return visibleModes.has(option.value);
     });
-  }, [twoLayerHasLateVoidNeed, hasMultipleTiles]);
+  }, [twoLayerHasLateVoidNeed, hasMultipleTiles, showFlatNbtSuppressStepOptions]);
   const showSuppressStepDirectionControl =
     !!imageData &&
     imageValid &&
@@ -1978,7 +2010,7 @@ const Index = () => {
     }
     if (!imageValid || previewBusy || autoSelectedImageRef.current === imageData) return;
     autoSelectedImageRef.current = imageData;
-    if (isFlatShape) setBuildMode(BuildMode.Flat);
+    if (lockFlatBuildMode) setBuildMode(BuildMode.Flat);
     else if (DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS && hasVoidShadow) {
       setBuildMode(prev => isStaircaseBuildMode(prev) ? BuildMode.SuppressStepChecker : prev);
       if (isStaircaseBuildMode(buildMode)) {
@@ -1986,7 +2018,7 @@ const Index = () => {
       }
     }
     else setBuildMode(prev => prev === BuildMode.Flat ? BuildMode.StaircaseClassic : prev);
-  }, [imageData, imageValid, previewBusy, isFlatShape, hasVoidShadow, buildMode]);
+  }, [imageData, imageValid, previewBusy, lockFlatBuildMode, hasVoidShadow, buildMode]);
 
   useEffect(() => {
     if (!imageData || previewBusy || lockFlatBuildMode) return;
@@ -3360,6 +3392,8 @@ const Index = () => {
         setBelowPlatformWater={setBelowPlatformWater}
         skipEmptySuppressSteps={skipEmptySuppressSteps}
         setSkipEmptySuppressSteps={setSkipEmptySuppressSteps}
+        showFlatNbtSuppressStepModes={showFlatNbtSuppressStepModes}
+        setShowFlatNbtSuppressStepModes={setShowFlatNbtSuppressStepModes}
         markSuppressLoadSpotsInSchematic={markSuppressLoadSpotsInSchematic}
         setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
         showAlignmentReminder={showAlignmentReminder}
