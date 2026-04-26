@@ -340,6 +340,7 @@ export const enCatalog = {
     options: {
       showTransparentRow: "Show color_id=0 row",
       showExcludedBlocks: "Show excluded blocks",
+      forceXZ128: "XZ-width always 128",
       forceZ129: "Z-width always 129",
       assumeFloor: "Assume floor",
       belowPlatformWater: "Below-platform water",

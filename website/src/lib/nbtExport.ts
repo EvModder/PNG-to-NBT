@@ -30,6 +30,7 @@ import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
 interface ExportOptions extends ColorBlockSelections {
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
+  forceXZ128?: boolean;
   forceZ129?: boolean;
   xColumnRange?: [number, number];
   phaseRange?: [number, number];
@@ -165,10 +166,17 @@ function materializeShapeParts(shape: GeneratedShape, options: ExportOptions): B
 
 function normalizeAndMeasure(
   blocks: BlockEntry[],
-  options: Pick<ExportOptions, "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceZ129">,
+  options: Pick<ExportOptions, "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceXZ128" | "forceZ129">,
 ): { sizeX: number; sizeY: number; sizeZ: number } {
+  const forceXZ128 = options.forceXZ128 !== false;
   const forceZ129 = options.forceZ129 === true;
-  if (blocks.length === 0) return { sizeX: MAP_SIZE, sizeY: 1, sizeZ: forceZ129 ? MAP_SIZE + 1 : MAP_SIZE };
+  if (blocks.length === 0) {
+    return {
+      sizeX: MAP_SIZE,
+      sizeY: 1,
+      sizeZ: forceZ129 ? MAP_SIZE + 1 : MAP_SIZE,
+    };
+  }
 
   let minX = Infinity;
   let maxX = -Infinity;
@@ -185,18 +193,23 @@ function normalizeAndMeasure(
     if (block.z > maxZ) maxZ = block.z;
   }
   validateExportHorizontalBounds(minX, maxX, minZ, maxZ, options);
-  const zShift = minZ < 0 ? -minZ : (forceZ129 ? 1 : 0);
+  const normalizedMinX = forceXZ128 ? Math.min(minX, 0) : minX;
+  const normalizedMaxX = forceXZ128 ? Math.max(maxX, MAP_SIZE - 1) : maxX;
+  const normalizedMinZ = forceXZ128 || forceZ129 ? Math.min(minZ, forceZ129 ? -1 : 0) : minZ;
+  const normalizedMaxZ = forceXZ128 || forceZ129 ? Math.max(maxZ, MAP_SIZE - 1) : maxZ;
+  const xShift = -normalizedMinX;
+  const zShift = -normalizedMinZ;
 
   for (const block of blocks) {
-    block.x -= minX;
+    block.x += xShift;
     block.y -= minY;
     block.z += zShift;
   }
 
   return {
-    sizeX: maxX - minX + 1,
+    sizeX: normalizedMaxX - normalizedMinX + 1,
     sizeY: maxY - minY + 1,
-    sizeZ: maxZ + zShift + 1,
+    sizeZ: normalizedMaxZ - normalizedMinZ + 1,
   };
 }
 

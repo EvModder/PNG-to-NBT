@@ -50,6 +50,7 @@ export const DEFAULT_MAX_PER_SPLIT = true;
 export const DEFAULT_COLUMN_ORDER: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 export const DEFAULT_SHOW_TRANSPARENT_ROW = false;
 export const DEFAULT_SHOW_EXCLUDED_BLOCKS = false;
+export const DEFAULT_FORCE_XZ128 = true;
 export const DEFAULT_FORCE_Z129 = false;
 export const DEFAULT_APPLY_SUPPORT_FLOOR_YS = true;
 export const DEFAULT_BELOW_PLATFORM_WATER = false;

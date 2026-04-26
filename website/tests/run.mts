@@ -13,6 +13,7 @@ import {
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_FLAT_WATER_DROP,
+  DEFAULT_FORCE_XZ128,
   DEFAULT_FORCE_Z129,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
@@ -92,6 +93,7 @@ type ExportFixtureSettings = {
   flatWaterDrop: number;
   darkWaterDrop: number;
   applySupportFloorYs: boolean;
+  forceXZ128: boolean;
   forceZ129: boolean;
   belowPlatformWater: boolean;
   convertUnsupported: boolean;
@@ -706,6 +708,7 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     flatWaterDrop: waterDrops.flat ?? settings.flatWaterDrop ?? DEFAULT_FLAT_WATER_DROP,
     darkWaterDrop: waterDrops.dark ?? settings.darkWaterDrop ?? DEFAULT_DARK_WATER_DROP,
     applySupportFloorYs: settings.applySupportFloorYs ?? DEFAULT_APPLY_SUPPORT_FLOOR_YS,
+    forceXZ128: settings.forceXZ128 ?? DEFAULT_FORCE_XZ128,
     forceZ129: settings.forceZ129 ?? DEFAULT_FORCE_Z129,
     belowPlatformWater: settings.belowPlatformWater ?? DEFAULT_BELOW_PLATFORM_WATER,
     convertUnsupported: settings.convertUnsupported ?? DEFAULT_CONVERT_UNSUPPORTED_COLORS,
@@ -904,6 +907,7 @@ async function runFixtureCase(
     selectedBlocks: testCase.preset.selectedBlocks,
     fillerAssignments,
     applySupportFloorYs: testCase.settings.applySupportFloorYs,
+    forceXZ128: testCase.settings.forceXZ128,
     forceZ129: testCase.settings.forceZ129,
     selectedBlocksCustom: testCase.settings.selectedBlocksCustom,
     customColors: testCase.settings.customColors,

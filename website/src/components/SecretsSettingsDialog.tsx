@@ -16,6 +16,8 @@ type SecretsSettingsDialogProps = {
   setShowTransparentRow: Dispatch<SetStateAction<boolean>>;
   showExcludedBlocks: boolean;
   setShowExcludedBlocks: Dispatch<SetStateAction<boolean>>;
+  forceXZ128: boolean;
+  setForceXZ128: Dispatch<SetStateAction<boolean>>;
   forceZ129: boolean;
   setForceZ129: Dispatch<SetStateAction<boolean>>;
   applySupportFloorYs: boolean;
@@ -65,6 +67,8 @@ export function SecretsSettingsDialog({
   setShowTransparentRow,
   showExcludedBlocks,
   setShowExcludedBlocks,
+  forceXZ128,
+  setForceXZ128,
   forceZ129,
   setForceZ129,
   applySupportFloorYs,
@@ -115,6 +119,11 @@ export function SecretsSettingsDialog({
             checked={showExcludedBlocks}
             onChange={setShowExcludedBlocks}
             label={messages.dialogs.options.showExcludedBlocks}
+          />
+          <OptionRow
+            checked={forceXZ128}
+            onChange={setForceXZ128}
+            label={messages.dialogs.options.forceXZ128}
           />
           <OptionRow
             checked={forceZ129}

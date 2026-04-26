@@ -336,6 +336,7 @@ export const esCatalog = {
     options: {
       showTransparentRow: "Mostrar fila color_id=0",
       showExcludedBlocks: "Mostrar bloques excluidos",
+      forceXZ128: "Ancho XZ siempre 128",
       forceZ129: "Ancho Z siempre 129",
       assumeFloor: "Suponer suelo",
       belowPlatformWater: "Agua bajo la plataforma",

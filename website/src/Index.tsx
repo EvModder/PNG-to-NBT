@@ -15,6 +15,7 @@ import {
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_FLAT_WATER_DROP,
+  DEFAULT_FORCE_XZ128,
   DEFAULT_FORCE_Z129,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
@@ -818,6 +819,7 @@ const Index = () => {
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, DEFAULT_COLUMN_ORDER));
   const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, DEFAULT_SHOW_TRANSPARENT_ROW));
   const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, DEFAULT_SHOW_EXCLUDED_BLOCKS));
+  const [forceXZ128, setForceXZ128] = useState(() => loadCached(LS_KEYS.forceXZ128, DEFAULT_FORCE_XZ128));
   const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, DEFAULT_FORCE_Z129));
   const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.applySupportFloorYs, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
   const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, DEFAULT_BELOW_PLATFORM_WATER));
@@ -1051,6 +1053,7 @@ const Index = () => {
       [LS_KEYS.columnOrder]: columnOrder,
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
+      [LS_KEYS.forceXZ128]: forceXZ128,
       [LS_KEYS.forceZ129]: forceZ129,
       [LS_KEYS.applySupportFloorYs]: applySupportFloorYs,
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
@@ -1091,6 +1094,7 @@ const Index = () => {
       columnOrder,
       showTransparentRow,
       showExcludedBlocks,
+      forceXZ128,
       forceZ129,
       applySupportFloorYs,
       belowPlatformWater,
@@ -2692,6 +2696,7 @@ const Index = () => {
           selectedBlocks: preset.selectedBlocks,
           fillerAssignments: uiFillerAssignments,
           applySupportFloorYs,
+          forceXZ128,
           forceZ129,
           selectedBlocksCustom,
           customColors,
@@ -3650,6 +3655,8 @@ const Index = () => {
         setShowTransparentRow={setShowTransparentRow}
         showExcludedBlocks={showExcludedBlocks}
         setShowExcludedBlocks={setShowExcludedBlocks}
+        forceXZ128={forceXZ128}
+        setForceXZ128={setForceXZ128}
         forceZ129={forceZ129}
         setForceZ129={setForceZ129}
         applySupportFloorYs={applySupportFloorYs}
