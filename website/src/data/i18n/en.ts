@@ -114,8 +114,8 @@ export const enCatalog = {
       [SuppressStepDirection.NorthToSouth]: "N→S",
       [SuppressStepDirection.SouthToNorth]: "S→N",
     } as const satisfies Record<SuppressStepDirection, string>,
-    stepDirectionTooltip: "Suppress step direction: {directionLabel}. Click to cycle.",
-    stepDirectionAriaLabel: "Suppress step direction {directionLabel}",
+    stepDirectionTooltip: "Suppression direction: {directionLabel}. Click to cycle.",
+    stepDirectionAriaLabel: "Suppression direction {directionLabel}",
     optionLabels: {
       [BuildMode.Flat]: "Flat",
       [BuildMode.InclineUp]: "Incline (Up)",
@@ -178,12 +178,12 @@ export const enCatalog = {
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Filler-1",
     dominateVoidTooltip:
-      "Used when the north cell for a dominant pixel does not naturally provide the needed shading height (for example transparent or dropped-below water), so a temporary filler must overwrite that north cell. This filler will need to be manually suppressed after building the NBT.",
+      "When a dominant pixel needs flat/dark shading, but the pixel north is transparent.\n\nInclude this filler in the initial build/load.\nWhen updating: remove it, then ONLY reload the north (transparent) pixel.",
     dominateVoidRequiredTooltip: "Required VS-Filler-1 placements for the current output range.",
     recessiveVoidLabel: "VS-2:",
     recessiveVoidWarningLabel: "VS-Filler-2",
     recessiveVoidTooltip:
-      "Used when the north cell for a recessive pixel does not naturally provide the needed shading height (for example transparent or dropped-below water), so a temporary filler must overwrite that north cell. This filler will need to be manually suppressed after building the NBT.",
+      "When a recessive pixel needs flat/dark shading, but the pixel north is transparent.\n\nSkip this filler in the initial build/load.\nWhen updating: place it, then ONLY reload the south (color) pixel.",
     recessiveVoidRequiredTooltip: "Required VS-Filler-2 placements for the current output range.",
     voidFillersWarningLabel: "VS-Fillers",
     lateLabel: "Late:",

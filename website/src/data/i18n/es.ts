@@ -108,8 +108,8 @@ export const esCatalog = {
       [SuppressStepDirection.NorthToSouth]: "N→S",
       [SuppressStepDirection.SouthToNorth]: "S→N",
     } as const satisfies Record<SuppressStepDirection, string>,
-    stepDirectionTooltip: "Dirección de los pasos de supresión: {directionLabel}. Haz clic para alternar.",
-    stepDirectionAriaLabel: "Dirección de los pasos de supresión {directionLabel}",
+    stepDirectionTooltip: "Dirección de supresión: {directionLabel}. Haz clic para alternar.",
+    stepDirectionAriaLabel: "Dirección de supresión {directionLabel}",
     optionLabels: {
       [BuildMode.Flat]: "Plano",
       [BuildMode.InclineUp]: "Inclinación (Sube)",
@@ -174,12 +174,12 @@ export const esCatalog = {
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Relleno-1",
     dominateVoidTooltip:
-      "Se usa cuando la celda norte de un píxel dominante no aporta de forma natural la altura de sombreado necesaria (por ejemplo, por transparencia o por agua bajada bajo la plataforma), así que un relleno temporal debe sobrescribir esa celda norte. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
+      "Cuando un píxel dominante necesita sombreado plano/oscuro, pero el píxel al norte es transparente.\n\nIncluye este relleno en la construcción/carga inicial.\nAl actualizar: elimínalo y luego recarga SOLO el píxel del norte (transparente).",
     dominateVoidRequiredTooltip: "Colocaciones requeridas de VS-Relleno-1 para el rango de salida actual.",
     recessiveVoidLabel: "VS-2:",
     recessiveVoidWarningLabel: "VS-Relleno-2",
     recessiveVoidTooltip:
-      "Se usa cuando la celda norte de un píxel recesivo no aporta de forma natural la altura de sombreado necesaria (por ejemplo, por transparencia o por agua bajada bajo la plataforma), así que un relleno temporal debe sobrescribir esa celda norte. Este relleno tendrá que suprimirse manualmente después de construir el NBT.",
+      "Cuando un píxel recesivo necesita sombreado plano/oscuro, pero el píxel al norte es transparente.\n\nOmite este relleno en la construcción/carga inicial.\nAl actualizar: colócalo y luego recarga SOLO el píxel del sur (de color).",
     recessiveVoidRequiredTooltip: "Colocaciones requeridas de VS-Relleno-2 para el rango de salida actual.",
     voidFillersWarningLabel: "VS-Rellenos",
     lateLabel: "Tardío:",
