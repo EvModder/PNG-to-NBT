@@ -46,6 +46,7 @@ interface RawShapePart {
   fillerCandidates: FillerCandidate[];
   bounds: ShapeBounds;
   supportFloorYs: ReadonlySet<number>;
+  suppressedTransparentVsCollisionCount: number;
 }
 
 type StepPhasePartsBuildResult = {
@@ -140,11 +141,10 @@ function getRequestedStaircaseModes(
   allSameShade: Shade | undefined,
   hasWater: boolean,
   hasTransparency: boolean,
-  includeTransparentBlocks: boolean,
   collapseStaircaseModes: boolean,
   includeFlatNorthline: boolean,
 ): TransparentPlacementBuildMode[] {
-  if ((!hasTransparency || includeTransparentBlocks) && !hasWater &&
+  if (!hasTransparency && !hasWater &&
     (allSameShade === Shade.Dark || allSameShade === Shade.Light)) {
     return [allSameShade === Shade.Dark ? BuildMode.InclineUp : BuildMode.InclineDown];
   }
@@ -222,6 +222,7 @@ function getGeneratedShapeSignatureId(shape: GeneratedShape): GeneratedShapeSign
   mixString(state, shape.partType);
   mixString(state, shape.splitExportNames?.[0] ?? "");
   mixString(state, shape.splitExportNames?.[1] ?? "");
+  mixUint32(state, shape.suppressedTransparentVsCollisionCount);
   mixUint32(state, shape.parts.length);
 
   for (const part of shape.parts) {
@@ -526,6 +527,7 @@ function buildShapePart(
   includeDefaultFillerCandidates = true,
   supportFloorYs?: ReadonlySet<number>,
   loweredWaterBlocks: ShapeBlock[] = [],
+  suppressedTransparentVsCollisionCount = 0,
 ): RawShapePart {
   assertShapeBlockZRange(blocks);
   assertShapeBlockZRange(loweredWaterBlocks);
@@ -539,6 +541,7 @@ function buildShapePart(
     fillerCandidates,
     bounds,
     supportFloorYs: supportFloorYs ?? new Set<number>([bounds.minY - 1]),
+    suppressedTransparentVsCollisionCount,
   };
 }
 
@@ -738,7 +741,7 @@ function buildTransparentStaircaseBlocks(
   buildMode: TransparentPlacementBuildMode,
   paletteSeed: number,
   occupiedExtraBlocks: ShapeBlock[] = [],
-): ShapeBlock[] {
+): { blocks: ShapeBlock[]; suppressedTransparentVsCollisionCount: number } {
   let hasTransparency = false;
   for (let x = 0; x < MAP_SIZE && !hasTransparency; ++x) {
     for (let z = 0; z < MAP_SIZE; ++z) {
@@ -748,21 +751,21 @@ function buildTransparentStaircaseBlocks(
       }
     }
   }
-  if (!hasTransparency) return [];
+  if (!hasTransparency) return { blocks: [], suppressedTransparentVsCollisionCount: 0 };
 
-  const occupiedYsByCell = new Map<ColumnCoordKey, Set<number>>();
+  const occupiedRefsByCell = new Map<ColumnCoordKey, Map<number, ShapeRef>>();
   const rowTopYByColumn = Array.from({ length: MAP_SIZE }, () => new Map<number, number>());
   let globalMinY = Infinity;
   let globalMaxY = -Infinity;
 
-  const markOccupied = (entry: PositionedEntry) => {
+  const markOccupied = (entry: ShapeBlock) => {
     const coord = toColumnCoordKey(entry.x, entry.z);
-    let occupiedYs = occupiedYsByCell.get(coord);
-    if (!occupiedYs) {
-      occupiedYs = new Set<number>();
-      occupiedYsByCell.set(coord, occupiedYs);
+    let occupiedRefs = occupiedRefsByCell.get(coord);
+    if (!occupiedRefs) {
+      occupiedRefs = new Map<number, ShapeRef>();
+      occupiedRefsByCell.set(coord, occupiedRefs);
     }
-    occupiedYs.add(entry.y);
+    occupiedRefs.set(entry.y, entry.ref);
   };
 
   for (const block of [...blocks, ...occupiedExtraBlocks]) {
@@ -780,16 +783,27 @@ function buildTransparentStaircaseBlocks(
     globalMaxY = 0;
   }
 
-  const claimTransparentY = (x: number, z: number, preferredY: number): number => {
+  const claimTransparentY = (x: number, z: number, preferredY: number): number | null => {
     const coord = toColumnCoordKey(x, z);
-    let occupiedYs = occupiedYsByCell.get(coord);
-    if (!occupiedYs) {
-      occupiedYs = new Set<number>();
-      occupiedYsByCell.set(coord, occupiedYs);
+    let occupiedRefs = occupiedRefsByCell.get(coord);
+    if (!occupiedRefs) {
+      occupiedRefs = new Map<number, ShapeRef>();
+      occupiedRefsByCell.set(coord, occupiedRefs);
+    }
+    const occupyingRef = occupiedRefs.get(preferredY);
+    if (
+      occupyingRef?.kind === "filler" &&
+      (occupyingRef.role === FillerRole.ShadeVoidDominant || occupyingRef.role === FillerRole.ShadeVoidRecessive)
+    ) {
+      return null;
     }
     let y = preferredY;
-    while (occupiedYs.has(y)) ++y;
-    occupiedYs.add(y);
+    if (occupyingRef?.kind === "filler") {
+      while (occupiedRefs.has(y)) --y;
+    } else {
+      while (occupiedRefs.has(y)) ++y;
+    }
+    occupiedRefs.set(y, { kind: "color", color: TRANSPARENT_COLOR });
     return y;
   };
 
@@ -802,6 +816,7 @@ function buildTransparentStaircaseBlocks(
   };
 
   const transparentBlocks: ShapeBlock[] = [];
+  let suppressedTransparentVsCollisionCount = 0;
 
   for (let x = 0; x < MAP_SIZE; ++x) {
     const rowTopY = rowTopYByColumn[x];
@@ -841,6 +856,10 @@ function buildTransparentStaircaseBlocks(
       }
 
       const y = claimTransparentY(x, z, preferredY);
+      if (y === null) {
+        ++suppressedTransparentVsCollisionCount;
+        continue;
+      }
       transparentBlocks.push({
         x,
         y,
@@ -850,7 +869,7 @@ function buildTransparentStaircaseBlocks(
     }
   }
 
-  return transparentBlocks;
+  return { blocks: transparentBlocks, suppressedTransparentVsCollisionCount };
 }
 
 function buildInclineBlocks(
@@ -2723,15 +2742,27 @@ function getCachedStaircaseParts(
 
     if (belowPlatformWater) {
       const { loweredWaterBlocks, supportFloorYs } = buildBelowPlatformWaterBlocks(blocks, colorGrid, waterDrops);
+      let suppressedTransparentVsCollisionCount = 0;
       if (includeTransparentBlocks) {
-        blocks.push(...buildTransparentStaircaseBlocks(colorGrid, blocks, transparentPlacementMode, paletteSeed, loweredWaterBlocks));
+        const transparentResult = buildTransparentStaircaseBlocks(
+          colorGrid,
+          blocks,
+          transparentPlacementMode,
+          paletteSeed,
+          loweredWaterBlocks,
+        );
+        blocks.push(...transparentResult.blocks);
+        suppressedTransparentVsCollisionCount = transparentResult.suppressedTransparentVsCollisionCount;
       }
-      return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
+      return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks, suppressedTransparentVsCollisionCount)];
     }
+    let suppressedTransparentVsCollisionCount = 0;
     if (includeTransparentBlocks) {
-      blocks.push(...buildTransparentStaircaseBlocks(colorGrid, blocks, transparentPlacementMode, paletteSeed));
+      const transparentResult = buildTransparentStaircaseBlocks(colorGrid, blocks, transparentPlacementMode, paletteSeed);
+      blocks.push(...transparentResult.blocks);
+      suppressedTransparentVsCollisionCount = transparentResult.suppressedTransparentVsCollisionCount;
     }
-    return [buildShapePart(blocks, waterConvenienceFillerCandidates)];
+    return [buildShapePart(blocks, waterConvenienceFillerCandidates, true, undefined, [], suppressedTransparentVsCollisionCount)];
   });
 }
 
@@ -2894,6 +2925,10 @@ function getGeneratedShape(
         ? ShapePartType.SuppressStepPhases
         : ShapePartType.SingleColumn,
     splitExportNames,
+    suppressedTransparentVsCollisionCount: rawParts.reduce(
+      (sum, part) => sum + part.suppressedTransparentVsCollisionCount,
+      0,
+    ),
   };
   const generatedShape = {
     shape,
@@ -2943,7 +2978,6 @@ export function generateShapeMap(
     allSameShade,
     hasWater,
     hasTransparency,
-    includeTransparentBlocks,
     collapseStaircaseModes,
     includeFlatNorthline,
   );

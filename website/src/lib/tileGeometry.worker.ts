@@ -48,11 +48,8 @@ function analyzeBaseGeometry(input: TileBaseGeometryWorkerInput): TileBaseGeomet
     },
   );
   const baseNorthlineShape = baseShapeMap[BuildMode.StaircaseNorthline] ?? null;
-  const effectiveFlatModeBehavior = input.includeTransparentBlocks
-    ? input.flatModeBehavior
-    : FlatModeBehavior.None;
   const isFlatShape = !!baseNorthlineShape
-    && (!hasNonWaterColorHeightVariance(baseNorthlineShape) || effectiveFlatModeBehavior !== FlatModeBehavior.None);
+    && (!hasNonWaterColorHeightVariance(baseNorthlineShape) || input.flatModeBehavior !== FlatModeBehavior.None);
 
   return {
     baseShapeMap,

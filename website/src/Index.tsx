@@ -190,7 +190,6 @@ type TileBaseAnalysis = {
   tile: ParsedColorGridTile;
   derivedImageStats: DerivedImageStats;
   hasWater: boolean;
-  includeTransparentBlocks: boolean;
   waterSetting: TileWaterSetting;
   baseShapeMap: Partial<Record<BuildMode, GeneratedShape>>;
   baseNorthlineShape: GeneratedShape | null;
@@ -586,7 +585,6 @@ function getStaircaseModeOptionsForState(
   tileDerivedImageStats: readonly DerivedImageStats[],
   isFlatShape: boolean,
   hasMultipleTiles: boolean,
-  transparentBlockMapping: Record<number, string>,
   showFlatNbtSuppressStepOptions: boolean,
 ): ModeOption[] {
   if (!imageValid) {
@@ -597,17 +595,16 @@ function getStaircaseModeOptionsForState(
   }
   if (hasMultipleTiles) {
     if (tileDerivedImageStats.length === 0) return DEFAULT_STAIRCASE_OPTIONS;
-    const includeTransparentBlocksForStaircase = (transparentBlockMapping[TRANSPARENCY_BASE_INDEX] ?? "").trim() !== "";
     const flatVisible = tileDerivedImageStats.every(tile => tile.flatModeBehavior !== FlatModeBehavior.None);
     const inclineUpVisible = tileDerivedImageStats.every(tile =>
       tile.allSameShade === Shade.Dark &&
       getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
-      (!tile.hasTransparency || includeTransparentBlocksForStaircase),
+      !tile.hasTransparency,
     );
     const inclineDownVisible = tileDerivedImageStats.every(tile =>
       tile.allSameShade === Shade.Light &&
       getUsedWaterShades(tile.usedShadesByColorKey).size === 0 &&
-      (!tile.hasTransparency || includeTransparentBlocksForStaircase),
+      !tile.hasTransparency,
     );
     return DEFAULT_STAIRCASE_OPTIONS.filter(option => {
       switch (option.value) {
@@ -853,6 +850,7 @@ const Index = () => {
   const [tileSelectionAnchorIndex, setTileSelectionAnchorIndex] = useState<number | null>(null);
   const [imageLossyFormatLabel, setImageLossyFormatLabel] = useState<string | null>(null);
   const previousMaterialInputsRef = useRef<{
+    signature: string;
     colorAssignmentsByKey: Map<ColorRefKey, string>;
     fillerAssignmentsByRole: Map<FillerRole, string>;
     applySupportFloorYs: boolean;
@@ -1189,6 +1187,7 @@ const Index = () => {
   const [tileAnalysesState, setTileAnalysesState] = useState<TileAnalysis[]>([]);
   const [isAnalyzingMaterials, setIsAnalyzingMaterials] = useState(false);
   const [materialAnalysisProgress, setMaterialAnalysisProgress] = useState<AnalysisProgress | null>(null);
+  const [pendingTransparentMaterialRefresh, setPendingTransparentMaterialRefresh] = useState(false);
   const selectedTileCount = selectedTileIndices.length;
   const selectedTileIndex = selectedTileCount === 1 ? selectedTileIndices[0] ?? null : null;
   const selectedTileIndexSet = useMemo(() => new Set(selectedTileIndices), [selectedTileIndices]);
@@ -1303,9 +1302,9 @@ const Index = () => {
     if (isFillerDisabled(nextValue)) setSupportMode(SupportMode.None);
   }, [sanitizeCommittedBlockEntry]);
   const shadeFillerShadingDisabled = isShadeFillerDisabled(effectiveShadeFillerBlock);
-  const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock || effectiveShadeFillerBlock);
-  const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock || effectiveShadeFillerBlock);
-  const lateFillerShadingDisabled = isShadeFillerDisabled(effectiveSuppress2LayerLateFillerBlock || effectiveShadeFillerBlock);
+  const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock);
+  const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock);
+  const lateFillerShadingDisabled = isShadeFillerDisabled(effectiveSuppress2LayerLateFillerBlock);
   const uiFillerAssignments = useMemo(
     () => createFillerAssignments(
       effectiveSupportFillerBlock,
@@ -1381,9 +1380,6 @@ const Index = () => {
             BuildMode.StaircaseClassic,
           );
           const waterSetting = getTileWaterSetting(tileDerivedStats, BuildMode.StaircaseClassic);
-          const flatModeBehavior = discoveryIncludesTransparentBlocks
-            ? tileDerivedStats.flatModeBehavior
-            : FlatModeBehavior.None;
           const baseGeometry = await getTileBaseGeometry(tile.cacheKey, {
             colorGrid: tile.colorGrid,
             allSameShade: tileDerivedStats.allSameShade,
@@ -1401,9 +1397,8 @@ const Index = () => {
             tile,
             derivedImageStats: tileDerivedStats,
             hasWater,
-            includeTransparentBlocks: discoveryIncludesTransparentBlocks,
             waterSetting,
-            flatModeBehavior,
+            flatModeBehavior: tileDerivedStats.flatModeBehavior,
             ...baseGeometry,
           } satisfies TileBaseAnalysis;
         }));
@@ -1431,7 +1426,6 @@ const Index = () => {
           tileDerivedImageStats,
           nextIsFlatShape,
           hasMultipleTiles,
-          transparentBlockMapping,
           nextShowFlatNbtSuppressStepOptions,
         );
         const nextSuppressModeOptions = getSuppressModeOptionsForState(
@@ -1482,15 +1476,7 @@ const Index = () => {
           }
           nextTileGeometryAnalyses = [];
           for (const [index, tile] of nextBaseAnalyses.entries()) {
-            const includeTransparentBlocks = shouldIncludeTransparentBlocks(
-              transparentBlockMapping,
-              tile.derivedImageStats.hasTransparency,
-              nextResolvedBuildMode,
-            );
             const waterSetting = getTileWaterSetting(tile.derivedImageStats, nextResolvedBuildMode);
-            const flatModeBehavior = includeTransparentBlocks
-              ? tile.derivedImageStats.flatModeBehavior
-              : FlatModeBehavior.None;
             const shapeMap = tile.baseShapeMap;
             const northlineShape = tile.baseNorthlineShape;
             const supportShape = nextResolvedBuildMode === BuildMode.Flat
@@ -1500,9 +1486,8 @@ const Index = () => {
             const northRowSingleLine = supportShape ? getCachedShapeNooblineIsSingleY(supportShape) : true;
             nextTileGeometryAnalyses.push({
               ...tile,
-              includeTransparentBlocks,
               waterSetting,
-              flatModeBehavior,
+              flatModeBehavior: tile.derivedImageStats.flatModeBehavior,
               shapeMap,
               northlineShape,
               supportShape,
@@ -1538,9 +1523,6 @@ const Index = () => {
               nextResolvedBuildMode,
             );
             const waterSetting = getTileWaterSetting(tile.derivedImageStats, nextResolvedBuildMode);
-            const flatModeBehavior = includeTransparentBlocks
-              ? tile.derivedImageStats.flatModeBehavior
-              : FlatModeBehavior.None;
             const finalGeometry = await getTileFinalGeometry(tile.tile.cacheKey, {
               colorGrid: tile.tile.colorGrid,
               allSameShade: tile.derivedImageStats.allSameShade,
@@ -1549,7 +1531,7 @@ const Index = () => {
               hasTwoLayerLateVoidNeed: twoLayerHasLateVoidNeed,
               includeTransparentBlocks,
               waterSetting,
-              flatModeBehavior,
+              flatModeBehavior: tile.derivedImageStats.flatModeBehavior,
               buildAtWorldMinY: nextActiveBuildAtWorldMinY,
               buildMode: nextResolvedBuildMode,
               isFlatShape: tile.isFlatShape,
@@ -1565,9 +1547,8 @@ const Index = () => {
             advanceProgress();
             return {
               ...tile,
-              includeTransparentBlocks,
               waterSetting,
-              flatModeBehavior,
+              flatModeBehavior: tile.derivedImageStats.flatModeBehavior,
               ...finalGeometry,
             } satisfies TileGeometryAnalysis;
           }));
@@ -1674,6 +1655,16 @@ const Index = () => {
       .map(role => `${role}=${assignmentByRole.get(role) ?? ""}`)
       .join("|");
   }, [aggregateFillerRoleCounts, uiFillerAssignments]);
+  const currentMaterialInputSignature = useMemo(
+    () =>
+      [
+        usedMaterialColorAssignments,
+        usedMaterialFillerAssignments,
+        `support=${supportMode !== SupportMode.None ? 1 : 0}`,
+        `supportFloorY=${applySupportFloorYs ? 1 : 0}`,
+      ].join("||"),
+    [usedMaterialColorAssignments, usedMaterialFillerAssignments, supportMode, applySupportFloorYs],
+  );
   const visibleWaterLevelControls = useMemo(
     () => {
       if (!imageValid || !belowPlatformWater || buildMode === BuildMode.Flat) return [];
@@ -1792,6 +1783,7 @@ const Index = () => {
       )
     ) {
       previousMaterialInputsRef.current = {
+        signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
         applySupportFloorYs,
@@ -1857,6 +1849,7 @@ const Index = () => {
 
       if (cancelled) return;
       previousMaterialInputsRef.current = {
+        signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
         applySupportFloorYs,
@@ -1874,14 +1867,17 @@ const Index = () => {
     tileGeometryAnalyses,
     usedMaterialColorAssignments,
     usedMaterialFillerAssignments,
+    currentMaterialInputSignature,
     applySupportFloorYs,
     supportMode,
   ]);
   const tileAnalyses = tileAnalysesState;
   const hasCurrentTileGeometryAnalysis = hasCurrentTileGeometryAnalyses(parsedTiles, tileGeometryAnalyses);
+  const materialInputsMatchCurrent = previousMaterialInputsRef.current?.signature === currentMaterialInputSignature;
   const hasCurrentMaterialAnalysis =
     hasCurrentTileGeometryAnalysis &&
     hasCurrentMaterialAnalyses(tileGeometryAnalyses, tileAnalysesState) &&
+    materialInputsMatchCurrent &&
     pendingIncomingTileCount === null;
 
   const setNormalizedWaterDrop = useCallback((shade: WaterDropShade, rawValue: number) => {
@@ -1981,7 +1977,6 @@ const Index = () => {
       tileDerivedImageStats,
       isFlatShape,
       hasMultipleTiles,
-      transparentBlockMapping,
       showFlatNbtSuppressStepOptions,
     ),
     [
@@ -1990,7 +1985,6 @@ const Index = () => {
       tileDerivedImageStats,
       isFlatShape,
       hasMultipleTiles,
-      transparentBlockMapping,
       showFlatNbtSuppressStepOptions,
     ],
   );
@@ -2061,6 +2055,14 @@ const Index = () => {
     }),
     [effectiveSelectedTileIndices, tileAnalyses],
   );
+  const activeOutputTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
+  const suppressedTransparentVsCollisionCount = useMemo(
+    () => activeOutputTileAnalyses.reduce(
+      (sum, tile) => sum + (tile.supportShape?.suppressedTransparentVsCollisionCount ?? 0),
+      0,
+    ),
+    [activeOutputTileAnalyses],
+  );
   const selectionMaterialCountsSum = useMemo(
     () => aggregateMaterialCounts(selectedTileAnalyses.flatMap(tile => (tile.materialNeedStats ? [tile.materialNeedStats] : [])), "sum"),
     [selectedTileAnalyses],
@@ -2115,9 +2117,23 @@ const Index = () => {
       selectionMaterialCountsSum,
     ],
   );
-  const materialCountsDisplayView = hasCurrentMaterialAnalysis ? materialCountsView : EMPTY_MATERIAL_COUNTS;
-  const allTileMaterialCountsDisplaySum = hasCurrentMaterialAnalysis ? allTileMaterialCountsSum : EMPTY_MATERIAL_COUNTS;
-  const fragileSupportOverrideNeedStatsDisplay = hasCurrentMaterialAnalysis ? fragileSupportOverrideNeedStats : null;
+  const holdResolvedMaterialUi =
+    pendingIncomingTileCount === null &&
+    !!imageData &&
+    parsedTiles.length === 1 &&
+    (pendingTransparentMaterialRefresh || !hasCurrentMaterialAnalysis);
+  const materialCountsDisplayView = useHeldValueWhilePending(
+    hasCurrentMaterialAnalysis ? materialCountsView : EMPTY_MATERIAL_COUNTS,
+    holdResolvedMaterialUi,
+  );
+  const allTileMaterialCountsDisplaySum = useHeldValueWhilePending(
+    hasCurrentMaterialAnalysis ? allTileMaterialCountsSum : EMPTY_MATERIAL_COUNTS,
+    holdResolvedMaterialUi,
+  );
+  const fragileSupportOverrideNeedStatsDisplay = useHeldValueWhilePending(
+    hasCurrentMaterialAnalysis ? fragileSupportOverrideNeedStats : null,
+    holdResolvedMaterialUi,
+  );
   const numUniqueColorShadesForPart =
     selectedTileMaterialNeedStats?.numUniqueColorShadesForPart ??
     (paletteUsageInfo?.uniqueShadeCount ?? 0);
@@ -2323,10 +2339,18 @@ const Index = () => {
     applyPresetAndCustomColorUpdate({ ...preset.selectedBlocks }, nextState.customColors, nextState.selectedBlocksCustom);
   }, [applyPresetAndCustomColorUpdate, customColors, selectedBlocksCustom, preset.selectedBlocks]);
 
+  useEffect(() => {
+    if (!pendingTransparentMaterialRefresh) return;
+    if (!imageData || (imageValid && hasCurrentMaterialAnalysis && !previewBusy)) {
+      setPendingTransparentMaterialRefresh(false);
+    }
+  }, [pendingTransparentMaterialRefresh, imageData, imageValid, hasCurrentMaterialAnalysis, previewBusy]);
+
   const updateBlock = (baseIndex: number, block: string) => {
     const nextBlock = sanitizeUserBlockEntry(block);
     const currentBlock = preset.selectedBlocks[baseIndex] ?? "";
     if (nextBlock === currentBlock) return;
+    if (baseIndex === TRANSPARENCY_BASE_INDEX) setPendingTransparentMaterialRefresh(true);
     applyPresetAndCustomColorUpdate(
       { ...preset.selectedBlocks, [baseIndex]: nextBlock },
       customColors,
@@ -2810,7 +2834,22 @@ const Index = () => {
   const aggregateNorthRowSingleLine = tileGeometryAnalyses.every(tile => tile.northRowSingleLine);
 
   const canGenerate = imageValid && !previewBusy && missingBlockCount === 0;
-  const hasRequiredCol = imageValid && hasCurrentMaterialAnalysis;
+  const hasRequiredCol = imageValid && (hasCurrentMaterialAnalysis || holdResolvedMaterialUi);
+  const transparentSortColorCount = useMemo(() => {
+    if (activeTransparentBlock !== "") return 0;
+    const transparentShadeCounts = shadeCountsByColorKey.get(getColorRefKey({ id: TRANSPARENCY_BASE_INDEX, isCustom: false }));
+    if (!transparentShadeCounts) return 0;
+    let total = 0;
+    for (const count of transparentShadeCounts.values()) total += count;
+    return total;
+  }, [activeTransparentBlock, shadeCountsByColorKey]);
+  const colorTableSortCounts = useMemo(() => {
+    if (transparentSortColorCount <= 0) return materialCountsDisplayView.colorCounts;
+    return {
+      ...materialCountsDisplayView.colorCounts,
+      [getColorRefKey({ id: TRANSPARENCY_BASE_INDEX, isCustom: false })]: transparentSortColorCount,
+    };
+  }, [materialCountsDisplayView.colorCounts, transparentSortColorCount]);
   const preserveSingleTileMaterialUi =
     !!imageData &&
     (
@@ -2824,6 +2863,7 @@ const Index = () => {
   const colorTableDisplayPending =
     preserveSingleTileMaterialUi &&
     (
+      pendingTransparentMaterialRefresh ||
       isParsingImage ||
       !imageValid ||
       parsedTiles.length === 0 ||
@@ -2838,7 +2878,7 @@ const Index = () => {
         showUsageInfo: !!paletteUsageInfo && imageValid,
         usedShadesByColorKey,
         shadeCountsByColorKey,
-        sortColorCounts: materialCountsDisplayView.colorCounts,
+        sortColorCounts: colorTableSortCounts,
         missingColorKeys,
       }),
       [
@@ -2847,7 +2887,7 @@ const Index = () => {
         paletteUsageInfo,
         usedShadesByColorKey,
         shadeCountsByColorKey,
-        materialCountsDisplayView.colorCounts,
+        colorTableSortCounts,
         missingColorKeys,
       ],
     ),
@@ -3161,38 +3201,45 @@ const Index = () => {
     const makeEntry = (
       show: boolean,
       label: VsEntry["label"],
-      rawValue: string,
+      value: string,
       noobPixels: number,
     ): VsEntry | null => {
       if (!show) return null;
-      const value = rawValue.trim() || effectiveShadeFillerBlock;
-      return { label, value, invalid: isFillerDisabled(value), noobPixels };
+      return { label, value, invalid: isShadeFillerDisabled(value), noobPixels };
     };
     const formatInvalid = (entry: VsEntry) => messages.preview.vsFillerInvalid(entry.label, entry.value, entry.noobPixels);
     const formatRequired = (label: string, pixels: number, isPluralLabel = false) =>
       messages.preview.vsFillerRequired(label, pixels, isPluralLabel);
+    const appendTransparentSwapLine = (text: string) =>
+      activeTransparentBlock && suppressedTransparentVsCollisionCount > 0
+        ? `${text}\n${messages.preview.vsFillerTransparentSwap(activeTransparentBlock)}`
+        : text;
 
     const dominant = makeEntry(
       showDominateVoidFillerInput,
       messages.fillers.dominateVoidWarningLabel,
-      dominateVoidFillerBlock,
+      effectiveDominateVoidFillerBlock,
       aggregateDominateVoidFillerRequiredCount,
     );
     const recessive = makeEntry(
       showRecessiveVoidFillerInput,
       messages.fillers.recessiveVoidWarningLabel,
-      recessiveVoidFillerBlock,
+      effectiveRecessiveVoidFillerBlock,
       aggregateRecessiveVoidFillerRequiredCount,
     );
 
     if (!dominant && !recessive) return null;
     if (!dominant) {
       if (recessive!.invalid) return { text: formatInvalid(recessive!), invalid: true };
-      return showVsFillerWarnings ? { text: formatRequired(recessive!.label, recessive!.noobPixels), invalid: false } : null;
+      return showVsFillerWarnings
+        ? { text: appendTransparentSwapLine(formatRequired(recessive!.label, recessive!.noobPixels)), invalid: false }
+        : null;
     }
     if (!recessive) {
       if (dominant.invalid) return { text: formatInvalid(dominant), invalid: true };
-      return showVsFillerWarnings ? { text: formatRequired(dominant.label, dominant.noobPixels), invalid: false } : null;
+      return showVsFillerWarnings
+        ? { text: appendTransparentSwapLine(formatRequired(dominant.label, dominant.noobPixels)), invalid: false }
+        : null;
     }
     if (dominant.invalid && recessive.invalid) {
       const pixels = dominant.noobPixels + recessive.noobPixels;
@@ -3206,16 +3253,17 @@ const Index = () => {
     }
     if (!showVsFillerWarnings) return null;
     const pixels = dominant.noobPixels + recessive.noobPixels;
-    return { text: formatRequired(messages.fillers.voidFillersWarningLabel, pixels, true), invalid: false };
+    return { text: appendTransparentSwapLine(formatRequired(messages.fillers.voidFillersWarningLabel, pixels, true)), invalid: false };
   }, [
-    dominateVoidFillerBlock,
-    effectiveShadeFillerBlock,
-    recessiveVoidFillerBlock,
+    activeTransparentBlock,
+    effectiveDominateVoidFillerBlock,
+    effectiveRecessiveVoidFillerBlock,
     showDominateVoidFillerInput,
     showRecessiveVoidFillerInput,
     showVsFillerWarnings,
     aggregateDominateVoidFillerRequiredCount,
     aggregateRecessiveVoidFillerRequiredCount,
+    suppressedTransparentVsCollisionCount,
   ]);
   const lateFillerWarning = useMemo<ShapeWarning | null>(() => {
     if (!showLateFillerInput || aggregateLateFillerRequiredCount <= 0 || !lateFillerShadingDisabled) return null;

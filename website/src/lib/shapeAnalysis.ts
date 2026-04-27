@@ -230,6 +230,7 @@ export function hasNonWaterColorHeightVariance(shape: GeneratedShape): boolean {
   for (const part of shape.parts) {
     for (const [coord, cell] of part.cells) {
       if (!isShapeColorCell(cell)) continue;
+      if (!cell.isCustom && cell.id === TRANSPARENCY_BASE_INDEX) continue;
       if (!cell.isCustom && cell.id === WATER_BASE_INDEX) continue;
       const [, y] = parseShapeCoordKey(coord);
       if (firstY === undefined) firstY = y;

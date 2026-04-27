@@ -307,6 +307,7 @@ export const enCatalog = {
       other:
         "VS-Fillers are invalid ({first}, {second}). There will be {count} staircase pixels with incorrect shading.",
     } as PluralForms,
+    vsFillerTransparentSwap: "Swap flat-shade VS-Fillers for {value}.",
     lateFillerInvalid: {
       one: "Late-Filler is invalid ({value}).\n{count} late suppress spot requires shading.",
       other: "Late-Filler is invalid ({value}).\n{count} late suppress spots require shading.",

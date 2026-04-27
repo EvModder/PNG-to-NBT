@@ -15,6 +15,10 @@ import { messages } from "@/lib/messages";
 import { MUTED_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
+const SUPPRESS_LOAD_SPOT_MARKER_SELECT_WIDTH_CH = Math.max(
+  ...SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.map(block => block.length),
+);
+
 type SecretsSettingsDialogProps = {
   open: boolean;
   onClose: () => void;
@@ -98,7 +102,8 @@ function OptionSelectRow({
         value={value}
         onChange={event => onValueChange(event.target.value as SuppressLoadSpotMarkerBlock)}
         aria-label={selectLabel}
-        className="min-w-0 rounded border border-border bg-input px-1.5 py-0.5 text-xs text-foreground"
+        className="min-w-0 shrink-0 rounded border border-border bg-input px-1.5 py-0.5 text-xs text-foreground"
+        style={{ width: `calc(${SUPPRESS_LOAD_SPOT_MARKER_SELECT_WIDTH_CH}ch + 2.75rem)` }}
       >
         {SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.map(block => (
           <option key={block} value={block}>{block}</option>

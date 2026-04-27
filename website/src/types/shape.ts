@@ -36,6 +36,7 @@ export interface GeneratedShape {
   parts: ShapePart[];
   partType: ShapePartType;
   splitExportNames: [string, string] | null;
+  suppressedTransparentVsCollisionCount: number;
 }
 
 // Callers:

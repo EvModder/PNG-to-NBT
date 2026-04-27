@@ -26,7 +26,7 @@ export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/lib/suppressLoadMarkers.ts
-export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "structure_block", "barrier"] as const;
+export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "barrier"] as const;
 export type SuppressLoadSpotMarkerBlock = typeof SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS[number];
 export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBlock = "jigsaw";
 

@@ -303,6 +303,7 @@ export const esCatalog = {
       other:
         "Los VS-Rellenos no son válidos ({first}, {second}). Habrá {count} píxeles de escalera con sombreado incorrecto.",
     } as PluralForms,
+    vsFillerTransparentSwap: "Sustituye los VS-Rellenos de sombreado plano por {value}.",
     lateFillerInvalid: {
       one: "El relleno tardío no es válido ({value}).\n{count} punto tardío de supresión requiere sombreado.",
       other: "El relleno tardío no es válido ({value}).\n{count} puntos tardíos de supresión requieren sombreado.",
