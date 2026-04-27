@@ -5,7 +5,11 @@
  * Callers:
  * - src/lib/nbtExport.ts
  */
+import {
+  DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
+} from "@/data/defaultSettings";
 import { WATER_BASE_INDEX } from "@/data/mapColors";
+import { resolveExportBlockName } from "@/lib/blockId";
 import { PixelParity, getPixelParity } from "@/lib/colorGridAnalysis";
 import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -15,9 +19,6 @@ import type { BlockEntry } from "@/utils/nbtWriter";
 
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
-const SUPPRESS_STEP_CHECKER_LOAD_SPOT_OFFSETS_ODD = [15, 41, 65, 89, 113] as const;
-const SUPPRESS_STEP_CHECKER_LOAD_SPOT_OFFSETS_EVEN = [14, 40, 64, 88, 112] as const;
-const BARRIER_BLOCK_NAME = "minecraft:barrier";
 
 type NonWaterColorCoord = { x: number; z: number };
 type StepPhaseSpec = {
@@ -26,13 +27,22 @@ type StepPhaseSpec = {
   includeAt: (x: number, z: number) => boolean;
 };
 
+type BuildLoadSpotMarkerOptions = {
+  markSuppressLoadSpotsInSchematic?: boolean;
+  suppressLoadSpotMarkerBlock?: string;
+};
+
+function isXAxisDirection(direction: SuppressStepDirection): boolean {
+  return (
+    direction === SuppressStepDirection.EastToWest ||
+    direction === SuppressStepDirection.WestToEast
+  );
+}
+
 function getOrderedStepLines(
   direction: SuppressStepDirection,
 ): { axis: "x" | "z"; lines: number[]; lineStep: 1 | -1 } {
-  const axis = (
-    direction === SuppressStepDirection.NorthToSouth ||
-    direction === SuppressStepDirection.SouthToNorth
-  ) ? "z" : "x";
+  const axis = isXAxisDirection(direction) ? "x" : "z";
   const ascending = (
     direction === SuppressStepDirection.WestToEast ||
     direction === SuppressStepDirection.NorthToSouth
@@ -123,6 +133,92 @@ function getLoadSpotCoordinate(
   }
 }
 
+const DOMINANT_SPARSE_LOAD_SPOT_OFFSETS_ODD = [15, 41, 65, 89, 113] as const;
+const DOMINANT_SPARSE_LOAD_SPOT_OFFSETS_EVEN = [14, 40, 64, 88, 112] as const;
+
+function getDominantSparseLoadSpotOffsets(markerLine: number): readonly number[] {
+  return (markerLine & 1) === 0
+    ? DOMINANT_SPARSE_LOAD_SPOT_OFFSETS_ODD
+    : DOMINANT_SPARSE_LOAD_SPOT_OFFSETS_EVEN;
+}
+
+function getNearestSparseLoadSpotOffsetIndex(
+  orthogonalCoord: number,
+  offsets: readonly number[],
+): number {
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  for (let i = 0; i < offsets.length; ++i) {
+    const distance = Math.abs(orthogonalCoord - offsets[i]);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+function buildSparseDominantLoadSpotMarkers(
+  coords: readonly NonWaterColorCoord[],
+  markerLine: number,
+  stepDirection: SuppressStepDirection,
+  markerY: number,
+  blockName: string,
+): BlockEntry[] {
+  const offsets = getDominantSparseLoadSpotOffsets(markerLine);
+  const usedOffsetIndices = new Set<number>();
+
+  for (const coord of coords) {
+    if (getPixelParity(coord.x, coord.z) !== PixelParity.Dominant) continue;
+    usedOffsetIndices.add(
+      getNearestSparseLoadSpotOffsetIndex(
+        isXAxisDirection(stepDirection) ? coord.z : coord.x,
+        offsets,
+      ),
+    );
+  }
+
+  return [...usedOffsetIndices]
+    .sort((a, b) => a - b)
+    .map(offsetIndex => {
+      const orthogonalCoord = offsets[offsetIndex];
+      return isXAxisDirection(stepDirection)
+        ? { x: markerLine, y: markerY, z: orthogonalCoord, blockName }
+        : { x: orthogonalCoord, y: markerY, z: markerLine, blockName };
+    });
+}
+
+function getJigsawOrientation(direction: SuppressStepDirection): "up_north" | "up_south" | "up_east" | "up_west" {
+  switch (direction) {
+    case SuppressStepDirection.NorthToSouth:
+      return "up_north";
+    case SuppressStepDirection.SouthToNorth:
+      return "up_south";
+    case SuppressStepDirection.EastToWest:
+      return "up_east";
+    case SuppressStepDirection.WestToEast:
+      return "up_west";
+  }
+}
+
+function orientLoadSpotMarkerBlockName(blockName: string, direction: SuppressStepDirection): string {
+  const bracketIdx = blockName.indexOf("[");
+  const baseName = bracketIdx < 0 ? blockName : blockName.slice(0, bracketIdx);
+  if (baseName !== "minecraft:jigsaw" && baseName !== "jigsaw") return blockName;
+
+  const orientationProp = `orientation=${getJigsawOrientation(direction)}`;
+  if (bracketIdx < 0) return `${baseName}[${orientationProp}]`;
+
+  const props = blockName
+    .slice(bracketIdx + 1, -1)
+    .split(",")
+    .map(part => part.trim())
+    .filter(Boolean)
+    .filter(part => !part.startsWith("orientation="));
+  props.push(orientationProp);
+  return `${baseName}[${props.join(",")}]`;
+}
+
 function getMarkerY(part: ShapePart): number | null {
   let minSupportFloorY = Infinity;
   for (const y of part.supportFloorYs) {
@@ -131,7 +227,7 @@ function getMarkerY(part: ShapePart): number | null {
   if (!Number.isFinite(minSupportFloorY)) return null;
   const markerY = minSupportFloorY + 1;
   if (markerY < part.bounds.minY || markerY > part.bounds.maxY) {
-    throw new Error(`Invalid suppress load marker Y ${markerY}; expected within shape bounds [${part.bounds.minY}, ${part.bounds.maxY}]`);
+    throw new Error(`Invalid load spot marker Y ${markerY}; expected within shape bounds [${part.bounds.minY}, ${part.bounds.maxY}]`);
   }
   return markerY;
 }
@@ -143,7 +239,7 @@ function getNonWaterColorCoords(part: ShapePart): NonWaterColorCoord[] {
     if (!cell.isCustom && cell.id === WATER_BASE_INDEX) continue;
     const [x, , z] = parseShapeCoordKey(coord);
     if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) {
-      throw new Error(`Invalid suppress load marker source coord (${x}, ${z}); expected within [0, ${MAP_SIZE - 1}]`);
+      throw new Error(`Invalid load spot source coord (${x}, ${z}); expected within [0, ${MAP_SIZE - 1}]`);
     }
     coords.push({ x, z });
   }
@@ -161,13 +257,14 @@ function findMatchingStepSpecIndex(
       if (spec.includeAt(coord.x, coord.z)) return specIndex;
     }
   }
-  throw new Error("Unable to match suppress load markers to a step phase spec");
+  throw new Error("Unable to match load spot markers to a step phase spec");
 }
 
 function buildSuppressStepPairMarkers(
   spec: StepPhaseSpec,
   stepDirection: SuppressStepDirection,
   markerY: number,
+  markerBlockName: string,
 ): BlockEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
@@ -176,12 +273,14 @@ function buildSuppressStepPairMarkers(
   );
   const markers: BlockEntry[] = [];
 
-  if (
-    stepDirection === SuppressStepDirection.EastToWest ||
-    stepDirection === SuppressStepDirection.WestToEast
-  ) {
+  if (isXAxisDirection(stepDirection)) {
     for (let z = 0; z < MAP_SIZE; ++z) {
-      const marker = { x: markerLine, y: markerY, z, blockName: BARRIER_BLOCK_NAME };
+      const marker = {
+        x: markerLine,
+        y: markerY,
+        z,
+        blockName: orientLoadSpotMarkerBlockName(markerBlockName, stepDirection),
+      };
       if (getPixelParity(marker.x, marker.z) !== PixelParity.Recessive) continue;
       markers.push(marker);
     }
@@ -189,7 +288,12 @@ function buildSuppressStepPairMarkers(
   }
 
   for (let x = 0; x < MAP_SIZE; ++x) {
-    const marker = { x, y: markerY, z: markerLine, blockName: BARRIER_BLOCK_NAME };
+    const marker = {
+      x,
+      y: markerY,
+      z: markerLine,
+      blockName: orientLoadSpotMarkerBlockName(markerBlockName, stepDirection),
+    };
     if (getPixelParity(marker.x, marker.z) !== PixelParity.Recessive) continue;
     markers.push(marker);
   }
@@ -201,42 +305,28 @@ function buildSuppressStepCheckerMarkers(
   spec: StepPhaseSpec,
   stepDirection: SuppressStepDirection,
   markerY: number,
+  markerBlockName: string,
 ): BlockEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
     spec.loadLine,
     SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE,
   );
-  const orthogonalOffsets = (markerLine & 1) === 0
-    ? SUPPRESS_STEP_CHECKER_LOAD_SPOT_OFFSETS_ODD
-    : SUPPRESS_STEP_CHECKER_LOAD_SPOT_OFFSETS_EVEN;
-  const markers: BlockEntry[] = [];
-
-  if (
-    stepDirection === SuppressStepDirection.EastToWest ||
-    stepDirection === SuppressStepDirection.WestToEast
-  ) {
-    for (const z of orthogonalOffsets) {
-      if (!coords.some(coord => coord.z === z && getPixelParity(coord.x, coord.z) === PixelParity.Dominant)) continue;
-      markers.push({ x: markerLine, y: markerY, z, blockName: BARRIER_BLOCK_NAME });
-    }
-    return markers;
-  }
-
-  for (const x of orthogonalOffsets) {
-    if (!coords.some(coord => coord.x === x && getPixelParity(coord.x, coord.z) === PixelParity.Dominant)) continue;
-    markers.push({ x, y: markerY, z: markerLine, blockName: BARRIER_BLOCK_NAME });
-  }
-  return markers;
+  return buildSparseDominantLoadSpotMarkers(
+    coords,
+    markerLine,
+    stepDirection,
+    markerY,
+    orientLoadSpotMarkerBlockName(markerBlockName, stepDirection),
+  );
 }
 
-// Callers:
-// - src/lib/nbtExport.ts
-export function buildSuppressLoadSpotMarkers(
+function buildSuppressStepLoadSpotMarkers(
   shape: GeneratedShape,
   buildMode: BuildMode,
   stepDirection: SuppressStepDirection,
   enabled: boolean,
+  markerBlockName: string,
 ): BlockEntry[] {
   if (!enabled || shape.partType !== ShapePartType.SuppressStepPhases) return [];
   if (buildMode !== BuildMode.SuppressStepPairs && buildMode !== BuildMode.SuppressStepChecker) return [];
@@ -256,11 +346,29 @@ export function buildSuppressLoadSpotMarkers(
     const specCoords = coords.filter(coord => spec.includeAt(coord.x, coord.z));
     markers.push(
       ...(buildMode === BuildMode.SuppressStepPairs
-        ? buildSuppressStepPairMarkers(spec, stepDirection, markerY)
+        ? buildSuppressStepPairMarkers(spec, stepDirection, markerY, markerBlockName)
         : specCoords.length === 0
           ? []
-          : buildSuppressStepCheckerMarkers(specCoords, spec, stepDirection, markerY)),
+          : buildSuppressStepCheckerMarkers(specCoords, spec, stepDirection, markerY, markerBlockName)),
     );
   }
   return markers;
+}
+
+// Callers:
+// - src/lib/nbtExport.ts
+export function buildSuppressLoadSpotMarkers(
+  shape: GeneratedShape,
+  buildMode: BuildMode,
+  stepDirection: SuppressStepDirection,
+  options: BuildLoadSpotMarkerOptions,
+): BlockEntry[] {
+  const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
+  return buildSuppressStepLoadSpotMarkers(
+    shape,
+    buildMode,
+    stepDirection,
+    options.markSuppressLoadSpotsInSchematic === true,
+    markerBlockName,
+  );
 }

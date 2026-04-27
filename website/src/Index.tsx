@@ -19,6 +19,8 @@ import {
   DEFAULT_FORCE_Z129,
   DEFAULT_LAYER_GAP,
   DEFAULT_LIGHT_WATER_DROP,
+  SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
+  DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
   DEFAULT_MAX_PER_SPLIT,
   DEFAULT_MIX_STEPS,
@@ -43,6 +45,7 @@ import {
   DEFAULT_SUPPORT_MODE,
   DEFAULT_SUPPRESS_STEP_DIRECTION,
   DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
+  type SuppressLoadSpotMarkerBlock,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
@@ -770,7 +773,7 @@ const Index = () => {
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
   const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
-  const [suppressStepDirection, setSuppressStepDirection] = useState<SuppressStepDirection>(() => {
+  const [suppressStepDirection, setSuppressDirection] = useState<SuppressStepDirection>(() => {
     const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
     return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
   });
@@ -828,7 +831,15 @@ const Index = () => {
     LS_KEYS.showFlatNbtSuppressStepModes,
     DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   ));
-  const [markSuppressLoadSpotsInSchematic, setMarkSuppressLoadSpotsInSchematic] = useState(() => loadCached(LS_KEYS.markSuppressLoadSpotsInSchematic, DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC));
+  const [markSuppressLoadSpotsInSchematic, setMarkSuppressLoadSpotsInSchematic] = useState(() =>
+    loadCached(LS_KEYS.markSuppressLoadSpotsInSchematic, DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC),
+  );
+  const [suppressLoadSpotMarkerBlock, setSuppressLoadSpotMarkerBlock] = useState<SuppressLoadSpotMarkerBlock>(() => {
+    const stored = loadCached(LS_KEYS.suppressLoadSpotMarkerBlock, DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
+    return SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.includes(stored as SuppressLoadSpotMarkerBlock)
+      ? stored as SuppressLoadSpotMarkerBlock
+      : DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK;
+  });
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
@@ -1060,6 +1071,7 @@ const Index = () => {
       [LS_KEYS.skipEmptySuppressSteps]: skipEmptySuppressSteps,
       [LS_KEYS.showFlatNbtSuppressStepModes]: showFlatNbtSuppressStepModes,
       [LS_KEYS.markSuppressLoadSpotsInSchematic]: markSuppressLoadSpotsInSchematic,
+      [LS_KEYS.suppressLoadSpotMarkerBlock]: suppressLoadSpotMarkerBlock,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
@@ -1101,6 +1113,7 @@ const Index = () => {
       skipEmptySuppressSteps,
       showFlatNbtSuppressStepModes,
       markSuppressLoadSpotsInSchematic,
+      suppressLoadSpotMarkerBlock,
       showVsFillerWarnings,
       showAlignmentReminder,
       showNooblineWarnings,
@@ -1241,9 +1254,9 @@ const Index = () => {
     [buildMode, imageValid, parsedTiles, tileDerivedImageStats, getTileWaterSetting],
   );
   const twoLayerHasLateVoidNeed = voidShadowSummary.hasDominantVoidShadow;
-  const isSuppressStepDirectionSelectable = useCallback(
+  const isSuppressDirectionSelectable = useCallback(
     (direction: SuppressStepDirection) => {
-      if (buildMode !== BuildMode.SuppressStepChecker) return false;
+      if (buildMode !== BuildMode.SuppressStepChecker) return true;
       switch (direction) {
         case SuppressStepDirection.EastToWest:
         case SuppressStepDirection.WestToEast:
@@ -1257,9 +1270,9 @@ const Index = () => {
     [buildMode, voidShadowSummary],
   );
   useEffect(() => {
-    if (buildMode !== BuildMode.SuppressStepChecker || isSuppressStepDirectionSelectable(suppressStepDirection)) return;
-    setSuppressStepDirection(current => cycleSuppressStepDirection(current, isSuppressStepDirectionSelectable));
-  }, [buildMode, suppressStepDirection, isSuppressStepDirectionSelectable]);
+    if (buildMode !== BuildMode.SuppressStepChecker || isSuppressDirectionSelectable(suppressStepDirection)) return;
+    setSuppressDirection(current => cycleSuppressStepDirection(current, isSuppressDirectionSelectable));
+  }, [buildMode, suppressStepDirection, isSuppressDirectionSelectable]);
   const normalizedSupportFillerBlockId = normalizeBlockId(effectiveSupportFillerBlock);
   const supportFillerIsFragile =
     normalizedSupportFillerBlockId.length > 0 && isFragileBlock(normalizedSupportFillerBlockId);
@@ -1444,7 +1457,7 @@ const Index = () => {
           startTransition(() => {
             if (nextResolvedBuildMode !== buildMode) setBuildMode(nextResolvedBuildMode);
             if (nextResolvedSuppressStepDirection !== suppressStepDirection) {
-              setSuppressStepDirection(nextResolvedSuppressStepDirection);
+              setSuppressDirection(nextResolvedSuppressStepDirection);
             }
           });
           return;
@@ -1991,48 +2004,14 @@ const Index = () => {
     [tileBaseAnalyses, effectiveBuildMode, applySupportFloorYs],
   );
   const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
-  const showSuppressStepDirectionControl =
-    !!imageData &&
-    imageValid &&
-    !lockFlatBuildMode &&
-    isSuppressStepsBuildMode(buildMode);
   const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
   const supportModeTooltip = messages.supportMode.tooltip(supportMode);
-  const toolbarBuildSettingsProps = displayImageData && imageValid ? {
-    lockFlatBuildMode: lockFlatBuildMode || (
-      !!imageData &&
-      imageValid &&
-      parsedTiles.length > 0 &&
-      !hasCurrentTileGeometryAnalysis &&
-      analysisResult === null
-    ),
-    visibleWaterLevelControls,
-    setNormalizedWaterDrop,
-    minLayerGap,
-    layerGap,
-    setLayerGap,
-    showMixStepsToggle,
-    mixSteps,
-    setMixSteps,
-    showPaletteSeedToggle,
-    proPaletteSeed,
-    setProPaletteSeed,
-    showBuildAtWorldMinYToggle,
-    buildAtWorldMinY,
-    setBuildAtWorldMinY,
-    buildMode,
-    setBuildMode,
-    showSuppressStepDirectionControl,
-    suppressStepDirection,
-    setSuppressStepDirection,
-    isSuppressStepDirectionSelectable,
-    staircaseModeOptions,
-    suppressModeOptions,
-    shadingMethodTooltip,
-  } : null;
   const suppressStepNorthSouthWarning = useMemo(
     () =>
-      showSuppressStepDirectionControl &&
+      !!imageData &&
+      imageValid &&
+      !lockFlatBuildMode &&
+      isSuppressStepsBuildMode(buildMode) &&
       isNorthSouthSuppressStepDirection
         ? messages.preview.suppressStepNorthSouthWarning(
             messages.buildMode.optionLabel(buildMode),
@@ -2041,9 +2020,11 @@ const Index = () => {
         : null,
     [
       buildMode,
-      showSuppressStepDirectionControl,
-      isNorthSouthSuppressStepDirection,
+      imageData,
+      imageValid,
+      lockFlatBuildMode,
       suppressStepDirection,
+      isNorthSouthSuppressStepDirection,
     ],
   );
   const buildMaterialAnalysisOptions = useCallback(
@@ -2210,7 +2191,7 @@ const Index = () => {
         if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
         if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
         if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
-          setSuppressStepDirection(decodedPreset.suppressStepDirection);
+          setSuppressDirection(decodedPreset.suppressStepDirection);
         }
         if (decodedPreset.dominateVoidFillerBlock !== undefined) setDominateVoidFillerBlock(decodedPreset.dominateVoidFillerBlock);
         if (decodedPreset.recessiveVoidFillerBlock !== undefined) setRecessiveVoidFillerBlock(decodedPreset.recessiveVoidFillerBlock);
@@ -2704,6 +2685,7 @@ const Index = () => {
           buildMode: effectiveBuildMode,
           suppressStepDirection,
           markSuppressLoadSpotsInSchematic,
+          suppressLoadSpotMarkerBlock,
         });
         const exportTile = hasMultipleTiles ? tile.tile : null;
         if (tileEntries.length === 1) {
@@ -2898,7 +2880,43 @@ const Index = () => {
   const lateFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
   const dominateVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
   const recessiveVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidRecessive);
-  const vsFillerSpotCount = dominateVoidFillerRequiredCount + recessiveVoidFillerRequiredCount;
+  const showSuppressDirectionControl =
+    !!imageData &&
+    imageValid &&
+    !lockFlatBuildMode &&
+    isSuppressStepsBuildMode(buildMode);
+  const toolbarBuildSettingsProps = displayImageData && imageValid ? {
+    lockFlatBuildMode: lockFlatBuildMode || (
+      !!imageData &&
+      imageValid &&
+      parsedTiles.length > 0 &&
+      !hasCurrentTileGeometryAnalysis &&
+      analysisResult === null
+    ),
+    visibleWaterLevelControls,
+    setNormalizedWaterDrop,
+    minLayerGap,
+    layerGap,
+    setLayerGap,
+    showMixStepsToggle,
+    mixSteps,
+    setMixSteps,
+    showPaletteSeedToggle,
+    proPaletteSeed,
+    setProPaletteSeed,
+    showBuildAtWorldMinYToggle,
+    buildAtWorldMinY,
+    setBuildAtWorldMinY,
+    buildMode,
+    setBuildMode,
+    showSuppressDirectionControl,
+    suppressDirection: suppressStepDirection,
+    setSuppressDirection,
+    isSuppressDirectionSelectable,
+    staircaseModeOptions,
+    suppressModeOptions,
+    shadingMethodTooltip,
+  } : null;
   const showWaterSideSupportWarning =
     imageValid &&
     (supportMode === SupportMode.All || supportMode === SupportMode.Water) &&
@@ -3073,7 +3091,6 @@ const Index = () => {
     [hasMultipleTiles, effectiveSelectedTileCount, buildMode],
   );
   const canCopyImageShareUrl = tileCount === 1 && !!imageColorGrid && imageValid;
-  const presetPrimaryActionLabel = presetDirty ? messages.common.save : messages.common.share;
   const presetPrimaryActionTitle = presetDirty ? messages.presets.saveTitle : messages.presets.shareTitle;
   const showNorthRowAlignmentInfo =
     showAlignmentReminder &&
@@ -3441,7 +3458,6 @@ const Index = () => {
             isBuiltinUnedited={isBuiltinUnedited}
             sharePreset={sharePreset}
             presetPrimaryActionTitle={presetPrimaryActionTitle}
-            presetPrimaryActionLabel={presetPrimaryActionLabel}
             deletePreset={deletePreset}
             createPreset={createPreset}
             showSupportModeSelector={showSupportModeSelector}
@@ -3669,6 +3685,8 @@ const Index = () => {
         setShowFlatNbtSuppressStepModes={setShowFlatNbtSuppressStepModes}
         markSuppressLoadSpotsInSchematic={markSuppressLoadSpotsInSchematic}
         setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
+        suppressLoadSpotMarkerBlock={suppressLoadSpotMarkerBlock}
+        setSuppressLoadSpotMarkerBlock={setSuppressLoadSpotMarkerBlock}
         showAlignmentReminder={showAlignmentReminder}
         setShowAlignmentReminder={setShowAlignmentReminder}
         showNooblineWarnings={showNooblineWarnings}

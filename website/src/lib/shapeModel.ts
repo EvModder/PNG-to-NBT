@@ -13,6 +13,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/suppressLoadMarkers.ts
  * - src/lib/nbtExport.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
@@ -25,6 +26,7 @@ import { MAP_SIZE } from "@/utils/color";
 import { type ColorBlockSelections, normalizeBlockId, resolveAssignedColorBlock } from "@/lib/blockId";
 
 // Callers:
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export function isShapeColorCell(cell: ShapeCell): cell is ColorRef {
@@ -33,6 +35,7 @@ export function isShapeColorCell(cell: ShapeCell): cell is ColorRef {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export function isShapeFillerCell(cell: ShapeCell): cell is FillerRole[] {
@@ -52,6 +55,7 @@ export function toShapeCoordKey(x: number, y: number, z: number): ShapeCoordKey 
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts

@@ -16,6 +16,7 @@ import {
   cycleSuppressStepDirection,
   getSuppressStepDirectionRotationDegrees,
 } from "@/utils/conversion";
+import { INPUT_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
 
 type WaterDropShade = Shade.Dark | Shade.Flat | Shade.Light;
@@ -52,10 +53,10 @@ export type ToolbarBuildSettingsProps = {
   setBuildAtWorldMinY: (value: boolean) => void;
   buildMode: BuildMode;
   setBuildMode: (value: BuildMode) => void;
-  showSuppressStepDirectionControl: boolean;
-  suppressStepDirection: SuppressStepDirection;
-  setSuppressStepDirection: (value: SuppressStepDirection) => void;
-  isSuppressStepDirectionSelectable: (direction: SuppressStepDirection) => boolean;
+  showSuppressDirectionControl: boolean;
+  suppressDirection: SuppressStepDirection;
+  setSuppressDirection: (value: SuppressStepDirection) => void;
+  isSuppressDirectionSelectable: (direction: SuppressStepDirection) => boolean;
   staircaseModeOptions: ToolbarBuildModeOption[];
   suppressModeOptions: ToolbarBuildModeOption[];
   shadingMethodTooltip: string;
@@ -109,10 +110,10 @@ export function ToolbarBuildSettings({
   setBuildAtWorldMinY,
   buildMode,
   setBuildMode,
-  showSuppressStepDirectionControl,
-  suppressStepDirection,
-  setSuppressStepDirection,
-  isSuppressStepDirectionSelectable,
+  showSuppressDirectionControl,
+  suppressDirection,
+  setSuppressDirection,
+  isSuppressDirectionSelectable,
   staircaseModeOptions,
   suppressModeOptions,
   shadingMethodTooltip,
@@ -248,27 +249,30 @@ export function ToolbarBuildSettings({
     });
   }
 
+  if (showSuppressDirectionControl) {
+    groups.push({
+      key: "direction",
+      node: (
+        <button
+          type="button"
+          className={INPUT_SQUARE_ICON_BUTTON_CLASS}
+          title={messages.buildMode.stepDirectionTooltip(suppressDirection)}
+          aria-label={messages.buildMode.stepDirectionAriaLabel(suppressDirection)}
+          onClick={() => setSuppressDirection(
+            cycleSuppressStepDirection(suppressDirection, isSuppressDirectionSelectable),
+          )}
+        >
+          <SuppressStepDirectionIcon direction={suppressDirection} />
+        </button>
+      ),
+    });
+  }
+
   if (showBuildModeControl) {
     groups.push({
       key: "build-mode",
       node: (
         <>
-          {showSuppressStepDirectionControl && (
-            <>
-              <button
-                type="button"
-                className="inline-flex h-6 w-6 items-center justify-center rounded border border-border bg-input text-foreground hover:border-primary/60"
-                title={messages.buildMode.stepDirectionTooltip(suppressStepDirection)}
-                aria-label={messages.buildMode.stepDirectionAriaLabel(suppressStepDirection)}
-                onClick={() => setSuppressStepDirection(
-                  cycleSuppressStepDirection(suppressStepDirection, isSuppressStepDirectionSelectable),
-                )}
-              >
-                <SuppressStepDirectionIcon direction={suppressStepDirection} />
-              </button>
-              <span className="h-4 border-l border-border/70" />
-            </>
-          )}
           <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>
             {messages.buildMode.label}
           </span>

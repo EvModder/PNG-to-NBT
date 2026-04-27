@@ -7,6 +7,7 @@
  * - ShapePart
  *
  * Callers:
+ * - src/lib/suppressLoadMarkers.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -17,6 +18,7 @@ import type { ColorRef } from "./color";
 import { FillerRole } from "./conversion";
 
 // Callers:
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 export enum ShapePartType {
@@ -25,6 +27,7 @@ export enum ShapePartType {
 }
 
 // Callers:
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
@@ -46,6 +49,7 @@ export type ShapeCell = ColorRef | FillerRole[];
 export type ShapeCoordKey = number;
 
 // Callers:
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts

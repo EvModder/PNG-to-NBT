@@ -5,6 +5,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/suppressLoadMarkers.ts
  * - tests/run.mts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -20,6 +21,14 @@ export const DEFAULT_SHADE_FILLER_BLOCK = "resin_block";
 export const DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
+
+// Callers:
+// - src/Index.tsx
+// - src/components/SecretsSettingsDialog.tsx
+// - src/lib/suppressLoadMarkers.ts
+export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "structure_block", "barrier"] as const;
+export type SuppressLoadSpotMarkerBlock = typeof SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS[number];
+export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBlock = "jigsaw";
 
 // Callers:
 // - src/Index.tsx

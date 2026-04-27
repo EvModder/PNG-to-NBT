@@ -6,10 +6,16 @@
  * - src/Index.tsx
  */
 import type { RefObject } from "react";
+import { Plus, Save, Share2, Trash2 } from "lucide-react";
 import { messages } from "@/lib/messages";
 import { type BlockPreset } from "@/data/presets";
 import { SupportMode } from "@/types/ui";
 import { ToolbarBuildSettings, type ToolbarBuildSettingsProps } from "@/components/ToolbarBuildSettings";
+import {
+  DESTRUCTIVE_SQUARE_ICON_BUTTON_CLASS,
+  MUTED_SQUARE_ICON_BUTTON_CLASS,
+  PRIMARY_SQUARE_ICON_BUTTON_CLASS,
+} from "@/utils/uiButtons";
 import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
 
 type ToolbarPresetSettingsProps = {
@@ -24,7 +30,6 @@ type ToolbarPresetSettingsProps = {
   isBuiltinUnedited: boolean;
   sharePreset: () => Promise<void>;
   presetPrimaryActionTitle: string;
-  presetPrimaryActionLabel: string;
   deletePreset: () => void;
   createPreset: () => void;
   showSupportModeSelector: boolean;
@@ -53,7 +58,6 @@ export function ToolbarPresetSettings({
   isBuiltinUnedited,
   sharePreset,
   presetPrimaryActionTitle,
-  presetPrimaryActionLabel,
   deletePreset,
   createPreset,
   showSupportModeSelector,
@@ -106,28 +110,31 @@ export function ToolbarPresetSettings({
           </div>
           {!isBuiltinUnedited && (
             <button
-              className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground hover:text-foreground"
+              className={MUTED_SQUARE_ICON_BUTTON_CLASS}
               onClick={() => { void sharePreset(); }}
               title={presetPrimaryActionTitle}
+              aria-label={presetPrimaryActionTitle}
             >
-              {presetPrimaryActionLabel}
+              {presetDirty ? <Save size={14} /> : <Share2 size={14} />}
             </button>
           )}
           {canDeletePreset && (
             <button
-              className="text-xs px-2 py-0.5 rounded border border-destructive text-destructive hover:bg-destructive/20"
+              className={DESTRUCTIVE_SQUARE_ICON_BUTTON_CLASS}
               onClick={deletePreset}
               title={messages.presets.deleteTitle}
+              aria-label={messages.presets.deleteTitle}
             >
-              {messages.common.deleteShort}
+              <Trash2 size={14} />
             </button>
           )}
           <button
-            className="text-xs px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/20"
+            className={PRIMARY_SQUARE_ICON_BUTTON_CLASS}
             onClick={createPreset}
             title={messages.common.newPresetTitle}
+            aria-label={messages.common.newPresetTitle}
           >
-            +
+            <Plus size={14} />
           </button>
         </div>
         {showSupportModeSelector && (

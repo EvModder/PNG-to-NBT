@@ -12,6 +12,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/suppressLoadMarkers.ts
  * - src/lib/shapeGeneration.ts
  * - tests/run.mts
  */
@@ -21,6 +22,7 @@ import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { type ColorGrid, Shade, type ColorRef } from "@/types/color";
 
 // Callers:
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeGeneration.ts
 export enum PixelParity {
   Recessive = "recessive",
@@ -64,6 +66,7 @@ export enum FlatModeBehavior {
 
 // Callers:
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressLoadMarkers.ts
 export function getPixelParity(x: number, z: number): PixelParity {
   return ((x + z) & 1) === 0 ? PixelParity.Recessive : PixelParity.Dominant;
 }

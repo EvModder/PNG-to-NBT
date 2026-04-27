@@ -778,7 +778,7 @@ export function PanelColorBlockTable({
   return (
     <>
       <section
-        className={`relative bg-card border border-border rounded-md p-2 w-full ${
+        className={`relative bg-card border border-border rounded-md pt-2 pr-2 pb-1 pl-2 w-full ${
           isStackedLayout ? "" : "min-w-[var(--color-table-min-width)]"
         }`}
       >
@@ -1002,7 +1002,7 @@ export function PanelColorBlockTable({
             <div>
               <div className="border-t border-border mt-[3px]" />
               <button
-                className="w-full flex items-center gap-1 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                className="w-full flex items-center gap-1 pt-1 pb-0.5 leading-none text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setShowUnusedColors(value => !value)}
               >
                 <span className={`inline-block transition-transform ${showUnusedColors ? "rotate-180" : ""}`}>▼</span>

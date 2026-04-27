@@ -51,6 +51,7 @@ export const STORAGE_KEYS = {
   skipEmptySuppressSteps: "mapart_secret_skip_empty_suppress_steps",
   showFlatNbtSuppressStepModes: "mapart_secret_show_flat_nbt_suppress_step_modes",
   markSuppressLoadSpotsInSchematic: "mapart_secret_mark_suppress_load_spots_in_schematic",
+  suppressLoadSpotMarkerBlock: "mapart_secret_suppress_load_spot_marker_block",
   showVsFillerWarnings: "mapart_secret_show_vs_filler_warnings",
   showAlignmentReminder: "mapart_secret_show_alignment_reminder",
   showNooblineWarnings: "mapart_secret_show_noobline_warnings",

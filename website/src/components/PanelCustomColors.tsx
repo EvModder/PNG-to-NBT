@@ -14,7 +14,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { X } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { BASE_COLORS, Shade } from "@/data/mapColors";
 import { getBlockIconAsset } from "@/lib/blockIconAtlas";
 import { getColorRefCount, getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
@@ -32,6 +32,10 @@ import {
   getSwatchRequiredAccentText,
 } from "@/utils/colorSwatch";
 import { COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX } from "@/utils/colorTableLayout";
+import {
+  DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS,
+  PRIMARY_SQUARE_ICON_BUTTON_CLASS,
+} from "@/utils/uiButtons";
 import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 
@@ -99,9 +103,7 @@ type CustomColumnId = Extract<ColumnId, "clr" | "id" | "name" | "block" | "optio
 
 const CUSTOM_TITLE_TEXT_CLASS = `${PANEL_TITLE_TEXT_CLASS} text-cyan-700 dark:text-cyan-300`;
 const CUSTOM_VISIBLE_COLUMNS = new Set<CustomColumnId>(["clr", "id", "name", "block", "options", "required"]);
-const REMOVE_BUTTON_CLASS =
-  "relative shrink-0 h-6 w-6 rounded border border-border bg-input text-destructive hover:text-foreground hover:border-destructive/60";
-const REMOVE_ICON_CLASS = "absolute inset-0 m-auto h-3.5 w-3.5";
+const REMOVE_BUTTON_CLASS = DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS;
 
 function isCustomColumnId(column: ColumnId): column is CustomColumnId {
   return CUSTOM_VISIBLE_COLUMNS.has(column as CustomColumnId);
@@ -122,14 +124,6 @@ function buildRowGridTemplate(
     required: `${requiredColumnWidthPx}px`,
   };
   return columns.map(column => columnWidthMap[column]).join(" ");
-}
-
-function SectionDivider({ className = "" }: { className?: string }) {
-  return (
-    <div className={`h-[7px] flex items-center ${className}`}>
-      <div className="w-full border-t border-border" />
-    </div>
-  );
 }
 
 function sortCustomRows(
@@ -229,6 +223,7 @@ export function PanelCustomColors({
     () => buildRowGridTemplate(visibleColumns, blockColumnWidthPx, requiredColumnWidthPx, blockColumnExpanded),
     [visibleColumns, blockColumnWidthPx, requiredColumnWidthPx, blockColumnExpanded],
   );
+  const hasCustomRows = customColors.length > 0;
 
   const { baseRows, usedCustomRows, unusedCustomRows } = useMemo(() => {
     const rows: CustomColorRow[] = customColors.map((color, customIndex) => ({
@@ -356,7 +351,9 @@ export function PanelCustomColors({
     const isMissing = row.baseIndex === null && missingColorKeys.has(getRowColorKey(row));
     const displayBlocks = row.color.blocks.toSorted();
     const selectedIsListedCustomBlock = displayBlocks.includes(selectedBlock);
-    const removableBlock = isBaseRow ? (selectedIsListedCustomBlock ? selectedBlock : "") : selectedBlock;
+    const removableBlock = selectedIsListedCustomBlock
+      ? selectedBlock
+      : (displayBlocks.at(-1) ?? "");
     const textureCollapsed = blockDisplayMode === "textures" && !blockColumnExpanded;
 
     const cells: Record<CustomColumnId, ReactNode> = {
@@ -394,10 +391,11 @@ export function PanelCustomColors({
             type="button"
             className={REMOVE_BUTTON_CLASS}
             title={messages.common.remove}
+            aria-label={messages.common.remove}
             onClick={() => removableBlock && onRemoveCustomBlock(row.customIndex, removableBlock, row.baseIndex)}
             disabled={!removableBlock}
           >
-            <X className={REMOVE_ICON_CLASS} strokeWidth={2.2} />
+            <Trash2 size={12} strokeWidth={2.1} />
           </button>
         </div>
       ) : (
@@ -462,10 +460,11 @@ export function PanelCustomColors({
             type="button"
             className={REMOVE_BUTTON_CLASS}
             title={messages.common.remove}
+            aria-label={messages.common.remove}
             onClick={() => removableBlock && onRemoveCustomBlock(row.customIndex, removableBlock, row.baseIndex)}
             disabled={!removableBlock}
           >
-            <X className={REMOVE_ICON_CLASS} strokeWidth={2.2} />
+            <Trash2 size={12} strokeWidth={2.1} />
           </button>
         </div>
       ),
@@ -523,7 +522,7 @@ export function PanelCustomColors({
           isStackedLayout ? "" : "min-w-[var(--color-table-min-width)]"
         }`}
       >
-        <div className="flex items-center gap-1 mb-2">
+        <div className="flex items-center gap-1 pb-1">
           <h2
             className={`${CUSTOM_TITLE_TEXT_CLASS} cursor-help`}
             title={messages.customColors.tooltip}
@@ -532,21 +531,18 @@ export function PanelCustomColors({
             {messages.customColors.title}
           </h2>
         </div>
-        {baseRows.length > 0 && (
-          <div className={usedCustomRows.length > 0 ? "" : "mb-2"}>
-            {baseRows.map(row => renderRow(row, false))}
-          </div>
-        )}
+        {hasCustomRows && <div className="border-t border-border mb-[3px]" />}
+        {baseRows.length > 0 && <div>{baseRows.map(row => renderRow(row, false))}</div>}
 
         {usedCustomRows.length > 0 && (
           <div>
-            {baseRows.length > 0 && <SectionDivider />}
+            {baseRows.length > 0 && <div className="border-t border-border my-[3px]" />}
             {imageValid && usedCustomRows.length > 0 && (
               <div className="mb-[3px] rounded border border-primary/30 bg-primary/10 px-1.5 py-1 text-[10px] leading-snug text-foreground">
                 {messages.customColors.usedInImage(usedCustomRows.length)}
               </div>
             )}
-            <div className={`relative ${unusedCustomRows.length > 0 ? "" : "mb-2"}`}>
+            <div className="relative">
               {hasRequiredCol && visibleColumns.includes("required") && (
                 <div className="absolute inset-0 pointer-events-none grid gap-1" style={{ gridTemplateColumns: rowGridTemplate }}>
                   {visibleColumns.map(column => (
@@ -566,7 +562,7 @@ export function PanelCustomColors({
           <div>
             {(baseRows.length > 0 || usedCustomRows.length > 0) && <div className="border-t border-border mt-[3px]" />}
             <button
-              className="w-full flex items-center gap-1 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              className="w-full flex items-center gap-1 pt-1 pb-0.5 leading-none text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowUnusedCustomColors(value => !value)}
             >
               <span className={`inline-block transition-transform ${showUnusedCustomColors ? "rotate-180" : ""}`}>▼</span>
@@ -576,7 +572,7 @@ export function PanelCustomColors({
           </div>
         )}
 
-        <div className="mt-1 flex flex-wrap gap-1.5 items-center">
+        <div className={`${hasCustomRows ? "mt-[3px]" : "mt-1"} flex flex-wrap gap-1.5 items-center`}>
           <select
             className="bg-input border border-border rounded px-1 h-6 text-[11px] font-mono text-foreground w-48"
             value={customMode === "custom" ? "custom" : String(customMode)}
@@ -623,10 +619,12 @@ export function PanelCustomColors({
             />
           </div>
           <button
-            className="h-6 px-2 text-xs rounded border border-border text-muted-foreground hover:text-foreground"
+            className={PRIMARY_SQUARE_ICON_BUTTON_CLASS}
             onClick={addCustomColor}
+            title={messages.common.add}
+            aria-label={messages.common.add}
           >
-            {messages.common.add}
+            <Plus size={14} />
           </button>
         </div>
       </section>

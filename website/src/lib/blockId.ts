@@ -17,6 +17,7 @@
  * - src/lib/fillerRules.ts
  * - src/lib/nbtExport.ts
  * - src/lib/codecPreset.ts
+ * - src/lib/suppressLoadMarkers.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -84,6 +85,7 @@ export interface ColorBlockSelections {
 
 // Callers:
 // - src/lib/fillerRules.ts
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export function resolveExportBlockName(block: string): string {

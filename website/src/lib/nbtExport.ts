@@ -38,6 +38,7 @@ interface ExportOptions extends ColorBlockSelections {
   buildMode: BuildMode;
   suppressStepDirection: SuppressStepDirection;
   markSuppressLoadSpotsInSchematic?: boolean;
+  suppressLoadSpotMarkerBlock?: string;
 }
 
 // Callers:
@@ -49,10 +50,10 @@ export interface NbtExportEntry {
 
 type ExportBoundsOptions = Pick<
   ExportOptions,
-  "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceZ129"
+  "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceXZ128" | "forceZ129"
 >;
 
-function getSuppressLoadMarkerDistance(options: ExportBoundsOptions): number {
+function getLoadMarkerDistance(options: ExportBoundsOptions): number {
   if (!options.markSuppressLoadSpotsInSchematic) return 0;
   if (options.buildMode === BuildMode.SuppressStepPairs) return 127;
   if (options.buildMode === BuildMode.SuppressStepChecker) return 126;
@@ -66,7 +67,7 @@ function validateExportHorizontalBounds(
   maxZ: number,
   options: ExportBoundsOptions,
 ): void {
-  const loadMarkerDistance = getSuppressLoadMarkerDistance(options);
+  const loadMarkerDistance = getLoadMarkerDistance(options);
   const extendsX =
     loadMarkerDistance > 0 &&
     (options.suppressStepDirection === SuppressStepDirection.EastToWest ||
@@ -240,7 +241,10 @@ async function buildSingleEntry(
     shape,
     options.buildMode,
     options.suppressStepDirection,
-    options.markSuppressLoadSpotsInSchematic === true,
+    {
+      markSuppressLoadSpotsInSchematic: options.markSuppressLoadSpotsInSchematic,
+      suppressLoadSpotMarkerBlock: options.suppressLoadSpotMarkerBlock,
+    },
   )) {
     blocks.push(marker);
   }
