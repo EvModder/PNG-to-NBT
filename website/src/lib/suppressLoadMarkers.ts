@@ -11,14 +11,17 @@ import {
 import { WATER_BASE_INDEX } from "@/data/mapColors";
 import { resolveExportBlockName } from "@/lib/blockId";
 import { PixelParity, getPixelParity } from "@/lib/colorGridAnalysis";
+import { collectFillerRolePixels } from "@/lib/shapeAnalysis";
 import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
-import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
+import { isSuppressBuildMode } from "@/utils/conversion";
 import type { BlockEntry } from "@/utils/nbtWriter";
 
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
+const VS_FILLER_LOAD_SPOT_ROLES = [FillerRole.ShadeVoidDominant, FillerRole.ShadeVoidRecessive] as const;
 
 type NonWaterColorCoord = { x: number; z: number };
 type StepPhaseSpec = {
@@ -30,6 +33,11 @@ type StepPhaseSpec = {
 type BuildLoadSpotMarkerOptions = {
   markSuppressLoadSpotsInSchematic?: boolean;
   suppressLoadSpotMarkerBlock?: string;
+};
+
+type SparseLoadSpotTarget = {
+  x: number;
+  z: number;
 };
 
 function isXAxisDirection(direction: SuppressStepDirection): boolean {
@@ -133,6 +141,10 @@ function getLoadSpotCoordinate(
   }
 }
 
+function getVsFillerLoadSpotDistance(): 127 {
+  return 127;
+}
+
 const DOMINANT_SPARSE_LOAD_SPOT_OFFSETS_ODD = [15, 41, 65, 89, 113] as const;
 const DOMINANT_SPARSE_LOAD_SPOT_OFFSETS_EVEN = [14, 40, 64, 88, 112] as const;
 
@@ -159,7 +171,7 @@ function getNearestSparseLoadSpotOffsetIndex(
 }
 
 function buildSparseDominantLoadSpotMarkers(
-  coords: readonly NonWaterColorCoord[],
+  coords: readonly SparseLoadSpotTarget[],
   markerLine: number,
   stepDirection: SuppressStepDirection,
   markerY: number,
@@ -186,6 +198,29 @@ function buildSparseDominantLoadSpotMarkers(
         ? { x: markerLine, y: markerY, z: orthogonalCoord, blockName }
         : { x: orthogonalCoord, y: markerY, z: markerLine, blockName };
     });
+}
+
+function buildDirectLoadSpotMarkers(
+  coords: readonly SparseLoadSpotTarget[],
+  markerLine: number,
+  stepDirection: SuppressStepDirection,
+  markerY: number,
+  blockName: string,
+): BlockEntry[] {
+  const seen = new Set<string>();
+  const markers: BlockEntry[] = [];
+
+  for (const coord of coords) {
+    const marker = isXAxisDirection(stepDirection)
+      ? { x: markerLine, y: markerY, z: coord.z, blockName }
+      : { x: coord.x, y: markerY, z: markerLine, blockName };
+    const key = `${marker.x},${marker.y},${marker.z}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    markers.push(marker);
+  }
+
+  return markers;
 }
 
 function getJigsawOrientation(direction: SuppressStepDirection): "up_north" | "up_south" | "up_east" | "up_west" {
@@ -230,6 +265,16 @@ function getMarkerY(part: ShapePart): number | null {
     throw new Error(`Invalid load spot marker Y ${markerY}; expected within shape bounds [${part.bounds.minY}, ${part.bounds.maxY}]`);
   }
   return markerY;
+}
+
+function getShapeMarkerY(shape: GeneratedShape): number | null {
+  let minSupportFloorY = Infinity;
+  for (const part of shape.parts) {
+    for (const y of part.supportFloorYs) {
+      if (y < minSupportFloorY) minSupportFloorY = y;
+    }
+  }
+  return Number.isFinite(minSupportFloorY) ? minSupportFloorY + 1 : null;
 }
 
 function getNonWaterColorCoords(part: ShapePart): NonWaterColorCoord[] {
@@ -355,6 +400,67 @@ function buildSuppressStepLoadSpotMarkers(
   return markers;
 }
 
+function buildVsFillerLoadSpotMarkers(
+  shape: GeneratedShape,
+  stepDirection: SuppressStepDirection,
+  enabled: boolean,
+  markerBlockName: string,
+): BlockEntry[] {
+  if (!enabled) return [];
+  const markerY = getShapeMarkerY(shape);
+  if (markerY === null) return [];
+
+  const loadSpotDistance = getVsFillerLoadSpotDistance();
+  const groupedTargets = new Map<number, SparseLoadSpotTarget[]>();
+
+  for (const { x, z, role } of collectFillerRolePixels(shape, VS_FILLER_LOAD_SPOT_ROLES)) {
+    const targetX = x;
+    const targetZ = role === FillerRole.ShadeVoidDominant ? z : z + 1;
+    if (targetZ >= MAP_SIZE) {
+      throw new Error(`Invalid VS load spot target z ${targetZ}; expected within [0, ${MAP_SIZE - 1}]`);
+    }
+    const sourceLine = isXAxisDirection(stepDirection) ? x : z;
+    const markerLine = getLoadSpotCoordinate(stepDirection, sourceLine, loadSpotDistance);
+    const existingGroup = groupedTargets.get(markerLine);
+    if (existingGroup) {
+      existingGroup.push({ x: targetX, z: targetZ });
+    } else {
+      groupedTargets.set(markerLine, [{ x: targetX, z: targetZ }]);
+    }
+  }
+
+  const occupied = new Set<string>();
+  const markers: BlockEntry[] = [];
+  for (const [markerLine, coords] of groupedTargets) {
+    const directMarkers = buildDirectLoadSpotMarkers(
+      coords,
+      markerLine,
+      stepDirection,
+      markerY,
+      orientLoadSpotMarkerBlockName(markerBlockName, stepDirection),
+    );
+    const sparseMarkers = buildSparseDominantLoadSpotMarkers(
+      coords,
+      markerLine,
+      stepDirection,
+      markerY,
+      orientLoadSpotMarkerBlockName(markerBlockName, stepDirection),
+    );
+    const chosenMarkers = directMarkers.length <= sparseMarkers.length
+      ? directMarkers
+      : sparseMarkers;
+
+    for (const marker of chosenMarkers) {
+      const key = `${marker.x},${marker.y},${marker.z}`;
+      if (occupied.has(key)) continue;
+      occupied.add(key);
+      markers.push(marker);
+    }
+  }
+
+  return markers;
+}
+
 // Callers:
 // - src/lib/nbtExport.ts
 export function buildSuppressLoadSpotMarkers(
@@ -364,11 +470,13 @@ export function buildSuppressLoadSpotMarkers(
   options: BuildLoadSpotMarkerOptions,
 ): BlockEntry[] {
   const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
-  return buildSuppressStepLoadSpotMarkers(
-    shape,
-    buildMode,
-    stepDirection,
-    options.markSuppressLoadSpotsInSchematic === true,
-    markerBlockName,
-  );
+  return [
+    ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),
+    ...buildVsFillerLoadSpotMarkers(
+      shape,
+      stepDirection,
+      options.markSuppressLoadSpotsInSchematic === true && !isSuppressBuildMode(buildMode),
+      markerBlockName,
+    ),
+  ];
 }

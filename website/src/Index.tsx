@@ -46,6 +46,7 @@ import {
   DEFAULT_SUPPRESS_STEP_DIRECTION,
   DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
   type SuppressLoadSpotMarkerBlock,
+  DEFAULT_VS_FILLER_LOAD_DIRECTION,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
@@ -774,6 +775,10 @@ const Index = () => {
     const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
     return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
   });
+  const [vsFillerLoadSpotDirection, setVsFillerLoadSpotDirection] = useState<SuppressStepDirection>(() => {
+    const storedDirection = loadCached(LS_KEYS.vsFillerLoadSpotDirection, DEFAULT_VS_FILLER_LOAD_DIRECTION);
+    return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_VS_FILLER_LOAD_DIRECTION;
+  });
   const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, DEFAULT_LIGHT_WATER_DROP));
   const calcLightWaterDrop = useDeferredValue(lightWaterDrop);
   const [flatWaterDrop, setFlatWaterDrop] = useState(() => loadCached(LS_KEYS.flatWaterDrop, DEFAULT_FLAT_WATER_DROP));
@@ -1051,6 +1056,7 @@ const Index = () => {
       [LS_KEYS.mixSteps]: mixSteps,
       [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
+      [LS_KEYS.vsFillerLoadSpotDirection]: vsFillerLoadSpotDirection,
       [LS_KEYS.lightWaterDrop]: lightWaterDrop,
       [LS_KEYS.flatWaterDrop]: flatWaterDrop,
       [LS_KEYS.darkWaterDrop]: darkWaterDrop,
@@ -1093,6 +1099,7 @@ const Index = () => {
       mixSteps,
       buildAtWorldMinY,
       suppressStepDirection,
+      vsFillerLoadSpotDirection,
       lightWaterDrop,
       flatWaterDrop,
       darkWaterDrop,
@@ -2707,7 +2714,7 @@ const Index = () => {
           customColors,
           baseName,
           buildMode: effectiveBuildMode,
-          suppressStepDirection,
+          suppressStepDirection: activeSuppressDirection,
           markSuppressLoadSpotsInSchematic,
           suppressLoadSpotMarkerBlock,
         });
@@ -2921,11 +2928,23 @@ const Index = () => {
   const dominateVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
   const recessiveVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidRecessive);
   const vsFillerSpotCount = dominateVoidFillerRequiredCount + recessiveVoidFillerRequiredCount;
+  const directionControlUsesVsFillers =
+    markSuppressLoadSpotsInSchematic &&
+    !isSuppressBuildMode(buildMode) &&
+    vsFillerSpotCount > 0;
   const showSuppressDirectionControl =
     !!imageData &&
     imageValid &&
-    !lockFlatBuildMode &&
-    isSuppressStepsBuildMode(buildMode);
+    (
+      (!lockFlatBuildMode && isSuppressStepsBuildMode(buildMode)) ||
+      directionControlUsesVsFillers
+    );
+  const activeSuppressDirection = directionControlUsesVsFillers
+    ? vsFillerLoadSpotDirection
+    : suppressStepDirection;
+  const setActiveSuppressDirection = directionControlUsesVsFillers
+    ? setVsFillerLoadSpotDirection
+    : setSuppressDirection;
   const toolbarBuildSettingsProps = displayImageData && imageValid ? {
     lockFlatBuildMode: lockFlatBuildMode || (
       !!imageData &&
@@ -2951,8 +2970,8 @@ const Index = () => {
     buildMode,
     setBuildMode,
     showSuppressDirectionControl,
-    suppressDirection: suppressStepDirection,
-    setSuppressDirection,
+    suppressDirection: activeSuppressDirection,
+    setSuppressDirection: setActiveSuppressDirection,
     isSuppressDirectionSelectable,
     staircaseModeOptions,
     suppressModeOptions,

@@ -36,6 +36,7 @@ export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBloc
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
 export const DEFAULT_SUPPORT_MODE = SupportMode.None;
 export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
+export const DEFAULT_VS_FILLER_LOAD_DIRECTION = SuppressStepDirection.NorthToSouth;
 export const DEFAULT_PALETTE_SEED = false;
 export const DEFAULT_LAYER_GAP = 5;
 export const DEFAULT_MIX_STEPS = false;

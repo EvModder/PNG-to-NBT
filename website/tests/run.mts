@@ -40,18 +40,23 @@ import {
   shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
 import { normalizeCustomSelectedBlocks } from "@/utils/customColors";
+import { MAP_SIZE } from "@/utils/color";
 import type { ColorRgb } from "@/types/color";
-import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
 import { createFillerAssignments, isFillerDisabled } from "@/lib/fillerRules";
 import { convertToNbt } from "@/lib/nbtExport";
 import { hasNonWaterColorHeightVariance } from "@/lib/shapeAnalysis";
 import { generateShapeMap } from "@/lib/shapeGeneration";
+import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
+import { toShapeCoordKey } from "@/lib/shapeModel";
+import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import { SupportMode } from "@/types/ui";
 
 const TEST_ROOT = import.meta.dir;
 const CASES_ROOT = path.join(TEST_ROOT, "cases");
 const FAILURE_ROOT = path.join(TEST_ROOT, "failures");
 const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
+const VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH = 14;
 type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -69,6 +74,61 @@ if (typeof globalThis.ImageData === "undefined") {
   }
 
   Object.assign(globalThis, { ImageData: PolyfilledImageData });
+}
+
+function assertVsSparseMarkerCoverage(
+  z: number,
+  role: FillerRole,
+  expectedMarkerXs: readonly number[],
+): void {
+  const cells = new Map<number, FillerRole[]>();
+  const targetZ = role === FillerRole.ShadeVoidDominant ? z : z + 1;
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    if (((x + targetZ) & 1) !== 1) continue;
+    cells.set(toShapeCoordKey(x, 64, z), [role]);
+  }
+  const shape: GeneratedShape = {
+    parts: [{
+      cells,
+      bounds: {
+        minY: 64,
+        maxY: 64,
+        minZ: z,
+        maxZ: z,
+      },
+      supportFloorYs: new Set<number>([63]),
+    }],
+    partType: ShapePartType.SingleColumn,
+    splitExportNames: null,
+    suppressedTransparentVsCollisionCount: 0,
+  };
+  const markers = buildSuppressLoadSpotMarkers(
+    shape,
+    BuildMode.StaircaseClassic,
+    SuppressStepDirection.NorthToSouth,
+    {
+      markSuppressLoadSpotsInSchematic: true,
+      suppressLoadSpotMarkerBlock: "jigsaw",
+    },
+  );
+  const markerXs = markers.map(marker => marker.x).sort((a, b) => a - b);
+  const expectedXs = [...expectedMarkerXs];
+
+  if (markerXs.length !== expectedXs.length || markerXs.some((x, index) => x !== expectedXs[index])) {
+    throw new Error(`Unexpected VS sparse marker Xs for z=${z}: got [${markerXs.join(", ")}], expected [${expectedXs.join(", ")}]`);
+  }
+
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    if (((x + targetZ) & 1) !== 1) continue;
+    if (!markerXs.some(markerX => Math.abs(markerX - x) <= VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH)) {
+      throw new Error(`VS sparse marker coverage gap for z=${z}, role=${role} at x=${x}`);
+    }
+  }
+}
+
+function assertVsSparseMarkerInvariants(): void {
+  assertVsSparseMarkerCoverage(0, FillerRole.ShadeVoidRecessive, [14, 40, 64, 88, 112]);
+  assertVsSparseMarkerCoverage(1, FillerRole.ShadeVoidRecessive, [15, 41, 65, 89, 113]);
 }
 
 type FixtureWaterDropOverrides = Partial<Record<"dark" | "flat" | "light", number>>;
@@ -989,6 +1049,8 @@ async function runFixtureCase(
 }
 
 async function main(): Promise<number> {
+  assertVsSparseMarkerInvariants();
+
   const rawArgs = process.argv.slice(2);
   const updateExpected = rawArgs.includes("--update");
   const requestedCases = new Set(rawArgs.filter(arg => arg !== "--update"));

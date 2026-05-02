@@ -10,6 +10,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/suppressLoadMarkers.ts
  * - src/lib/previewImageEdits.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
@@ -179,6 +180,7 @@ export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/previewImageEdits.ts
 export function collectFillerRolePixels(
   shape: GeneratedShape,

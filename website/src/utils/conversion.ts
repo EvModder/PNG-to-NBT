@@ -17,6 +17,7 @@
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/lib/codecPreset.ts
+ * - src/lib/suppressLoadMarkers.ts
  * - src/lib/shapeGeneration.ts
  * - tests/run.mts
  */
@@ -128,6 +129,7 @@ export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/suppressLoadMarkers.ts
 export function isSuppressBuildMode(buildMode: BuildMode): boolean {
   return !isStaircaseBuildMode(buildMode);
 }

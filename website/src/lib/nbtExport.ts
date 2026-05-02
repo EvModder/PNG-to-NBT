@@ -16,6 +16,7 @@ import { type BlockEntry, gzipCompress, writeStructureNbt } from "@/utils/nbtWri
 import { createZip } from "@/utils/zip";
 import { BuildMode, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { WATER_BASE_INDEX } from "@/data/mapColors";
+import { isSuppressBuildMode } from "@/utils/conversion";
 import {
   isShapeColorCell,
   isShapeFillerCell,
@@ -57,6 +58,7 @@ function getLoadMarkerDistance(options: ExportBoundsOptions): number {
   if (!options.markSuppressLoadSpotsInSchematic) return 0;
   if (options.buildMode === BuildMode.SuppressStepPairs) return 127;
   if (options.buildMode === BuildMode.SuppressStepChecker) return 126;
+  if (!isSuppressBuildMode(options.buildMode)) return 127;
   return 0;
 }
 
