@@ -1,6 +1,5 @@
 /**
  * Public API:
- * - BlockEntry
  * - writeStructureNbt()
  * - gzipCompress()
  *
@@ -48,8 +47,6 @@ class NbtWriter {
     this.writeInt(count);
   }
 
-  endCompoundElement() { this.writeByte(0); }
-
   toUint8Array(): Uint8Array {
     return new Uint8Array(this.data);
   }
@@ -60,14 +57,6 @@ const TAG = {
   ByteArray: 7, String: 8, List: 9, Compound: 10, IntArray: 11, LongArray: 12,
 } as const;
 
-// Callers:
-// - src/lib/nbtExport.ts
-export interface BlockEntry {
-  x: number;
-  y: number;
-  z: number;
-  blockName: string; // e.g. "minecraft:stone" or "minecraft:oak_leaves[waterlogged=true]"
-}
 
 // Parse "minecraft:oak_leaves[waterlogged=true]" into name + properties
 function parseBlockId(id: string): { name: string; props: Record<string, string> } {
@@ -86,22 +75,14 @@ function parseBlockId(id: string): { name: string; props: Record<string, string>
 // Callers:
 // - src/lib/nbtExport.ts
 export function writeStructureNbt(
-  blocks: BlockEntry[],
+  blocks: readonly { x: number; y: number; z: number; state: number }[],
+  paletteBlockIds: readonly string[],
   sizeX: number,
   sizeY: number,
-  sizeZ: number
+  sizeZ: number,
+  author?: string,
 ): Uint8Array {
-  // Build palette with properties support
-  // Key is the full blockName string (including properties)
-  const paletteMap = new Map<string, number>();
-  const palette: { name: string; props: Record<string, string> }[] = [];
-  for (const b of blocks) {
-    const blockName = b.blockName;
-    if (!paletteMap.has(blockName)) {
-      paletteMap.set(blockName, palette.length);
-      palette.push(parseBlockId(blockName));
-    }
-  }
+  const palette = paletteBlockIds.map(parseBlockId);
 
   const w = new NbtWriter();
 
@@ -112,6 +93,7 @@ export function writeStructureNbt(
   w.writeInt(sizeX);
   w.writeInt(sizeY);
   w.writeInt(sizeZ);
+  if (author) w.stringTag("author", author);
 
   w.beginList("palette", TAG.Compound, palette.length);
   for (const entry of palette) {
@@ -124,18 +106,17 @@ export function writeStructureNbt(
       }
       w.endCompound();
     }
-    w.endCompoundElement();
+    w.endCompound();
   }
 
   w.beginList("blocks", TAG.Compound, blocks.length);
   for (const b of blocks) {
-    const blockName = b.blockName;
     w.beginList("pos", TAG.Int, 3);
     w.writeInt(b.x);
     w.writeInt(b.y);
     w.writeInt(b.z);
-    w.intTag("state", paletteMap.get(blockName)!);
-    w.endCompoundElement();
+    w.intTag("state", b.state);
+    w.endCompound();
   }
 
   w.beginList("entities", TAG.End, 0);
@@ -157,7 +138,7 @@ export async function gzipCompress(data: Uint8Array): Promise<Uint8Array> {
     if (done) break;
     chunks.push(value);
   }
-  const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const result = new Uint8Array(totalLength);
   let offset = 0;
   for (const chunk of chunks) {

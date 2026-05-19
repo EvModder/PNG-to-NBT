@@ -1,6 +1,5 @@
 /**
  * Public API:
- * - toBlockIconKey()
  * - getBlockIconAsset()
  * - getBlockIconAtlasEntry()
  * - renderBlockIconAtlasEntryToCanvas()
@@ -29,9 +28,7 @@ type BlockIconAsset = {
 
 const KNOWN_UNUSED_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.unused.entries));
 
-// Callers:
-// - src/lib/blockIconAtlas.ts
-export function toBlockIconKey(raw: string): string {
+function toBlockIconKey(raw: string): string {
   return stripDefaultBlockNamespace(raw)
     .replace(/__/g, "__us__")
     .replace(/\[/g, "__lb__")

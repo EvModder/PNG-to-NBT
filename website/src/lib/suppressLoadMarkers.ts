@@ -4,6 +4,7 @@
  *
  * Callers:
  * - src/lib/nbtExport.ts
+ * - tests/invariants.mts
  */
 import {
   DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
@@ -17,7 +18,6 @@ import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
 import { isSuppressBuildMode } from "@/utils/conversion";
-import type { BlockEntry } from "@/utils/nbtWriter";
 
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
@@ -38,6 +38,13 @@ type BuildLoadSpotMarkerOptions = {
 type SparseLoadSpotTarget = {
   x: number;
   z: number;
+};
+
+type LoadSpotMarkerEntry = {
+  x: number;
+  y: number;
+  z: number;
+  blockName: string;
 };
 
 function isXAxisDirection(direction: SuppressStepDirection): boolean {
@@ -176,7 +183,7 @@ function buildSparseDominantLoadSpotMarkers(
   stepDirection: SuppressStepDirection,
   markerY: number,
   blockName: string,
-): BlockEntry[] {
+): LoadSpotMarkerEntry[] {
   const offsets = getDominantSparseLoadSpotOffsets(markerLine);
   const usedOffsetIndices = new Set<number>();
 
@@ -206,9 +213,9 @@ function buildDirectLoadSpotMarkers(
   stepDirection: SuppressStepDirection,
   markerY: number,
   blockName: string,
-): BlockEntry[] {
+): LoadSpotMarkerEntry[] {
   const seen = new Set<string>();
-  const markers: BlockEntry[] = [];
+  const markers: LoadSpotMarkerEntry[] = [];
 
   for (const coord of coords) {
     const marker = isXAxisDirection(stepDirection)
@@ -310,13 +317,13 @@ function buildSuppressStepPairMarkers(
   stepDirection: SuppressStepDirection,
   markerY: number,
   markerBlockName: string,
-): BlockEntry[] {
+): LoadSpotMarkerEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
     spec.loadLine,
     SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE,
   );
-  const markers: BlockEntry[] = [];
+  const markers: LoadSpotMarkerEntry[] = [];
 
   if (isXAxisDirection(stepDirection)) {
     for (let z = 0; z < MAP_SIZE; ++z) {
@@ -351,7 +358,7 @@ function buildSuppressStepCheckerMarkers(
   stepDirection: SuppressStepDirection,
   markerY: number,
   markerBlockName: string,
-): BlockEntry[] {
+): LoadSpotMarkerEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
     spec.loadLine,
@@ -372,12 +379,12 @@ function buildSuppressStepLoadSpotMarkers(
   stepDirection: SuppressStepDirection,
   enabled: boolean,
   markerBlockName: string,
-): BlockEntry[] {
+): LoadSpotMarkerEntry[] {
   if (!enabled || shape.partType !== ShapePartType.SuppressStepPhases) return [];
   if (buildMode !== BuildMode.SuppressStepPairs && buildMode !== BuildMode.SuppressStepChecker) return [];
 
   const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
-  const markers: BlockEntry[] = [];
+  const markers: LoadSpotMarkerEntry[] = [];
   let nextSpecIndex = 0;
   for (const part of shape.parts) {
     const coords = getNonWaterColorCoords(part);
@@ -405,7 +412,7 @@ function buildVsFillerLoadSpotMarkers(
   stepDirection: SuppressStepDirection,
   enabled: boolean,
   markerBlockName: string,
-): BlockEntry[] {
+): LoadSpotMarkerEntry[] {
   if (!enabled) return [];
   const markerY = getShapeMarkerY(shape);
   if (markerY === null) return [];
@@ -430,7 +437,7 @@ function buildVsFillerLoadSpotMarkers(
   }
 
   const occupied = new Set<string>();
-  const markers: BlockEntry[] = [];
+  const markers: LoadSpotMarkerEntry[] = [];
   for (const [markerLine, coords] of groupedTargets) {
     const directMarkers = buildDirectLoadSpotMarkers(
       coords,
@@ -463,12 +470,13 @@ function buildVsFillerLoadSpotMarkers(
 
 // Callers:
 // - src/lib/nbtExport.ts
+// - tests/invariants.mts
 export function buildSuppressLoadSpotMarkers(
   shape: GeneratedShape,
   buildMode: BuildMode,
   stepDirection: SuppressStepDirection,
   options: BuildLoadSpotMarkerOptions,
-): BlockEntry[] {
+): LoadSpotMarkerEntry[] {
   const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
   return [
     ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),

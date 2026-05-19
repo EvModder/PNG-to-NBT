@@ -49,6 +49,7 @@ const SHAPE_COORD_Y_SIZE = 8192;
 
 // Callers:
 // - src/lib/shapeGeneration.ts
+// - tests/invariants.mts
 export function toShapeCoordKey(x: number, y: number, z: number): ShapeCoordKey {
   return ((x + 1) * SHAPE_COORD_Y_SIZE + (y + SHAPE_COORD_Y_OFFSET)) * SHAPE_COORD_Z_SIZE + (z + SHAPE_COORD_Z_OFFSET);
 }

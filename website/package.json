@@ -14,6 +14,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "test:fixtures": "bun run tests/run.mts",
+    "test:invariants": "bun run tests/invariants.mts",
+    "test:all": "bun run test:invariants && bun run test:fixtures",
     "audit:mapcolors": "node scripts/audit-mapcolors.mjs",
     "audit:mapcolors:strict": "node scripts/audit-mapcolors.mjs --strict-missing",
     "build:block-icons": "python3 scripts/generate-stateful-icon-overrides.py && node scripts/build-block-icon-files.mjs && python3 scripts/postprocess-block-icon-files.py && python3 scripts/render-shulker-icons.py && python3 scripts/build-icon-atlases.py"

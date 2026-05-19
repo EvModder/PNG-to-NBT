@@ -26,6 +26,8 @@ type SecretsSettingsDialogProps = {
   setShowTransparentRow: Dispatch<SetStateAction<boolean>>;
   showExcludedBlocks: boolean;
   setShowExcludedBlocks: Dispatch<SetStateAction<boolean>>;
+  collapseDuplicateNbtPaletteStates: boolean;
+  setCollapseDuplicateNbtPaletteStates: Dispatch<SetStateAction<boolean>>;
   forceXZ128: boolean;
   setForceXZ128: Dispatch<SetStateAction<boolean>>;
   forceZ129: boolean;
@@ -122,6 +124,8 @@ export function SecretsSettingsDialog({
   setShowTransparentRow,
   showExcludedBlocks,
   setShowExcludedBlocks,
+  collapseDuplicateNbtPaletteStates,
+  setCollapseDuplicateNbtPaletteStates,
   forceXZ128,
   setForceXZ128,
   forceZ129,
@@ -186,6 +190,11 @@ export function SecretsSettingsDialog({
             checked={showExcludedBlocks}
             onChange={setShowExcludedBlocks}
             label={messages.dialogs.options.showExcludedBlocks}
+          />
+          <OptionRow
+            checked={collapseDuplicateNbtPaletteStates}
+            onChange={setCollapseDuplicateNbtPaletteStates}
+            label={messages.dialogs.options.collapseDuplicateNbtPaletteStates}
           />
           <OptionRow
             checked={forceXZ128}

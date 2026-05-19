@@ -11,6 +11,7 @@ import {
   DEFAULT_BUILD_AT_WORLD_MIN_Y,
   DEFAULT_COLUMN_ORDER,
   DEFAULT_CONVERT_UNSUPPORTED_COLORS,
+  DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES,
   DEFAULT_CROP_IMAGE,
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
@@ -824,6 +825,10 @@ const Index = () => {
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, DEFAULT_COLUMN_ORDER));
   const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, DEFAULT_SHOW_TRANSPARENT_ROW));
   const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, DEFAULT_SHOW_EXCLUDED_BLOCKS));
+  const [collapseDuplicateNbtPaletteStates, setCollapseDuplicateNbtPaletteStates] = useState(() => loadCached(
+    LS_KEYS.collapseDuplicateNbtPaletteStates,
+    DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES,
+  ));
   const [forceXZ128, setForceXZ128] = useState(() => loadCached(LS_KEYS.forceXZ128, DEFAULT_FORCE_XZ128));
   const [forceZ129, setForceZ129] = useState(() => loadCached(LS_KEYS.forceZ129, DEFAULT_FORCE_Z129));
   const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.applySupportFloorYs, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
@@ -1068,6 +1073,7 @@ const Index = () => {
       [LS_KEYS.columnOrder]: columnOrder,
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
+      [LS_KEYS.collapseDuplicateNbtPaletteStates]: collapseDuplicateNbtPaletteStates,
       [LS_KEYS.forceXZ128]: forceXZ128,
       [LS_KEYS.forceZ129]: forceZ129,
       [LS_KEYS.applySupportFloorYs]: applySupportFloorYs,
@@ -1111,6 +1117,7 @@ const Index = () => {
       columnOrder,
       showTransparentRow,
       showExcludedBlocks,
+      collapseDuplicateNbtPaletteStates,
       forceXZ128,
       forceZ129,
       applySupportFloorYs,
@@ -2708,6 +2715,7 @@ const Index = () => {
           selectedBlocks: preset.selectedBlocks,
           fillerAssignments: uiFillerAssignments,
           applySupportFloorYs,
+          collapseDuplicatePaletteStates: collapseDuplicateNbtPaletteStates,
           forceXZ128,
           forceZ129,
           selectedBlocksCustom,
@@ -3739,6 +3747,8 @@ const Index = () => {
         setShowTransparentRow={setShowTransparentRow}
         showExcludedBlocks={showExcludedBlocks}
         setShowExcludedBlocks={setShowExcludedBlocks}
+        collapseDuplicateNbtPaletteStates={collapseDuplicateNbtPaletteStates}
+        setCollapseDuplicateNbtPaletteStates={setCollapseDuplicateNbtPaletteStates}
         forceXZ128={forceXZ128}
         setForceXZ128={setForceXZ128}
         forceZ129={forceZ129}

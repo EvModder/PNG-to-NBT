@@ -45,6 +45,7 @@ export const STORAGE_KEYS = {
   darkWaterDrop: "mapart_dark_water_drop",
   showTransparentRow: "mapart_secret_show_transparent_row",
   showExcludedBlocks: "mapart_secret_show_excluded_blocks",
+  collapseDuplicateNbtPaletteStates: "mapart_secret_collapse_duplicate_nbt_palette_states",
   forceXZ128: "mapart_secret_force_xz128",
   forceZ129: "mapart_secret_force_z129",
   applySupportFloorYs: "mapart_secret_apply_support_floor_ys",

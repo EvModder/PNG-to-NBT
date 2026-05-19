@@ -6,15 +6,17 @@
  * Callers:
  * - src/Index.tsx
  * - tests/run.mts
+ * - tests/invariants.mts
  */
 import { MAP_SIZE } from "@/utils/color";
+import { DEFAULT_NBT_AUTHOR } from "@/data/defaultSettings";
 import type { ColorRef } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
-import { type BlockEntry, gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
+import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { createZip } from "@/utils/zip";
-import { BuildMode, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
+import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { WATER_BASE_INDEX } from "@/data/mapColors";
 import { isSuppressBuildMode } from "@/utils/conversion";
 import {
@@ -31,6 +33,7 @@ import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
 interface ExportOptions extends ColorBlockSelections {
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
+  collapseDuplicatePaletteStates?: boolean;
   forceXZ128?: boolean;
   forceZ129?: boolean;
   xColumnRange?: [number, number];
@@ -42,9 +45,98 @@ interface ExportOptions extends ColorBlockSelections {
   suppressLoadSpotMarkerBlock?: string;
 }
 
-// Callers:
-// - src/Index.tsx
-export interface NbtExportEntry {
+type ExportPaletteRole = "visible" | "convenience" | "shading" | "vs_filler" | "support";
+const EXPORT_PALETTE_ROLE_ORDER = ["visible", "convenience", "shading", "vs_filler", "support"] as const;
+
+interface PaletteIndexedBlock {
+  x: number;
+  y: number;
+  z: number;
+  state: number;
+}
+
+interface PaletteSourceBlock {
+  x: number;
+  y: number;
+  z: number;
+  blockName: string;
+  paletteRole?: ExportPaletteRole;
+}
+
+function comparePaletteSourceBlocks(left: PaletteSourceBlock, right: PaletteSourceBlock): number {
+  if (left.x !== right.x) return left.x - right.x;
+  if (left.z !== right.z) return left.z - right.z;
+  return right.y - left.y;
+}
+
+function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
+  switch (role) {
+    case FillerRole.StairStep:
+    case FillerRole.WaterPath:
+      return "convenience";
+    case FillerRole.ShadeNorthRow:
+    case FillerRole.ShadeSuppress:
+    case FillerRole.ShadeSuppressLate:
+      return "shading";
+    case FillerRole.ShadeVoidDominant:
+    case FillerRole.ShadeVoidRecessive:
+      return "vs_filler";
+    case FillerRole.SupportAll:
+    case FillerRole.SupportFragile:
+    case FillerRole.SupportWaterBase:
+    case FillerRole.SupportWaterSides:
+    case FillerRole.SupportWaterSidesCovered:
+      return "support";
+  }
+  const exhaustiveCheck: never = role;
+  return exhaustiveCheck;
+}
+
+function buildStructurePaletteStateEntries(
+  blocks: readonly PaletteSourceBlock[],
+  collapseDuplicatePaletteStates: boolean,
+): { paletteBlockIds: string[]; stateBlocks: PaletteIndexedBlock[] } {
+  const paletteBlockIds: string[] = [];
+  const blockIndexesByRole: Record<ExportPaletteRole, number[]> = {
+    visible: [],
+    convenience: [],
+    shading: [],
+    vs_filler: [],
+    support: [],
+  };
+  const stateByBlockIndex = new Array<number>(blocks.length);
+  const sharedPaletteIndexByBlockName = collapseDuplicatePaletteStates ? new Map<string, number>() : null;
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    blockIndexesByRole[blocks[index].paletteRole ?? "visible"].push(index);
+  }
+
+  for (const paletteRole of EXPORT_PALETTE_ROLE_ORDER) {
+    const paletteIndexByBlockName = sharedPaletteIndexByBlockName ?? new Map<string, number>();
+    for (const blockIndex of blockIndexesByRole[paletteRole]) {
+      const blockName = blocks[blockIndex].blockName;
+      let state = paletteIndexByBlockName.get(blockName);
+      if (state === undefined) {
+        state = paletteBlockIds.length;
+        paletteIndexByBlockName.set(blockName, state);
+        paletteBlockIds.push(blockName);
+      }
+      stateByBlockIndex[blockIndex] = state;
+    }
+  }
+
+  return {
+    paletteBlockIds,
+    stateBlocks: blocks.map((block, index) => ({
+      x: block.x,
+      y: block.y,
+      z: block.z,
+      state: stateByBlockIndex[index]!,
+    })),
+  };
+}
+
+interface NbtExportEntry {
   name: string;
   data: Uint8Array;
 }
@@ -124,8 +216,8 @@ function resolveExportShapeColorBlockName(
   return blockBaseName === "minecraft:water" ? "minecraft:water[level=8]" : blockName;
 }
 
-function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs: ReadonlySet<number>): BlockEntry[] {
-  const resolved: BlockEntry[] = [];
+function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs: ReadonlySet<number>): PaletteSourceBlock[] {
+  const resolved: PaletteSourceBlock[] = [];
   const occupied = new Set<number>();
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
   const waterTopYByColumn = getWaterColumnTopY(part);
@@ -153,22 +245,16 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
       const override = getFragileSupportOverride(part, coord, assignment.role, assignedSupportBlock, options);
       const blockName = override ? resolveExportBlockName(override.replacementBlockId) : fillerName;
       if (!blockName) continue;
-      resolved.push({ x, y, z, blockName });
+      resolved.push({ x, y, z, blockName, paletteRole: getExportPaletteRoleForFiller(assignment.role) });
       occupied.add(coord);
     }
   }
 
-  return resolved;
+  return resolved.toSorted(comparePaletteSourceBlocks);
 }
 
-function materializeShapeParts(shape: GeneratedShape, options: ExportOptions): BlockEntry[][] {
-  return shape.parts.map(part =>
-    materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
-  );
-}
-
-function normalizeAndMeasure(
-  blocks: BlockEntry[],
+function normalizeAndMeasure<T extends { x: number; y: number; z: number }>(
+  blocks: T[],
   options: Pick<ExportOptions, "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceXZ128" | "forceZ129">,
 ): { sizeX: number; sizeY: number; sizeZ: number } {
   const forceXZ128 = options.forceXZ128 !== false;
@@ -216,17 +302,27 @@ function normalizeAndMeasure(
   };
 }
 
+async function writeExportBlocksToNbt(
+  blocks: PaletteSourceBlock[],
+  options: ExportOptions,
+): Promise<Uint8Array> {
+  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
+  const { paletteBlockIds, stateBlocks } = buildStructurePaletteStateEntries(
+    blocks,
+    options.collapseDuplicatePaletteStates !== false,
+  );
+  return gzipCompress(writeStructureNbt(stateBlocks, paletteBlockIds, sizeX, sizeY, sizeZ, DEFAULT_NBT_AUTHOR));
+}
+
 async function buildSplitEntries(
-  parts: BlockEntry[][],
+  parts: PaletteSourceBlock[][],
   options: ExportOptions,
   names: [string, string],
 ): Promise<NbtExportEntry[]> {
-  const toNbt = async (blocks: BlockEntry[]) => {
-    const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
-    return gzipCompress(writeStructureNbt(blocks, sizeX, sizeY, sizeZ));
-  };
-
-  const [firstData, secondData] = await Promise.all([toNbt(parts[0] ?? []), toNbt(parts[1] ?? [])]);
+  const [firstData, secondData] = await Promise.all([
+    writeExportBlocksToNbt(parts[0] ?? [], options),
+    writeExportBlocksToNbt(parts[1] ?? [], options),
+  ]);
   return [
     { name: `${options.baseName}-${names[0]}.nbt`, data: firstData },
     { name: `${options.baseName}-${names[1]}.nbt`, data: secondData },
@@ -235,7 +331,7 @@ async function buildSplitEntries(
 
 async function buildSingleEntry(
   shape: GeneratedShape,
-  parts: BlockEntry[][],
+  parts: PaletteSourceBlock[][],
   options: ExportOptions,
 ): Promise<NbtExportEntry> {
   const blocks = parts.flat();
@@ -250,10 +346,9 @@ async function buildSingleEntry(
   )) {
     blocks.push(marker);
   }
-  const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
   return {
     name: `${options.baseName}.nbt`,
-    data: await gzipCompress(writeStructureNbt(blocks, sizeX, sizeY, sizeZ)),
+    data: await writeExportBlocksToNbt(blocks, options),
   };
 }
 
@@ -263,13 +358,16 @@ export async function convertToNbtEntries(
   shape: GeneratedShape,
   options: ExportOptions,
 ): Promise<NbtExportEntry[]> {
-  const parts = materializeShapeParts(shape, options);
+  const parts = shape.parts.map(part =>
+    materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
+  );
   if (shape.splitExportNames) return buildSplitEntries(parts, options, shape.splitExportNames);
   return [await buildSingleEntry(shape, parts, options)];
 }
 
 // Callers:
-// - src/Index.tsx
+// - tests/run.mts
+// - tests/invariants.mts
 export async function convertToNbt(
   shape: GeneratedShape,
   options: ExportOptions,

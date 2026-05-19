@@ -5,6 +5,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/nbtExport.ts
  * - src/lib/suppressLoadMarkers.ts
  * - tests/run.mts
  */
@@ -26,9 +27,12 @@ export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/nbtExport.ts
+// - tests/run.mts
 export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "barrier"] as const;
 export type SuppressLoadSpotMarkerBlock = typeof SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS[number];
 export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBlock = "jigsaw";
+export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 
 // Callers:
 // - src/Index.tsx
@@ -60,6 +64,7 @@ export const DEFAULT_MAX_PER_SPLIT = true;
 export const DEFAULT_COLUMN_ORDER: ColumnId[] = ["clr", "id", "name", "block", "options", "required"];
 export const DEFAULT_SHOW_TRANSPARENT_ROW = false;
 export const DEFAULT_SHOW_EXCLUDED_BLOCKS = false;
+export const DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES = true;
 export const DEFAULT_FORCE_XZ128 = true;
 export const DEFAULT_FORCE_Z129 = false;
 export const DEFAULT_APPLY_SUPPORT_FLOOR_YS = true;

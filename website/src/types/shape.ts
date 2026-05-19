@@ -21,6 +21,7 @@ import { FillerRole } from "./conversion";
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
+// - tests/invariants.mts
 export enum ShapePartType {
   SingleColumn = "single_column",
   SuppressStepPhases = "suppress_step_phases",
@@ -32,6 +33,7 @@ export enum ShapePartType {
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/nbtExport.ts
+// - tests/invariants.mts
 export interface GeneratedShape {
   parts: ShapePart[];
   partType: ShapePartType;
@@ -42,6 +44,7 @@ export interface GeneratedShape {
 // Callers:
 // - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
+// - tests/invariants.mts
 export type ShapeCell = ColorRef | FillerRole[];
 
 // Callers:

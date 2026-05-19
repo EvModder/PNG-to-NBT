@@ -334,6 +334,7 @@ export const esCatalog = {
     options: {
       showTransparentRow: "Mostrar fila color_id=0",
       showExcludedBlocks: "Mostrar bloques excluidos",
+      collapseDuplicateNbtPaletteStates: "Colapsar estados duplicados de la paleta NBT",
       forceXZ128: "Ancho XZ siempre 128",
       forceZ129: "Ancho Z siempre 129",
       assumeFloor: "Suponer suelo",
