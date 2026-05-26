@@ -46,7 +46,7 @@ interface ExportOptions extends ColorBlockSelections {
 }
 
 type ExportPaletteRole = "visible" | "convenience" | "shading" | "vs_filler" | "support";
-const EXPORT_PALETTE_ROLE_ORDER = ["visible", "convenience", "shading", "vs_filler", "support"] as const;
+const EXPORT_PALETTE_ROLE_ORDER = ["visible", "shading", "vs_filler", "support", "convenience"] as const;
 
 interface PaletteIndexedBlock {
   x: number;
@@ -75,7 +75,11 @@ function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
     case FillerRole.WaterPath:
       return "convenience";
     case FillerRole.ShadeNorthRow:
+    case FillerRole.ShadeNorthRowBreakable:
+    case FillerRole.ShadeNorthRowPushable:
     case FillerRole.ShadeSuppress:
+    case FillerRole.ShadeSuppressBreakable:
+    case FillerRole.ShadeSuppressPushable:
     case FillerRole.ShadeSuppressLate:
       return "shading";
     case FillerRole.ShadeVoidDominant:

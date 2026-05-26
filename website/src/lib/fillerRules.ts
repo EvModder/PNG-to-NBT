@@ -4,6 +4,8 @@
  * - getSupportModeFillerRoles()
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
+ * - isCrubTechShadeBreakableValid()
+ * - isCrubTechShadePushableValid()
  * - isWaterSideSupportFillerValid()
  * - buildFillerAssignmentMap()
  * - resolveAssignedFillerName()
@@ -27,6 +29,10 @@ function isShadeCriticalFillerRole(role: FillerRole): boolean {
   switch (role) {
     case FillerRole.ShadeNorthRow:
     case FillerRole.ShadeSuppress:
+    case FillerRole.ShadeNorthRowBreakable:
+    case FillerRole.ShadeNorthRowPushable:
+    case FillerRole.ShadeSuppressBreakable:
+    case FillerRole.ShadeSuppressPushable:
     case FillerRole.ShadeSuppressLate:
     case FillerRole.ShadeVoidDominant:
     case FillerRole.ShadeVoidRecessive:
@@ -35,6 +41,30 @@ function isShadeCriticalFillerRole(role: FillerRole): boolean {
       return false;
   }
 }
+
+const CRUBTECH_BREAKABLE_FILLER_BLOCKS = new Set<string>([
+  "moss_block",
+]);
+
+// Conservative denylist for obvious piston/slime-incompatible choices.
+// This is only used for warnings; unknown normal blocks are treated as pushable.
+const CRUBTECH_NON_PUSHABLE_FILLER_BLOCKS = new Set<string>([
+  "bedrock",
+  "barrier",
+  "obsidian",
+  "crying_obsidian",
+  "respawn_anchor",
+  "reinforced_deepslate",
+  "command_block",
+  "chain_command_block",
+  "repeating_command_block",
+  "end_portal_frame",
+  "end_portal",
+  "end_gateway",
+  "moving_piston",
+  "piston_head",
+  "spawner",
+]);
 
 // Callers:
 // - src/Index.tsx
@@ -92,6 +122,8 @@ export function getSupportModeFillerRoles(
 export function createFillerAssignments(
   supportFillerBlock: string,
   shadeFillerBlock: string,
+  crubTechShadeBreakableFillerBlock: string,
+  crubTechShadePushableFillerBlock: string,
   dominateVoidFillerBlock: string,
   recessiveVoidFillerBlock: string,
   suppress2LayerLateFillerBlock: string,
@@ -102,6 +134,10 @@ export function createFillerAssignments(
   const assignments: FillerAssignment[] = [
     { role: FillerRole.ShadeSuppress, block: shadeFillerBlock },
     { role: FillerRole.ShadeNorthRow, block: shadeFillerBlock },
+    { role: FillerRole.ShadeSuppressBreakable, block: crubTechShadeBreakableFillerBlock },
+    { role: FillerRole.ShadeNorthRowBreakable, block: crubTechShadeBreakableFillerBlock },
+    { role: FillerRole.ShadeSuppressPushable, block: crubTechShadePushableFillerBlock },
+    { role: FillerRole.ShadeNorthRowPushable, block: crubTechShadePushableFillerBlock },
     { role: FillerRole.ShadeVoidDominant, block: dominateVoidFillerBlock || shadeFillerBlock },
     { role: FillerRole.ShadeVoidRecessive, block: recessiveVoidFillerBlock || shadeFillerBlock },
     { role: FillerRole.ShadeSuppressLate, block: suppress2LayerLateFillerBlock || shadeFillerBlock },
@@ -125,6 +161,20 @@ export function isShadeFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   if (!normalized) return false;
   return DISABLED_FILLER_ALIASES.has(normalized) || TRANSPARENT_FILLER_BLOCKS.has(normalized);
+}
+
+// Callers:
+// - src/Index.tsx
+export function isCrubTechShadeBreakableValid(fillerBlock: string): boolean {
+  const normalized = normalizeBlockId(fillerBlock);
+  return !!normalized && !isShadeFillerDisabled(fillerBlock) && CRUBTECH_BREAKABLE_FILLER_BLOCKS.has(normalized);
+}
+
+// Callers:
+// - src/Index.tsx
+export function isCrubTechShadePushableValid(fillerBlock: string): boolean {
+  const normalized = normalizeBlockId(fillerBlock);
+  return !!normalized && !isShadeFillerDisabled(fillerBlock) && !CRUBTECH_NON_PUSHABLE_FILLER_BLOCKS.has(normalized);
 }
 
 function isTransparentMapColorBlock(fillerBlock: string): boolean {

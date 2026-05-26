@@ -7,6 +7,8 @@
  */
 import { Fragment, useEffect, useState, type MutableRefObject, type ReactNode } from "react";
 import {
+  DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
+  DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_SHADE_FILLER_BLOCK,
@@ -44,6 +46,16 @@ type ToolbarFillerSettingsProps = {
   shadeFillerIsNorthRowOnly: boolean;
   shadeFillerShadingDisabled: boolean;
   shadeFillerRequiredCount: number;
+  showShadeBreakableFillerInput: boolean;
+  shadeBreakableFillerBlock: string;
+  setShadeBreakableFillerBlock: (value: string) => void;
+  shadeBreakableFillerShadingDisabled: boolean;
+  shadeBreakableFillerRequiredCount: number;
+  showShadePushableFillerInput: boolean;
+  shadePushableFillerBlock: string;
+  setShadePushableFillerBlock: (value: string) => void;
+  shadePushableFillerShadingDisabled: boolean;
+  shadePushableFillerRequiredCount: number;
   showDominateVoidFillerInput: boolean;
   dominateVoidFillerBlock: string;
   setDominateVoidFillerBlock: (value: string) => void;
@@ -148,6 +160,16 @@ export function ToolbarFillerSettings({
   shadeFillerIsNorthRowOnly,
   shadeFillerShadingDisabled,
   shadeFillerRequiredCount,
+  showShadeBreakableFillerInput,
+  shadeBreakableFillerBlock,
+  setShadeBreakableFillerBlock,
+  shadeBreakableFillerShadingDisabled,
+  shadeBreakableFillerRequiredCount,
+  showShadePushableFillerInput,
+  shadePushableFillerBlock,
+  setShadePushableFillerBlock,
+  shadePushableFillerShadingDisabled,
+  shadePushableFillerRequiredCount,
   showDominateVoidFillerInput,
   dominateVoidFillerBlock,
   setDominateVoidFillerBlock,
@@ -202,6 +224,42 @@ export function ToolbarFillerSettings({
           showRequiredBadge={hasImageData && !shadeFillerShadingDisabled && shadeFillerRequiredCount > 0}
           requiredTooltip={shadeFillerRequiredTooltip}
           requiredCountLabel={formatRequiredCount(shadeFillerRequiredCount)}
+        />
+      ),
+    });
+  }
+
+  if (showShadeBreakableFillerInput) {
+    groups.push({
+      key: "shade-breakable",
+      node: (
+        <FillerField
+          label={messages.fillers.crubTechBreakableLabel}
+          tooltip={messages.fillers.crubTechBreakableTooltip}
+          value={shadeBreakableFillerBlock}
+          setValue={setShadeBreakableFillerBlock}
+          placeholder={DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK}
+          showRequiredBadge={hasImageData && !shadeBreakableFillerShadingDisabled && shadeBreakableFillerRequiredCount > 0}
+          requiredTooltip={messages.fillers.crubTechBreakableRequiredTooltip}
+          requiredCountLabel={formatRequiredCount(shadeBreakableFillerRequiredCount)}
+        />
+      ),
+    });
+  }
+
+  if (showShadePushableFillerInput) {
+    groups.push({
+      key: "shade-pushable",
+      node: (
+        <FillerField
+          label={messages.fillers.crubTechPushableLabel}
+          tooltip={messages.fillers.crubTechPushableTooltip}
+          value={shadePushableFillerBlock}
+          setValue={setShadePushableFillerBlock}
+          placeholder={DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK}
+          showRequiredBadge={hasImageData && !shadePushableFillerShadingDisabled && shadePushableFillerRequiredCount > 0}
+          requiredTooltip={messages.fillers.crubTechPushableRequiredTooltip}
+          requiredCountLabel={formatRequiredCount(shadePushableFillerRequiredCount)}
         />
       ),
     });

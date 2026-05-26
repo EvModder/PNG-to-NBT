@@ -216,7 +216,12 @@ export function nooblineIsSingleY(shape: GeneratedShape): boolean {
   let northY: number | undefined;
   for (const part of shape.parts) {
     for (const [coord, cell] of part.cells) {
-      if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.ShadeNorthRow)) continue;
+      if (
+        !isShapeFillerCell(cell) ||
+        (!cell.includes(FillerRole.ShadeNorthRow) &&
+          !cell.includes(FillerRole.ShadeNorthRowBreakable) &&
+          !cell.includes(FillerRole.ShadeNorthRowPushable))
+      ) continue;
       const [, y] = parseShapeCoordKey(coord);
       if (northY === undefined) northY = y;
       else if (northY !== y) return false;

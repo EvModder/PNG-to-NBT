@@ -21,6 +21,8 @@ interface FullPreset {
   blockPreset: BlockPreset;
   supportFiller?: string;
   shadeFiller?: string;
+  crubTechShadeBreakableFillerBlock?: string;
+  crubTechShadePushableFillerBlock?: string;
   supportMode?: SupportMode;
   buildMode?: BuildMode;
   customColors?: ColorRgb[];
@@ -30,6 +32,7 @@ interface FullPreset {
   proPaletteSeed?: boolean;
   mixSteps?: boolean;
   buildAtWorldMinY?: boolean;
+  crubTechSlimeBar?: boolean;
   suppressStepDirection?: SuppressStepDirection;
   dominateVoidFillerBlock?: string;
   recessiveVoidFillerBlock?: string;
@@ -38,7 +41,8 @@ interface FullPreset {
 function serializeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: ColorRgb[], selectedBlocksCustom: Readonly<Record<number, string>>, convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, crubTechSlimeBar: boolean, suppressStepDirection: SuppressStepDirection,
+  crubTechShadeBreakableFillerBlock: string, crubTechShadePushableFillerBlock: string,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
   const parts = Array.from({ length: BASE_COLORS.length }, (_, i) => {
@@ -70,7 +74,10 @@ function serializeFullPreset(
     recessiveVoidFillerBlock,
     mixSteps ? "1" : "0",
     buildAtWorldMinY ? "1" : "0",
+    crubTechSlimeBar ? "1" : "0",
     suppressStepDirection,
+    crubTechShadeBreakableFillerBlock,
+    crubTechShadePushableFillerBlock,
   ].join("|");
   return serialized;
 }
@@ -126,7 +133,8 @@ function parseFullPreset(serialized: string): FullPreset | null {
   const proPaletteSeed = sections[9] === "1" ? true : sections[9] === "0" ? false : undefined;
   const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
   const buildAtWorldMinY = sections[13] === "1" ? true : sections[13] === "0" ? false : undefined;
-  const suppressStepDirection = sections[14] && isSuppressStepDirection(sections[14]) ? sections[14] : undefined;
+  const crubTechSlimeBar = sections[14] === "1" ? true : sections[14] === "0" ? false : undefined;
+  const suppressStepDirection = sections[15] && isSuppressStepDirection(sections[15]) ? sections[15] : undefined;
 
   return {
     blockPreset: { name: sections[0], selectedBlocks: blocks },
@@ -140,10 +148,13 @@ function parseFullPreset(serialized: string): FullPreset | null {
     proPaletteSeed,
     mixSteps,
     buildAtWorldMinY,
+    crubTechSlimeBar,
     suppressStepDirection,
     suppress2LayerLateFillerBlock: sections[8],
     dominateVoidFillerBlock: sections[10],
     recessiveVoidFillerBlock: sections[11],
+    crubTechShadeBreakableFillerBlock: sections[16],
+    crubTechShadePushableFillerBlock: sections[17],
   };
 }
 
@@ -152,7 +163,8 @@ function parseFullPreset(serialized: string): FullPreset | null {
 export async function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: ColorRgb[], selectedBlocksCustom: Readonly<Record<number, string>>, convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, suppressStepDirection: SuppressStepDirection,
+  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, crubTechSlimeBar: boolean, suppressStepDirection: SuppressStepDirection,
+  crubTechShadeBreakableFillerBlock: string, crubTechShadePushableFillerBlock: string,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): Promise<string> {
   return encodeUrlParamText(
@@ -169,7 +181,10 @@ export async function encodeFullPreset(
       proPaletteSeed,
       mixSteps,
       buildAtWorldMinY,
+      crubTechSlimeBar,
       suppressStepDirection,
+      crubTechShadeBreakableFillerBlock,
+      crubTechShadePushableFillerBlock,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
     ),

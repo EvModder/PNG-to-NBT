@@ -17,6 +17,8 @@ export const STORAGE_KEYS = {
 
   supportFiller: "mapart_support_filler",
   shadeFiller: "mapart_shade_filler",
+  crubTechShadeBreakableFiller: "mapart_crubtech_shade_breakable_filler",
+  crubTechShadePushableFiller: "mapart_crubtech_shade_pushable_filler",
   buildMode: "mapart_build_mode",
   supportMode: "mapart_support_mode",
   showStacks: "mapart_show_stacks",
@@ -30,6 +32,7 @@ export const STORAGE_KEYS = {
   sortKey: "mapart_sort_key",
   sortDir: "mapart_sort_dir",
   layerGap: "mapart_layer_gap",
+  crubTechSlimeBar: "mapart_crubtech_slime_bar",
   mixSteps: "mapart_mix_steps",
   buildAtWorldMinY: "mapart_build_at_world_min_y",
   suppressStepDirection: "mapart_suppress_step_direction",

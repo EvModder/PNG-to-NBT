@@ -81,6 +81,9 @@ export const esCatalog = {
     label: "Sombreado:",
     staircaseGroupLabel: "Escalera",
     suppressGroupLabel: "Supresión",
+    crubTechSlimeBarLabel: "Barra slime CrubTech",
+    crubTechSlimeBarTooltip:
+      "Para los esquemas suppress de 2 capas, divide los rellenos de sombreado superiores entre variantes rompibles y empujables para que los rellenos adyacentes este-oeste no usen todos el mismo comportamiento de la barra de slime.",
     layerGapLabel: "Separación de capas:",
     layerGapTooltip:
       "La separación de capas controla el espacio vertical entre las secciones inferior y superior de la supresión de 2 capas.",
@@ -168,6 +171,18 @@ export const esCatalog = {
     shadeRequiredTooltip:
       "Colocaciones de relleno requeridas para el sombreado de la fila norte y de supresión en el rango de salida actual.",
     nooblineRequiredTooltip: "Colocaciones de relleno requeridas para el sombreado de la fila norte en el rango de salida actual.",
+    crubTechBreakableLabel: "Shade-Breakable:",
+    crubTechBreakableWarningLabel: "Shade-Breakable",
+    crubTechBreakableTooltip:
+      "Usado para los puntos de sombreado de 2 capas de CrubTech que deben romperse al ser empujados por pistón/slime.",
+    crubTechBreakableRequiredTooltip:
+      "Colocaciones requeridas del relleno de sombreado rompible de CrubTech para el rango de salida actual.",
+    crubTechPushableLabel: "Shade-Pushable:",
+    crubTechPushableWarningLabel: "Shade-Pushable",
+    crubTechPushableTooltip:
+      "Usado para los puntos de sombreado de 2 capas de CrubTech que deben seguir siendo empujables por pistón/slime.",
+    crubTechPushableRequiredTooltip:
+      "Colocaciones requeridas del relleno de sombreado empujable de CrubTech para el rango de salida actual.",
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Relleno-1",
     dominateVoidTooltip:
@@ -278,6 +293,22 @@ export const esCatalog = {
     noFillerSuppressLine: "El sombreado de supresión requiere colocaciones de relleno.",
     noFillerInGridLine: "Se requieren algunos rellenos críticos de sombreado dentro de la cuadrícula de 128x128.",
     noFillerWarning: "El relleno de sombra está desactivado ({value}).\n{lines}",
+    crubTechBreakableInvalid: {
+      one: "Shade-Breakable no es válido ({value}).\n{count} punto de sombreado de CrubTech lo requiere.",
+      other: "Shade-Breakable no es válido ({value}).\n{count} puntos de sombreado de CrubTech lo requieren.",
+    } as PluralForms,
+    crubTechPushableInvalid: {
+      one: "Shade-Pushable no es válido ({value}).\n{count} punto de sombreado de CrubTech lo requiere.",
+      other: "Shade-Pushable no es válido ({value}).\n{count} puntos de sombreado de CrubTech lo requieren.",
+    } as PluralForms,
+    crubTechBreakableBehaviorWarning: {
+      one: "Shade-Breakable debería romperse al ser empujado por pistón/slime ({value}).\n{count} punto de sombreado de CrubTech lo usa.",
+      other: "Shade-Breakable debería romperse al ser empujado por pistón/slime ({value}).\n{count} puntos de sombreado de CrubTech lo usan.",
+    } as PluralForms,
+    crubTechPushableBehaviorWarning: {
+      one: "Shade-Pushable debería seguir siendo empujable por pistón/slime ({value}).\n{count} punto de sombreado de CrubTech lo usa.",
+      other: "Shade-Pushable debería seguir siendo empujable por pistón/slime ({value}).\n{count} puntos de sombreado de CrubTech lo usan.",
+    } as PluralForms,
     waterSideSupportInvalid:
       "El relleno de soporte no es válido ({value}).\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán.",
     waterSideSupportNotColorIdZero:

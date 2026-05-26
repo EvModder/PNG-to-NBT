@@ -135,6 +135,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     input.buildMode,
     input.isFlatShape ? 1 : 0,
     input.layerGap,
+    input.useCrubTechSlimeBar ? 1 : 0,
     input.mixSteps ? 1 : 0,
     input.paletteSeed,
     input.enableWaterConvenience ? 1 : 0,

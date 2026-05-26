@@ -87,6 +87,10 @@ export enum SuppressStepDirection {
 export enum FillerRole {
   ShadeNorthRow = "shade_north_row",
   ShadeSuppress = "shade_suppress",
+  ShadeNorthRowBreakable = "shade_north_row_breakable",
+  ShadeNorthRowPushable = "shade_north_row_pushable",
+  ShadeSuppressBreakable = "shade_suppress_breakable",
+  ShadeSuppressPushable = "shade_suppress_pushable",
   ShadeSuppressLate = "shade_suppress_late",
   ShadeVoidDominant = "shade_void_dominant",
   ShadeVoidRecessive = "shade_void_recessive",

@@ -88,6 +88,9 @@ export const enCatalog = {
     label: "Shading:",
     staircaseGroupLabel: "Staircase",
     suppressGroupLabel: "Suppress",
+    crubTechSlimeBarLabel: "CrubTech slime bar",
+    crubTechSlimeBarTooltip:
+      "For 2-layer suppress builds, split upper shading fillers into breakable and pushable variants so east-west adjacent shade fillers do not all use the same slime-bar behavior.",
     layerGapLabel: "Layer gap:",
     layerGapTooltip: "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.",
     mixStepsLabel: "Printer+Nuker:",
@@ -172,6 +175,18 @@ export const enCatalog = {
     nooblineTooltip: "Used for north-row shading filler placements.",
     shadeRequiredTooltip: "Required north-row and suppress-shading filler placements for the current output range.",
     nooblineRequiredTooltip: "Required north-row shading filler placements for the current output range.",
+    crubTechBreakableLabel: "Shade-Breakable:",
+    crubTechBreakableWarningLabel: "Shade-Breakable",
+    crubTechBreakableTooltip:
+      "Used for CrubTech 2-layer shading spots that should break when pushed by piston/slime.",
+    crubTechBreakableRequiredTooltip:
+      "Required CrubTech breakable shading filler placements for the current output range.",
+    crubTechPushableLabel: "Shade-Pushable:",
+    crubTechPushableWarningLabel: "Shade-Pushable",
+    crubTechPushableTooltip:
+      "Used for CrubTech 2-layer shading spots that must remain pushable by piston/slime.",
+    crubTechPushableRequiredTooltip:
+      "Required CrubTech pushable shading filler placements for the current output range.",
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Filler-1",
     dominateVoidTooltip:
@@ -282,6 +297,22 @@ export const enCatalog = {
     noFillerSuppressLine: "Suppress-shading requires filler placements.",
     noFillerInGridLine: "Some shading-critical fillers are required inside the 128x128 grid.",
     noFillerWarning: "Shade-Filler is disabled ({value}).\n{lines}",
+    crubTechBreakableInvalid: {
+      one: "Shade-Breakable is invalid ({value}).\n{count} CrubTech shading spot requires it.",
+      other: "Shade-Breakable is invalid ({value}).\n{count} CrubTech shading spots require it.",
+    } as PluralForms,
+    crubTechPushableInvalid: {
+      one: "Shade-Pushable is invalid ({value}).\n{count} CrubTech shading spot requires it.",
+      other: "Shade-Pushable is invalid ({value}).\n{count} CrubTech shading spots require it.",
+    } as PluralForms,
+    crubTechBreakableBehaviorWarning: {
+      one: "Shade-Breakable should break when pushed by piston/slime ({value}).\n{count} CrubTech shading spot uses it.",
+      other: "Shade-Breakable should break when pushed by piston/slime ({value}).\n{count} CrubTech shading spots use it.",
+    } as PluralForms,
+    crubTechPushableBehaviorWarning: {
+      one: "Shade-Pushable should remain pushable by piston/slime ({value}).\n{count} CrubTech shading spot uses it.",
+      other: "Shade-Pushable should remain pushable by piston/slime ({value}).\n{count} CrubTech shading spots use it.",
+    } as PluralForms,
     waterSideSupportInvalid:
       "Support filler is invalid ({value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.",
     waterSideSupportNotColorIdZero:

@@ -11,6 +11,8 @@ import {
   DEFAULT_BUILD_MODE,
   DEFAULT_CONVERT_UNSUPPORTED_COLORS,
   DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES,
+  DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
+  DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_FLAT_WATER_DROP,
@@ -900,6 +902,8 @@ async function runFixtureCase(
   const fillerAssignments = createFillerAssignments(
     effectiveSupportFillerBlock,
     effectiveShadeFillerBlock,
+    DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
+    DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
     effectiveDominateVoidFillerBlock,
     effectiveRecessiveVoidFillerBlock,
     effectiveSuppress2LayerLateFillerBlock,

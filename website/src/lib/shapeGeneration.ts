@@ -549,6 +549,26 @@ function getShadeFillerRole(z: number): FillerRole {
   return z < 0 ? FillerRole.ShadeNorthRow : FillerRole.ShadeSuppress;
 }
 
+function isCrubTechShadeFillerRole(role: FillerRole): boolean {
+  return role === FillerRole.ShadeNorthRow || role === FillerRole.ShadeSuppress;
+}
+
+function getCrubTechShadeFillerRole(baseRole: FillerRole.ShadeNorthRow | FillerRole.ShadeSuppress, x: number): FillerRole {
+  const usePushable = (x & 1) === 1;
+  if (baseRole === FillerRole.ShadeNorthRow) {
+    return usePushable ? FillerRole.ShadeNorthRowPushable : FillerRole.ShadeNorthRowBreakable;
+  }
+  return usePushable ? FillerRole.ShadeSuppressPushable : FillerRole.ShadeSuppressBreakable;
+}
+
+function applyCrubTechShadeFillerRoles(fillerPlacements: Map<ShapeCoordKey, ShapeRef>): void {
+  for (const [coord, ref] of fillerPlacements) {
+    if (ref.kind !== "filler" || !isCrubTechShadeFillerRole(ref.role)) continue;
+    const [x] = parseShapeCoordKey(coord);
+    ref.role = getCrubTechShadeFillerRole(ref.role, x);
+  }
+}
+
 function makeVoidAwareShadeFiller(x: number, y: number, z: number): ShapeBlock {
   if (z < 0) return makeFillerBlock(x, y, z, FillerRole.ShadeNorthRow);
   return makeFillerBlock(
@@ -1959,6 +1979,7 @@ function buildSuppressDualLayerBlocks(
   colorGrid: ColorGrid,
   layerGap: number | undefined,
   buildMode: TwoLayerSuppressBuildMode,
+  useCrubTechSlimeBar: boolean,
   waterDrops?: WaterDrops,
 ): { blocks: ShapeBlock[]; loweredWaterBlocks: ShapeBlock[]; supportFloorYs: ReadonlySet<number> } {
   const belowPlatformWater = waterDrops !== undefined;
@@ -2108,6 +2129,8 @@ function buildSuppressDualLayerBlocks(
       if (!occupied.has(coord)) fillerPlacements.set(coord, { kind: "filler", role: getShadeFillerRole(northZ) });
     }
   }
+
+  if (useCrubTechSlimeBar) applyCrubTechShadeFillerRoles(fillerPlacements);
 
   for (const [coord, ref] of fillerPlacements.entries()) {
     if (occupied.has(coord)) continue;
@@ -2590,6 +2613,7 @@ function getShapeCacheKeyId(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
+  useCrubTechSlimeBar = false,
   includeTransparentBlocks = false,
   transparentPlacementMode: BuildMode = buildMode,
 ): ShapeCacheKeyId {
@@ -2598,6 +2622,7 @@ function getShapeCacheKeyId(
   if (isSuppressStepsBuildMode(buildMode)) id += `|dir:${stepDirection}`;
   if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
   if (isSuppressStepsBuildMode(buildMode)) id += `|skipempty:${skipEmptySuppressSteps ? 1 : 0}`;
+  if (useCrubTechSlimeBar && buildModeUsesLayerGap(buildMode)) id += "|crubtech:1";
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
   else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
@@ -2715,6 +2740,7 @@ function getCachedStaircaseParts(
     enableWaterConvenience,
     buildAtWorldMinY,
     true,
+    false,
     includeTransparentBlocks,
     transparentPlacementMode,
   );
@@ -2807,11 +2833,18 @@ function getCachedSuppress2LayerParts(
   cache: GridShapeCache,
   layerGap: number,
   buildMode: TwoLayerSuppressBuildMode,
+  useCrubTechSlimeBar: boolean,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, SuppressStepDirection.EastToWest, 0, waterDrops);
+  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, SuppressStepDirection.EastToWest, 0, waterDrops, false, true, false, true, useCrubTechSlimeBar);
   return getCachedRawParts(cache, keyId, () => {
-    const { blocks, loweredWaterBlocks, supportFloorYs } = buildSuppressDualLayerBlocks(colorGrid, layerGap, buildMode, waterDrops);
+    const { blocks, loweredWaterBlocks, supportFloorYs } = buildSuppressDualLayerBlocks(
+      colorGrid,
+      layerGap,
+      buildMode,
+      useCrubTechSlimeBar,
+      waterDrops,
+    );
     return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
   });
 }
@@ -2829,6 +2862,7 @@ function buildRawShapeParts(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
+  useCrubTechSlimeBar = false,
   includeTransparentBlocks = false,
   transparentPlacementMode: BuildMode = buildMode,
 ): RawShapePart[] {
@@ -2842,9 +2876,23 @@ function buildRawShapeParts(
     case BuildMode.SuppressStepChecker:
       return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, mixSteps, skipEmptySuppressSteps, waterDrops);
     case BuildMode.Suppress2LayerLateFillers:
-      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLateFillers, waterDrops);
+      return getCachedSuppress2LayerParts(
+        colorGrid,
+        cache,
+        layerGap,
+        BuildMode.Suppress2LayerLateFillers,
+        useCrubTechSlimeBar,
+        waterDrops,
+      );
     case BuildMode.Suppress2LayerLatePairs:
-      return getCachedSuppress2LayerParts(colorGrid, cache, layerGap, BuildMode.Suppress2LayerLatePairs, waterDrops);
+      return getCachedSuppress2LayerParts(
+        colorGrid,
+        cache,
+        layerGap,
+        BuildMode.Suppress2LayerLatePairs,
+        useCrubTechSlimeBar,
+        waterDrops,
+      );
     default: {
       return getCachedStaircaseParts(
         colorGrid,
@@ -2874,6 +2922,7 @@ function getGeneratedShape(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
+  useCrubTechSlimeBar = false,
   includeTransparentBlocks = false,
   transparentPlacementMode: BuildMode = buildMode,
 ): CachedGeneratedShape {
@@ -2889,6 +2938,7 @@ function getGeneratedShape(
     enableWaterConvenience,
     buildAtWorldMinY,
     skipEmptySuppressSteps,
+    useCrubTechSlimeBar,
     includeTransparentBlocks,
     transparentPlacementMode,
   );
@@ -2908,6 +2958,7 @@ function getGeneratedShape(
     enableWaterConvenience,
     buildAtWorldMinY,
     skipEmptySuppressSteps,
+    useCrubTechSlimeBar,
     includeTransparentBlocks,
     transparentPlacementMode,
   );
@@ -2954,6 +3005,7 @@ export function generateShapeMap(
     enableWaterConvenience?: boolean;
     buildAtWorldMinY?: boolean;
     skipEmptySuppressSteps?: boolean;
+    useCrubTechSlimeBar?: boolean;
     includeTransparentBlocks?: boolean;
     collapseStaircaseModes?: boolean;
     includeFlatNorthline?: boolean;
@@ -2969,6 +3021,7 @@ export function generateShapeMap(
   const enableWaterConvenience = options.enableWaterConvenience ?? true;
   const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
   const skipEmptySuppressSteps = options.skipEmptySuppressSteps ?? true;
+  const useCrubTechSlimeBar = options.useCrubTechSlimeBar ?? false;
   const includeTransparentBlocks = options.includeTransparentBlocks ?? false;
   const collapseStaircaseModes = options.collapseStaircaseModes ?? true;
   const includeFlatNorthline = options.includeFlatNorthline ?? false;
@@ -3001,6 +3054,7 @@ export function generateShapeMap(
       enableWaterConvenience,
       buildAtWorldMinY,
       skipEmptySuppressSteps,
+      useCrubTechSlimeBar,
       includeTransparentBlocks,
       buildMode,
     );
@@ -3022,6 +3076,7 @@ export function generateShapeMap(
       enableWaterConvenience,
       buildAtWorldMinY,
       skipEmptySuppressSteps,
+      useCrubTechSlimeBar,
       includeTransparentBlocks,
     );
     if (!seenShapeSignatures.has(signatureId)) {

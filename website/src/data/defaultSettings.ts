@@ -19,6 +19,8 @@ import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, Suppo
 export const DEFAULT_ACTIVE_PRESET_NAME = "Fullblock";
 export const DEFAULT_SUPPORT_FILLER_BLOCK = "cobblestone";
 export const DEFAULT_SHADE_FILLER_BLOCK = "resin_block";
+export const DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK = "moss_block";
+export const DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK = "resin_block";
 export const DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
@@ -43,6 +45,7 @@ export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
 export const DEFAULT_VS_FILLER_LOAD_DIRECTION = SuppressStepDirection.NorthToSouth;
 export const DEFAULT_PALETTE_SEED = false;
 export const DEFAULT_LAYER_GAP = 5;
+export const DEFAULT_CRUBTECH_SLIME_BAR = false;
 export const DEFAULT_MIX_STEPS = false;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;

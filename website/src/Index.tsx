@@ -12,6 +12,9 @@ import {
   DEFAULT_COLUMN_ORDER,
   DEFAULT_CONVERT_UNSUPPORTED_COLORS,
   DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES,
+  DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
+  DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
+  DEFAULT_CRUBTECH_SLIME_BAR,
   DEFAULT_CROP_IMAGE,
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
@@ -100,6 +103,8 @@ import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorR
 import {
   createFillerAssignments,
   getSupportModeFillerRoles,
+  isCrubTechShadeBreakableValid,
+  isCrubTechShadePushableValid,
   isFillerDisabled,
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
@@ -121,6 +126,7 @@ import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, Suppo
 import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
 import {
   getBuildModeDownloadSuffix,
+  buildModeUsesLayerGap,
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
   cycleSuppressStepDirection,
@@ -758,6 +764,12 @@ const Index = () => {
   });
   const [supportFillerBlock, setSupportFillerBlock] = useState(() => loadCached(LS_KEYS.supportFiller, DEFAULT_SUPPORT_FILLER_BLOCK));
   const [shadeFillerBlock, setShadeFillerBlock] = useState(() => loadCached(LS_KEYS.shadeFiller, DEFAULT_SHADE_FILLER_BLOCK));
+  const [crubTechShadeBreakableFillerBlock, setCrubTechShadeBreakableFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.crubTechShadeBreakableFiller, DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK),
+  );
+  const [crubTechShadePushableFillerBlock, setCrubTechShadePushableFillerBlock] = useState(() =>
+    loadCached(LS_KEYS.crubTechShadePushableFiller, DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK),
+  );
   const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() => loadCached(LS_KEYS.suppress2LayerLateFiller, DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK));
   const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() => loadCached(LS_KEYS.dominateVoidFiller, DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK));
   const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() => loadCached(LS_KEYS.recessiveVoidFiller, DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK));
@@ -769,6 +781,7 @@ const Index = () => {
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, DEFAULT_LAYER_GAP));
   const calcLayerGap = useDeferredValue(layerGap);
+  const [crubTechSlimeBar, setCrubTechSlimeBar] = useState(() => loadCached(LS_KEYS.crubTechSlimeBar, DEFAULT_CRUBTECH_SLIME_BAR));
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
   const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
@@ -1045,6 +1058,8 @@ const Index = () => {
     () => ({
       [LS_KEYS.supportFiller]: supportFillerBlock,
       [LS_KEYS.shadeFiller]: shadeFillerBlock,
+      [LS_KEYS.crubTechShadeBreakableFiller]: crubTechShadeBreakableFillerBlock,
+      [LS_KEYS.crubTechShadePushableFiller]: crubTechShadePushableFillerBlock,
       [LS_KEYS.buildMode]: buildMode,
       [LS_KEYS.supportMode]: supportMode,
       [LS_KEYS.showStacks]: showStacks,
@@ -1058,6 +1073,7 @@ const Index = () => {
       [LS_KEYS.sortKey]: sortKey,
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
+      [LS_KEYS.crubTechSlimeBar]: crubTechSlimeBar,
       [LS_KEYS.mixSteps]: mixSteps,
       [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
@@ -1089,6 +1105,8 @@ const Index = () => {
     [
       supportFillerBlock,
       shadeFillerBlock,
+      crubTechShadeBreakableFillerBlock,
+      crubTechShadePushableFillerBlock,
       buildMode,
       supportMode,
       showStacks,
@@ -1102,6 +1120,7 @@ const Index = () => {
       sortKey,
       sortDir,
       layerGap,
+      crubTechSlimeBar,
       mixSteps,
       buildAtWorldMinY,
       suppressStepDirection,
@@ -1218,6 +1237,10 @@ const Index = () => {
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
   const effectiveSupportFillerBlock = supportFillerBlock.trim() || DEFAULT_SUPPORT_FILLER_BLOCK;
   const effectiveShadeFillerBlock = shadeFillerBlock.trim() || DEFAULT_SHADE_FILLER_BLOCK;
+  const effectiveCrubTechShadeBreakableFillerBlock =
+    crubTechShadeBreakableFillerBlock.trim() || DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK;
+  const effectiveCrubTechShadePushableFillerBlock =
+    crubTechShadePushableFillerBlock.trim() || DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK;
   const effectiveSuppress2LayerLateFillerBlock =
     suppress2LayerLateFillerBlock.trim() || DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK;
   const effectiveDominateVoidFillerBlock =
@@ -1299,6 +1322,14 @@ const Index = () => {
     (value: string) => setShadeFillerBlock(sanitizeCommittedBlockEntry(value)),
     [sanitizeCommittedBlockEntry],
   );
+  const setCommittedCrubTechShadeBreakableFillerBlock = useCallback(
+    (value: string) => setCrubTechShadeBreakableFillerBlock(sanitizeCommittedBlockEntry(value)),
+    [sanitizeCommittedBlockEntry],
+  );
+  const setCommittedCrubTechShadePushableFillerBlock = useCallback(
+    (value: string) => setCrubTechShadePushableFillerBlock(sanitizeCommittedBlockEntry(value)),
+    [sanitizeCommittedBlockEntry],
+  );
   const setCommittedSuppress2LayerLateFillerBlock = useCallback(
     (value: string) => setSuppress2LayerLateFillerBlock(sanitizeCommittedBlockEntry(value)),
     [sanitizeCommittedBlockEntry],
@@ -1316,6 +1347,8 @@ const Index = () => {
     if (isFillerDisabled(nextValue)) setSupportMode(SupportMode.None);
   }, [sanitizeCommittedBlockEntry]);
   const shadeFillerShadingDisabled = isShadeFillerDisabled(effectiveShadeFillerBlock);
+  const crubTechShadeBreakableFillerShadingDisabled = isShadeFillerDisabled(effectiveCrubTechShadeBreakableFillerBlock);
+  const crubTechShadePushableFillerShadingDisabled = isShadeFillerDisabled(effectiveCrubTechShadePushableFillerBlock);
   const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock);
   const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock);
   const lateFillerShadingDisabled = isShadeFillerDisabled(effectiveSuppress2LayerLateFillerBlock);
@@ -1323,6 +1356,8 @@ const Index = () => {
     () => createFillerAssignments(
       effectiveSupportFillerBlock,
       effectiveShadeFillerBlock,
+      effectiveCrubTechShadeBreakableFillerBlock,
+      effectiveCrubTechShadePushableFillerBlock,
       effectiveDominateVoidFillerBlock,
       effectiveRecessiveVoidFillerBlock,
       effectiveSuppress2LayerLateFillerBlock,
@@ -1333,6 +1368,8 @@ const Index = () => {
     [
       effectiveSupportFillerBlock,
       effectiveShadeFillerBlock,
+      effectiveCrubTechShadeBreakableFillerBlock,
+      effectiveCrubTechShadePushableFillerBlock,
       effectiveDominateVoidFillerBlock,
       effectiveRecessiveVoidFillerBlock,
       effectiveSuppress2LayerLateFillerBlock,
@@ -1550,6 +1587,7 @@ const Index = () => {
               buildMode: nextResolvedBuildMode,
               isFlatShape: tile.isFlatShape,
               layerGap: calcLayerGap,
+              useCrubTechSlimeBar: crubTechSlimeBar && buildModeUsesLayerGap(nextResolvedBuildMode),
               mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
@@ -1690,8 +1728,9 @@ const Index = () => {
     [
       imageValid,
       belowPlatformWater,
-      buildMode,
-      usedWaterShades,
+    buildMode,
+    crubTechSlimeBar,
+    usedWaterShades,
       lightWaterDrop,
       flatWaterDrop,
       darkWaterDrop,
@@ -2210,6 +2249,12 @@ const Index = () => {
         });
         if (decodedPreset.supportFiller !== undefined) setSupportFillerBlock(decodedPreset.supportFiller);
         if (decodedPreset.shadeFiller !== undefined) setShadeFillerBlock(decodedPreset.shadeFiller);
+        if (decodedPreset.crubTechShadeBreakableFillerBlock !== undefined) {
+          setCrubTechShadeBreakableFillerBlock(decodedPreset.crubTechShadeBreakableFillerBlock);
+        }
+        if (decodedPreset.crubTechShadePushableFillerBlock !== undefined) {
+          setCrubTechShadePushableFillerBlock(decodedPreset.crubTechShadePushableFillerBlock);
+        }
         if (decodedPreset.supportMode !== undefined) setSupportMode(decodedPreset.supportMode);
         if (decodedPreset.buildMode) setBuildMode(decodedPreset.buildMode);
         setCustomColors(decodedPreset.customColors ?? []);
@@ -2220,6 +2265,7 @@ const Index = () => {
         if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
         if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
         if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
+        if (decodedPreset.crubTechSlimeBar !== undefined) setCrubTechSlimeBar(decodedPreset.crubTechSlimeBar);
         if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
           setSuppressDirection(decodedPreset.suppressStepDirection);
         }
@@ -2458,7 +2504,10 @@ const Index = () => {
           proPaletteSeed,
           mixSteps,
           buildAtWorldMinY,
+          crubTechSlimeBar,
           suppressStepDirection,
+          crubTechShadeBreakableFillerBlock,
+          crubTechShadePushableFillerBlock,
           dominateVoidFillerBlock,
           recessiveVoidFillerBlock,
         ),
@@ -2482,7 +2531,10 @@ const Index = () => {
     proPaletteSeed,
     mixSteps,
     buildAtWorldMinY,
+    crubTechSlimeBar,
     suppressStepDirection,
+    crubTechShadeBreakableFillerBlock,
+    crubTechShadePushableFillerBlock,
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
     imageColorGrid,
@@ -2908,8 +2960,14 @@ const Index = () => {
     ),
     colorTableDisplayPending,
   );
-  const northRowFillerCount = aggregateFillerRoleCounts.get(FillerRole.ShadeNorthRow) ?? 0;
-  const suppressFillerCount = aggregateFillerRoleCounts.get(FillerRole.ShadeSuppress) ?? 0;
+  const northRowFillerCount =
+    (aggregateFillerRoleCounts.get(FillerRole.ShadeNorthRow) ?? 0) +
+    (aggregateFillerRoleCounts.get(FillerRole.ShadeNorthRowBreakable) ?? 0) +
+    (aggregateFillerRoleCounts.get(FillerRole.ShadeNorthRowPushable) ?? 0);
+  const suppressFillerCount =
+    (aggregateFillerRoleCounts.get(FillerRole.ShadeSuppress) ?? 0) +
+    (aggregateFillerRoleCounts.get(FillerRole.ShadeSuppressBreakable) ?? 0) +
+    (aggregateFillerRoleCounts.get(FillerRole.ShadeSuppressPushable) ?? 0);
   const lateSuppressFillerCount = aggregateFillerRoleCounts.get(FillerRole.ShadeSuppressLate) ?? 0;
   const getAggregateRequiredFillerRoleCount = useCallback(
     (...roles: FillerRole[]) =>
@@ -2924,6 +2982,14 @@ const Index = () => {
     FillerRole.ShadeNorthRow,
     FillerRole.ShadeSuppress,
   );
+  const aggregateCrubTechShadeBreakableRequiredCount = getAggregateRequiredFillerRoleCount(
+    FillerRole.ShadeNorthRowBreakable,
+    FillerRole.ShadeSuppressBreakable,
+  );
+  const aggregateCrubTechShadePushableRequiredCount = getAggregateRequiredFillerRoleCount(
+    FillerRole.ShadeNorthRowPushable,
+    FillerRole.ShadeSuppressPushable,
+  );
   const aggregateLateFillerRequiredCount = getAggregateRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
   const aggregateDominateVoidFillerRequiredCount = getAggregateRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
   const aggregateRecessiveVoidFillerRequiredCount = getAggregateRequiredFillerRoleCount(FillerRole.ShadeVoidRecessive);
@@ -2931,6 +2997,14 @@ const Index = () => {
   const shadeFillerRequiredCount = getRequiredFillerRoleCount(
     FillerRole.ShadeNorthRow,
     FillerRole.ShadeSuppress,
+  );
+  const crubTechShadeBreakableFillerRequiredCount = getRequiredFillerRoleCount(
+    FillerRole.ShadeNorthRowBreakable,
+    FillerRole.ShadeSuppressBreakable,
+  );
+  const crubTechShadePushableFillerRequiredCount = getRequiredFillerRoleCount(
+    FillerRole.ShadeNorthRowPushable,
+    FillerRole.ShadeSuppressPushable,
   );
   const lateFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
   const dominateVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
@@ -2953,6 +3027,7 @@ const Index = () => {
   const setActiveSuppressDirection = directionControlUsesVsFillers
     ? setVsFillerLoadSpotDirection
     : setSuppressDirection;
+  const useCrubTechShadeFillers = crubTechSlimeBar && buildModeUsesLayerGap(effectiveBuildMode);
   const toolbarBuildSettingsProps = displayImageData && imageValid ? {
     lockFlatBuildMode: lockFlatBuildMode || (
       !!imageData &&
@@ -2966,6 +3041,8 @@ const Index = () => {
     minLayerGap,
     layerGap,
     setLayerGap,
+    crubTechSlimeBar,
+    setCrubTechSlimeBar,
     showMixStepsToggle,
     mixSteps,
     setMixSteps,
@@ -2996,6 +3073,7 @@ const Index = () => {
   const inGridShadingCountsAsWarning = hasInGridFillerNeed && isSuppressBuildMode(effectiveBuildMode);
   const hasComplexNorthNeed = northRowFillerCount > 0 && (showNooblineWarnings || !aggregateNorthRowSingleLine);
   const showNoFillerWarning =
+    !useCrubTechShadeFillers &&
     imageValid &&
     ((inGridShadingCountsAsWarning && shadeFillerShadingDisabled) || (hasComplexNorthNeed && shadeFillerShadingDisabled));
   const showLateFillerInput =
@@ -3005,7 +3083,15 @@ const Index = () => {
   const showSupportFillerInput =
     supportMode !== SupportMode.None &&
     (!imageData || aggregateSupportFillerRequiredCount > 0 || showWaterSideSupportWarning);
-  const showShadeFillerInput = !!imageData && aggregateShadeFillerRequiredCount > 0;
+  const showShadeFillerInput = !!imageData && !useCrubTechShadeFillers && aggregateShadeFillerRequiredCount > 0;
+  const showCrubTechShadeBreakableFillerInput =
+    !!imageData &&
+    useCrubTechShadeFillers &&
+    aggregateCrubTechShadeBreakableRequiredCount > 0;
+  const showCrubTechShadePushableFillerInput =
+    !!imageData &&
+    useCrubTechShadeFillers &&
+    aggregateCrubTechShadePushableRequiredCount > 0;
   const shadeFillerIsNorthRowOnly = northRowFillerCount > 0 && suppressFillerCount === 0;
   const showDominateVoidFillerInput =
     !!imageData &&
@@ -3018,6 +3104,8 @@ const Index = () => {
       () => ({
         showSupportFillerInput,
         showShadeFillerInput,
+        showShadeBreakableFillerInput: showCrubTechShadeBreakableFillerInput,
+        showShadePushableFillerInput: showCrubTechShadePushableFillerInput,
         showDominateVoidFillerInput,
         showRecessiveVoidFillerInput,
         showLateFillerInput,
@@ -3026,6 +3114,8 @@ const Index = () => {
         showDominateVoidFillerInput,
         showLateFillerInput,
         showRecessiveVoidFillerInput,
+        showCrubTechShadeBreakableFillerInput,
+        showCrubTechShadePushableFillerInput,
         showShadeFillerInput,
         showSupportFillerInput,
       ],
@@ -3160,12 +3250,56 @@ const Index = () => {
   );
   const canCopyImageShareUrl = tileCount === 1 && !!imageColorGrid && imageValid;
   const presetPrimaryActionTitle = presetDirty ? messages.presets.saveTitle : messages.presets.shareTitle;
+  const hasValidNorthRowShadeFiller =
+    northRowFillerCount > 0 && (
+      useCrubTechShadeFillers
+        ? (
+          (getRequiredFillerRoleCount(FillerRole.ShadeNorthRowBreakable) > 0 && !crubTechShadeBreakableFillerShadingDisabled) ||
+          (getRequiredFillerRoleCount(FillerRole.ShadeNorthRowPushable) > 0 && !crubTechShadePushableFillerShadingDisabled)
+        )
+        : !shadeFillerShadingDisabled
+    );
   const showNorthRowAlignmentInfo =
     showAlignmentReminder &&
     imageValid &&
     tileGeometryAnalyses.length > 0 &&
-    (forceZ129 || (!shadeFillerShadingDisabled && northRowFillerCount > 0));
+    (forceZ129 || hasValidNorthRowShadeFiller);
   const noFillerWarning = useMemo(() => {
+    if (useCrubTechShadeFillers) {
+      const parts: string[] = [];
+      if (aggregateCrubTechShadeBreakableRequiredCount > 0) {
+        parts.push(
+          crubTechShadeBreakableFillerShadingDisabled
+            ? messages.preview.crubTechBreakableInvalid(
+              effectiveCrubTechShadeBreakableFillerBlock,
+              aggregateCrubTechShadeBreakableRequiredCount,
+            )
+            : !isCrubTechShadeBreakableValid(effectiveCrubTechShadeBreakableFillerBlock)
+              ? messages.preview.crubTechBreakableBehaviorWarning(
+                effectiveCrubTechShadeBreakableFillerBlock,
+                aggregateCrubTechShadeBreakableRequiredCount,
+              )
+              : "",
+        );
+      }
+      if (aggregateCrubTechShadePushableRequiredCount > 0) {
+        parts.push(
+          crubTechShadePushableFillerShadingDisabled
+            ? messages.preview.crubTechPushableInvalid(
+              effectiveCrubTechShadePushableFillerBlock,
+              aggregateCrubTechShadePushableRequiredCount,
+            )
+            : !isCrubTechShadePushableValid(effectiveCrubTechShadePushableFillerBlock)
+              ? messages.preview.crubTechPushableBehaviorWarning(
+                effectiveCrubTechShadePushableFillerBlock,
+                aggregateCrubTechShadePushableRequiredCount,
+              )
+              : "",
+        );
+      }
+      const nonEmptyParts = parts.filter(Boolean);
+      return nonEmptyParts.length > 0 ? nonEmptyParts.join("\n\n") : null;
+    }
     if (!showNoFillerWarning) return null;
     const parts: string[] = [];
     if (northRowFillerCount > 0 && (showNooblineWarnings || !aggregateNorthRowSingleLine)) {
@@ -3182,14 +3316,21 @@ const Index = () => {
     if (parts.length === 0) return null;
     return messages.preview.noFillerWarning(effectiveShadeFillerBlock, parts);
   }, [
+    aggregateCrubTechShadeBreakableRequiredCount,
+    aggregateCrubTechShadePushableRequiredCount,
     effectiveBuildMode,
+    effectiveCrubTechShadeBreakableFillerBlock,
+    effectiveCrubTechShadePushableFillerBlock,
     effectiveShadeFillerBlock,
     hasInGridFillerNeed,
     lateSuppressFillerCount,
     northRowFillerCount,
     aggregateNorthRowSingleLine,
+    crubTechShadeBreakableFillerShadingDisabled,
+    crubTechShadePushableFillerShadingDisabled,
     showNoFillerWarning,
     showNooblineWarnings,
+    useCrubTechShadeFillers,
   ]);
   const waterSideSupportWarning = useMemo<ShapeWarning | null>(() => {
     if (!showWaterSideSupportWarning) return null;
@@ -3565,6 +3706,16 @@ const Index = () => {
             shadeFillerIsNorthRowOnly={shadeFillerIsNorthRowOnly}
             shadeFillerShadingDisabled={shadeFillerShadingDisabled}
             shadeFillerRequiredCount={shadeFillerRequiredCount}
+            showShadeBreakableFillerInput={fillerUiVisibilityState.showShadeBreakableFillerInput}
+            shadeBreakableFillerBlock={crubTechShadeBreakableFillerBlock}
+            setShadeBreakableFillerBlock={setCommittedCrubTechShadeBreakableFillerBlock}
+            shadeBreakableFillerShadingDisabled={crubTechShadeBreakableFillerShadingDisabled}
+            shadeBreakableFillerRequiredCount={crubTechShadeBreakableFillerRequiredCount}
+            showShadePushableFillerInput={fillerUiVisibilityState.showShadePushableFillerInput}
+            shadePushableFillerBlock={crubTechShadePushableFillerBlock}
+            setShadePushableFillerBlock={setCommittedCrubTechShadePushableFillerBlock}
+            shadePushableFillerShadingDisabled={crubTechShadePushableFillerShadingDisabled}
+            shadePushableFillerRequiredCount={crubTechShadePushableFillerRequiredCount}
             showDominateVoidFillerInput={fillerUiVisibilityState.showDominateVoidFillerInput}
             dominateVoidFillerBlock={dominateVoidFillerBlock}
             setDominateVoidFillerBlock={setCommittedDominateVoidFillerBlock}

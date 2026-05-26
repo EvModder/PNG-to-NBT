@@ -42,6 +42,8 @@ export type ToolbarBuildSettingsProps = {
   minLayerGap: number;
   layerGap: number;
   setLayerGap: (value: number) => void;
+  crubTechSlimeBar: boolean;
+  setCrubTechSlimeBar: (value: boolean) => void;
   showMixStepsToggle: boolean;
   mixSteps: boolean;
   setMixSteps: (value: boolean) => void;
@@ -99,6 +101,8 @@ export function ToolbarBuildSettings({
   minLayerGap,
   layerGap,
   setLayerGap,
+  crubTechSlimeBar,
+  setCrubTechSlimeBar,
   showMixStepsToggle,
   mixSteps,
   setMixSteps,
@@ -166,6 +170,24 @@ export function ToolbarBuildSettings({
   }
 
   if (showLayerGapControl) {
+    groups.push({
+      key: "crubtech-slime-bar",
+      node: (
+        <label
+          className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
+          title={messages.buildMode.crubTechSlimeBarTooltip}
+        >
+          <span>{messages.buildMode.crubTechSlimeBarLabel}</span>
+          <input
+            type="checkbox"
+            checked={crubTechSlimeBar}
+            onChange={e => setCrubTechSlimeBar(e.target.checked)}
+            title={messages.buildMode.crubTechSlimeBarTooltip}
+            className="h-3.5 w-3.5 accent-primary"
+          />
+        </label>
+      ),
+    });
     groups.push({
       key: "layer-gap",
       node: (

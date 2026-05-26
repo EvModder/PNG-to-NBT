@@ -74,6 +74,7 @@ function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileFinalGeo
       enableWaterConvenience: input.enableWaterConvenience,
       buildAtWorldMinY: input.buildAtWorldMinY,
       skipEmptySuppressSteps: input.skipEmptySuppressSteps,
+      useCrubTechSlimeBar: input.useCrubTechSlimeBar,
       collapseStaircaseModes: input.collapseStaircaseModes,
       includeFlatNorthline: input.includeFlatNorthline,
       selectedMode: input.buildMode,

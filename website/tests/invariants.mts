@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 import { gunzipSync } from "node:zlib";
 
-import { MAP_SIZE } from "@/utils/color";
+import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { convertToNbt } from "@/lib/nbtExport";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
+import { generateShapeMap } from "@/lib/shapeGeneration";
 import { toShapeCoordKey } from "@/lib/shapeModel";
+import { Shade, type ColorGrid } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 
 const VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH = 14;
@@ -243,8 +245,114 @@ async function assertPaletteCollapseModeInvariants(): Promise<void> {
   );
 }
 
+function assertCrubTechSlimeBarInvariants(): void {
+  const colorGrid: ColorGrid = Array.from(
+    { length: MAP_SIZE },
+    () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
+  );
+  // This shape deliberately produces both north-row and in-grid shade fillers
+  // on both x parities, so the CrubTech split must exercise all 4 new roles.
+  colorGrid[0][0] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[1][0] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[6][6] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[7][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+
+  const withoutCrubTech = generateShapeMap(
+    colorGrid,
+    undefined,
+    false,
+    true,
+    false,
+    {
+      layerGap: 5,
+      mixSteps: false,
+      paletteSeed: 0,
+      buildAtWorldMinY: false,
+      skipEmptySuppressSteps: true,
+      useCrubTechSlimeBar: false,
+      includeTransparentBlocks: false,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: BuildMode.Suppress2Layer,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
+    },
+  )[BuildMode.Suppress2Layer];
+
+  const withCrubTech = generateShapeMap(
+    colorGrid,
+    undefined,
+    false,
+    true,
+    false,
+    {
+      layerGap: 5,
+      mixSteps: false,
+      paletteSeed: 0,
+      buildAtWorldMinY: false,
+      skipEmptySuppressSteps: true,
+      useCrubTechSlimeBar: true,
+      includeTransparentBlocks: false,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: BuildMode.Suppress2Layer,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
+    },
+  )[BuildMode.Suppress2Layer];
+
+  if (!withoutCrubTech || !withCrubTech) throw new Error("Expected suppress 2-layer shape in CrubTech invariant test");
+
+  let legacyNorthRowCount = 0;
+  let legacySuppressCount = 0;
+  for (const part of withoutCrubTech.parts) {
+    for (const [, cell] of part.cells) {
+      if (!Array.isArray(cell)) continue;
+      if (cell.includes(FillerRole.ShadeNorthRow)) legacyNorthRowCount += 1;
+      if (cell.includes(FillerRole.ShadeSuppress)) legacySuppressCount += 1;
+    }
+  }
+  if (legacyNorthRowCount === 0 || legacySuppressCount === 0) {
+    throw new Error(
+      `Expected legacy north-row and suppress shade fillers without CrubTech slime bar, got north_row=${legacyNorthRowCount}, suppress=${legacySuppressCount}`,
+    );
+  }
+
+  let northRowBreakableCount = 0;
+  let northRowPushableCount = 0;
+  let breakableCount = 0;
+  let pushableCount = 0;
+  let legacyNorthRowWithCrubTechCount = 0;
+  let legacyWithCrubTechCount = 0;
+  for (const part of withCrubTech.parts) {
+    for (const [, cell] of part.cells) {
+      if (!Array.isArray(cell)) continue;
+      if (cell.includes(FillerRole.ShadeNorthRowBreakable)) northRowBreakableCount += 1;
+      if (cell.includes(FillerRole.ShadeNorthRowPushable)) northRowPushableCount += 1;
+      if (cell.includes(FillerRole.ShadeSuppressBreakable)) breakableCount += 1;
+      if (cell.includes(FillerRole.ShadeSuppressPushable)) pushableCount += 1;
+      if (cell.includes(FillerRole.ShadeNorthRow)) legacyNorthRowWithCrubTechCount += 1;
+      if (cell.includes(FillerRole.ShadeSuppress)) legacyWithCrubTechCount += 1;
+    }
+  }
+  if (
+    northRowBreakableCount === 0 ||
+    northRowPushableCount === 0 ||
+    breakableCount === 0 ||
+    pushableCount === 0
+  ) {
+    throw new Error(
+      `Expected mixed CrubTech shade roles, got north_row_breakable=${northRowBreakableCount}, north_row_pushable=${northRowPushableCount}, breakable=${breakableCount}, pushable=${pushableCount}`,
+    );
+  }
+  if (legacyNorthRowWithCrubTechCount !== 0 || legacyWithCrubTechCount !== 0) {
+    throw new Error(
+      `Expected no legacy shade fillers with CrubTech slime bar, got north_row=${legacyNorthRowWithCrubTechCount}, suppress=${legacyWithCrubTechCount}`,
+    );
+  }
+}
+
 async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
+  assertCrubTechSlimeBarInvariants();
   await assertPaletteCollapseModeInvariants();
   console.log("Inline invariants passed.");
   return 0;

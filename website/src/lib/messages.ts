@@ -189,6 +189,8 @@ export const messages = {
     label: catalog.buildMode.label,
     staircaseGroupLabel: catalog.buildMode.staircaseGroupLabel,
     suppressGroupLabel: catalog.buildMode.suppressGroupLabel,
+    crubTechSlimeBarLabel: catalog.buildMode.crubTechSlimeBarLabel,
+    crubTechSlimeBarTooltip: catalog.buildMode.crubTechSlimeBarTooltip,
     layerGapLabel: catalog.buildMode.layerGapLabel,
     layerGapTooltip: catalog.buildMode.layerGapTooltip,
     mixStepsLabel: catalog.buildMode.mixStepsLabel,
@@ -243,6 +245,14 @@ export const messages = {
     shadeRequiredTooltip(isNorthRowOnly: boolean): string {
       return isNorthRowOnly ? catalog.fillers.nooblineRequiredTooltip : catalog.fillers.shadeRequiredTooltip;
     },
+    crubTechBreakableLabel: catalog.fillers.crubTechBreakableLabel,
+    crubTechBreakableWarningLabel: catalog.fillers.crubTechBreakableWarningLabel,
+    crubTechBreakableTooltip: catalog.fillers.crubTechBreakableTooltip,
+    crubTechBreakableRequiredTooltip: catalog.fillers.crubTechBreakableRequiredTooltip,
+    crubTechPushableLabel: catalog.fillers.crubTechPushableLabel,
+    crubTechPushableWarningLabel: catalog.fillers.crubTechPushableWarningLabel,
+    crubTechPushableTooltip: catalog.fillers.crubTechPushableTooltip,
+    crubTechPushableRequiredTooltip: catalog.fillers.crubTechPushableRequiredTooltip,
     dominateVoidLabel: catalog.fillers.dominateVoidLabel,
     dominateVoidWarningLabel: catalog.fillers.dominateVoidWarningLabel,
     dominateVoidTooltip: catalog.fillers.dominateVoidTooltip,
@@ -352,6 +362,18 @@ export const messages = {
         value,
         lines: lines.join("\n"),
       });
+    },
+    crubTechBreakableInvalid(value: string, count: number): string {
+      return formatPlural(catalog.preview.crubTechBreakableInvalid, count, { value });
+    },
+    crubTechPushableInvalid(value: string, count: number): string {
+      return formatPlural(catalog.preview.crubTechPushableInvalid, count, { value });
+    },
+    crubTechBreakableBehaviorWarning(value: string, count: number): string {
+      return formatPlural(catalog.preview.crubTechBreakableBehaviorWarning, count, { value });
+    },
+    crubTechPushableBehaviorWarning(value: string, count: number): string {
+      return formatPlural(catalog.preview.crubTechPushableBehaviorWarning, count, { value });
     },
     waterSideSupportWarning(value: string, isInvalid: boolean): string {
       return formatTemplate(
