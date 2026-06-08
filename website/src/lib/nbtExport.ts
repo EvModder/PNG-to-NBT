@@ -41,6 +41,8 @@ interface ExportOptions extends ColorBlockSelections {
   baseName: string;
   buildMode: BuildMode;
   suppressStepDirection: SuppressStepDirection;
+  suppress2LayerLatePairY?: number;
+  crubTech?: boolean;
   markSuppressLoadSpotsInSchematic?: boolean;
   suppressLoadSpotMarkerBlock?: string;
 }
@@ -147,8 +149,13 @@ interface NbtExportEntry {
 
 type ExportBoundsOptions = Pick<
   ExportOptions,
-  "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceXZ128" | "forceZ129"
+  "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "crubTech" | "forceXZ128" | "forceZ129"
 >;
+
+function hasCrubTechPauseMarkers(options: ExportBoundsOptions): boolean {
+  return options.crubTech === true &&
+    options.buildMode === BuildMode.Suppress2LayerLatePairs;
+}
 
 function getLoadMarkerDistance(options: ExportBoundsOptions): number {
   if (!options.markSuppressLoadSpotsInSchematic) return 0;
@@ -177,7 +184,10 @@ function validateExportHorizontalBounds(
   const minExpectedX = extendsX ? -loadMarkerDistance : 0;
   const maxExpectedX = extendsX ? MAP_SIZE - 1 + loadMarkerDistance : MAP_SIZE - 1;
   const minExpectedZ = extendsZ ? -loadMarkerDistance : -1;
-  const maxExpectedZ = extendsZ ? MAP_SIZE - 1 + loadMarkerDistance : MAP_SIZE - 1;
+  const maxExpectedZ = Math.max(
+    extendsZ ? MAP_SIZE - 1 + loadMarkerDistance : MAP_SIZE - 1,
+    hasCrubTechPauseMarkers(options) ? MAP_SIZE : MAP_SIZE - 1,
+  );
 
   if (minX < minExpectedX || maxX > maxExpectedX) {
     throw new Error(`Invalid shape x range during export: [${minX}, ${maxX}] (expected within [${minExpectedX}, ${maxExpectedX}])`);
@@ -259,7 +269,7 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
 
 function normalizeAndMeasure<T extends { x: number; y: number; z: number }>(
   blocks: T[],
-  options: Pick<ExportOptions, "buildMode" | "suppressStepDirection" | "markSuppressLoadSpotsInSchematic" | "forceXZ128" | "forceZ129">,
+  options: ExportBoundsOptions,
 ): { sizeX: number; sizeY: number; sizeZ: number } {
   const forceXZ128 = options.forceXZ128 !== false;
   const forceZ129 = options.forceZ129 === true;
@@ -346,6 +356,8 @@ async function buildSingleEntry(
     {
       markSuppressLoadSpotsInSchematic: options.markSuppressLoadSpotsInSchematic,
       suppressLoadSpotMarkerBlock: options.suppressLoadSpotMarkerBlock,
+      crubTech: options.crubTech,
+      suppress2LayerLatePairY: options.suppress2LayerLatePairY,
     },
   )) {
     blocks.push(marker);

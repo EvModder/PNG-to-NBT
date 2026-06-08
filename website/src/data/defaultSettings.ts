@@ -7,6 +7,7 @@
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/nbtExport.ts
  * - src/lib/suppressLoadMarkers.ts
+ * - src/utils/colorTableLayout.ts
  * - tests/run.mts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -38,6 +39,8 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/suppressLoadMarkers.ts
+// - tests/invariants.mts
 // - tests/run.mts
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
 export const DEFAULT_SUPPORT_MODE = SupportMode.None;
@@ -45,7 +48,9 @@ export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
 export const DEFAULT_VS_FILLER_LOAD_DIRECTION = SuppressStepDirection.NorthToSouth;
 export const DEFAULT_PALETTE_SEED = false;
 export const DEFAULT_LAYER_GAP = 5;
-export const DEFAULT_CRUBTECH_SLIME_BAR = false;
+export const DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP = 1;
+export const DEFAULT_CRUBTECH_LATE_PAIRS_GAP = 12;
+export const DEFAULT_CRUBTECH = false;
 export const DEFAULT_MIX_STEPS = false;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;
@@ -54,6 +59,7 @@ export const DEFAULT_BUILD_AT_WORLD_MIN_Y = true;
 
 // Callers:
 // - src/Index.tsx
+// - src/utils/colorTableLayout.ts
 export const DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW = false;
 export const DEFAULT_SHOW_NAMES = false;
 export const DEFAULT_SHOW_IDS = false;

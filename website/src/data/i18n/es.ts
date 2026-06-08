@@ -81,9 +81,11 @@ export const esCatalog = {
     label: "Sombreado:",
     staircaseGroupLabel: "Escalera",
     suppressGroupLabel: "Supresión",
-    crubTechSlimeBarLabel: "Barra slime CrubTech",
-    crubTechSlimeBarTooltip:
-      "Para los esquemas suppress de 2 capas, divide los rellenos de sombreado superiores entre variantes rompibles y empujables para que los rellenos adyacentes este-oeste no usen todos el mismo comportamiento de la barra de slime.",
+    crubTechLabel: "CrubTech",
+    crubTechTooltip:
+      "Para los esquemas suppress de 2 capas, divide los rellenos de sombreado superiores entre variantes rompibles y empujables para que los rellenos adyacentes este-oeste no usen todos el mismo comportamiento de CrubTech.",
+    latePairsGapLabel: "Separación de pares tardios:",
+    latePairsGapTooltip: "Separacion vertical sobre el bloque superior normal de 2 capas usada para las colocaciones de pares tardios agregadas durante cada fase suppress.",
     layerGapLabel: "Separación de capas:",
     layerGapTooltip:
       "La separación de capas controla el espacio vertical entre las secciones inferior y superior de la supresión de 2 capas.",

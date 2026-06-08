@@ -7,6 +7,8 @@
  * - tests/invariants.mts
  */
 import {
+  DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
+  DEFAULT_LAYER_GAP,
   DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
 } from "@/data/defaultSettings";
 import { WATER_BASE_INDEX } from "@/data/mapColors";
@@ -33,6 +35,8 @@ type StepPhaseSpec = {
 type BuildLoadSpotMarkerOptions = {
   markSuppressLoadSpotsInSchematic?: boolean;
   suppressLoadSpotMarkerBlock?: string;
+  crubTech?: boolean;
+  suppress2LayerLatePairY?: number;
 };
 
 type SparseLoadSpotTarget = {
@@ -468,6 +472,42 @@ function buildVsFillerLoadSpotMarkers(
   return markers;
 }
 
+function getCrubTechStepStartX(x: number): number {
+  return Math.min(MAP_SIZE - 1, x | 1);
+}
+
+function buildCrubTechLatePairPauseMarkers(
+  shape: GeneratedShape,
+  buildMode: BuildMode,
+  enabled: boolean,
+  latePairY: number,
+  markerBlockName: string,
+): LoadSpotMarkerEntry[] {
+  if (!enabled || buildMode !== BuildMode.Suppress2LayerLatePairs) {
+    return [];
+  }
+  const markerY = getShapeMarkerY(shape);
+  if (markerY === null) return [];
+
+  const stepStartXs = new Set<number>();
+  for (const part of shape.parts) {
+    for (const [coord] of part.cells) {
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (y !== latePairY || x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
+      stepStartXs.add(getCrubTechStepStartX(x));
+    }
+  }
+
+  return [...stepStartXs]
+    .sort((a, b) => b - a)
+    .map(x => ({
+      x,
+      y: markerY,
+      z: MAP_SIZE,
+      blockName: orientLoadSpotMarkerBlockName(markerBlockName, SuppressStepDirection.EastToWest),
+    }));
+}
+
 // Callers:
 // - src/lib/nbtExport.ts
 // - tests/invariants.mts
@@ -480,6 +520,13 @@ export function buildSuppressLoadSpotMarkers(
   const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
   return [
     ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),
+    ...buildCrubTechLatePairPauseMarkers(
+      shape,
+      buildMode,
+      options.crubTech === true,
+      options.suppress2LayerLatePairY ?? DEFAULT_LAYER_GAP + DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
+      markerBlockName,
+    ),
     ...buildVsFillerLoadSpotMarkers(
       shape,
       stepDirection,

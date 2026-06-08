@@ -88,9 +88,11 @@ export const enCatalog = {
     label: "Shading:",
     staircaseGroupLabel: "Staircase",
     suppressGroupLabel: "Suppress",
-    crubTechSlimeBarLabel: "CrubTech slime bar",
-    crubTechSlimeBarTooltip:
-      "For 2-layer suppress builds, split upper shading fillers into breakable and pushable variants so east-west adjacent shade fillers do not all use the same slime-bar behavior.",
+    crubTechLabel: "CrubTech",
+    crubTechTooltip:
+      "For 2-layer suppress builds, split upper shading fillers into breakable and pushable variants so east-west adjacent shade fillers do not all use the same CrubTech behavior.",
+    latePairsGapLabel: "Late-pairs gap:",
+    latePairsGapTooltip: "Vertical gap above the normal upper 2-layer block used for late-pair placements added during each suppress update phase.",
     layerGapLabel: "Layer gap:",
     layerGapTooltip: "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.",
     mixStepsLabel: "Printer+Nuker:",

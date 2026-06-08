@@ -3,7 +3,7 @@
  * - generateShapeMap()
  *
  * Callers:
- * - src/Index.tsx
+ * - src/lib/tileGeometry.worker.ts
  */
 import {
   buildModeUsesLayerGap,
@@ -1978,8 +1978,9 @@ function buildSuppressSplitCheckerBlockSets(
 function buildSuppressDualLayerBlocks(
   colorGrid: ColorGrid,
   layerGap: number | undefined,
+  suppress2LayerLatePairY: number | undefined,
   buildMode: TwoLayerSuppressBuildMode,
-  useCrubTechSlimeBar: boolean,
+  useCrubTech: boolean,
   waterDrops?: WaterDrops,
 ): { blocks: ShapeBlock[]; loweredWaterBlocks: ShapeBlock[]; supportFloorYs: ReadonlySet<number> } {
   const belowPlatformWater = waterDrops !== undefined;
@@ -1989,7 +1990,7 @@ function buildSuppressDualLayerBlocks(
   const occupied = new Set<ShapeCoordKey>();
   const lowerY = 0;
   const upperY = Math.max(1, layerGap ?? 5);
-  const lateY = upperY + 2;
+  const lateY = Math.max(upperY + 1, Math.trunc(suppress2LayerLatePairY ?? upperY + 1) || upperY + 1);
   const recessiveOverrides = new Map<ColumnCoordKey, RecessivePlacementOverride>();
   const lateDominant = new Set<ColumnCoordKey>();
   const cellKey = (x: number, z: number) => toColumnCoordKey(x, z);
@@ -2130,7 +2131,7 @@ function buildSuppressDualLayerBlocks(
     }
   }
 
-  if (useCrubTechSlimeBar) applyCrubTechShadeFillerRoles(fillerPlacements);
+  if (useCrubTech) applyCrubTechShadeFillerRoles(fillerPlacements);
 
   for (const [coord, ref] of fillerPlacements.entries()) {
     if (occupied.has(coord)) continue;
@@ -2613,16 +2614,18 @@ function getShapeCacheKeyId(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
-  useCrubTechSlimeBar = false,
+  useCrubTech = false,
   includeTransparentBlocks = false,
   transparentPlacementMode: BuildMode = buildMode,
+  suppress2LayerLatePairY = layerGap + 1,
 ): ShapeCacheKeyId {
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|dir:${stepDirection}`;
   if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
   if (isSuppressStepsBuildMode(buildMode)) id += `|skipempty:${skipEmptySuppressSteps ? 1 : 0}`;
-  if (useCrubTechSlimeBar && buildModeUsesLayerGap(buildMode)) id += "|crubtech:1";
+  if (useCrubTech && buildModeUsesLayerGap(buildMode)) id += "|crubtech:1";
+  if (buildMode === BuildMode.Suppress2LayerLatePairs) id += `|latepairy:${suppress2LayerLatePairY}`;
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
   else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
@@ -2833,16 +2836,33 @@ function getCachedSuppress2LayerParts(
   cache: GridShapeCache,
   layerGap: number,
   buildMode: TwoLayerSuppressBuildMode,
-  useCrubTechSlimeBar: boolean,
+  suppress2LayerLatePairY: number,
+  useCrubTech: boolean,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, layerGap, false, SuppressStepDirection.EastToWest, 0, waterDrops, false, true, false, true, useCrubTechSlimeBar);
+  const keyId = getShapeCacheKeyId(
+    buildMode,
+    layerGap,
+    false,
+    SuppressStepDirection.EastToWest,
+    0,
+    waterDrops,
+    false,
+    true,
+    false,
+    true,
+    useCrubTech,
+    false,
+    buildMode,
+    suppress2LayerLatePairY,
+  );
   return getCachedRawParts(cache, keyId, () => {
     const { blocks, loweredWaterBlocks, supportFloorYs } = buildSuppressDualLayerBlocks(
       colorGrid,
       layerGap,
+      suppress2LayerLatePairY,
       buildMode,
-      useCrubTechSlimeBar,
+      useCrubTech,
       waterDrops,
     );
     return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
@@ -2862,9 +2882,10 @@ function buildRawShapeParts(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
-  useCrubTechSlimeBar = false,
+  useCrubTech = false,
   includeTransparentBlocks = false,
   transparentPlacementMode: BuildMode = buildMode,
+  suppress2LayerLatePairY = layerGap + 1,
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
@@ -2881,7 +2902,8 @@ function buildRawShapeParts(
         cache,
         layerGap,
         BuildMode.Suppress2LayerLateFillers,
-        useCrubTechSlimeBar,
+        suppress2LayerLatePairY,
+        useCrubTech,
         waterDrops,
       );
     case BuildMode.Suppress2LayerLatePairs:
@@ -2890,7 +2912,8 @@ function buildRawShapeParts(
         cache,
         layerGap,
         BuildMode.Suppress2LayerLatePairs,
-        useCrubTechSlimeBar,
+        suppress2LayerLatePairY,
+        useCrubTech,
         waterDrops,
       );
     default: {
@@ -2922,9 +2945,10 @@ function getGeneratedShape(
   enableWaterConvenience = true,
   buildAtWorldMinY = false,
   skipEmptySuppressSteps = true,
-  useCrubTechSlimeBar = false,
+  useCrubTech = false,
   includeTransparentBlocks = false,
   transparentPlacementMode: BuildMode = buildMode,
+  suppress2LayerLatePairY = layerGap + 1,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
   const cacheKeyId = getShapeCacheKeyId(
@@ -2938,9 +2962,10 @@ function getGeneratedShape(
     enableWaterConvenience,
     buildAtWorldMinY,
     skipEmptySuppressSteps,
-    useCrubTechSlimeBar,
+    useCrubTech,
     includeTransparentBlocks,
     transparentPlacementMode,
+    suppress2LayerLatePairY,
   );
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
@@ -2958,9 +2983,10 @@ function getGeneratedShape(
     enableWaterConvenience,
     buildAtWorldMinY,
     skipEmptySuppressSteps,
-    useCrubTechSlimeBar,
+    useCrubTech,
     includeTransparentBlocks,
     transparentPlacementMode,
+    suppress2LayerLatePairY,
   );
   const parts = rawParts.map(finalizeShapePart);
   const splitExportNames =
@@ -2990,7 +3016,9 @@ function getGeneratedShape(
 }
 
 // Callers:
-// - src/Index.tsx
+// - src/lib/tileGeometry.worker.ts
+// - tests/run.mts
+// - tests/invariants.mts
 export function generateShapeMap(
   colorGrid: ColorGrid,
   allSameShade: Shade | undefined,
@@ -3005,7 +3033,8 @@ export function generateShapeMap(
     enableWaterConvenience?: boolean;
     buildAtWorldMinY?: boolean;
     skipEmptySuppressSteps?: boolean;
-    useCrubTechSlimeBar?: boolean;
+    suppress2LayerLatePairY?: number;
+    useCrubTech?: boolean;
     includeTransparentBlocks?: boolean;
     collapseStaircaseModes?: boolean;
     includeFlatNorthline?: boolean;
@@ -3021,7 +3050,8 @@ export function generateShapeMap(
   const enableWaterConvenience = options.enableWaterConvenience ?? true;
   const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
   const skipEmptySuppressSteps = options.skipEmptySuppressSteps ?? true;
-  const useCrubTechSlimeBar = options.useCrubTechSlimeBar ?? false;
+  const suppress2LayerLatePairY = options.suppress2LayerLatePairY ?? Math.max(1, options.layerGap) + 1;
+  const useCrubTech = options.useCrubTech ?? false;
   const includeTransparentBlocks = options.includeTransparentBlocks ?? false;
   const collapseStaircaseModes = options.collapseStaircaseModes ?? true;
   const includeFlatNorthline = options.includeFlatNorthline ?? false;
@@ -3054,9 +3084,10 @@ export function generateShapeMap(
       enableWaterConvenience,
       buildAtWorldMinY,
       skipEmptySuppressSteps,
-      useCrubTechSlimeBar,
+      useCrubTech,
       includeTransparentBlocks,
       buildMode,
+      suppress2LayerLatePairY,
     );
     if (seenShapeSignatures.has(signatureId)) continue;
     seenShapeSignatures.add(signatureId);
@@ -3076,8 +3107,10 @@ export function generateShapeMap(
       enableWaterConvenience,
       buildAtWorldMinY,
       skipEmptySuppressSteps,
-      useCrubTechSlimeBar,
+      useCrubTech,
       includeTransparentBlocks,
+      selectedMode,
+      suppress2LayerLatePairY,
     );
     if (!seenShapeSignatures.has(signatureId)) {
       seenShapeSignatures.add(signatureId);

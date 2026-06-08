@@ -68,7 +68,8 @@ export type TileFinalGeometryWorkerInput = {
   buildMode: BuildMode;
   isFlatShape: boolean;
   layerGap: number;
-  useCrubTechSlimeBar: boolean;
+  suppress2LayerLatePairY: number;
+  useCrubTech: boolean;
   mixSteps: boolean;
   paletteSeed: number;
   enableWaterConvenience: boolean;

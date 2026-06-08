@@ -42,8 +42,14 @@ export type ToolbarBuildSettingsProps = {
   minLayerGap: number;
   layerGap: number;
   setLayerGap: (value: number) => void;
-  crubTechSlimeBar: boolean;
-  setCrubTechSlimeBar: (value: boolean) => void;
+  showCrubTechControl: boolean;
+  crubTech: boolean;
+  setCrubTech: (value: boolean) => void;
+  showLatePairsGapControl: boolean;
+  latePairsGap: number;
+  maxLatePairsGap: number;
+  latePairsGapDisabled: boolean;
+  setLatePairsGap: (value: number) => void;
   showMixStepsToggle: boolean;
   mixSteps: boolean;
   setMixSteps: (value: boolean) => void;
@@ -101,8 +107,14 @@ export function ToolbarBuildSettings({
   minLayerGap,
   layerGap,
   setLayerGap,
-  crubTechSlimeBar,
-  setCrubTechSlimeBar,
+  showCrubTechControl,
+  crubTech,
+  setCrubTech,
+  showLatePairsGapControl,
+  latePairsGap,
+  maxLatePairsGap,
+  latePairsGapDisabled,
+  setLatePairsGap,
   showMixStepsToggle,
   mixSteps,
   setMixSteps,
@@ -169,25 +181,54 @@ export function ToolbarBuildSettings({
     });
   }
 
-  if (showLayerGapControl) {
+  if (showLayerGapControl && showCrubTechControl) {
     groups.push({
-      key: "crubtech-slime-bar",
+      key: "crubtech",
       node: (
         <label
           className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
-          title={messages.buildMode.crubTechSlimeBarTooltip}
+          title={messages.buildMode.crubTechTooltip}
         >
-          <span>{messages.buildMode.crubTechSlimeBarLabel}</span>
+          <span>{messages.buildMode.crubTechLabel}</span>
           <input
             type="checkbox"
-            checked={crubTechSlimeBar}
-            onChange={e => setCrubTechSlimeBar(e.target.checked)}
-            title={messages.buildMode.crubTechSlimeBarTooltip}
+            checked={crubTech}
+            onChange={e => setCrubTech(e.target.checked)}
+            title={messages.buildMode.crubTechTooltip}
             className="h-3.5 w-3.5 accent-primary"
           />
         </label>
       ),
     });
+  }
+
+  if (showLayerGapControl && showLatePairsGapControl) {
+    groups.push({
+      key: "late-pairs-gap",
+      node: (
+        <>
+          <span
+            className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} cursor-help ${latePairsGapDisabled ? "opacity-55" : ""}`}
+            title={messages.buildMode.latePairsGapTooltip}
+          >
+            {messages.buildMode.latePairsGapLabel}
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={maxLatePairsGap}
+            value={Math.max(1, Math.min(maxLatePairsGap, latePairsGap))}
+            disabled={latePairsGapDisabled}
+            onChange={e => setLatePairsGap(Math.max(1, Math.min(maxLatePairsGap, parseInt(e.target.value) || 1)))}
+            title={messages.buildMode.latePairsGapTooltip}
+            className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center disabled:opacity-55 disabled:cursor-not-allowed"
+          />
+        </>
+      ),
+    });
+  }
+
+  if (showLayerGapControl) {
     groups.push({
       key: "layer-gap",
       node: (

@@ -29,10 +29,11 @@ interface FullPreset {
   selectedBlocksCustom?: Record<number, string>;
   convertUnsupported?: boolean;
   suppress2LayerLateFillerBlock?: string;
+  suppress2LayerLatePairsGap?: number;
   proPaletteSeed?: boolean;
   mixSteps?: boolean;
   buildAtWorldMinY?: boolean;
-  crubTechSlimeBar?: boolean;
+  crubTech?: boolean;
   suppressStepDirection?: SuppressStepDirection;
   dominateVoidFillerBlock?: string;
   recessiveVoidFillerBlock?: string;
@@ -41,7 +42,7 @@ interface FullPreset {
 function serializeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: ColorRgb[], selectedBlocksCustom: Readonly<Record<number, string>>, convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, crubTechSlimeBar: boolean, suppressStepDirection: SuppressStepDirection,
+  suppress2LayerLateFillerBlock: string, suppress2LayerLatePairsGap: number, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, crubTech: boolean, suppressStepDirection: SuppressStepDirection,
   crubTechShadeBreakableFillerBlock: string, crubTechShadePushableFillerBlock: string,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): string {
@@ -74,12 +75,19 @@ function serializeFullPreset(
     recessiveVoidFillerBlock,
     mixSteps ? "1" : "0",
     buildAtWorldMinY ? "1" : "0",
-    crubTechSlimeBar ? "1" : "0",
+    crubTech ? "1" : "0",
     suppressStepDirection,
     crubTechShadeBreakableFillerBlock,
     crubTechShadePushableFillerBlock,
+    `g${suppress2LayerLatePairsGap}`,
   ].join("|");
   return serialized;
+}
+
+function parseLatePairsGap(section: string | undefined): number | undefined {
+  if (!section?.startsWith("g")) return undefined;
+  const value = Number.parseInt(section.slice(1), 10);
+  return Number.isFinite(value) ? value : undefined;
 }
 
 function parseFullPreset(serialized: string): FullPreset | null {
@@ -133,8 +141,9 @@ function parseFullPreset(serialized: string): FullPreset | null {
   const proPaletteSeed = sections[9] === "1" ? true : sections[9] === "0" ? false : undefined;
   const mixSteps = sections[12] === "1" ? true : sections[12] === "0" ? false : undefined;
   const buildAtWorldMinY = sections[13] === "1" ? true : sections[13] === "0" ? false : undefined;
-  const crubTechSlimeBar = sections[14] === "1" ? true : sections[14] === "0" ? false : undefined;
+  const crubTech = sections[14] === "1" ? true : sections[14] === "0" ? false : undefined;
   const suppressStepDirection = sections[15] && isSuppressStepDirection(sections[15]) ? sections[15] : undefined;
+  const suppress2LayerLatePairsGap = parseLatePairsGap(sections[18]);
 
   return {
     blockPreset: { name: sections[0], selectedBlocks: blocks },
@@ -148,13 +157,14 @@ function parseFullPreset(serialized: string): FullPreset | null {
     proPaletteSeed,
     mixSteps,
     buildAtWorldMinY,
-    crubTechSlimeBar,
+    crubTech,
     suppressStepDirection,
     suppress2LayerLateFillerBlock: sections[8],
     dominateVoidFillerBlock: sections[10],
     recessiveVoidFillerBlock: sections[11],
     crubTechShadeBreakableFillerBlock: sections[16],
     crubTechShadePushableFillerBlock: sections[17],
+    suppress2LayerLatePairsGap,
   };
 }
 
@@ -163,7 +173,7 @@ function parseFullPreset(serialized: string): FullPreset | null {
 export async function encodeFullPreset(
   preset: BlockPreset, supportFillerBlock: string, shadeFillerBlock: string, supportMode: SupportMode,
   buildMode: BuildMode, customColors: ColorRgb[], selectedBlocksCustom: Readonly<Record<number, string>>, convertUnsupported: boolean,
-  suppress2LayerLateFillerBlock: string, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, crubTechSlimeBar: boolean, suppressStepDirection: SuppressStepDirection,
+  suppress2LayerLateFillerBlock: string, suppress2LayerLatePairsGap: number, proPaletteSeed: boolean, mixSteps: boolean, buildAtWorldMinY: boolean, crubTech: boolean, suppressStepDirection: SuppressStepDirection,
   crubTechShadeBreakableFillerBlock: string, crubTechShadePushableFillerBlock: string,
   dominateVoidFillerBlock: string, recessiveVoidFillerBlock: string,
 ): Promise<string> {
@@ -178,10 +188,11 @@ export async function encodeFullPreset(
       selectedBlocksCustom,
       convertUnsupported,
       suppress2LayerLateFillerBlock,
+      suppress2LayerLatePairsGap,
       proPaletteSeed,
       mixSteps,
       buildAtWorldMinY,
-      crubTechSlimeBar,
+      crubTech,
       suppressStepDirection,
       crubTechShadeBreakableFillerBlock,
       crubTechShadePushableFillerBlock,

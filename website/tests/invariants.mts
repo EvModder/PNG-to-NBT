@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 import { gunzipSync } from "node:zlib";
 
+import { DEFAULT_CRUBTECH_LATE_PAIRS_GAP, DEFAULT_LAYER_GAP, DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP } from "@/data/defaultSettings";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { convertToNbt } from "@/lib/nbtExport";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { generateShapeMap } from "@/lib/shapeGeneration";
-import { toShapeCoordKey } from "@/lib/shapeModel";
+import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 
@@ -245,7 +246,7 @@ async function assertPaletteCollapseModeInvariants(): Promise<void> {
   );
 }
 
-function assertCrubTechSlimeBarInvariants(): void {
+function assertCrubTechInvariants(): void {
   const colorGrid: ColorGrid = Array.from(
     { length: MAP_SIZE },
     () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
@@ -269,7 +270,7 @@ function assertCrubTechSlimeBarInvariants(): void {
       paletteSeed: 0,
       buildAtWorldMinY: false,
       skipEmptySuppressSteps: true,
-      useCrubTechSlimeBar: false,
+      useCrubTech: false,
       includeTransparentBlocks: false,
       collapseStaircaseModes: true,
       includeFlatNorthline: false,
@@ -290,7 +291,7 @@ function assertCrubTechSlimeBarInvariants(): void {
       paletteSeed: 0,
       buildAtWorldMinY: false,
       skipEmptySuppressSteps: true,
-      useCrubTechSlimeBar: true,
+      useCrubTech: true,
       includeTransparentBlocks: false,
       collapseStaircaseModes: true,
       includeFlatNorthline: false,
@@ -312,7 +313,7 @@ function assertCrubTechSlimeBarInvariants(): void {
   }
   if (legacyNorthRowCount === 0 || legacySuppressCount === 0) {
     throw new Error(
-      `Expected legacy north-row and suppress shade fillers without CrubTech slime bar, got north_row=${legacyNorthRowCount}, suppress=${legacySuppressCount}`,
+      `Expected legacy north-row and suppress shade fillers without CrubTech, got north_row=${legacyNorthRowCount}, suppress=${legacySuppressCount}`,
     );
   }
 
@@ -345,14 +346,146 @@ function assertCrubTechSlimeBarInvariants(): void {
   }
   if (legacyNorthRowWithCrubTechCount !== 0 || legacyWithCrubTechCount !== 0) {
     throw new Error(
-      `Expected no legacy shade fillers with CrubTech slime bar, got north_row=${legacyNorthRowWithCrubTechCount}, suppress=${legacyWithCrubTechCount}`,
+      `Expected no legacy shade fillers with CrubTech, got north_row=${legacyNorthRowWithCrubTechCount}, suppress=${legacyWithCrubTechCount}`,
     );
   }
 }
 
+async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
+  const colorGrid: ColorGrid = Array.from(
+    { length: MAP_SIZE },
+    () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
+  );
+  colorGrid[0][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[1][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[3][2] = { id: 1, isCustom: false, shade: Shade.Flat };
+
+  const layerGap = DEFAULT_LAYER_GAP;
+  const latePairY = layerGap + DEFAULT_CRUBTECH_LATE_PAIRS_GAP;
+  const shape = generateShapeMap(
+    colorGrid,
+    undefined,
+    false,
+    true,
+    true,
+    {
+      layerGap,
+      suppress2LayerLatePairY: latePairY,
+      mixSteps: false,
+      paletteSeed: 0,
+      buildAtWorldMinY: false,
+      skipEmptySuppressSteps: true,
+      useCrubTech: true,
+      includeTransparentBlocks: false,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: BuildMode.Suppress2LayerLatePairs,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
+    },
+  )[BuildMode.Suppress2LayerLatePairs];
+  if (!shape) throw new Error("Expected suppress 2-layer late-pairs shape in CrubTech pause-marker invariant test");
+
+  const expectedStepStartXs = new Set<number>();
+  for (const part of shape.parts) {
+    for (const [coord] of part.cells) {
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (y !== latePairY || x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
+      expectedStepStartXs.add(Math.min(MAP_SIZE - 1, x | 1));
+    }
+  }
+  if (expectedStepStartXs.size === 0) throw new Error("Expected late-pair cells for CrubTech pause-marker invariant test");
+
+  const markers = buildSuppressLoadSpotMarkers(
+    shape,
+    BuildMode.Suppress2LayerLatePairs,
+    SuppressStepDirection.WestToEast,
+    {
+      crubTech: true,
+      suppress2LayerLatePairY: latePairY,
+      suppressLoadSpotMarkerBlock: "jigsaw",
+    },
+  );
+  const markerStepStartXs = new Set(markers.filter(marker => marker.z === MAP_SIZE).map(marker => marker.x));
+  const expectedXs = [...expectedStepStartXs].sort((a, b) => a - b);
+  const actualXs = [...markerStepStartXs].sort((a, b) => a - b);
+  if (actualXs.length !== expectedXs.length || actualXs.some((x, index) => x !== expectedXs[index])) {
+    throw new Error(`Unexpected CrubTech pause marker x positions: got [${actualXs.join(", ")}], expected [${expectedXs.join(", ")}]`);
+  }
+
+  const exportResult = await convertToNbt(shape, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [
+      { role: FillerRole.ShadeSuppressBreakable, block: "moss_block" },
+      { role: FillerRole.ShadeSuppressPushable, block: "resin_block" },
+    ],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: true,
+    forceZ129: false,
+    baseName: "crubtech-pause-marker-test",
+    buildMode: BuildMode.Suppress2LayerLatePairs,
+    suppressStepDirection: SuppressStepDirection.WestToEast,
+    suppress2LayerLatePairY: latePairY,
+    crubTech: true,
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (exportResult.isZip) throw new Error("Expected single NBT export in CrubTech pause-marker invariant test");
+}
+
+function assertDefaultLatePairYInvariant(): void {
+  const layerGap = DEFAULT_LAYER_GAP;
+  const expectedLatePairY = layerGap + DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP;
+  const colorGrid: ColorGrid = Array.from(
+    { length: MAP_SIZE },
+    () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
+  );
+  colorGrid[0][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[1][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+
+  const shape = generateShapeMap(
+    colorGrid,
+    undefined,
+    false,
+    true,
+    true,
+    {
+      layerGap,
+      mixSteps: false,
+      paletteSeed: 0,
+      buildAtWorldMinY: false,
+      skipEmptySuppressSteps: true,
+      useCrubTech: false,
+      includeTransparentBlocks: false,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: BuildMode.Suppress2LayerLatePairs,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
+    },
+  )[BuildMode.Suppress2LayerLatePairs];
+  if (!shape) throw new Error("Expected suppress 2-layer late-pairs shape in default late-pair invariant test");
+
+  let expectedYCount = 0;
+  let tooHighCount = 0;
+  for (const part of shape.parts) {
+    for (const [coord] of part.cells) {
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
+      if (y === expectedLatePairY) expectedYCount++;
+      if (y > expectedLatePairY) tooHighCount++;
+    }
+  }
+  if (expectedYCount === 0) throw new Error("Expected default late-pair cells at layer gap + 1");
+  if (tooHighCount > 0) throw new Error("Default late-pair cells were placed above layer gap + 1");
+}
+
 async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
-  assertCrubTechSlimeBarInvariants();
+  assertCrubTechInvariants();
+  await assertCrubTechLatePairPauseMarkerInvariants();
+  assertDefaultLatePairYInvariant();
   await assertPaletteCollapseModeInvariants();
   console.log("Inline invariants passed.");
   return 0;

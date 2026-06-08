@@ -14,7 +14,7 @@ import {
   DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES,
   DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
-  DEFAULT_CRUBTECH_SLIME_BAR,
+  DEFAULT_CRUBTECH,
   DEFAULT_CROP_IMAGE,
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
@@ -49,6 +49,8 @@ import {
   DEFAULT_SUPPORT_MODE,
   DEFAULT_SUPPRESS_STEP_DIRECTION,
   DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
+  DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
+  DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
   type SuppressLoadSpotMarkerBlock,
   DEFAULT_VS_FILLER_LOAD_DIRECTION,
 } from "@/data/defaultSettings";
@@ -126,7 +128,6 @@ import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, Suppo
 import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
 import {
   getBuildModeDownloadSuffix,
-  buildModeUsesLayerGap,
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
   cycleSuppressStepDirection,
@@ -171,6 +172,11 @@ function loadCached<T>(key: string, fallback: T): T {
     /* ignore */
   }
   return fallback;
+}
+
+function clampLatePairsGap(value: number, maxGap: number): number {
+  const nextValue = Number.isFinite(value) ? Math.trunc(value) : DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP;
+  return Math.max(1, Math.min(maxGap, nextValue));
 }
 
 const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
@@ -781,7 +787,11 @@ const Index = () => {
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, DEFAULT_LAYER_GAP));
   const calcLayerGap = useDeferredValue(layerGap);
-  const [crubTechSlimeBar, setCrubTechSlimeBar] = useState(() => loadCached(LS_KEYS.crubTechSlimeBar, DEFAULT_CRUBTECH_SLIME_BAR));
+  const [suppress2LayerLatePairsGap, setSuppress2LayerLatePairsGap] = useState(() =>
+    loadCached(LS_KEYS.suppress2LayerLatePairsGap, DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP),
+  );
+  const calcSuppress2LayerLatePairsGap = useDeferredValue(suppress2LayerLatePairsGap);
+  const [crubTech, setCrubTech] = useState(() => loadCached(LS_KEYS.crubTech, DEFAULT_CRUBTECH));
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
   const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
@@ -1073,7 +1083,8 @@ const Index = () => {
       [LS_KEYS.sortKey]: sortKey,
       [LS_KEYS.sortDir]: sortDir,
       [LS_KEYS.layerGap]: layerGap,
-      [LS_KEYS.crubTechSlimeBar]: crubTechSlimeBar,
+      [LS_KEYS.suppress2LayerLatePairsGap]: suppress2LayerLatePairsGap,
+      [LS_KEYS.crubTech]: crubTech,
       [LS_KEYS.mixSteps]: mixSteps,
       [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
@@ -1120,7 +1131,8 @@ const Index = () => {
       sortKey,
       sortDir,
       layerGap,
-      crubTechSlimeBar,
+      suppress2LayerLatePairsGap,
+      crubTech,
       mixSteps,
       buildAtWorldMinY,
       suppressStepDirection,
@@ -1290,6 +1302,19 @@ const Index = () => {
     [buildMode, imageValid, parsedTiles, tileDerivedImageStats, getTileWaterSetting],
   );
   const twoLayerHasLateVoidNeed = voidShadowSummary.hasDominantVoidShadow;
+  const crubTechControlsLatePairsGap = crubTech && buildMode === BuildMode.Suppress2LayerLatePairs && twoLayerHasLateVoidNeed;
+  const suppress2LayerUpperY = Math.max(1, layerGap);
+  const calcSuppress2LayerUpperY = Math.max(1, calcLayerGap);
+  const maxSuppress2LayerLatePairsGap = Math.max(1, 64 - suppress2LayerUpperY);
+  const calcMaxSuppress2LayerLatePairsGap = Math.max(1, 64 - calcSuppress2LayerUpperY);
+  const effectiveSuppress2LayerLatePairsGap = crubTechControlsLatePairsGap
+    ? DEFAULT_CRUBTECH_LATE_PAIRS_GAP
+    : clampLatePairsGap(suppress2LayerLatePairsGap, maxSuppress2LayerLatePairsGap);
+  const calcEffectiveSuppress2LayerLatePairsGap = crubTechControlsLatePairsGap
+    ? DEFAULT_CRUBTECH_LATE_PAIRS_GAP
+    : clampLatePairsGap(calcSuppress2LayerLatePairsGap, calcMaxSuppress2LayerLatePairsGap);
+  const effectiveSuppress2LayerLatePairY = suppress2LayerUpperY + effectiveSuppress2LayerLatePairsGap;
+  const calcEffectiveSuppress2LayerLatePairY = calcSuppress2LayerUpperY + calcEffectiveSuppress2LayerLatePairsGap;
   const isSuppressDirectionSelectable = useCallback(
     (direction: SuppressStepDirection) => {
       if (buildMode !== BuildMode.SuppressStepChecker) return true;
@@ -1504,6 +1529,9 @@ const Index = () => {
             if (nextResolvedSuppressStepDirection !== suppressStepDirection) {
               setSuppressDirection(nextResolvedSuppressStepDirection);
             }
+            setIsAnalyzingTiles(false);
+            setAnalysisProgress(null);
+            setAnalysisPhase("generating");
           });
           return;
         }
@@ -1514,6 +1542,9 @@ const Index = () => {
           applySupportFloorYs,
         );
         const nextActiveBuildAtWorldMinY = nextBuildAtWorldMinYEligible && buildAtWorldMinY;
+        const nextUseCrubTechShadeFillers =
+          crubTech &&
+          nextResolvedBuildMode === BuildMode.Suppress2LayerLatePairs;
         const canReuseBaseGeometry =
           !nextActiveBuildAtWorldMinY &&
           isStaircaseBuildMode(nextResolvedBuildMode);
@@ -1587,7 +1618,8 @@ const Index = () => {
               buildMode: nextResolvedBuildMode,
               isFlatShape: tile.isFlatShape,
               layerGap: calcLayerGap,
-              useCrubTechSlimeBar: crubTechSlimeBar && buildModeUsesLayerGap(nextResolvedBuildMode),
+              suppress2LayerLatePairY: calcEffectiveSuppress2LayerLatePairY,
+              useCrubTech: nextUseCrubTechShadeFillers,
               mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
@@ -1650,11 +1682,13 @@ const Index = () => {
     getTileWaterSetting,
     twoLayerHasLateVoidNeed,
     calcLayerGap,
+    calcEffectiveSuppress2LayerLatePairY,
     showMixStepsToggle,
     calcMixSteps,
     paletteSeedOffset,
     supportMode,
     skipEmptySuppressSteps,
+    crubTech,
     suppressStepDirection,
     applySupportFloorYs,
     buildAtWorldMinY,
@@ -1729,7 +1763,7 @@ const Index = () => {
       imageValid,
       belowPlatformWater,
     buildMode,
-    crubTechSlimeBar,
+    crubTech,
     usedWaterShades,
       lightWaterDrop,
       flatWaterDrop,
@@ -2262,10 +2296,13 @@ const Index = () => {
         if (decodedPreset.suppress2LayerLateFillerBlock !== undefined) {
           setSuppress2LayerLateFillerBlock(decodedPreset.suppress2LayerLateFillerBlock);
         }
+        if (decodedPreset.suppress2LayerLatePairsGap !== undefined) {
+          setSuppress2LayerLatePairsGap(decodedPreset.suppress2LayerLatePairsGap);
+        }
         if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
         if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
         if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
-        if (decodedPreset.crubTechSlimeBar !== undefined) setCrubTechSlimeBar(decodedPreset.crubTechSlimeBar);
+        if (decodedPreset.crubTech !== undefined) setCrubTech(decodedPreset.crubTech);
         if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
           setSuppressDirection(decodedPreset.suppressStepDirection);
         }
@@ -2501,10 +2538,11 @@ const Index = () => {
           selectedBlocksCustom,
           convertUnsupported,
           suppress2LayerLateFillerBlock,
+          suppress2LayerLatePairsGap,
           proPaletteSeed,
           mixSteps,
           buildAtWorldMinY,
-          crubTechSlimeBar,
+          crubTech,
           suppressStepDirection,
           crubTechShadeBreakableFillerBlock,
           crubTechShadePushableFillerBlock,
@@ -2528,10 +2566,11 @@ const Index = () => {
     selectedBlocksCustom,
     convertUnsupported,
     suppress2LayerLateFillerBlock,
+    suppress2LayerLatePairsGap,
     proPaletteSeed,
     mixSteps,
     buildAtWorldMinY,
-    crubTechSlimeBar,
+    crubTech,
     suppressStepDirection,
     crubTechShadeBreakableFillerBlock,
     crubTechShadePushableFillerBlock,
@@ -2775,6 +2814,8 @@ const Index = () => {
           baseName,
           buildMode: effectiveBuildMode,
           suppressStepDirection: activeSuppressDirection,
+          suppress2LayerLatePairY: effectiveSuppress2LayerLatePairY,
+          crubTech: useCrubTechShadeFillers,
           markSuppressLoadSpotsInSchematic,
           suppressLoadSpotMarkerBlock,
         });
@@ -2978,10 +3019,6 @@ const Index = () => {
     (...roles: FillerRole[]) => roles.reduce((sum, role) => sum + (materialCountsDisplayView.fillerRoleCounts.get(role) ?? 0), 0),
     [materialCountsDisplayView],
   );
-  const aggregateShadeFillerRequiredCount = getAggregateRequiredFillerRoleCount(
-    FillerRole.ShadeNorthRow,
-    FillerRole.ShadeSuppress,
-  );
   const aggregateCrubTechShadeBreakableRequiredCount = getAggregateRequiredFillerRoleCount(
     FillerRole.ShadeNorthRowBreakable,
     FillerRole.ShadeSuppressBreakable,
@@ -2997,6 +3034,10 @@ const Index = () => {
   const shadeFillerRequiredCount = getRequiredFillerRoleCount(
     FillerRole.ShadeNorthRow,
     FillerRole.ShadeSuppress,
+    FillerRole.ShadeNorthRowBreakable,
+    FillerRole.ShadeSuppressBreakable,
+    FillerRole.ShadeNorthRowPushable,
+    FillerRole.ShadeSuppressPushable,
   );
   const crubTechShadeBreakableFillerRequiredCount = getRequiredFillerRoleCount(
     FillerRole.ShadeNorthRowBreakable,
@@ -3014,6 +3055,10 @@ const Index = () => {
     markSuppressLoadSpotsInSchematic &&
     !isSuppressBuildMode(buildMode) &&
     vsFillerSpotCount > 0;
+  const selectedLatePairSuppressMode = effectiveBuildMode === BuildMode.Suppress2LayerLatePairs;
+  const showCrubTechControl =
+    selectedLatePairSuppressMode &&
+    twoLayerHasLateVoidNeed;
   const showSuppressDirectionControl =
     !!imageData &&
     imageValid &&
@@ -3027,7 +3072,10 @@ const Index = () => {
   const setActiveSuppressDirection = directionControlUsesVsFillers
     ? setVsFillerLoadSpotDirection
     : setSuppressDirection;
-  const useCrubTechShadeFillers = crubTechSlimeBar && buildModeUsesLayerGap(effectiveBuildMode);
+  const useCrubTechShadeFillers = crubTech && showCrubTechControl;
+  const showLatePairsGapControl =
+    selectedLatePairSuppressMode &&
+    twoLayerHasLateVoidNeed;
   const toolbarBuildSettingsProps = displayImageData && imageValid ? {
     lockFlatBuildMode: lockFlatBuildMode || (
       !!imageData &&
@@ -3041,8 +3089,14 @@ const Index = () => {
     minLayerGap,
     layerGap,
     setLayerGap,
-    crubTechSlimeBar,
-    setCrubTechSlimeBar,
+    showCrubTechControl,
+    crubTech,
+    setCrubTech,
+    showLatePairsGapControl,
+    latePairsGap: effectiveSuppress2LayerLatePairsGap,
+    maxLatePairsGap: maxSuppress2LayerLatePairsGap,
+    latePairsGapDisabled: crubTechControlsLatePairsGap,
+    setLatePairsGap: setSuppress2LayerLatePairsGap,
     showMixStepsToggle,
     mixSteps,
     setMixSteps,
@@ -3083,15 +3137,10 @@ const Index = () => {
   const showSupportFillerInput =
     supportMode !== SupportMode.None &&
     (!imageData || aggregateSupportFillerRequiredCount > 0 || showWaterSideSupportWarning);
-  const showShadeFillerInput = !!imageData && !useCrubTechShadeFillers && aggregateShadeFillerRequiredCount > 0;
-  const showCrubTechShadeBreakableFillerInput =
-    !!imageData &&
-    useCrubTechShadeFillers &&
-    aggregateCrubTechShadeBreakableRequiredCount > 0;
-  const showCrubTechShadePushableFillerInput =
-    !!imageData &&
-    useCrubTechShadeFillers &&
-    aggregateCrubTechShadePushableRequiredCount > 0;
+  const showShadeFillerControlFamily = !!imageData && (suppressFillerCount + northRowFillerCount) > 0;
+  const showShadeFillerInput = showShadeFillerControlFamily && !useCrubTechShadeFillers;
+  const showCrubTechShadeBreakableFillerInput = showShadeFillerControlFamily && useCrubTechShadeFillers;
+  const showCrubTechShadePushableFillerInput = showShadeFillerControlFamily && useCrubTechShadeFillers;
   const shadeFillerIsNorthRowOnly = northRowFillerCount > 0 && suppressFillerCount === 0;
   const showDominateVoidFillerInput =
     !!imageData &&
@@ -3099,6 +3148,10 @@ const Index = () => {
   const showRecessiveVoidFillerInput =
     !!imageData &&
     aggregateRecessiveVoidFillerRequiredCount > 0;
+  const fillerUiVisibilityPending =
+    !!imageData &&
+    imageValid &&
+    (previewBusy || !hasCurrentMaterialAnalysis);
   const fillerUiVisibilityState = useHeldValueWhilePending(
     useMemo(
       () => ({
@@ -3120,7 +3173,7 @@ const Index = () => {
         showSupportFillerInput,
       ],
     ),
-    colorTableDisplayPending,
+    fillerUiVisibilityPending,
   );
   const previewXColumnRange = useMemo<[number, number] | undefined>(
     () => (selectedTileAnalysis && colRangeEnabled && !isStepRangeMode ? [colStart, colEnd] : undefined),
@@ -3625,7 +3678,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-4 py-1.5 flex items-center justify-between bg-[hsl(var(--header-bg))]">
+      <header className="border-b border-border px-2 py-1.5 flex items-center justify-between bg-[hsl(var(--header-bg))]">
         <h1 className="text-base font-bold text-primary">
           <button
             type="button"
