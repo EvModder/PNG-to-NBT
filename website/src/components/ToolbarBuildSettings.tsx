@@ -41,6 +41,7 @@ export type ToolbarBuildSettingsProps = {
   setNormalizedWaterDrop: (shade: WaterDropShade, value: number) => void;
   minLayerGap: number;
   layerGap: number;
+  layerGapDisabled: boolean;
   setLayerGap: (value: number) => void;
   showCrubTechControl: boolean;
   crubTech: boolean;
@@ -106,6 +107,7 @@ export function ToolbarBuildSettings({
   setNormalizedWaterDrop,
   minLayerGap,
   layerGap,
+  layerGapDisabled,
   setLayerGap,
   showCrubTechControl,
   crubTech,
@@ -234,7 +236,7 @@ export function ToolbarBuildSettings({
       node: (
         <>
           <span
-            className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} cursor-help`}
+            className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} cursor-help ${layerGapDisabled ? "opacity-55" : ""}`}
             title={messages.buildMode.layerGapTooltip}
           >
             {messages.buildMode.layerGapLabel}
@@ -244,9 +246,10 @@ export function ToolbarBuildSettings({
             min={minLayerGap}
             max={20}
             value={layerGap}
+            disabled={layerGapDisabled}
             onChange={e => setLayerGap(Math.max(minLayerGap, Math.min(20, parseInt(e.target.value) || 5)))}
             title={messages.buildMode.layerGapTooltip}
-            className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+            className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center disabled:opacity-55 disabled:cursor-not-allowed"
           />
         </>
       ),

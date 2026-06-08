@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 import { gunzipSync } from "node:zlib";
 
-import { DEFAULT_CRUBTECH_LATE_PAIRS_GAP, DEFAULT_LAYER_GAP, DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP } from "@/data/defaultSettings";
+import { DEFAULT_CRUBTECH_LAYER_GAP, DEFAULT_CRUBTECH_LATE_PAIRS_GAP, DEFAULT_LAYER_GAP, DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP } from "@/data/defaultSettings";
+import { BASE_COLORS } from "@/data/mapColors";
+import { CRUBTECH_PRESET_NAME, getBuiltinPreset } from "@/data/presets";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { convertToNbt } from "@/lib/nbtExport";
@@ -30,6 +32,23 @@ function assertBytesDiffer(left: Uint8Array, right: Uint8Array, label: string): 
     if (left[index] !== right[index]) return;
   }
   throw new Error(`${label}: expected differing bytes`);
+}
+
+function assertBytesContainAscii(bytes: Uint8Array, expected: string, label: string): void {
+  const needle = new TextEncoder().encode(expected);
+  for (let index = 0; index <= bytes.length - needle.length; index += 1) {
+    if (needle.every((byte, offset) => bytes[index + offset] === byte)) return;
+  }
+  throw new Error(`${label}: expected bytes to contain ${expected}`);
+}
+
+function assertBytesDoNotContainAscii(bytes: Uint8Array, expected: string, label: string): void {
+  const needle = new TextEncoder().encode(expected);
+  for (let index = 0; index <= bytes.length - needle.length; index += 1) {
+    if (needle.every((byte, offset) => bytes[index + offset] === byte)) {
+      throw new Error(`${label}: expected bytes not to contain ${expected}`);
+    }
+  }
 }
 
 type TestExportCell = {
@@ -246,17 +265,42 @@ async function assertPaletteCollapseModeInvariants(): Promise<void> {
   );
 }
 
-function assertCrubTechInvariants(): void {
+function assertCrubTechPresetInvariant(): void {
+  const preset = getBuiltinPreset(CRUBTECH_PRESET_NAME);
+  if (!preset) throw new Error("Expected built-in CrubTech preset");
+
+  const intentionallyBlankColorIndexes = new Set([0, 12]);
+  for (let baseIndex = 0; baseIndex < BASE_COLORS.length; baseIndex += 1) {
+    const block = preset.selectedBlocks[baseIndex] ?? "";
+    if (intentionallyBlankColorIndexes.has(baseIndex)) {
+      if (block !== "") throw new Error(`Expected CrubTech preset color ${baseIndex}:${BASE_COLORS[baseIndex].name} to be blank`);
+      continue;
+    }
+    if (!BASE_COLORS[baseIndex].blocks.includes(block)) {
+      throw new Error(`Invalid CrubTech preset block for ${baseIndex}:${BASE_COLORS[baseIndex].name}: ${block}`);
+    }
+  }
+
+  if (preset.selectedBlocks[7] !== "bamboo_block[axis=x]") {
+    throw new Error("Expected CrubTech preset PLANT color to use bamboo_block[axis=x]");
+  }
+  if (preset.selectedBlocks[9] !== "clay") throw new Error("Expected CrubTech preset CLAY color to use clay");
+  if (preset.selectedBlocks[25] !== "blue_concrete") throw new Error("Expected CrubTech preset COLOR_BLUE color to use blue_concrete");
+}
+
+async function assertCrubTechInvariants(): Promise<void> {
+  const layerGap = 5;
   const colorGrid: ColorGrid = Array.from(
     { length: MAP_SIZE },
     () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
   );
   // This shape deliberately produces both north-row and in-grid shade fillers
-  // on both x parities, so the CrubTech split must exercise all 4 new roles.
+  // on both x parities, so CrubTech must split in-grid suppress roles while
+  // keeping north-row/noobline roles piston-breakable.
   colorGrid[0][0] = { id: 1, isCustom: false, shade: Shade.Flat };
   colorGrid[1][0] = { id: 1, isCustom: false, shade: Shade.Flat };
-  colorGrid[6][6] = { id: 1, isCustom: false, shade: Shade.Flat };
-  colorGrid[7][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[2][2] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[3][1] = { id: 1, isCustom: false, shade: Shade.Flat };
 
   const withoutCrubTech = generateShapeMap(
     colorGrid,
@@ -265,7 +309,7 @@ function assertCrubTechInvariants(): void {
     true,
     false,
     {
-      layerGap: 5,
+      layerGap,
       mixSteps: false,
       paletteSeed: 0,
       buildAtWorldMinY: false,
@@ -286,7 +330,7 @@ function assertCrubTechInvariants(): void {
     true,
     false,
     {
-      layerGap: 5,
+      layerGap,
       mixSteps: false,
       paletteSeed: 0,
       buildAtWorldMinY: false,
@@ -324,7 +368,7 @@ function assertCrubTechInvariants(): void {
   let legacyNorthRowWithCrubTechCount = 0;
   let legacyWithCrubTechCount = 0;
   for (const part of withCrubTech.parts) {
-    for (const [, cell] of part.cells) {
+    for (const [coord, cell] of part.cells) {
       if (!Array.isArray(cell)) continue;
       if (cell.includes(FillerRole.ShadeNorthRowBreakable)) northRowBreakableCount += 1;
       if (cell.includes(FillerRole.ShadeNorthRowPushable)) northRowPushableCount += 1;
@@ -332,23 +376,115 @@ function assertCrubTechInvariants(): void {
       if (cell.includes(FillerRole.ShadeSuppressPushable)) pushableCount += 1;
       if (cell.includes(FillerRole.ShadeNorthRow)) legacyNorthRowWithCrubTechCount += 1;
       if (cell.includes(FillerRole.ShadeSuppress)) legacyWithCrubTechCount += 1;
+      const hasSuppressBreakable = cell.includes(FillerRole.ShadeSuppressBreakable);
+      const hasSuppressPushable = cell.includes(FillerRole.ShadeSuppressPushable);
+      if (!hasSuppressBreakable && !hasSuppressPushable) continue;
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (y < layerGap) {
+        if (!hasSuppressPushable || hasSuppressBreakable) {
+          throw new Error(`Expected CrubTech bottom-layer suppress filler at (${x}, ${y}, ${z}) to use pushable/resin role`);
+        }
+        continue;
+      }
+      const pairX = (x & 1) === 0 ? x + 1 : x - 1;
+      const pairCoord = toShapeCoordKey(pairX, y, z);
+      const shouldBePushable = !part.cells.has(pairCoord);
+      if (shouldBePushable !== hasSuppressPushable || hasSuppressBreakable === hasSuppressPushable) {
+        throw new Error(
+          `Expected CrubTech suppress filler at (${x}, ${y}, ${z}) to match gmask-like paired occupancy; pair=${part.cells.has(pairCoord)}, breakable=${hasSuppressBreakable}, pushable=${hasSuppressPushable}`,
+        );
+      }
     }
   }
   if (
     northRowBreakableCount === 0 ||
-    northRowPushableCount === 0 ||
     breakableCount === 0 ||
     pushableCount === 0
   ) {
     throw new Error(
-      `Expected mixed CrubTech shade roles, got north_row_breakable=${northRowBreakableCount}, north_row_pushable=${northRowPushableCount}, breakable=${breakableCount}, pushable=${pushableCount}`,
+      `Expected CrubTech shade roles, got north_row_breakable=${northRowBreakableCount}, breakable=${breakableCount}, pushable=${pushableCount}`,
     );
+  }
+  if (northRowPushableCount !== 0) {
+    throw new Error(`Expected CrubTech noobline fillers to avoid pushable roles, got ${northRowPushableCount}`);
   }
   if (legacyNorthRowWithCrubTechCount !== 0 || legacyWithCrubTechCount !== 0) {
     throw new Error(
       `Expected no legacy shade fillers with CrubTech, got north_row=${legacyNorthRowWithCrubTechCount}, suppress=${legacyWithCrubTechCount}`,
     );
   }
+
+  const bottomLayerGrid: ColorGrid = Array.from(
+    { length: MAP_SIZE },
+    () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
+  );
+  bottomLayerGrid[0][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  bottomLayerGrid[1][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  bottomLayerGrid[1][2] = { id: 1, isCustom: false, shade: Shade.Flat };
+  const bottomLayerCrubTech = generateShapeMap(
+    bottomLayerGrid,
+    undefined,
+    false,
+    true,
+    false,
+    {
+      layerGap,
+      mixSteps: false,
+      paletteSeed: 0,
+      buildAtWorldMinY: false,
+      skipEmptySuppressSteps: true,
+      useCrubTech: true,
+      includeTransparentBlocks: false,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: BuildMode.Suppress2Layer,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
+    },
+  )[BuildMode.Suppress2Layer];
+  if (!bottomLayerCrubTech) throw new Error("Expected suppress 2-layer shape in CrubTech bottom-layer invariant test");
+
+  let bottomLayerPushableCount = 0;
+  let bottomLayerBreakableCount = 0;
+  for (const part of bottomLayerCrubTech.parts) {
+    for (const [coord, cell] of part.cells) {
+      if (!Array.isArray(cell)) continue;
+      const [, y] = parseShapeCoordKey(coord);
+      if (y >= layerGap) continue;
+      if (cell.includes(FillerRole.ShadeSuppressPushable)) bottomLayerPushableCount += 1;
+      if (cell.includes(FillerRole.ShadeSuppressBreakable)) bottomLayerBreakableCount += 1;
+    }
+  }
+  if (bottomLayerPushableCount === 0 || bottomLayerBreakableCount !== 0) {
+    throw new Error(
+      `Expected CrubTech bottom-layer suppress fillers to be pushable-only, got pushable=${bottomLayerPushableCount}, breakable=${bottomLayerBreakableCount}`,
+    );
+  }
+
+  const exportResult = await convertToNbt(withCrubTech, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [
+      { role: FillerRole.ShadeNorthRowBreakable, block: "diamond_block" },
+      { role: FillerRole.ShadeNorthRowPushable, block: "diamond_block" },
+      { role: FillerRole.ShadeSuppressBreakable, block: "gold_block" },
+      { role: FillerRole.ShadeSuppressPushable, block: "emerald_block" },
+    ],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: true,
+    forceZ129: false,
+    baseName: "crubtech-noobline-test",
+    buildMode: BuildMode.Suppress2Layer,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+    crubTech: true,
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (exportResult.isZip) throw new Error("Expected single NBT export in CrubTech noobline invariant test");
+  const bytes = new Uint8Array(gunzipSync(exportResult.data));
+  assertBytesContainAscii(bytes, "minecraft:moss_block", "CrubTech noobline export should force moss");
+  assertBytesDoNotContainAscii(bytes, "minecraft:diamond_block", "CrubTech noobline export should ignore caller-provided north-row blocks");
 }
 
 async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
@@ -360,7 +496,7 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
   colorGrid[1][1] = { id: 1, isCustom: false, shade: Shade.Flat };
   colorGrid[3][2] = { id: 1, isCustom: false, shade: Shade.Flat };
 
-  const layerGap = DEFAULT_LAYER_GAP;
+  const layerGap = DEFAULT_CRUBTECH_LAYER_GAP;
   const latePairY = layerGap + DEFAULT_CRUBTECH_LATE_PAIRS_GAP;
   const shape = generateShapeMap(
     colorGrid,
@@ -386,14 +522,26 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
   if (!shape) throw new Error("Expected suppress 2-layer late-pairs shape in CrubTech pause-marker invariant test");
 
   const expectedStepStartXs = new Set<number>();
+  let lateLayerPushableCount = 0;
+  let lateLayerBreakableCount = 0;
   for (const part of shape.parts) {
-    for (const [coord] of part.cells) {
+    for (const [coord, cell] of part.cells) {
       const [x, y, z] = parseShapeCoordKey(coord);
       if (y !== latePairY || x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
       expectedStepStartXs.add(Math.min(MAP_SIZE - 1, x | 1));
+      if (!Array.isArray(cell)) continue;
+      if (cell.includes(FillerRole.ShadeSuppressPushable)) lateLayerPushableCount += 1;
+      if (cell.includes(FillerRole.ShadeSuppressBreakable)) lateLayerBreakableCount += 1;
     }
   }
   if (expectedStepStartXs.size === 0) throw new Error("Expected late-pair cells for CrubTech pause-marker invariant test");
+  if (lateLayerPushableCount === 0 || lateLayerBreakableCount !== 0) {
+    throw new Error(
+      `Expected CrubTech late-layer suppress fillers to be pushable-only, got pushable=${lateLayerPushableCount}, breakable=${lateLayerBreakableCount}`,
+    );
+  }
+  const maxSupportFloorY = Math.max(...shape.parts.flatMap(part => [...part.supportFloorYs]));
+  const expectedLampY = maxSupportFloorY + 4;
 
   const markers = buildSuppressLoadSpotMarkers(
     shape,
@@ -405,11 +553,36 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
       suppressLoadSpotMarkerBlock: "jigsaw",
     },
   );
-  const markerStepStartXs = new Set(markers.filter(marker => marker.z === MAP_SIZE).map(marker => marker.x));
+  const markerStepStartXs = new Set(
+    markers
+      .filter(marker => marker.z === MAP_SIZE && marker.blockName === "minecraft:redstone_lamp[lit=true]")
+      .map(marker => marker.x),
+  );
   const expectedXs = [...expectedStepStartXs].sort((a, b) => a - b);
   const actualXs = [...markerStepStartXs].sort((a, b) => a - b);
   if (actualXs.length !== expectedXs.length || actualXs.some((x, index) => x !== expectedXs[index])) {
     throw new Error(`Unexpected CrubTech pause marker x positions: got [${actualXs.join(", ")}], expected [${expectedXs.join(", ")}]`);
+  }
+  const signalLamps = markers.filter(marker => marker.z === MAP_SIZE && marker.blockName.startsWith("minecraft:redstone_lamp"));
+  if (signalLamps.length !== MAP_SIZE / 2) {
+    throw new Error(`Expected ${MAP_SIZE / 2} CrubTech signal lamps, got ${signalLamps.length}`);
+  }
+  const misplacedLamp = signalLamps.find(marker => marker.y !== expectedLampY);
+  if (misplacedLamp) {
+    throw new Error(`Expected CrubTech signal lamps at y=${expectedLampY}, got y=${misplacedLamp.y}`);
+  }
+  const expectedSignalXs = Array.from({ length: MAP_SIZE / 2 }, (_, index) => index * 2 + 1);
+  const actualSignalXs = signalLamps.map(marker => marker.x).sort((a, b) => a - b);
+  if (actualSignalXs.some((x, index) => x !== expectedSignalXs[index])) {
+    throw new Error(`Unexpected CrubTech signal lamp Xs: got [${actualSignalXs.join(", ")}]`);
+  }
+  for (const marker of signalLamps) {
+    const expectedBlock = expectedStepStartXs.has(marker.x)
+      ? "minecraft:redstone_lamp[lit=true]"
+      : "minecraft:redstone_lamp[lit=false]";
+    if (marker.blockName !== expectedBlock) {
+      throw new Error(`Unexpected CrubTech signal lamp at x=${marker.x}: got ${marker.blockName}, expected ${expectedBlock}`);
+    }
   }
 
   const exportResult = await convertToNbt(shape, {
@@ -433,6 +606,16 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
     suppressLoadSpotMarkerBlock: "jigsaw",
   });
   if (exportResult.isZip) throw new Error("Expected single NBT export in CrubTech pause-marker invariant test");
+  assertBytesContainAscii(
+    new Uint8Array(gunzipSync(exportResult.data)),
+    "minecraft:glass",
+    "CrubTech export should include prebuilt platform glass",
+  );
+  assertBytesContainAscii(
+    new Uint8Array(gunzipSync(exportResult.data)),
+    "minecraft:redstone_lamp",
+    "CrubTech export should include pause/continue signal lamps",
+  );
 }
 
 function assertDefaultLatePairYInvariant(): void {
@@ -483,7 +666,8 @@ function assertDefaultLatePairYInvariant(): void {
 
 async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
-  assertCrubTechInvariants();
+  assertCrubTechPresetInvariant();
+  await assertCrubTechInvariants();
   await assertCrubTechLatePairPauseMarkerInvariants();
   assertDefaultLatePairYInvariant();
   await assertPaletteCollapseModeInvariants();

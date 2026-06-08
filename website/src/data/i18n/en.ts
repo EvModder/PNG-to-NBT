@@ -64,6 +64,7 @@ export const enCatalog = {
       Fullblock: "Fast-to-mine, high visual contrast (easily distinguishable) full blocks.",
       Carpets: "Just carpets, cheapest and easiest.",
       PistonClear: "Piston-clearables for use with a non-TNT/nuker auto-resetting platform.",
+      CrubTech: "Block choices intended for the CrubTech 2-layer suppress platform.",
     },
   },
   supportMode: {

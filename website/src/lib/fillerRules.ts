@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - createFillerAssignments()
+ * - CRUBTECH_NOOBLINE_FILLER_BLOCK
  * - getSupportModeFillerRoles()
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
@@ -45,6 +46,10 @@ function isShadeCriticalFillerRole(role: FillerRole): boolean {
 const CRUBTECH_BREAKABLE_FILLER_BLOCKS = new Set<string>([
   "moss_block",
 ]);
+
+// Callers:
+// - src/lib/nbtExport.ts
+export const CRUBTECH_NOOBLINE_FILLER_BLOCK = "moss_block";
 
 // Conservative denylist for obvious piston/slime-incompatible choices.
 // This is only used for warnings; unknown normal blocks are treated as pushable.
@@ -135,9 +140,9 @@ export function createFillerAssignments(
     { role: FillerRole.ShadeSuppress, block: shadeFillerBlock },
     { role: FillerRole.ShadeNorthRow, block: shadeFillerBlock },
     { role: FillerRole.ShadeSuppressBreakable, block: crubTechShadeBreakableFillerBlock },
-    { role: FillerRole.ShadeNorthRowBreakable, block: crubTechShadeBreakableFillerBlock },
+    { role: FillerRole.ShadeNorthRowBreakable, block: CRUBTECH_NOOBLINE_FILLER_BLOCK },
     { role: FillerRole.ShadeSuppressPushable, block: crubTechShadePushableFillerBlock },
-    { role: FillerRole.ShadeNorthRowPushable, block: crubTechShadePushableFillerBlock },
+    { role: FillerRole.ShadeNorthRowPushable, block: CRUBTECH_NOOBLINE_FILLER_BLOCK },
     { role: FillerRole.ShadeVoidDominant, block: dominateVoidFillerBlock || shadeFillerBlock },
     { role: FillerRole.ShadeVoidRecessive, block: recessiveVoidFillerBlock || shadeFillerBlock },
     { role: FillerRole.ShadeSuppressLate, block: suppress2LayerLateFillerBlock || shadeFillerBlock },

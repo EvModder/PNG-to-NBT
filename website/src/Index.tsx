@@ -49,6 +49,7 @@ import {
   DEFAULT_SUPPORT_MODE,
   DEFAULT_SUPPRESS_STEP_DIRECTION,
   DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
+  DEFAULT_CRUBTECH_LAYER_GAP,
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
   type SuppressLoadSpotMarkerBlock,
@@ -146,6 +147,7 @@ import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import {
   arePresetBlocksEqual,
   BUILTIN_PRESET_NAMES,
+  CRUBTECH_PRESET_NAME,
   findMatchingBuiltinPresetName,
   getBuiltinPreset,
   isAutoCustomPresetName,
@@ -1303,8 +1305,10 @@ const Index = () => {
   );
   const twoLayerHasLateVoidNeed = voidShadowSummary.hasDominantVoidShadow;
   const crubTechControlsLatePairsGap = crubTech && buildMode === BuildMode.Suppress2LayerLatePairs && twoLayerHasLateVoidNeed;
-  const suppress2LayerUpperY = Math.max(1, layerGap);
-  const calcSuppress2LayerUpperY = Math.max(1, calcLayerGap);
+  const effectiveLayerGap = crubTechControlsLatePairsGap ? DEFAULT_CRUBTECH_LAYER_GAP : layerGap;
+  const calcEffectiveLayerGap = crubTechControlsLatePairsGap ? DEFAULT_CRUBTECH_LAYER_GAP : calcLayerGap;
+  const suppress2LayerUpperY = Math.max(1, effectiveLayerGap);
+  const calcSuppress2LayerUpperY = Math.max(1, calcEffectiveLayerGap);
   const maxSuppress2LayerLatePairsGap = Math.max(1, 64 - suppress2LayerUpperY);
   const calcMaxSuppress2LayerLatePairsGap = Math.max(1, 64 - calcSuppress2LayerUpperY);
   const effectiveSuppress2LayerLatePairsGap = crubTechControlsLatePairsGap
@@ -1617,7 +1621,7 @@ const Index = () => {
               buildAtWorldMinY: nextActiveBuildAtWorldMinY,
               buildMode: nextResolvedBuildMode,
               isFlatShape: tile.isFlatShape,
-              layerGap: calcLayerGap,
+              layerGap: calcEffectiveLayerGap,
               suppress2LayerLatePairY: calcEffectiveSuppress2LayerLatePairY,
               useCrubTech: nextUseCrubTechShadeFillers,
               mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
@@ -1682,6 +1686,7 @@ const Index = () => {
     getTileWaterSetting,
     twoLayerHasLateVoidNeed,
     calcLayerGap,
+    calcEffectiveLayerGap,
     calcEffectiveSuppress2LayerLatePairY,
     showMixStepsToggle,
     calcMixSteps,
@@ -2475,6 +2480,13 @@ const Index = () => {
     markSavedDeferred();
   };
 
+  const setCrubTechWithPreset = (enabled: boolean) => {
+    setCrubTech(enabled);
+    if (!enabled) return;
+    const crubTechPresetIdx = presets.findIndex(p => p.name === CRUBTECH_PRESET_NAME);
+    if (crubTechPresetIdx >= 0 && crubTechPresetIdx !== activeIdx) selectPreset(crubTechPresetIdx);
+  };
+
   const createPreset = () => {
     const name = prompt(messages.presets.namePrompt)?.trim();
     if (!name) return;
@@ -2796,7 +2808,7 @@ const Index = () => {
     setConverting(true);
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
-      const suffix = getBuildModeDownloadSuffix(buildMode, suppressStepDirection);
+      const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, suppressStepDirection, useCrubTechShadeFillers);
       const exportTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
       const exportEntries: { name: string; data: Uint8Array }[] = [];
 
@@ -3020,11 +3032,9 @@ const Index = () => {
     [materialCountsDisplayView],
   );
   const aggregateCrubTechShadeBreakableRequiredCount = getAggregateRequiredFillerRoleCount(
-    FillerRole.ShadeNorthRowBreakable,
     FillerRole.ShadeSuppressBreakable,
   );
   const aggregateCrubTechShadePushableRequiredCount = getAggregateRequiredFillerRoleCount(
-    FillerRole.ShadeNorthRowPushable,
     FillerRole.ShadeSuppressPushable,
   );
   const aggregateLateFillerRequiredCount = getAggregateRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
@@ -3040,11 +3050,9 @@ const Index = () => {
     FillerRole.ShadeSuppressPushable,
   );
   const crubTechShadeBreakableFillerRequiredCount = getRequiredFillerRoleCount(
-    FillerRole.ShadeNorthRowBreakable,
     FillerRole.ShadeSuppressBreakable,
   );
   const crubTechShadePushableFillerRequiredCount = getRequiredFillerRoleCount(
-    FillerRole.ShadeNorthRowPushable,
     FillerRole.ShadeSuppressPushable,
   );
   const lateFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
@@ -3087,11 +3095,12 @@ const Index = () => {
     visibleWaterLevelControls,
     setNormalizedWaterDrop,
     minLayerGap,
-    layerGap,
+    layerGap: effectiveLayerGap,
+    layerGapDisabled: crubTechControlsLatePairsGap,
     setLayerGap,
     showCrubTechControl,
     crubTech,
-    setCrubTech,
+    setCrubTech: setCrubTechWithPreset,
     showLatePairsGapControl,
     latePairsGap: effectiveSuppress2LayerLatePairsGap,
     maxLatePairsGap: maxSuppress2LayerLatePairsGap,
@@ -3306,10 +3315,7 @@ const Index = () => {
   const hasValidNorthRowShadeFiller =
     northRowFillerCount > 0 && (
       useCrubTechShadeFillers
-        ? (
-          (getRequiredFillerRoleCount(FillerRole.ShadeNorthRowBreakable) > 0 && !crubTechShadeBreakableFillerShadingDisabled) ||
-          (getRequiredFillerRoleCount(FillerRole.ShadeNorthRowPushable) > 0 && !crubTechShadePushableFillerShadingDisabled)
-        )
+        ? true
         : !shadeFillerShadingDisabled
     );
   const showNorthRowAlignmentInfo =

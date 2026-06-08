@@ -7,8 +7,8 @@
  * - tests/invariants.mts
  */
 import {
+  DEFAULT_CRUBTECH_LAYER_GAP,
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
-  DEFAULT_LAYER_GAP,
   DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
 } from "@/data/defaultSettings";
 import { WATER_BASE_INDEX } from "@/data/mapColors";
@@ -24,6 +24,8 @@ import { isSuppressBuildMode } from "@/utils/conversion";
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
 const VS_FILLER_LOAD_SPOT_ROLES = [FillerRole.ShadeVoidDominant, FillerRole.ShadeVoidRecessive] as const;
+const CRUBTECH_PAUSE_LAMP_BLOCK = "minecraft:redstone_lamp[lit=true]";
+const CRUBTECH_CONTINUE_LAMP_BLOCK = "minecraft:redstone_lamp[lit=false]";
 
 type NonWaterColorCoord = { x: number; z: number };
 type StepPhaseSpec = {
@@ -288,6 +290,16 @@ function getShapeMarkerY(shape: GeneratedShape): number | null {
   return Number.isFinite(minSupportFloorY) ? minSupportFloorY + 1 : null;
 }
 
+function getCrubTechSignalLampY(shape: GeneratedShape): number | null {
+  let maxSupportFloorY = -Infinity;
+  for (const part of shape.parts) {
+    for (const y of part.supportFloorYs) {
+      if (y > maxSupportFloorY) maxSupportFloorY = y;
+    }
+  }
+  return Number.isFinite(maxSupportFloorY) ? maxSupportFloorY + 4 : null;
+}
+
 function getNonWaterColorCoords(part: ShapePart): NonWaterColorCoord[] {
   const coords: NonWaterColorCoord[] = [];
   for (const [coord, cell] of part.cells) {
@@ -476,18 +488,17 @@ function getCrubTechStepStartX(x: number): number {
   return Math.min(MAP_SIZE - 1, x | 1);
 }
 
-function buildCrubTechLatePairPauseMarkers(
+function buildCrubTechLatePairSignalLamps(
   shape: GeneratedShape,
   buildMode: BuildMode,
   enabled: boolean,
   latePairY: number,
-  markerBlockName: string,
 ): LoadSpotMarkerEntry[] {
   if (!enabled || buildMode !== BuildMode.Suppress2LayerLatePairs) {
     return [];
   }
-  const markerY = getShapeMarkerY(shape);
-  if (markerY === null) return [];
+  const lampY = getCrubTechSignalLampY(shape);
+  if (lampY === null) return [];
 
   const stepStartXs = new Set<number>();
   for (const part of shape.parts) {
@@ -498,13 +509,15 @@ function buildCrubTechLatePairPauseMarkers(
     }
   }
 
-  return [...stepStartXs]
-    .sort((a, b) => b - a)
+  return Array.from(
+    { length: MAP_SIZE / 2 },
+    (_, index) => MAP_SIZE - 1 - index * 2,
+  )
     .map(x => ({
       x,
-      y: markerY,
+      y: lampY,
       z: MAP_SIZE,
-      blockName: orientLoadSpotMarkerBlockName(markerBlockName, SuppressStepDirection.EastToWest),
+      blockName: stepStartXs.has(x) ? CRUBTECH_PAUSE_LAMP_BLOCK : CRUBTECH_CONTINUE_LAMP_BLOCK,
     }));
 }
 
@@ -520,12 +533,11 @@ export function buildSuppressLoadSpotMarkers(
   const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
   return [
     ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),
-    ...buildCrubTechLatePairPauseMarkers(
+    ...buildCrubTechLatePairSignalLamps(
       shape,
       buildMode,
       options.crubTech === true,
-      options.suppress2LayerLatePairY ?? DEFAULT_LAYER_GAP + DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
-      markerBlockName,
+      options.suppress2LayerLatePairY ?? DEFAULT_CRUBTECH_LAYER_GAP + DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
     ),
     ...buildVsFillerLoadSpotMarkers(
       shape,

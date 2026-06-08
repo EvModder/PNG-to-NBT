@@ -57,6 +57,7 @@ function getDirectionSuffix(direction: SuppressStepDirection): string {
 export function getBuildModeDownloadSuffix(
   buildMode: BuildMode,
   direction: SuppressStepDirection,
+  crubTech = false,
 ): string {
   switch (buildMode) {
     case BuildMode.Flat:
@@ -87,8 +88,9 @@ export function getBuildModeDownloadSuffix(
       return `-suppress_step_checker_${getDirectionSuffix(direction)}`;
     case BuildMode.Suppress2Layer:
     case BuildMode.Suppress2LayerLateFillers:
-    case BuildMode.Suppress2LayerLatePairs:
       return "-suppress_2layer";
+    case BuildMode.Suppress2LayerLatePairs:
+      return crubTech ? "-suppress_crubtech" : "-suppress_2layer";
   }
 }
 

@@ -12,7 +12,7 @@ import { MAP_SIZE } from "@/utils/color";
 import { DEFAULT_NBT_AUTHOR } from "@/data/defaultSettings";
 import type { ColorRef } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
-import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
+import { CRUBTECH_NOOBLINE_FILLER_BLOCK, buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
 import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { createZip } from "@/utils/zip";
@@ -49,6 +49,7 @@ interface ExportOptions extends ColorBlockSelections {
 
 type ExportPaletteRole = "visible" | "convenience" | "shading" | "vs_filler" | "support";
 const EXPORT_PALETTE_ROLE_ORDER = ["visible", "shading", "vs_filler", "support", "convenience"] as const;
+const CRUBTECH_PLATFORM_BLOCK_NAME = "minecraft:glass";
 
 interface PaletteIndexedBlock {
   x: number;
@@ -247,8 +248,18 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
 
   if (options.fillerAssignments.length === 0) return resolved;
 
+  const resolveExportFillerName = (role: FillerRole) => {
+    if (
+      options.crubTech &&
+      (role === FillerRole.ShadeNorthRowBreakable || role === FillerRole.ShadeNorthRowPushable)
+    ) {
+      return resolveExportBlockName(CRUBTECH_NOOBLINE_FILLER_BLOCK);
+    }
+    return resolveAssignedFillerName(fillerAssignments, role);
+  };
+
   for (const assignment of options.fillerAssignments) {
-    const fillerName = resolveAssignedFillerName(fillerAssignments, assignment.role);
+    const fillerName = resolveExportFillerName(assignment.role);
     for (const [coord, cell] of part.cells) {
       if (!isShapeFillerCell(cell) || !cell.includes(assignment.role)) continue;
       const [x, y, z] = parseShapeCoordKey(coord);
@@ -316,6 +327,32 @@ function normalizeAndMeasure<T extends { x: number; y: number; z: number }>(
   };
 }
 
+function appendCrubTechPlatformBlocks(
+  blocks: PaletteSourceBlock[],
+  shape: GeneratedShape,
+  options: ExportOptions,
+): void {
+  if (options.crubTech !== true || options.buildMode !== BuildMode.Suppress2LayerLatePairs) return;
+
+  const platformYs = new Set<number>();
+  for (const part of shape.parts) {
+    for (const y of part.supportFloorYs) platformYs.add(y);
+  }
+  if (platformYs.size === 0) return;
+
+  const occupied = new Set(blocks.map(block => `${block.x},${block.y},${block.z}`));
+  for (const y of [...platformYs].sort((a, b) => a - b)) {
+    for (let x = 0; x < MAP_SIZE; x += 1) {
+      for (let z = 0; z < MAP_SIZE; z += 1) {
+        const key = `${x},${y},${z}`;
+        if (occupied.has(key)) continue;
+        blocks.push({ x, y, z, blockName: CRUBTECH_PLATFORM_BLOCK_NAME, paletteRole: "support" });
+        occupied.add(key);
+      }
+    }
+  }
+}
+
 async function writeExportBlocksToNbt(
   blocks: PaletteSourceBlock[],
   options: ExportOptions,
@@ -349,6 +386,7 @@ async function buildSingleEntry(
   options: ExportOptions,
 ): Promise<NbtExportEntry> {
   const blocks = parts.flat();
+  appendCrubTechPlatformBlocks(blocks, shape, options);
   for (const marker of buildSuppressLoadSpotMarkers(
     shape,
     options.buildMode,

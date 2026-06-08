@@ -553,19 +553,33 @@ function isCrubTechShadeFillerRole(role: FillerRole): boolean {
   return role === FillerRole.ShadeNorthRow || role === FillerRole.ShadeSuppress;
 }
 
-function getCrubTechShadeFillerRole(baseRole: FillerRole.ShadeNorthRow | FillerRole.ShadeSuppress, x: number): FillerRole {
-  const usePushable = (x & 1) === 1;
-  if (baseRole === FillerRole.ShadeNorthRow) {
-    return usePushable ? FillerRole.ShadeNorthRowPushable : FillerRole.ShadeNorthRowBreakable;
-  }
-  return usePushable ? FillerRole.ShadeSuppressPushable : FillerRole.ShadeSuppressBreakable;
+function getCrubTechShadeFillerRole(
+  baseRole: FillerRole.ShadeNorthRow | FillerRole.ShadeSuppress,
+  x: number,
+  y: number,
+  z: number,
+  upperY: number,
+  occupied: ReadonlySet<ShapeCoordKey>,
+  fillerPlacements: ReadonlyMap<ShapeCoordKey, ShapeRef>,
+): FillerRole {
+  if (baseRole === FillerRole.ShadeNorthRow) return FillerRole.ShadeNorthRowBreakable;
+  if (y !== upperY) return FillerRole.ShadeSuppressPushable;
+  const pairX = (x & 1) === 0 ? x + 1 : x - 1;
+  const pairCoord = toShapeCoordKey(pairX, y, z);
+  return !occupied.has(pairCoord) && !fillerPlacements.has(pairCoord)
+    ? FillerRole.ShadeSuppressPushable
+    : FillerRole.ShadeSuppressBreakable;
 }
 
-function applyCrubTechShadeFillerRoles(fillerPlacements: Map<ShapeCoordKey, ShapeRef>): void {
+function applyCrubTechShadeFillerRoles(
+  fillerPlacements: Map<ShapeCoordKey, ShapeRef>,
+  occupied: ReadonlySet<ShapeCoordKey>,
+  upperY: number,
+): void {
   for (const [coord, ref] of fillerPlacements) {
     if (ref.kind !== "filler" || !isCrubTechShadeFillerRole(ref.role)) continue;
-    const [x] = parseShapeCoordKey(coord);
-    ref.role = getCrubTechShadeFillerRole(ref.role, x);
+    const [x, y, z] = parseShapeCoordKey(coord);
+    ref.role = getCrubTechShadeFillerRole(ref.role, x, y, z, upperY, occupied, fillerPlacements);
   }
 }
 
@@ -2131,7 +2145,7 @@ function buildSuppressDualLayerBlocks(
     }
   }
 
-  if (useCrubTech) applyCrubTechShadeFillerRoles(fillerPlacements);
+  if (useCrubTech) applyCrubTechShadeFillerRoles(fillerPlacements, occupied, upperY);
 
   for (const [coord, ref] of fillerPlacements.entries()) {
     if (occupied.has(coord)) continue;

@@ -57,6 +57,7 @@ export const esCatalog = {
       Fullblock: "Preset de uso general que utiliza sobre todo bloques completos y tablones para cada color del mapa.",
       Carpets: "Usa variantes de alfombra cuando están disponibles para reducir la altura y el coste de bloques.",
       PistonClear: "Usa bloques compatibles con limpieza por pistón o atravesables, incluyendo sustitutos transparentes especiales cuando hace falta.",
+      CrubTech: "Bloques pensados para la plataforma CrubTech suppress de 2 capas.",
     },
   },
   supportMode: {
