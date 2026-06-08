@@ -19,7 +19,7 @@ import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { isSuppressBuildMode } from "@/utils/conversion";
+import { isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
 
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
@@ -290,14 +290,28 @@ function getShapeMarkerY(shape: GeneratedShape): number | null {
   return Number.isFinite(minSupportFloorY) ? minSupportFloorY + 1 : null;
 }
 
-function getCrubTechSignalLampY(shape: GeneratedShape): number | null {
+function getMaxSupportFloorY(shape: GeneratedShape): number | null {
   let maxSupportFloorY = -Infinity;
   for (const part of shape.parts) {
     for (const y of part.supportFloorYs) {
       if (y > maxSupportFloorY) maxSupportFloorY = y;
     }
   }
-  return Number.isFinite(maxSupportFloorY) ? maxSupportFloorY + 4 : null;
+  return Number.isFinite(maxSupportFloorY) ? maxSupportFloorY : null;
+}
+
+function getDefaultCrubTechLatePairY(shape: GeneratedShape, buildMode: BuildMode): number {
+  const maxSupportFloorY = getMaxSupportFloorY(shape);
+  if (maxSupportFloorY === null) return DEFAULT_CRUBTECH_LAYER_GAP + DEFAULT_CRUBTECH_LATE_PAIRS_GAP;
+  return buildMode === BuildMode.Suppress2Layer
+    ? maxSupportFloorY + 1 + DEFAULT_CRUBTECH_LATE_PAIRS_GAP
+    : maxSupportFloorY + 1;
+}
+
+function getCrubTechSignalLampY(shape: GeneratedShape, latePairY: number): number | null {
+  const maxSupportFloorY = getMaxSupportFloorY(shape);
+  if (maxSupportFloorY === null) return null;
+  return Math.max(maxSupportFloorY, latePairY - 1) + 4;
 }
 
 function getNonWaterColorCoords(part: ShapePart): NonWaterColorCoord[] {
@@ -488,24 +502,26 @@ function getCrubTechStepStartX(x: number): number {
   return Math.min(MAP_SIZE - 1, x | 1);
 }
 
-function buildCrubTechLatePairSignalLamps(
+function buildCrubTechSignalLamps(
   shape: GeneratedShape,
   buildMode: BuildMode,
   enabled: boolean,
   latePairY: number,
 ): LoadSpotMarkerEntry[] {
-  if (!enabled || buildMode !== BuildMode.Suppress2LayerLatePairs) {
+  if (!enabled || !isCrubTechBuildMode(buildMode)) {
     return [];
   }
-  const lampY = getCrubTechSignalLampY(shape);
+  const lampY = getCrubTechSignalLampY(shape, latePairY);
   if (lampY === null) return [];
 
   const stepStartXs = new Set<number>();
-  for (const part of shape.parts) {
-    for (const [coord] of part.cells) {
-      const [x, y, z] = parseShapeCoordKey(coord);
-      if (y !== latePairY || x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
-      stepStartXs.add(getCrubTechStepStartX(x));
+  if (buildMode === BuildMode.Suppress2LayerLatePairs) {
+    for (const part of shape.parts) {
+      for (const [coord] of part.cells) {
+        const [x, y, z] = parseShapeCoordKey(coord);
+        if (y !== latePairY || x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
+        stepStartXs.add(getCrubTechStepStartX(x));
+      }
     }
   }
 
@@ -531,13 +547,14 @@ export function buildSuppressLoadSpotMarkers(
   options: BuildLoadSpotMarkerOptions,
 ): LoadSpotMarkerEntry[] {
   const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
+  const crubTechLatePairY = options.suppress2LayerLatePairY ?? getDefaultCrubTechLatePairY(shape, buildMode);
   return [
     ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),
-    ...buildCrubTechLatePairSignalLamps(
+    ...buildCrubTechSignalLamps(
       shape,
       buildMode,
       options.crubTech === true,
-      options.suppress2LayerLatePairY ?? DEFAULT_CRUBTECH_LAYER_GAP + DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
+      crubTechLatePairY,
     ),
     ...buildVsFillerLoadSpotMarkers(
       shape,

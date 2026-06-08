@@ -4,6 +4,7 @@
  * - isSuppressBuildMode()
  * - isSuppressStepsBuildMode()
  * - buildModeUsesLayerGap()
+ * - isCrubTechBuildMode()
  * - buildModeUsesPaletteSeed()
  * - shouldIncludeTransparentBlocks()
  * - getBuildModeRangeMax()
@@ -19,6 +20,7 @@
  * - src/lib/codecPreset.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/shapeGeneration.ts
+ * - src/lib/nbtExport.ts
  * - tests/run.mts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -86,10 +88,10 @@ export function getBuildModeDownloadSuffix(
       return `-suppress_step_pairs_${getDirectionSuffix(direction)}`;
     case BuildMode.SuppressStepChecker:
       return `-suppress_step_checker_${getDirectionSuffix(direction)}`;
-    case BuildMode.Suppress2Layer:
     case BuildMode.Suppress2LayerLateFillers:
       return "-suppress_2layer";
     case BuildMode.Suppress2LayerLatePairs:
+    case BuildMode.Suppress2Layer:
       return crubTech ? "-suppress_crubtech" : "-suppress_2layer";
   }
 }
@@ -131,6 +133,7 @@ export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
 export function isSuppressBuildMode(buildMode: BuildMode): boolean {
   return !isStaircaseBuildMode(buildMode);
@@ -157,6 +160,20 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Suppress2Layer:
     case BuildMode.Suppress2LayerLateFillers:
+    case BuildMode.Suppress2LayerLatePairs:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Callers:
+// - src/Index.tsx
+// - src/lib/nbtExport.ts
+// - src/lib/suppressLoadMarkers.ts
+export function isCrubTechBuildMode(buildMode: BuildMode): boolean {
+  switch (buildMode) {
+    case BuildMode.Suppress2Layer:
     case BuildMode.Suppress2LayerLatePairs:
       return true;
     default:

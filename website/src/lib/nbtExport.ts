@@ -9,7 +9,13 @@
  * - tests/invariants.mts
  */
 import { MAP_SIZE } from "@/utils/color";
-import { DEFAULT_NBT_AUTHOR } from "@/data/defaultSettings";
+import {
+  DEFAULT_CRUBTECH_DARK_WATER_DROP,
+  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
+  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
+  DEFAULT_NBT_AUTHOR,
+} from "@/data/defaultSettings";
 import type { ColorRef } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
 import { CRUBTECH_NOOBLINE_FILLER_BLOCK, buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
@@ -17,8 +23,8 @@ import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlo
 import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { createZip } from "@/utils/zip";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
-import { WATER_BASE_INDEX } from "@/data/mapColors";
-import { isSuppressBuildMode } from "@/utils/conversion";
+import { Shade, WATER_BASE_INDEX } from "@/data/mapColors";
+import { isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
 import {
   isShapeColorCell,
   isShapeFillerCell,
@@ -50,6 +56,10 @@ interface ExportOptions extends ColorBlockSelections {
 type ExportPaletteRole = "visible" | "convenience" | "shading" | "vs_filler" | "support";
 const EXPORT_PALETTE_ROLE_ORDER = ["visible", "shading", "vs_filler", "support", "convenience"] as const;
 const CRUBTECH_PLATFORM_BLOCK_NAME = "minecraft:glass";
+const CRUBTECH_GLASS_PANE_BLOCK_NAME = "minecraft:glass_pane[east=true,north=true,south=true,west=true]";
+const CRUBTECH_WATERLOGGED_GLASS_PANE_BLOCK_NAME = "minecraft:glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
+const CRUBTECH_CATCHER_CHAIN_BLOCK_NAME = "minecraft:chain[axis=z]";
+const CRUBTECH_FALLING_WATER_BLOCK_NAME = "minecraft:water[level=8]";
 
 interface PaletteIndexedBlock {
   x: number;
@@ -154,8 +164,7 @@ type ExportBoundsOptions = Pick<
 >;
 
 function hasCrubTechPauseMarkers(options: ExportBoundsOptions): boolean {
-  return options.crubTech === true &&
-    options.buildMode === BuildMode.Suppress2LayerLatePairs;
+  return options.crubTech === true && isCrubTechBuildMode(options.buildMode);
 }
 
 function getLoadMarkerDistance(options: ExportBoundsOptions): number {
@@ -282,8 +291,9 @@ function normalizeAndMeasure<T extends { x: number; y: number; z: number }>(
   blocks: T[],
   options: ExportBoundsOptions,
 ): { sizeX: number; sizeY: number; sizeZ: number } {
-  const forceXZ128 = options.forceXZ128 !== false;
-  const forceZ129 = options.forceZ129 === true;
+  const crubTechForcesBounds = options.crubTech === true && isCrubTechBuildMode(options.buildMode);
+  const forceXZ128 = crubTechForcesBounds || options.forceXZ128 !== false;
+  const forceZ129 = crubTechForcesBounds || options.forceZ129 === true;
   if (blocks.length === 0) {
     return {
       sizeX: MAP_SIZE,
@@ -332,25 +342,103 @@ function appendCrubTechPlatformBlocks(
   shape: GeneratedShape,
   options: ExportOptions,
 ): void {
-  if (options.crubTech !== true || options.buildMode !== BuildMode.Suppress2LayerLatePairs) return;
+  if (options.crubTech !== true || !isCrubTechBuildMode(options.buildMode)) return;
 
   const platformYs = new Set<number>();
   for (const part of shape.parts) {
     for (const y of part.supportFloorYs) platformYs.add(y);
   }
+  if (options.suppress2LayerLatePairY !== undefined) {
+    platformYs.add(options.suppress2LayerLatePairY - 1);
+  } else if (options.buildMode === BuildMode.Suppress2Layer && platformYs.size > 0) {
+    platformYs.add(Math.max(...platformYs) + DEFAULT_CRUBTECH_LATE_PAIRS_GAP);
+  }
   if (platformYs.size === 0) return;
 
-  const occupied = new Set(blocks.map(block => `${block.x},${block.y},${block.z}`));
+  const bottomPlatformY = Math.min(...platformYs);
+  const shadeLayerYs = {
+    [Shade.Dark]: bottomPlatformY - DEFAULT_CRUBTECH_DARK_WATER_DROP,
+    [Shade.Flat]: bottomPlatformY - DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+    [Shade.Light]: bottomPlatformY - DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
+  } as const;
+  const waterShadeByCoord = new Map<string, Shade>();
+  for (const part of shape.parts) {
+    for (const [coord, cell] of part.cells) {
+      if (!isShapeColorCell(cell) || cell.isCustom || cell.id !== WATER_BASE_INDEX) continue;
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
+      const shade = y === shadeLayerYs[Shade.Light]
+        ? Shade.Light
+        : y === shadeLayerYs[Shade.Flat]
+          ? Shade.Flat
+          : y === shadeLayerYs[Shade.Dark]
+            ? Shade.Dark
+            : null;
+      if (shade !== null) waterShadeByCoord.set(`${x},${z}`, shade);
+    }
+  }
+  if (waterShadeByCoord.size === 0) {
+    platformYs.delete(bottomPlatformY);
+    if (platformYs.size === 0) return;
+  }
+
+  const blockIndexByCoord = new Map(blocks.map((block, index) => [`${block.x},${block.y},${block.z}`, index] as const));
+  const upsertBlock = (x: number, y: number, z: number, blockName: string, replace = false) => {
+    const key = `${x},${y},${z}`;
+    const existingIndex = blockIndexByCoord.get(key);
+    if (existingIndex !== undefined) {
+      if (replace) {
+        blocks[existingIndex].blockName = blockName;
+        blocks[existingIndex].paletteRole = "support";
+      }
+      return;
+    }
+    blocks.push({ x, y, z, blockName, paletteRole: "support" });
+    blockIndexByCoord.set(key, blocks.length - 1);
+  };
+
   for (const y of [...platformYs].sort((a, b) => a - b)) {
     for (let x = 0; x < MAP_SIZE; x += 1) {
       for (let z = 0; z < MAP_SIZE; z += 1) {
-        const key = `${x},${y},${z}`;
-        if (occupied.has(key)) continue;
-        blocks.push({ x, y, z, blockName: CRUBTECH_PLATFORM_BLOCK_NAME, paletteRole: "support" });
-        occupied.add(key);
+        upsertBlock(x, y, z, CRUBTECH_PLATFORM_BLOCK_NAME);
       }
     }
   }
+
+  if (waterShadeByCoord.size === 0) return;
+
+  for (const shade of [Shade.Light, Shade.Flat, Shade.Dark] as const) {
+    const y = shadeLayerYs[shade];
+    for (let x = 0; x < MAP_SIZE; x += 1) {
+      for (let z = 0; z < MAP_SIZE; z += 1) {
+        const blockName = waterShadeByCoord.get(`${x},${z}`) === shade
+          ? CRUBTECH_WATERLOGGED_GLASS_PANE_BLOCK_NAME
+          : CRUBTECH_GLASS_PANE_BLOCK_NAME;
+        upsertBlock(x, y, z, blockName, true);
+      }
+    }
+  }
+
+  const appendCatcher = (waterShade: Shade.Light | Shade.Flat, catcherDrop: number) => {
+    const waterY = shadeLayerYs[waterShade];
+    const catcherPaneY = waterY - catcherDrop;
+    const catcherChainY = catcherPaneY - 1;
+    for (let x = 0; x < MAP_SIZE; x += 1) {
+      for (let z = 0; z < MAP_SIZE; z += 1) {
+        upsertBlock(x, catcherPaneY, z, CRUBTECH_WATERLOGGED_GLASS_PANE_BLOCK_NAME, true);
+        upsertBlock(x, catcherChainY, z, CRUBTECH_CATCHER_CHAIN_BLOCK_NAME, true);
+      }
+    }
+    for (const [coord, shade] of waterShadeByCoord) {
+      if (shade !== waterShade) continue;
+      const [x, z] = coord.split(",").map(Number);
+      for (let y = waterY - 1; y > catcherPaneY; y -= 1) {
+        upsertBlock(x, y, z, CRUBTECH_FALLING_WATER_BLOCK_NAME, true);
+      }
+    }
+  };
+  appendCatcher(Shade.Light, 2);
+  appendCatcher(Shade.Flat, 5);
 }
 
 async function writeExportBlocksToNbt(

@@ -30,12 +30,16 @@ type SecretsSettingsDialogProps = {
   setCollapseDuplicateNbtPaletteStates: Dispatch<SetStateAction<boolean>>;
   forceXZ128: boolean;
   setForceXZ128: Dispatch<SetStateAction<boolean>>;
+  forceXZ128Disabled?: boolean;
   forceZ129: boolean;
   setForceZ129: Dispatch<SetStateAction<boolean>>;
+  forceZ129Disabled?: boolean;
   applySupportFloorYs: boolean;
   setApplySupportFloorYs: Dispatch<SetStateAction<boolean>>;
+  applySupportFloorYsDisabled?: boolean;
   belowPlatformWater: boolean;
   setBelowPlatformWater: Dispatch<SetStateAction<boolean>>;
+  belowPlatformWaterDisabled?: boolean;
   skipEmptySuppressSteps: boolean;
   setSkipEmptySuppressSteps: Dispatch<SetStateAction<boolean>>;
   showFlatNbtSuppressStepModes: boolean;
@@ -56,14 +60,16 @@ type OptionRowProps = {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
+  disabled?: boolean;
 };
 
-function OptionRow({ checked, onChange, label }: OptionRowProps) {
+function OptionRow({ checked, onChange, label, disabled = false }: OptionRowProps) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer">
+    <label className={`flex items-center gap-2 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={event => onChange(event.target.checked)}
         className="h-3.5 w-3.5"
       />
@@ -128,12 +134,16 @@ export function SecretsSettingsDialog({
   setCollapseDuplicateNbtPaletteStates,
   forceXZ128,
   setForceXZ128,
+  forceXZ128Disabled = false,
   forceZ129,
   setForceZ129,
+  forceZ129Disabled = false,
   applySupportFloorYs,
   setApplySupportFloorYs,
+  applySupportFloorYsDisabled = false,
   belowPlatformWater,
   setBelowPlatformWater,
+  belowPlatformWaterDisabled = false,
   skipEmptySuppressSteps,
   setSkipEmptySuppressSteps,
   showFlatNbtSuppressStepModes,
@@ -200,21 +210,25 @@ export function SecretsSettingsDialog({
             checked={forceXZ128}
             onChange={setForceXZ128}
             label={messages.dialogs.options.forceXZ128}
+            disabled={forceXZ128Disabled}
           />
           <OptionRow
             checked={forceZ129}
             onChange={setForceZ129}
             label={messages.dialogs.options.forceZ129}
+            disabled={forceZ129Disabled}
           />
           <OptionRow
             checked={applySupportFloorYs}
             onChange={setApplySupportFloorYs}
             label={messages.dialogs.options.assumeFloor}
+            disabled={applySupportFloorYsDisabled}
           />
           <OptionRow
             checked={belowPlatformWater}
             onChange={setBelowPlatformWater}
             label={messages.dialogs.options.belowPlatformWater}
+            disabled={belowPlatformWaterDisabled}
           />
           <OptionRow
             checked={skipEmptySuppressSteps}

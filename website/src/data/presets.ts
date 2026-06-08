@@ -208,7 +208,7 @@ function buildCrubTechPreset(): BlockPreset {
       9: "clay",
       10: "jungle_planks",
       11: "cobblestone",
-      12: "",
+      12: "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]",
       13: "oak_planks",
       14: "diorite",
       15: "orange_concrete",

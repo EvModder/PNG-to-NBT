@@ -39,6 +39,7 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
 // - tests/invariants.mts
 // - tests/run.mts
@@ -56,6 +57,9 @@ export const DEFAULT_MIX_STEPS = false;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;
 export const DEFAULT_DARK_WATER_DROP = 4;
+export const DEFAULT_CRUBTECH_LIGHT_WATER_DROP = 7;
+export const DEFAULT_CRUBTECH_FLAT_WATER_DROP = 14;
+export const DEFAULT_CRUBTECH_DARK_WATER_DROP = 24;
 export const DEFAULT_BUILD_AT_WORLD_MIN_Y = true;
 
 // Callers:

@@ -1,8 +1,16 @@
 #!/usr/bin/env bun
 import { gunzipSync } from "node:zlib";
 
-import { DEFAULT_CRUBTECH_LAYER_GAP, DEFAULT_CRUBTECH_LATE_PAIRS_GAP, DEFAULT_LAYER_GAP, DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP } from "@/data/defaultSettings";
-import { BASE_COLORS } from "@/data/mapColors";
+import {
+  DEFAULT_CRUBTECH_DARK_WATER_DROP,
+  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_CRUBTECH_LAYER_GAP,
+  DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
+  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
+  DEFAULT_LAYER_GAP,
+  DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
+} from "@/data/defaultSettings";
+import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { CRUBTECH_PRESET_NAME, getBuiltinPreset } from "@/data/presets";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
@@ -14,6 +22,11 @@ import { Shade, type ColorGrid } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 
 const VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH = 14;
+const CRUBTECH_WATER_COLOR_BLOCK = "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
+const CRUBTECH_EXPORT_GLASS_PANE = "minecraft:glass_pane[east=true,north=true,south=true,west=true]";
+const CRUBTECH_EXPORT_WATERLOGGED_GLASS_PANE = "minecraft:glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
+const CRUBTECH_EXPORT_CATCHER_CHAIN = "minecraft:chain[axis=z]";
+const CRUBTECH_EXPORT_FALLING_WATER = "minecraft:water[level=8]";
 
 function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, label: string): void {
   if (actual.length !== expected.length) {
@@ -57,6 +70,121 @@ type TestExportCell = {
   z: number;
   cell: ShapeCell;
 };
+
+type ParsedStructureBlock = { x: number; y: number; z: number; blockName: string };
+
+function parseStructureBlocks(bytes: Uint8Array): ParsedStructureBlock[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+  const readByte = () => view.getUint8(offset++);
+  const readShort = () => {
+    const value = view.getUint16(offset, false);
+    offset += 2;
+    return value;
+  };
+  const readInt = () => {
+    const value = view.getInt32(offset, false);
+    offset += 4;
+    return value;
+  };
+  const readString = () => {
+    const length = readShort();
+    const value = new TextDecoder().decode(bytes.subarray(offset, offset + length));
+    offset += length;
+    return value;
+  };
+  const readTag = () => {
+    const type = readByte();
+    return { type, name: type === 0 ? "" : readString() };
+  };
+  const expectTag = (expectedName: string, expectedType: number) => {
+    const tag = readTag();
+    if (tag.type !== expectedType || tag.name !== expectedName) {
+      throw new Error(`Expected NBT tag ${expectedName}:${expectedType}, got ${tag.name}:${tag.type}`);
+    }
+  };
+  const readIntList = (): number[] => {
+    const elementType = readByte();
+    const count = readInt();
+    if (elementType !== 3) throw new Error(`Expected int list, got element tag ${elementType}`);
+    return Array.from({ length: count }, () => readInt());
+  };
+  const readPalette = (): string[] => {
+    const elementType = readByte();
+    const count = readInt();
+    if (elementType !== 10) throw new Error(`Expected palette compound list, got element tag ${elementType}`);
+    return Array.from({ length: count }, () => {
+      let blockName = "";
+      const properties: [string, string][] = [];
+      while (true) {
+        const tagType = readByte();
+        if (tagType === 0) {
+          if (properties.length === 0) return blockName;
+          return `${blockName}[${properties.map(([name, value]) => `${name}=${value}`).join(",")}]`;
+        }
+        const tagName = readString();
+        if (tagName === "Name" && tagType === 8) blockName = readString();
+        else if (tagName === "Properties" && tagType === 10) {
+          while (true) {
+            const propertyType = readByte();
+            if (propertyType === 0) break;
+            if (propertyType !== 8) throw new Error(`Unexpected palette property tag type ${propertyType}`);
+            const propertyName = readString();
+            properties.push([propertyName, readString()]);
+          }
+        } else {
+          throw new Error(`Unexpected palette tag ${tagName}:${tagType}`);
+        }
+      }
+    });
+  };
+  const readBlockStates = (): { x: number; y: number; z: number; state: number }[] => {
+    const elementType = readByte();
+    const count = readInt();
+    if (elementType !== 10) throw new Error(`Expected block compound list, got element tag ${elementType}`);
+    return Array.from({ length: count }, () => {
+      let pos = [0, 0, 0];
+      let state = 0;
+      while (true) {
+        const tagType = readByte();
+        if (tagType === 0) return { x: pos[0], y: pos[1], z: pos[2], state };
+        const tagName = readString();
+        if (tagName === "pos" && tagType === 9) pos = readIntList();
+        else if (tagName === "state" && tagType === 3) state = readInt();
+        else throw new Error(`Unexpected block tag ${tagName}:${tagType}`);
+      }
+    });
+  };
+
+  if (readByte() !== 10) throw new Error("Expected root compound NBT tag");
+  readString();
+  expectTag("DataVersion", 3);
+  readInt();
+  expectTag("size", 9);
+  readIntList();
+  let nextTag = readTag();
+  if (nextTag.name === "author" && nextTag.type === 8) {
+    readString();
+    nextTag = readTag();
+  }
+  if (nextTag.name !== "palette" || nextTag.type !== 9) {
+    throw new Error(`Expected palette tag, got ${nextTag.name}:${nextTag.type}`);
+  }
+  const palette = readPalette();
+  expectTag("blocks", 9);
+  const blocks = readBlockStates();
+  const endTag = readTag();
+  if (endTag.name !== "entities" || endTag.type !== 9) {
+    throw new Error(`Expected entities tag, got ${endTag.name}:${endTag.type}`);
+  }
+
+  return blocks.map(block => ({
+    x: block.x,
+    y: block.y,
+    z: block.z,
+    blockName: palette[block.state] ?? "",
+  }));
+}
 
 function buildTestShape(cells: readonly TestExportCell[]): GeneratedShape {
   const partCells = new Map<number, ShapeCell>();
@@ -269,11 +397,15 @@ function assertCrubTechPresetInvariant(): void {
   const preset = getBuiltinPreset(CRUBTECH_PRESET_NAME);
   if (!preset) throw new Error("Expected built-in CrubTech preset");
 
-  const intentionallyBlankColorIndexes = new Set([0, 12]);
+  const intentionallyBlankColorIndexes = new Set([0]);
   for (let baseIndex = 0; baseIndex < BASE_COLORS.length; baseIndex += 1) {
     const block = preset.selectedBlocks[baseIndex] ?? "";
     if (intentionallyBlankColorIndexes.has(baseIndex)) {
       if (block !== "") throw new Error(`Expected CrubTech preset color ${baseIndex}:${BASE_COLORS[baseIndex].name} to be blank`);
+      continue;
+    }
+    if (baseIndex === WATER_BASE_INDEX) {
+      if (block !== CRUBTECH_WATER_COLOR_BLOCK) throw new Error(`Expected CrubTech preset WATER color to use ${CRUBTECH_WATER_COLOR_BLOCK}`);
       continue;
     }
     if (!BASE_COLORS[baseIndex].blocks.includes(block)) {
@@ -413,6 +545,27 @@ async function assertCrubTechInvariants(): Promise<void> {
       `Expected no legacy shade fillers with CrubTech, got north_row=${legacyNorthRowWithCrubTechCount}, suppress=${legacyWithCrubTechCount}`,
     );
   }
+  const plainSignals = buildSuppressLoadSpotMarkers(
+    withCrubTech,
+    BuildMode.Suppress2Layer,
+    SuppressStepDirection.EastToWest,
+    {
+      crubTech: true,
+      suppressLoadSpotMarkerBlock: "jigsaw",
+    },
+  ).filter(marker => marker.z === MAP_SIZE && marker.blockName.startsWith("minecraft:redstone_lamp"));
+  if (plainSignals.length !== MAP_SIZE / 2) {
+    throw new Error(`Expected ${MAP_SIZE / 2} plain CrubTech signal lamps, got ${plainSignals.length}`);
+  }
+  const expectedPlainSignalY = layerGap + DEFAULT_CRUBTECH_LATE_PAIRS_GAP + 3;
+  const misplacedPlainSignal = plainSignals.find(marker => marker.y !== expectedPlainSignalY);
+  if (misplacedPlainSignal) {
+    throw new Error(`Expected plain CrubTech signal lamps at y=${expectedPlainSignalY}, got y=${misplacedPlainSignal.y}`);
+  }
+  const litPlainSignal = plainSignals.find(marker => marker.blockName === "minecraft:redstone_lamp[lit=true]");
+  if (litPlainSignal) {
+    throw new Error(`Expected plain CrubTech signal lamps to be unlit, got lit lamp at x=${litPlainSignal.x}`);
+  }
 
   const bottomLayerGrid: ColorGrid = Array.from(
     { length: MAP_SIZE },
@@ -485,6 +638,137 @@ async function assertCrubTechInvariants(): Promise<void> {
   const bytes = new Uint8Array(gunzipSync(exportResult.data));
   assertBytesContainAscii(bytes, "minecraft:moss_block", "CrubTech noobline export should force moss");
   assertBytesDoNotContainAscii(bytes, "minecraft:diamond_block", "CrubTech noobline export should ignore caller-provided north-row blocks");
+  assertBytesContainAscii(bytes, "minecraft:glass", "Plain CrubTech export should include prebuilt platform glass");
+  assertBytesContainAscii(bytes, "minecraft:redstone_lamp", "Plain CrubTech export should include all-off signal lamps");
+  assertBytesDoNotContainAscii(bytes, "minecraft:glass_pane", "No-water CrubTech export should omit water platform panes");
+  assertBytesDoNotContainAscii(bytes, "minecraft:chain", "No-water CrubTech export should omit water catcher chains");
+  assertBytesDoNotContainAscii(bytes, "minecraft:water", "No-water CrubTech export should omit falling water columns");
+  const exportedBlocks = parseStructureBlocks(bytes);
+  const glassCountsByY = new Map<number, number>();
+  for (const block of exportedBlocks) {
+    if (block.blockName !== "minecraft:glass") continue;
+    glassCountsByY.set(block.y, (glassCountsByY.get(block.y) ?? 0) + 1);
+  }
+  const omittedBottomPlatformCount = glassCountsByY.get(0) ?? 0;
+  if (omittedBottomPlatformCount !== 0) {
+    throw new Error(`Expected no CrubTech bottom glass platform without water colors, got ${omittedBottomPlatformCount} blocks`);
+  }
+  const expectedPlatformYs = [layerGap - 1, layerGap - 1 + DEFAULT_CRUBTECH_LATE_PAIRS_GAP];
+  for (const y of expectedPlatformYs) {
+    const count = glassCountsByY.get(y) ?? 0;
+    if (count !== MAP_SIZE * MAP_SIZE) {
+      throw new Error(`Expected full CrubTech glass platform at exported y=${y}, got ${count} blocks`);
+    }
+  }
+}
+
+async function assertCrubTechWaterPlatformInvariant(): Promise<void> {
+  const colorGrid: ColorGrid = Array.from(
+    { length: MAP_SIZE },
+    () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
+  );
+  colorGrid[0][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[10][10] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Light };
+  colorGrid[11][10] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Flat };
+  colorGrid[12][10] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Dark };
+
+  const shape = generateShapeMap(
+    colorGrid,
+    undefined,
+    true,
+    true,
+    false,
+    {
+      layerGap: DEFAULT_CRUBTECH_LAYER_GAP,
+      waterSetting: {
+        kind: "below-platform",
+        drops: [
+          DEFAULT_CRUBTECH_DARK_WATER_DROP + 1,
+          DEFAULT_CRUBTECH_FLAT_WATER_DROP + 1,
+          DEFAULT_CRUBTECH_LIGHT_WATER_DROP + 1,
+        ],
+      },
+      mixSteps: false,
+      paletteSeed: 0,
+      buildAtWorldMinY: false,
+      skipEmptySuppressSteps: true,
+      useCrubTech: true,
+      includeTransparentBlocks: false,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: BuildMode.Suppress2Layer,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
+    },
+  )[BuildMode.Suppress2Layer];
+  if (!shape) throw new Error("Expected suppress 2-layer shape in CrubTech water platform invariant test");
+
+  const exportResult = await convertToNbt(shape, {
+    selectedBlocks: {
+      1: "stone",
+      [WATER_BASE_INDEX]: CRUBTECH_WATER_COLOR_BLOCK,
+    },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: true,
+    forceZ129: true,
+    baseName: "crubtech-water-platform-test",
+    buildMode: BuildMode.Suppress2Layer,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+    crubTech: true,
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (exportResult.isZip) throw new Error("Expected single NBT export in CrubTech water platform invariant test");
+
+  const countsByBlockAndY = new Map<string, number>();
+  for (const block of parseStructureBlocks(new Uint8Array(gunzipSync(exportResult.data)))) {
+    const key = `${block.blockName}|${block.y}`;
+    countsByBlockAndY.set(key, (countsByBlockAndY.get(key) ?? 0) + 1);
+  }
+  const countBlocks = (blockName: string, y: number) => countsByBlockAndY.get(`${blockName}|${y}`) ?? 0;
+  const minOriginalY = -1 - DEFAULT_CRUBTECH_DARK_WATER_DROP;
+  const normalizeY = (originalY: number) => originalY - minOriginalY;
+  const lightWaterY = -1 - DEFAULT_CRUBTECH_LIGHT_WATER_DROP;
+  const flatWaterY = -1 - DEFAULT_CRUBTECH_FLAT_WATER_DROP;
+  const darkWaterY = -1 - DEFAULT_CRUBTECH_DARK_WATER_DROP;
+  const fullLayerCount = MAP_SIZE * MAP_SIZE;
+
+  for (const y of [lightWaterY, flatWaterY, darkWaterY]) {
+    const regularCount = countBlocks(CRUBTECH_EXPORT_GLASS_PANE, normalizeY(y));
+    const waterloggedCount = countBlocks(CRUBTECH_EXPORT_WATERLOGGED_GLASS_PANE, normalizeY(y));
+    if (regularCount !== fullLayerCount - 1 || waterloggedCount !== 1) {
+      throw new Error(
+        `Expected CrubTech water shade layer at y=${normalizeY(y)} to have 1 waterlogged pane and ${fullLayerCount - 1} regular panes, got ${waterloggedCount}/${regularCount}`,
+      );
+    }
+  }
+
+  const lightCatcherPaneY = lightWaterY - 2;
+  const flatCatcherPaneY = flatWaterY - 5;
+  for (const y of [lightCatcherPaneY, flatCatcherPaneY]) {
+    const waterloggedCount = countBlocks(CRUBTECH_EXPORT_WATERLOGGED_GLASS_PANE, normalizeY(y));
+    const chainCount = countBlocks(CRUBTECH_EXPORT_CATCHER_CHAIN, normalizeY(y - 1));
+    if (waterloggedCount !== fullLayerCount || chainCount !== fullLayerCount) {
+      throw new Error(
+        `Expected full CrubTech catcher pane/chain layers near y=${normalizeY(y)}, got waterlogged=${waterloggedCount}, chain=${chainCount}`,
+      );
+    }
+  }
+
+  const fallingWaterYs = [
+    lightWaterY - 1,
+    flatWaterY - 1,
+    flatWaterY - 2,
+    flatWaterY - 3,
+    flatWaterY - 4,
+  ].map(normalizeY);
+  for (const y of fallingWaterYs) {
+    const count = countBlocks(CRUBTECH_EXPORT_FALLING_WATER, y);
+    if (count !== 1) throw new Error(`Expected one CrubTech falling water column block at y=${y}, got ${count}`);
+  }
 }
 
 async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
@@ -566,6 +850,24 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
   const signalLamps = markers.filter(marker => marker.z === MAP_SIZE && marker.blockName.startsWith("minecraft:redstone_lamp"));
   if (signalLamps.length !== MAP_SIZE / 2) {
     throw new Error(`Expected ${MAP_SIZE / 2} CrubTech signal lamps, got ${signalLamps.length}`);
+  }
+  const plainModeMarkers = buildSuppressLoadSpotMarkers(
+    shape,
+    BuildMode.Suppress2Layer,
+    SuppressStepDirection.WestToEast,
+    {
+      crubTech: true,
+      suppress2LayerLatePairY: latePairY,
+      suppressLoadSpotMarkerBlock: "jigsaw",
+    },
+  );
+  const plainModeSignalLamps = plainModeMarkers.filter(marker => marker.z === MAP_SIZE && marker.blockName.startsWith("minecraft:redstone_lamp"));
+  if (plainModeSignalLamps.length !== MAP_SIZE / 2) {
+    throw new Error(`Expected ${MAP_SIZE / 2} plain CrubTech signal lamps, got ${plainModeSignalLamps.length}`);
+  }
+  const plainModeLitLamp = plainModeSignalLamps.find(marker => marker.blockName === "minecraft:redstone_lamp[lit=true]");
+  if (plainModeLitLamp) {
+    throw new Error(`Expected plain CrubTech signal lamps to be unlit, got lit lamp at x=${plainModeLitLamp.x}`);
   }
   const misplacedLamp = signalLamps.find(marker => marker.y !== expectedLampY);
   if (misplacedLamp) {
@@ -668,6 +970,7 @@ async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
   assertCrubTechPresetInvariant();
   await assertCrubTechInvariants();
+  await assertCrubTechWaterPlatformInvariant();
   await assertCrubTechLatePairPauseMarkerInvariants();
   assertDefaultLatePairYInvariant();
   await assertPaletteCollapseModeInvariants();

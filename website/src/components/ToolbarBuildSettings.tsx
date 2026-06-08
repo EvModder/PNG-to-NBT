@@ -38,6 +38,7 @@ type ToolbarBuildModeOption = {
 export type ToolbarBuildSettingsProps = {
   lockFlatBuildMode: boolean;
   visibleWaterLevelControls: VisibleWaterLevelControl[];
+  waterDropControlsDisabled: boolean;
   setNormalizedWaterDrop: (shade: WaterDropShade, value: number) => void;
   minLayerGap: number;
   layerGap: number;
@@ -104,6 +105,7 @@ function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirec
 export function ToolbarBuildSettings({
   lockFlatBuildMode,
   visibleWaterLevelControls,
+  waterDropControlsDisabled,
   setNormalizedWaterDrop,
   minLayerGap,
   layerGap,
@@ -154,7 +156,7 @@ export function ToolbarBuildSettings({
             return (
               <label
                 key={shade}
-                className="inline-flex items-center gap-1 cursor-help"
+                className={`inline-flex items-center gap-1 cursor-help ${waterDropControlsDisabled ? "opacity-55" : ""}`}
                 title={tooltip}
               >
                 <span
@@ -170,10 +172,11 @@ export function ToolbarBuildSettings({
                   type="number"
                   min={0}
                   value={value}
+                  disabled={waterDropControlsDisabled}
                   onChange={e => setNormalizedWaterDrop(shade, parseInt(e.target.value) || 0)}
                   title={tooltip}
                   aria-label={ariaLabel}
-                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                  className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center disabled:cursor-not-allowed"
                 />
               </label>
             );

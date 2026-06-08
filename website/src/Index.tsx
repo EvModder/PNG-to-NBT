@@ -15,6 +15,9 @@ import {
   DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
   DEFAULT_CRUBTECH,
+  DEFAULT_CRUBTECH_DARK_WATER_DROP,
+  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
   DEFAULT_CROP_IMAGE,
   DEFAULT_DARK_WATER_DROP,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
@@ -72,6 +75,7 @@ import {
   FlatModeBehavior,
   hasStepMixOpportunity,
   type ColorGridStats,
+  type WaterDrops,
 } from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
 import { createImageDataFromColorGrid, MAP_SIZE } from "@/utils/color";
@@ -146,6 +150,7 @@ import {
   isSuppressStepDirection,
   isStaircaseBuildMode,
   isSuppressBuildMode,
+  isCrubTechBuildMode,
   getVisibleSuppressBuildModes,
   shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
@@ -193,6 +198,12 @@ function clampLatePairsGap(value: number, maxGap: number): number {
 
 const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
 type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
+const CRUBTECH_WATER_DROPS = [
+  DEFAULT_CRUBTECH_DARK_WATER_DROP,
+  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
+] as const satisfies WaterDrops;
+const CRUBTECH_SHAPE_WATER_DROPS = CRUBTECH_WATER_DROPS.map(drop => drop + 1) as WaterDrops;
 type TileSelectionModifiers = {
   shiftKey: boolean;
   metaKey: boolean;
@@ -1287,23 +1298,29 @@ const Index = () => {
     ),
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
+  const usesBelowPlatformWaterForBuildMode = useCallback(
+    (targetBuildMode: BuildMode) => belowPlatformWater || (crubTech && isCrubTechBuildMode(targetBuildMode)),
+    [belowPlatformWater, crubTech],
+  );
   const getTileWaterSetting = useCallback(
     (tileDerivedImageStats: DerivedImageStats, targetBuildMode: BuildMode): TileWaterSetting => {
+      const targetBelowPlatformWater = usesBelowPlatformWaterForBuildMode(targetBuildMode);
       const tileUsedWaterShades = getUsedWaterShades(tileDerivedImageStats.usedShadesByColorKey);
       const tileHasWater = tileUsedWaterShades.size > 0;
       const tileHasNonLightWater =
         tileUsedWaterShades.has(Shade.Dark) ||
         tileUsedWaterShades.has(Shade.Flat);
+      const targetCrubTechWater = crubTech && isCrubTechBuildMode(targetBuildMode);
       if (targetBuildMode === BuildMode.Flat) return undefined;
-      if (belowPlatformWater && tileHasWater) {
-        return { kind: "below-platform", drops: normalizedDeferredWaterDrops };
+      if (targetBelowPlatformWater && tileHasWater) {
+        return { kind: "below-platform", drops: targetCrubTechWater ? CRUBTECH_SHAPE_WATER_DROPS : normalizedDeferredWaterDrops };
       }
-      if (!belowPlatformWater && usesWaterForWater && tileHasNonLightWater) {
+      if (!targetBelowPlatformWater && usesWaterForWater && tileHasNonLightWater) {
         return { kind: "top-aligned" };
       }
       return undefined;
     },
-    [belowPlatformWater, normalizedDeferredWaterDrops, usesWaterForWater],
+    [crubTech, normalizedDeferredWaterDrops, usesBelowPlatformWaterForBuildMode, usesWaterForWater],
   );
   const showMixStepsToggle = useMemo(
     () =>
@@ -1318,9 +1335,10 @@ const Index = () => {
     [buildMode, imageValid, parsedTiles, tileDerivedImageStats, getTileWaterSetting],
   );
   const twoLayerHasLateVoidNeed = voidShadowSummary.hasDominantVoidShadow;
-  const crubTechControlsLatePairsGap = crubTech && buildMode === BuildMode.Suppress2LayerLatePairs && twoLayerHasLateVoidNeed;
-  const effectiveLayerGap = crubTechControlsLatePairsGap ? DEFAULT_CRUBTECH_LAYER_GAP : layerGap;
-  const calcEffectiveLayerGap = crubTechControlsLatePairsGap ? DEFAULT_CRUBTECH_LAYER_GAP : calcLayerGap;
+  const crubTechControlsCurrent2LayerSettings = crubTech && isCrubTechBuildMode(buildMode);
+  const crubTechControlsLatePairsGap = crubTechControlsCurrent2LayerSettings;
+  const effectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : layerGap;
+  const calcEffectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : calcLayerGap;
   const suppress2LayerUpperY = Math.max(1, effectiveLayerGap);
   const calcSuppress2LayerUpperY = Math.max(1, calcEffectiveLayerGap);
   const maxSuppress2LayerLatePairsGap = Math.max(1, 64 - suppress2LayerUpperY);
@@ -1557,12 +1575,12 @@ const Index = () => {
         const nextBuildAtWorldMinYEligible = getBuildAtWorldMinYEligibleForBuildMode(
           nextBaseAnalyses,
           nextResolvedBuildMode,
-          applySupportFloorYs,
+          applySupportFloorYs || (crubTech && isCrubTechBuildMode(nextResolvedBuildMode)),
         );
         const nextActiveBuildAtWorldMinY = nextBuildAtWorldMinYEligible && buildAtWorldMinY;
         const nextUseCrubTechShadeFillers =
           crubTech &&
-          nextResolvedBuildMode === BuildMode.Suppress2LayerLatePairs;
+          isCrubTechBuildMode(nextResolvedBuildMode);
         const canReuseBaseGeometry =
           !nextActiveBuildAtWorldMinY &&
           isStaircaseBuildMode(nextResolvedBuildMode);
@@ -1741,6 +1759,11 @@ const Index = () => {
     !flatRequiresVsFillers &&
     !showFlatNbtSuppressStepModes;
   const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
+  const crubTechControlsActive2LayerSettings = crubTech && isCrubTechBuildMode(effectiveBuildMode);
+  const effectiveForceXZ128 = crubTechControlsActive2LayerSettings || forceXZ128;
+  const effectiveForceZ129 = crubTechControlsActive2LayerSettings || forceZ129;
+  const effectiveApplySupportFloorYs = crubTechControlsActive2LayerSettings || applySupportFloorYs;
+  const effectiveBelowPlatformWater = crubTechControlsActive2LayerSettings || belowPlatformWater;
   const colorBlockSelections = useMemo<ColorBlockSelections>(
     () => ({ selectedBlocks: preset.selectedBlocks, selectedBlocksCustom, customColors }),
     [preset.selectedBlocks, selectedBlocksCustom, customColors],
@@ -1766,24 +1789,26 @@ const Index = () => {
         usedMaterialColorAssignments,
         usedMaterialFillerAssignments,
         `support=${supportMode !== SupportMode.None ? 1 : 0}`,
-        `supportFloorY=${applySupportFloorYs ? 1 : 0}`,
+        `supportFloorY=${effectiveApplySupportFloorYs ? 1 : 0}`,
       ].join("||"),
-    [usedMaterialColorAssignments, usedMaterialFillerAssignments, supportMode, applySupportFloorYs],
+    [usedMaterialColorAssignments, usedMaterialFillerAssignments, supportMode, effectiveApplySupportFloorYs],
   );
   const visibleWaterLevelControls = useMemo(
     () => {
-      if (!imageValid || !belowPlatformWater || buildMode === BuildMode.Flat) return [];
-      const currentWaterDrops = buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
+      if (!imageValid || !effectiveBelowPlatformWater || buildMode === BuildMode.Flat) return [];
+      const currentWaterDrops = crubTechControlsActive2LayerSettings
+        ? CRUBTECH_WATER_DROPS
+        : buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
       return WATER_DROP_INPUT_ORDER
         .filter(shade => usedWaterShades.has(shade))
         .map(shade => ({ shade, value: currentWaterDrops[shade] }));
     },
     [
       imageValid,
-      belowPlatformWater,
-    buildMode,
-    crubTech,
-    usedWaterShades,
+      effectiveBelowPlatformWater,
+      buildMode,
+      crubTechControlsActive2LayerSettings,
+      usedWaterShades,
       lightWaterDrop,
       flatWaterDrop,
       darkWaterDrop,
@@ -1791,12 +1816,13 @@ const Index = () => {
   );
 
   useEffect(() => {
-    if (!belowPlatformWater) return;
+    if (!effectiveBelowPlatformWater || crubTechControlsActive2LayerSettings) return;
     if (lightWaterDrop !== normalizedImmediateWaterDrops[Shade.Light]) setLightWaterDrop(normalizedImmediateWaterDrops[Shade.Light]);
     if (flatWaterDrop !== normalizedImmediateWaterDrops[Shade.Flat]) setFlatWaterDrop(normalizedImmediateWaterDrops[Shade.Flat]);
     if (darkWaterDrop !== normalizedImmediateWaterDrops[Shade.Dark]) setDarkWaterDrop(normalizedImmediateWaterDrops[Shade.Dark]);
   }, [
-    belowPlatformWater,
+    effectiveBelowPlatformWater,
+    crubTechControlsActive2LayerSettings,
     lightWaterDrop,
     flatWaterDrop,
     darkWaterDrop,
@@ -1819,7 +1845,7 @@ const Index = () => {
       selectedBlocks: preset.selectedBlocks,
       selectedBlocksCustom,
       fillerAssignments: uiFillerAssignments,
-      applySupportFloorYs,
+      applySupportFloorYs: effectiveApplySupportFloorYs,
       customColors,
     };
     const currentColorAssignmentsByKey = new Map(
@@ -1847,7 +1873,7 @@ const Index = () => {
     ): previousTile is TileAnalysis => {
       if (!previousTile?.materialNeedStats || !tile.supportShape) return false;
       if (previousTile.tile.cacheKey !== tile.tile.cacheKey || previousTile.supportShape !== tile.supportShape) return false;
-      if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== applySupportFloorYs) return false;
+      if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== effectiveApplySupportFloorYs) return false;
       if (hasAnySharedValue(tile.derivedImageStats.usedShadesByColorKey.keys(), changedColorKeys)) return false;
       if (hasAnySharedValue(tile.fillerNeedStats?.roleCounts.keys() ?? [], changedFillerRoles)) return false;
       return true;
@@ -1892,7 +1918,7 @@ const Index = () => {
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
-        applySupportFloorYs,
+        applySupportFloorYs: effectiveApplySupportFloorYs,
         supportModeEnabled: currentSupportModeEnabled,
       };
       setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, reusableTileAnalyses) ? current : reusableTileAnalyses));
@@ -1958,7 +1984,7 @@ const Index = () => {
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
-        applySupportFloorYs,
+        applySupportFloorYs: effectiveApplySupportFloorYs,
         supportModeEnabled: currentSupportModeEnabled,
       };
       setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, nextTileAnalyses) ? current : nextTileAnalyses));
@@ -1974,7 +2000,7 @@ const Index = () => {
     usedMaterialColorAssignments,
     usedMaterialFillerAssignments,
     currentMaterialInputSignature,
-    applySupportFloorYs,
+    effectiveApplySupportFloorYs,
     supportMode,
   ]);
   const tileAnalyses = tileAnalysesState;
@@ -2025,10 +2051,10 @@ const Index = () => {
     () => {
       if (!selectedTileAnalysis) return getBuildModeRangeMax(effectiveBuildMode);
       return isStepRangeMode
-        ? Math.max(0, (supportShape?.parts.length ?? (getBuildModeRangeMax(effectiveBuildMode) + (belowPlatformWater && selectedTileAnalysis.hasWater ? 1 : 0))) - 1)
+        ? Math.max(0, (supportShape?.parts.length ?? (getBuildModeRangeMax(effectiveBuildMode) + (effectiveBelowPlatformWater && selectedTileAnalysis.hasWater ? 1 : 0))) - 1)
         : getBuildModeRangeMax(effectiveBuildMode);
     },
-    [effectiveBuildMode, isStepRangeMode, supportShape, belowPlatformWater, selectedTileAnalysis],
+    [effectiveBuildMode, isStepRangeMode, supportShape, effectiveBelowPlatformWater, selectedTileAnalysis],
   );
   const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
   const supportModeVisibilityPending =
@@ -2046,7 +2072,7 @@ const Index = () => {
       part.cells.entries().some(([coord, cell]) => {
         if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
         const [x, y, z] = parseShapeCoordKey(coord);
-        const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+        const supportFloorYs = effectiveApplySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
         return isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs);
       }),
     ),
@@ -2065,7 +2091,7 @@ const Index = () => {
         part.cells.entries().some(([coord, cell]) => {
           if (!isShapeFillerCell(cell)) return false;
           const [x, y, z] = parseShapeCoordKey(coord);
-          const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+          const supportFloorYs = effectiveApplySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
           if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) return false;
           if (!cell.includes(FillerRole.SupportFragile)) return false;
           const color = getSupportedColorAbove(part, coord);
@@ -2075,7 +2101,7 @@ const Index = () => {
         }),
       ),
     );
-  }, [imageData, supportModeVisibilityPending, tileAnalyses, colorBlockSelections, applySupportFloorYs]);
+  }, [imageData, supportModeVisibilityPending, tileAnalyses, colorBlockSelections, effectiveApplySupportFloorYs]);
   const staircaseModeOptions = useMemo(
     () => getStaircaseModeOptionsForState(
       imageValid,
@@ -2100,8 +2126,8 @@ const Index = () => {
     [twoLayerHasLateVoidNeed, hasMultipleTiles, showFlatNbtSuppressStepOptions],
   );
   const buildAtWorldMinYEligible = useMemo(
-    () => getBuildAtWorldMinYEligibleForBuildMode(tileBaseAnalyses, effectiveBuildMode, applySupportFloorYs),
-    [tileBaseAnalyses, effectiveBuildMode, applySupportFloorYs],
+    () => getBuildAtWorldMinYEligibleForBuildMode(tileBaseAnalyses, effectiveBuildMode, effectiveApplySupportFloorYs),
+    [tileBaseAnalyses, effectiveBuildMode, effectiveApplySupportFloorYs],
   );
   const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
   const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
@@ -2131,14 +2157,14 @@ const Index = () => {
     (fillerAssignments: FillerAssignment[], includeRange: boolean) => ({
       selectedBlocks: preset.selectedBlocks,
       fillerAssignments,
-      applySupportFloorYs,
+      applySupportFloorYs: effectiveApplySupportFloorYs,
       customColors,
       selectedBlocksCustom,
       ...(includeRange && colRangeEnabled
         ? (isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] })
         : {}),
     }),
-    [preset.selectedBlocks, applySupportFloorYs, customColors, selectedBlocksCustom, colRangeEnabled, isStepRangeMode, colStart, colEnd],
+    [preset.selectedBlocks, effectiveApplySupportFloorYs, customColors, selectedBlocksCustom, colRangeEnabled, isStepRangeMode, colStart, colEnd],
   );
 
   const selectedTileMaterialNeedStats = useMemo(() => {
@@ -2830,10 +2856,10 @@ const Index = () => {
         const tileEntries = await convertToNbtEntries(tile.supportShape, {
           selectedBlocks: preset.selectedBlocks,
           fillerAssignments: uiFillerAssignments,
-          applySupportFloorYs,
+          applySupportFloorYs: effectiveApplySupportFloorYs,
           collapseDuplicatePaletteStates: collapseDuplicateNbtPaletteStates,
-          forceXZ128,
-          forceZ129,
+          forceXZ128: effectiveForceXZ128,
+          forceZ129: effectiveForceZ129,
           selectedBlocksCustom,
           customColors,
           baseName,
@@ -3085,9 +3111,7 @@ const Index = () => {
     !isSuppressBuildMode(buildMode) &&
     vsFillerSpotCount > 0;
   const selectedLatePairSuppressMode = effectiveBuildMode === BuildMode.Suppress2LayerLatePairs;
-  const showCrubTechControl =
-    selectedLatePairSuppressMode &&
-    twoLayerHasLateVoidNeed;
+  const showCrubTechControl = isCrubTechBuildMode(effectiveBuildMode);
   const showSuppressDirectionControl =
     !!imageData &&
     imageValid &&
@@ -3114,10 +3138,11 @@ const Index = () => {
       analysisResult === null
     ),
     visibleWaterLevelControls,
+    waterDropControlsDisabled: crubTechControlsActive2LayerSettings,
     setNormalizedWaterDrop,
     minLayerGap,
     layerGap: effectiveLayerGap,
-    layerGapDisabled: crubTechControlsLatePairsGap,
+    layerGapDisabled: crubTechControlsActive2LayerSettings,
     setLayerGap,
     showCrubTechControl,
     crubTech,
@@ -3340,10 +3365,10 @@ const Index = () => {
         : !shadeFillerShadingDisabled
     );
   const showNorthRowAlignmentInfo =
-    showAlignmentReminder &&
-    imageValid &&
-    tileGeometryAnalyses.length > 0 &&
-    (forceZ129 || hasValidNorthRowShadeFiller);
+	    showAlignmentReminder &&
+	    imageValid &&
+	    tileGeometryAnalyses.length > 0 &&
+	    (effectiveForceZ129 || hasValidNorthRowShadeFiller);
   const noFillerWarning = useMemo(() => {
     if (useCrubTechShadeFillers) {
       const parts: string[] = [];
@@ -3842,7 +3867,7 @@ const Index = () => {
           <PanelColorBlockTable
             isStackedLayout={isStackedLayout}
             imageValid={colorTableDisplayState.imageValid}
-            belowPlatformWater={belowPlatformWater}
+            belowPlatformWater={effectiveBelowPlatformWater}
             hasRequiredCol={colorTableDisplayState.hasRequiredCol}
             showUsageInfo={colorTableDisplayState.showUsageInfo}
             showIds={showIds}
@@ -4002,14 +4027,18 @@ const Index = () => {
         setShowExcludedBlocks={setShowExcludedBlocks}
         collapseDuplicateNbtPaletteStates={collapseDuplicateNbtPaletteStates}
         setCollapseDuplicateNbtPaletteStates={setCollapseDuplicateNbtPaletteStates}
-        forceXZ128={forceXZ128}
+        forceXZ128={effectiveForceXZ128}
         setForceXZ128={setForceXZ128}
-        forceZ129={forceZ129}
+        forceXZ128Disabled={crubTechControlsActive2LayerSettings}
+        forceZ129={effectiveForceZ129}
         setForceZ129={setForceZ129}
-        applySupportFloorYs={applySupportFloorYs}
+        forceZ129Disabled={crubTechControlsActive2LayerSettings}
+        applySupportFloorYs={effectiveApplySupportFloorYs}
         setApplySupportFloorYs={setApplySupportFloorYs}
-        belowPlatformWater={belowPlatformWater}
+        applySupportFloorYsDisabled={crubTechControlsActive2LayerSettings}
+        belowPlatformWater={effectiveBelowPlatformWater}
         setBelowPlatformWater={setBelowPlatformWater}
+        belowPlatformWaterDisabled={crubTechControlsActive2LayerSettings}
         skipEmptySuppressSteps={skipEmptySuppressSteps}
         setSkipEmptySuppressSteps={setSkipEmptySuppressSteps}
         showFlatNbtSuppressStepModes={showFlatNbtSuppressStepModes}
