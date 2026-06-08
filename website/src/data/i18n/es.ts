@@ -33,6 +33,8 @@ export const esCatalog = {
     missingTextureSymbol: "?",
     openSecretsSettings: "Abrir ajustes secretos",
     toggleThemeAriaLabel: "Cambiar tema",
+    languageAriaLabel: "Idioma",
+    languageBrowserOption: "Navegador",
     unsavedChanges: "Cambios sin guardar",
     newPresetTitle: "Nombrar nuevo preset según la configuración actual",
   },

@@ -40,6 +40,8 @@ export const enCatalog = {
     missingTextureSymbol: "?",
     openSecretsSettings: "Open secret settings",
     toggleThemeAriaLabel: "Toggle theme",
+    languageAriaLabel: "Language",
+    languageBrowserOption: "Browser",
     unsavedChanges: "Unsaved changes",
     newPresetTitle: "Name new preset from current settings",
   },

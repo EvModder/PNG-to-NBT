@@ -2,6 +2,11 @@
  * Public API:
  * - PaletteNoticeKind
  * - PaletteNotice
+ * - LOCALE_BROWSER
+ * - LocalePreference
+ * - SUPPORTED_LOCALES
+ * - getLocalePreference()
+ * - setLocalePreference()
  * - messages
  *
  * Callers:
@@ -20,6 +25,7 @@
  * - Selects the active locale catalog and applies interpolation/plural formatting at runtime.
  * - Locale catalogs live under `src/data/i18n/` and are intended to remain pure data only.
  */
+import { STORAGE_KEYS } from "@/data/storageKeys";
 import { unpackRgb } from "@/utils/color";
 import { enCatalog, type MessageCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
@@ -42,24 +48,70 @@ const CATALOGS = {
   en: enCatalog,
   es: esCatalog,
 } as const satisfies Record<string, MessageCatalog>;
+const LOCALE_LABELS = {
+  en: "English",
+  es: "Español",
+} as const satisfies Record<keyof typeof CATALOGS, string>;
 
 type SupportedLocale = keyof typeof CATALOGS;
 type ActiveCatalog = MessageCatalog;
 
 const FALLBACK_LOCALE: SupportedLocale = "en";
+export const LOCALE_BROWSER = "browser";
+export type LocalePreference = SupportedLocale | typeof LOCALE_BROWSER;
+export const SUPPORTED_LOCALES = Object.keys(CATALOGS) as SupportedLocale[];
 
 function resolveLocale(rawLocale?: string): SupportedLocale {
   const localeBase = rawLocale?.trim().toLowerCase().split(/[-_]/)[0];
   return localeBase && localeBase in CATALOGS ? (localeBase as SupportedLocale) : FALLBACK_LOCALE;
 }
 
+function resolveLocaleOverride(rawLocale: string | null | undefined): SupportedLocale | null {
+  const locale = rawLocale?.trim().toLowerCase();
+  return locale && locale in CATALOGS ? (locale as SupportedLocale) : null;
+}
+
+function getStoredLocale(): SupportedLocale | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    return resolveLocaleOverride(localStorage.getItem(STORAGE_KEYS.language));
+  } catch {
+    return null;
+  }
+}
+
 function getActiveCatalog(): ActiveCatalog {
+  const storedLocale = getStoredLocale();
+  if (storedLocale) return CATALOGS[storedLocale];
   const browserLocale = typeof navigator !== "undefined" ? navigator.language : undefined;
   return CATALOGS[resolveLocale(browserLocale)];
 }
 
 const catalog = getActiveCatalog();
 const pluralRules = new Intl.PluralRules(catalog.locale);
+
+// Callers:
+// - src/Index.tsx
+export function getLocalePreference(): LocalePreference {
+  return getStoredLocale() ?? LOCALE_BROWSER;
+}
+
+// Callers:
+// - src/Index.tsx
+export function setLocalePreference(locale: LocalePreference): void {
+  if (typeof localStorage === "undefined") return;
+  if (locale === LOCALE_BROWSER) {
+    localStorage.removeItem(STORAGE_KEYS.language);
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.language, locale);
+}
+
+// Callers:
+// - src/Index.tsx
+export function getLocaleLabel(locale: SupportedLocale): string {
+  return LOCALE_LABELS[locale];
+}
 
 function formatTemplate(template: string, values: TemplateValues): string {
   return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key: string) => String(values[key] ?? `{${key}}`));
@@ -157,6 +209,7 @@ export type PaletteNotice =
 // - src/components/ToolbarPresetSettings.tsx
 // - src/lib/colorGridParsing.ts
 export const messages = {
+  locale: catalog.locale,
   common: catalog.common,
   app: catalog.app,
   blocks: {

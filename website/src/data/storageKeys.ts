@@ -14,6 +14,7 @@
 export const STORAGE_KEYS = {
   presets: "mapart_presets",
   theme: "mapart_theme",
+  language: "mapart_language",
 
   supportFiller: "mapart_support_filler",
   shadeFiller: "mapart_shade_filler",

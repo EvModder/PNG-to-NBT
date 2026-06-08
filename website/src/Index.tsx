@@ -1,5 +1,5 @@
-import { startTransition, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect } from "react";
-import { Moon, Sun } from "lucide-react";
+import { startTransition, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect, useEffectEvent, type ChangeEvent } from "react";
+import { Languages, Moon, Sun } from "lucide-react";
 import {
   DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
   DEFAULT_ACTIVE_PRESET_NAME,
@@ -112,7 +112,17 @@ import {
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
 } from "@/lib/fillerRules";
-import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
+import {
+  LOCALE_BROWSER,
+  messages,
+  PaletteNoticeKind,
+  getLocaleLabel,
+  getLocalePreference,
+  setLocalePreference,
+  SUPPORTED_LOCALES,
+  type LocalePreference,
+  type PaletteNotice,
+} from "@/lib/messages";
 import { decodeFullPreset, encodeFullPreset, loadPresets } from "@/lib/codecPreset";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
@@ -845,6 +855,7 @@ const Index = () => {
   const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, DEFAULT_MC_UNITS));
   const [showMaxPerSplit, setShowMaxPerSplit] = useState(() => loadCached(LS_KEYS.maxPerSplit, DEFAULT_MAX_PER_SPLIT));
   const [isDark, setIsDark] = useState(resolveDarkTheme);
+  const [localePreference, setLocalePreferenceState] = useState<LocalePreference>(getLocalePreference);
   const [convertUnsupported, /* setConvertUnsupported */] = useState(DEFAULT_CONVERT_UNSUPPORTED_COLORS); // always on; checkbox not shown
   const [cropImage, /* setCropImage */] = useState(DEFAULT_CROP_IMAGE); // always on; checkbox not shown
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, DEFAULT_COLUMN_ORDER));
@@ -1235,6 +1246,9 @@ const Index = () => {
   const [isAnalyzingMaterials, setIsAnalyzingMaterials] = useState(false);
   const [materialAnalysisProgress, setMaterialAnalysisProgress] = useState<AnalysisProgress | null>(null);
   const [pendingTransparentMaterialRefresh, setPendingTransparentMaterialRefresh] = useState(false);
+  useEffect(() => {
+    document.documentElement.lang = messages.locale;
+  }, []);
   const selectedTileCount = selectedTileIndices.length;
   const selectedTileIndex = selectedTileCount === 1 ? selectedTileIndices[0] ?? null : null;
   const selectedTileIndexSet = useMemo(() => new Set(selectedTileIndices), [selectedTileIndices]);
@@ -2791,17 +2805,16 @@ const Index = () => {
     [cropImage, getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
   );
 
+  const handlePaste = useEffectEvent((event: ClipboardEvent) => {
+    const file = getClipboardImageFile(event.clipboardData);
+    if (!file) return;
+    event.preventDefault();
+    handleFile(file);
+  });
   useEffect(() => {
-    const onPaste = (event: ClipboardEvent) => {
-      const file = getClipboardImageFile(event.clipboardData);
-      if (!file) return;
-      event.preventDefault();
-      handleFile(file);
-    };
-
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [handleFile]);
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
 
   const handleConvertAndDownload = async () => {
     if (!imageValid || tileAnalyses.length === 0) return;
@@ -2950,6 +2963,14 @@ const Index = () => {
     document.documentElement.classList.toggle("dark", next === "dark");
     setIsDark(next === "dark");
   };
+  const handleLocalePreferenceChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const next = event.target.value as LocalePreference;
+    if (next === localePreference) return;
+    setLocalePreferenceState(next);
+    setLocalePreference(next);
+    window.location.reload();
+  };
+  const localePreferenceDisplay = localePreference === LOCALE_BROWSER ? "auto" : localePreference;
 
   const aggregateNorthRowSingleLine = tileGeometryAnalyses.every(tile => tile.northRowSingleLine);
 
@@ -3695,14 +3716,36 @@ const Index = () => {
             {messages.app.title}
           </button>
         </h1>
-        <button
-          onClick={toggleTheme}
-          className="p-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
-          aria-label={messages.common.toggleThemeAriaLabel}
-          title={messages.common.toggleThemeAriaLabel}
-        >
-          {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-        </button>
+        <div className="flex items-center gap-1">
+          <label
+            className="relative flex h-7 w-14 items-center justify-start gap-1 rounded-md bg-secondary px-1.5 text-secondary-foreground hover:bg-muted focus-within:ring-1 focus-within:ring-ring transition-colors"
+            title={messages.common.languageAriaLabel}
+          >
+            <Languages className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="text-xs tabular-nums">{localePreferenceDisplay}</span>
+            <select
+              value={localePreference}
+              onChange={handleLocalePreferenceChange}
+              aria-label={messages.common.languageAriaLabel}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            >
+              <option value={LOCALE_BROWSER}>↻ {messages.common.languageBrowserOption}</option>
+              {SUPPORTED_LOCALES.map(locale => (
+                <option key={locale} value={locale}>
+                  {getLocaleLabel(locale)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={toggleTheme}
+            className="h-7 w-7 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors grid place-items-center"
+            aria-label={messages.common.toggleThemeAriaLabel}
+            title={messages.common.toggleThemeAriaLabel}
+          >
+            {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </header>
 
       <div
