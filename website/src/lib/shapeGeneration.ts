@@ -563,6 +563,7 @@ function getCrubTechShadeFillerRole(
   fillerPlacements: ReadonlyMap<ShapeCoordKey, ShapeRef>,
 ): FillerRole {
   if (baseRole === FillerRole.ShadeNorthRow) return FillerRole.ShadeNorthRowBreakable;
+  if (y === upperY + 1) return FillerRole.ShadeSuppressBreakable;
   if (y !== upperY) return FillerRole.ShadeSuppressPushable;
   const pairX = (x & 1) === 0 ? x + 1 : x - 1;
   const pairCoord = toShapeCoordKey(pairX, y, z);
