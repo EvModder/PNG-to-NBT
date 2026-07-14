@@ -396,7 +396,7 @@ export const enCatalog = {
     title: "Credits",
     evModderName: "EvModder",
     evModderUrl: "https://www.youtube.com/@evmodder",
-    evModderRole: "Creator of this site",
+    evModderRole: "Creator of this tool website",
     rebaneName: "Rebane2001",
     rebaneUrl: "https://rebane2001.com/",
     rebaneRole: "Creator of {name}",
@@ -404,7 +404,7 @@ export const enCatalog = {
     mapArtCraftUrl: "https://mike2b2t.github.io/mapartcraft/",
     gu2t4vName: "Gu2t4v",
     gu2t4vUrl: "https://youtube.com/@gust4v_",
-    gu2t4vRole: "Suppression expert, inventor of 2-Layer",
+    gu2t4vRole: "Suppression expert, invented 2-Layer",
     gptNote: "Selective visuals and coding",
   },
   parsing: {

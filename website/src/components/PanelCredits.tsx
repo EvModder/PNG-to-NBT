@@ -46,24 +46,14 @@ export function PanelCredits({
       <h3 className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} mb-1`}>{messages.credits.title}</h3>
       <p>
         <a
-          href={messages.credits.evModderUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          {messages.credits.evModderName}
-        </a>{" "}
-        — {messages.credits.evModderRole}
-      </p>
-      <p>
-        <a
           href={messages.credits.rebaneUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-foreground"
         >
           {messages.credits.rebaneName}
-        </a>{" "}
+        </a>
+        {" "}
         — {rebaneRolePrefix}
         <a
           href={messages.credits.mapArtCraftUrl}
@@ -74,6 +64,17 @@ export function PanelCredits({
           {messages.credits.mapArtCraftName}
         </a>
         {rebaneRoleSuffix}
+      </p>
+      <p>
+        <a
+          href={messages.credits.evModderUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          {messages.credits.evModderName}
+        </a>{" "}
+        — {messages.credits.evModderRole}
       </p>
       <p>
         <a

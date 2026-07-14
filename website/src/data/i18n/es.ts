@@ -392,7 +392,7 @@ export const esCatalog = {
     title: "Créditos",
     evModderName: "EvModder",
     evModderUrl: "https://www.youtube.com/@evmodder",
-    evModderRole: "Desarrollador",
+    evModderRole: "Creador de este sitio-herramienta",
     rebaneName: "Rebane2001",
     rebaneUrl: "https://rebane2001.com/",
     rebaneRole: "Creador original de {name}",
@@ -400,7 +400,7 @@ export const esCatalog = {
     mapArtCraftUrl: "https://mike2b2t.github.io/mapartcraft/",
     gu2t4vName: "Gu2t4v",
     gu2t4vUrl: "https://youtube.com/@gust4v_",
-    gu2t4vRole: "Experto en supresión, inventor de 2 capas",
+    gu2t4vRole: "Experto en supresión, inventó 2 capas",
     gptNote: "Visuales y código selectivos",
   },
   parsing: {
