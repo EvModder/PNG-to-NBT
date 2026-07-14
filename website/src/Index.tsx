@@ -196,6 +196,19 @@ function clampLatePairsGap(value: number, maxGap: number): number {
   return Math.max(1, Math.min(maxGap, nextValue));
 }
 
+const DEFAULT_WEST_EAST_SLOPE_RUN = 0;
+const DEFAULT_WEST_EAST_SLOPE_RISE = 0;
+
+function clampWestEastSlopeRun(value: number): number {
+  const nextValue = Number.isFinite(value) ? Math.trunc(value) : DEFAULT_WEST_EAST_SLOPE_RUN;
+  return Math.max(0, Math.min(MAP_SIZE - 1, nextValue));
+}
+
+function clampWestEastSlopeRise(value: number): number {
+  const nextValue = Number.isFinite(value) ? Math.trunc(value) : DEFAULT_WEST_EAST_SLOPE_RISE;
+  return nextValue;
+}
+
 const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
 type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 const CRUBTECH_WATER_DROPS = [
@@ -835,6 +848,11 @@ const Index = () => {
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
   const [colStart, setColStart] = useState(0);
   const [colEnd, setColEnd] = useState(127);
+  const [westEastSlopeEnabled, setWestEastSlopeEnabled] = useState(false);
+  const [westEastSlopeRun, setWestEastSlopeRunState] = useState(DEFAULT_WEST_EAST_SLOPE_RUN);
+  const [westEastSlopeRise, setWestEastSlopeRiseState] = useState(DEFAULT_WEST_EAST_SLOPE_RISE);
+  const setWestEastSlopeRun = useCallback((value: number) => setWestEastSlopeRunState(clampWestEastSlopeRun(value)), []);
+  const setWestEastSlopeRise = useCallback((value: number) => setWestEastSlopeRiseState(clampWestEastSlopeRise(value)), []);
   const colStartRef = useRef(0);
   const colEndRef = useRef(127);
   useEffect(() => { colStartRef.current = colStart; }, [colStart]);
@@ -2043,6 +2061,8 @@ const Index = () => {
   const activeSingleTileIndex = hasMultipleTiles ? selectedTileIndex : (tileAnalyses.length > 0 ? 0 : null);
   const selectedTileAnalysis = activeSingleTileIndex === null ? null : (tileAnalyses[activeSingleTileIndex] ?? null);
   const isStepRangeMode = isSuppressStepsBuildMode(effectiveBuildMode);
+  const showPreviewRangeControls = selectedTileAnalysis !== null && (!hasMultipleTiles || selectedTileCount === 1);
+  const showWestEastSlopeControls = showPreviewRangeControls && !isSuppressBuildMode(effectiveBuildMode);
   const isNorthSouthSuppressStepDirection =
     suppressStepDirection === SuppressStepDirection.NorthToSouth ||
     suppressStepDirection === SuppressStepDirection.SouthToNorth;
@@ -2850,6 +2870,9 @@ const Index = () => {
       const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, suppressStepDirection, useCrubTechShadeFillers);
       const exportTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
       const exportEntries: { name: string; data: Uint8Array }[] = [];
+      const westEastSlope = westEastSlopeEnabled && westEastSlopeRise !== 0 && !isSuppressBuildMode(effectiveBuildMode)
+        ? { run: westEastSlopeRun, rise: westEastSlopeRise }
+        : undefined;
 
       for (const tile of exportTileAnalyses) {
         if (!tile.supportShape) throw new Error(messages.parsing.conversionFailed);
@@ -2865,6 +2888,7 @@ const Index = () => {
           baseName,
           buildMode: effectiveBuildMode,
           suppressStepDirection: activeSuppressDirection,
+          westEastSlope,
           suppress2LayerLatePairY: effectiveSuppress2LayerLatePairY,
           crubTech: useCrubTechShadeFillers,
           markSuppressLoadSpotsInSchematic,
@@ -3992,7 +4016,14 @@ const Index = () => {
               numUniqueColorShadesForPart={numUniqueColorShadesForPart}
               numColorBlockTypesForPart={numColorBlockTypesForPart}
               vsFillerSpotCount={vsFillerSpotCount}
-              showRangeControls={selectedTileAnalysis !== null && (!hasMultipleTiles || selectedTileCount === 1)}
+              showRangeControls={showPreviewRangeControls}
+              showWestEastSlopeControls={showWestEastSlopeControls}
+              westEastSlopeEnabled={westEastSlopeEnabled}
+              setWestEastSlopeEnabled={setWestEastSlopeEnabled}
+              westEastSlopeRun={westEastSlopeRun}
+              setWestEastSlopeRun={setWestEastSlopeRun}
+              westEastSlopeRise={westEastSlopeRise}
+              setWestEastSlopeRise={setWestEastSlopeRise}
               showTileSelection={showTileSelection}
               tileRows={tileRows}
               tileCols={tileCols}

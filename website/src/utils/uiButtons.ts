@@ -13,6 +13,7 @@
  * Callers:
  * - src/components/ToolbarPresetSettings.tsx
  * - src/components/ToolbarBuildSettings.tsx
+ * - src/components/PanelImagePreview.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/SecretsSettingsDialog.tsx
  */
@@ -20,6 +21,7 @@
 // Callers:
 // - src/components/ToolbarPresetSettings.tsx
 // - src/components/PanelCustomColors.tsx
+// - src/components/PanelImagePreview.tsx
 export const SWATCH_SIZED_ICON_BUTTON_BASE_CLASS =
   "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border";
 
@@ -37,6 +39,7 @@ export const PRIMARY_SWATCH_SIZED_ICON_BUTTON_CLASS =
 // Callers:
 // - src/components/ToolbarPresetSettings.tsx
 // - src/components/PanelCustomColors.tsx
+// - src/components/PanelImagePreview.tsx
 export const DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS =
   `${SWATCH_SIZED_ICON_BUTTON_BASE_CLASS} border-destructive text-destructive hover:bg-destructive/20`;
 

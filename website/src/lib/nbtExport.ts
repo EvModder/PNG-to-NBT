@@ -44,6 +44,7 @@ interface ExportOptions extends ColorBlockSelections {
   forceZ129?: boolean;
   xColumnRange?: [number, number];
   phaseRange?: [number, number];
+  westEastSlope?: WestEastSlopeOptions;
   baseName: string;
   buildMode: BuildMode;
   suppressStepDirection: SuppressStepDirection;
@@ -52,6 +53,11 @@ interface ExportOptions extends ColorBlockSelections {
   markSuppressLoadSpotsInSchematic?: boolean;
   suppressLoadSpotMarkerBlock?: string;
 }
+
+type WestEastSlopeOptions = {
+  run: number;
+  rise: number;
+};
 
 type ExportPaletteRole = "visible" | "convenience" | "shading" | "vs_filler" | "support";
 const EXPORT_PALETTE_ROLE_ORDER = ["visible", "shading", "vs_filler", "support", "convenience"] as const;
@@ -287,6 +293,19 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
   return resolved.toSorted(comparePaletteSourceBlocks);
 }
 
+function applyWestEastSlope(blocks: PaletteSourceBlock[], options: ExportOptions): void {
+  if (!options.westEastSlope || isSuppressBuildMode(options.buildMode)) return;
+  const rawRun = Number.isFinite(options.westEastSlope.run) ? Math.trunc(options.westEastSlope.run) : 0;
+  const run = Math.max(0, Math.min(MAP_SIZE - 1, rawRun)) || 1;
+  const rise = Number.isFinite(options.westEastSlope.rise) ? Math.trunc(options.westEastSlope.rise) : 0;
+  if (rise === 0) return;
+  for (const block of blocks) {
+    if (block.x < 0 || block.x >= MAP_SIZE) continue;
+    // Positive rise follows increasing X, which is west-to-east in the map preview/export grid.
+    block.y += Math.floor(block.x / run) * rise;
+  }
+}
+
 function normalizeAndMeasure<T extends { x: number; y: number; z: number }>(
   blocks: T[],
   options: ExportBoundsOptions,
@@ -503,6 +522,7 @@ export async function convertToNbtEntries(
   const parts = shape.parts.map(part =>
     materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
   );
+  for (const partBlocks of parts) applyWestEastSlope(partBlocks, options);
   if (shape.splitExportNames) return buildSplitEntries(parts, options, shape.splitExportNames);
   return [await buildSingleEntry(shape, parts, options)];
 }

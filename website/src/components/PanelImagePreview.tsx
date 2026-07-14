@@ -6,7 +6,9 @@
  * - src/Index.tsx
  */
 import type { MutableRefObject, RefObject } from "react";
+import { Trash2 } from "lucide-react";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
+import { DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { MUTED_INLINE_TOGGLE_CONTROL_CLASS, PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
 type PreviewWarning = {
@@ -70,6 +72,13 @@ type PanelImagePreviewProps = {
   colEndRef: MutableRefObject<number>;
   setColStart: (value: number) => void;
   setColEnd: (value: number) => void;
+  showWestEastSlopeControls: boolean;
+  westEastSlopeEnabled: boolean;
+  setWestEastSlopeEnabled: (value: boolean | ((value: boolean) => boolean)) => void;
+  westEastSlopeRun: number;
+  setWestEastSlopeRun: (value: number) => void;
+  westEastSlopeRise: number;
+  setWestEastSlopeRise: (value: number) => void;
 };
 
 function WarningBanner({
@@ -195,40 +204,76 @@ export function PanelImagePreview({
   colEndRef,
   setColStart,
   setColEnd,
+  showWestEastSlopeControls,
+  westEastSlopeEnabled,
+  setWestEastSlopeEnabled,
+  westEastSlopeRun,
+  setWestEastSlopeRun,
+  westEastSlopeRise,
+  setWestEastSlopeRise,
 }: PanelImagePreviewProps) {
   const previewAspectRatio = imageData ? `${imageData.width} / ${imageData.height}` : "1 / 1";
   const activePreviewImageUrl = previewImageUrl ?? fallbackPreviewImageUrl;
   const paletteNoticeGroups = groupPaletteNotices(paletteNotices);
+  // Align the visible title glyph center with toolbar labels, not just the CSS line box.
+  const titleClassName = `${PANEL_TITLE_TEXT_CLASS} inline-flex h-3.5 items-center`;
+  const headerActionInsetClassName = imageData
+    ? showVsFillersInPreviewToggle ? "pr-36" : "pr-8"
+    : showVsFillersInPreviewToggle ? "pr-28" : "";
 
   return (
-    <section className="bg-card border border-border rounded-md px-3 pb-3 pt-3">
-      <div className="mb-1 flex min-h-3.5 items-center justify-between gap-2">
-        {canCopyImageShareUrl ? (
-          <button
-            type="button"
-            className={`bg-transparent p-0 border-0 ${PANEL_TITLE_TEXT_CLASS} text-left hover:underline decoration-dotted underline-offset-2`}
-            onClick={() => { void copyImageShareUrl(); }}
-            title={messages.upload.copyImageUrlTitle}
-          >
-            {messages.upload.title}
-          </button>
-        ) : (
-          <h2 className={PANEL_TITLE_TEXT_CLASS}>{messages.upload.title}</h2>
-        )}
-        {showVsFillersInPreviewToggle && (
-          <label
-            className={MUTED_INLINE_TOGGLE_CONTROL_CLASS}
-            title={messages.upload.showVsFillersTooltip}
-          >
-            <span>{messages.upload.showVsFillersToggle}</span>
-            <input
-              type="checkbox"
-              checked={showVsFillersInPreview}
-              onChange={e => setShowVsFillersInPreview(e.target.checked)}
-              className="h-3.5 w-3.5"
-            />
-          </label>
-        )}
+    <section className="bg-card border border-border rounded-md p-2">
+      <div className="relative mb-0.5 h-[34px]">
+        <div className={`relative -top-[4.5px] min-w-0 pt-px ${headerActionInsetClassName}`}>
+          {canCopyImageShareUrl ? (
+            <button
+              type="button"
+              className={`bg-transparent p-0 border-0 ${titleClassName} text-left hover:underline decoration-dotted underline-offset-2`}
+              onClick={() => { void copyImageShareUrl(); }}
+              title={messages.upload.copyImageUrlTitle}
+            >
+              {messages.upload.title}
+            </button>
+          ) : (
+            <h2 className={titleClassName}>{messages.upload.title}</h2>
+          )}
+        </div>
+        <p
+          className={`absolute bottom-0 left-0 right-0 flex items-center text-[11px] leading-none text-primary font-mono truncate ${headerActionInsetClassName} ${
+            imageName ? "" : "invisible"
+          }`}
+          aria-hidden={imageName ? undefined : true}
+        >
+          {imageName || "\u00A0"}
+        </p>
+        <div className="absolute right-0 top-0 inline-flex min-w-0 items-center gap-1.5">
+          {showVsFillersInPreviewToggle && (
+            <label
+              className={MUTED_INLINE_TOGGLE_CONTROL_CLASS}
+              title={messages.upload.showVsFillersTooltip}
+            >
+              <span>{messages.upload.showVsFillersToggle}</span>
+              <input
+                type="checkbox"
+                checked={showVsFillersInPreview}
+                onChange={e => setShowVsFillersInPreview(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+            </label>
+          )}
+          {showVsFillersInPreviewToggle && imageData && <span className="h-4 border-l border-border/70" />}
+          {imageData && (
+            <button
+              type="button"
+              className={`${DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS} h-7 w-7`}
+              onClick={clearImage}
+              title={busy ? messages.upload.cancelButton : messages.upload.removeButton}
+              aria-label={busy ? messages.upload.cancelButton : messages.upload.removeButton}
+            >
+              <Trash2 size={14} strokeWidth={2.1} />
+            </button>
+          )}
+        </div>
       </div>
       <input
         ref={fileRef}
@@ -240,14 +285,6 @@ export function PanelImagePreview({
           if (file) handleFile(file);
         }}
       />
-      <p
-        className={`flex items-center text-[11px] leading-none text-primary font-mono truncate mb-1 min-h-[0.75rem] ${
-          imageName ? "" : "invisible"
-        }`}
-        aria-hidden={imageName ? undefined : true}
-      >
-        {imageName || "\u00A0"}
-      </p>
       <div className="w-full mx-auto">
         <div
           className={`relative rounded-md w-full border-2 border-dashed border-border transition-colors overflow-hidden flex items-center justify-center ${
@@ -373,26 +410,6 @@ export function PanelImagePreview({
       {showNorthRowAlignmentInfo && <WarningBanner text={messages.preview.northRowAlignmentInfo} tone="muted" />}
       {canGenerate && imageHasWater && usesIceForWater && <WarningBanner text={messages.preview.iceConversionInfo} tone="muted" />}
 
-      {imageData && (
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            className="text-xs px-2 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/20 whitespace-nowrap"
-            onClick={clearImage}
-          >
-            {busy ? messages.upload.cancelButton : messages.upload.removeButton}
-          </button>
-          {canGenerate && (
-            <button
-              onClick={handleConvertAndDownload}
-              disabled={converting || busy}
-              className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {converting ? messages.upload.convertButton(true, false) : generateButtonLabel}
-            </button>
-          )}
-        </div>
-      )}
-
       {showUsageInfo && (
         <div className="mt-2 space-y-1">
           <div className="flex gap-3 text-[11px] text-muted-foreground flex-wrap items-center">
@@ -418,6 +435,15 @@ export function PanelImagePreview({
               >
                 {messages.preview.rangeButtonLabel(isStepRangeMode)}
               </button>
+              {showWestEastSlopeControls && (
+                <button
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${westEastSlopeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
+                  title={messages.preview.westEastSlopeTooltip}
+                  onClick={() => setWestEastSlopeEnabled(value => !value)}
+                >
+                  {messages.preview.westEastSlopeButton}
+                </button>
+              )}
             </div>
           )}
           {showRangeControls && colRangeEnabled && (
@@ -474,6 +500,46 @@ export function PanelImagePreview({
               </div>
             </div>
           )}
+          {showWestEastSlopeControls && westEastSlopeEnabled && (
+            <div className="mt-1 border border-border rounded p-1.5 bg-muted/30">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
+                <label className="inline-flex items-center gap-1" title={messages.preview.westEastSlopeRunTitle}>
+                  <span className="font-mono font-semibold text-foreground text-xs w-8 text-center shrink-0">W→E</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={127}
+                    value={westEastSlopeRun}
+                    onChange={event => setWestEastSlopeRun(Number.parseInt(event.target.value, 10))}
+                    aria-label={messages.preview.westEastSlopeRunTitle}
+                    className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1" title={messages.preview.westEastSlopeRiseTitle}>
+                  <span className="font-mono font-semibold text-foreground text-xs w-5 text-center shrink-0">↑↓</span>
+                  <input
+                    type="number"
+                    value={westEastSlopeRise}
+                    onChange={event => setWestEastSlopeRise(Number.parseInt(event.target.value, 10))}
+                    aria-label={messages.preview.westEastSlopeRiseTitle}
+                    className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {imageData && canGenerate && (
+        <div className="mt-2 flex justify-start">
+          <button
+            type="button"
+            onClick={handleConvertAndDownload}
+            disabled={converting || busy}
+            className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {converting ? messages.upload.convertButton(true, false) : generateButtonLabel}
+          </button>
         </div>
       )}
     </section>

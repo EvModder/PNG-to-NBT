@@ -360,6 +360,10 @@ export const esCatalog = {
     } as PluralForms,
     stepRangeButton: "Rango de pasos",
     columnRangeButton: "Rango de columnas",
+    westEastSlopeButton: "Pendiente W→E",
+    westEastSlopeTooltip: "Inclina los bloques generados del mapa de oeste a este antes de exportar.",
+    westEastSlopeRunTitle: "Recorrido oeste a este, 0-127; 0 significa cada columna",
+    westEastSlopeRiseTitle: "Cambio en Y por recorrido W→E; negativo invierte la inclinación",
   },
   swatches: {
     transparent: "Transparente",
@@ -396,8 +400,8 @@ export const esCatalog = {
     mapArtCraftUrl: "https://mike2b2t.github.io/mapartcraft/",
     gu2t4vName: "Gu2t4v",
     gu2t4vUrl: "https://youtube.com/@gust4v_",
-    gu2t4vRole: "Experto en supresión, inventor del método de 2 capas",
-    gptNote: "Nota: se usó GPT para partes de este sitio",
+    gu2t4vRole: "Experto en supresión, inventor de 2 capas",
+    gptNote: "Visuales y código selectivos",
   },
   parsing: {
     unableToCreateImageCanvas: "No se pudo crear el lienzo de la imagen.",

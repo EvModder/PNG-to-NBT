@@ -393,6 +393,131 @@ async function assertPaletteCollapseModeInvariants(): Promise<void> {
   );
 }
 
+async function assertWestEastSlopeExportInvariant(): Promise<void> {
+  const slopedShape = buildTestShape([0, 1, 2, 3].map(x => ({
+    x,
+    y: 0,
+    z: 0,
+    cell: { id: 1, isCustom: false },
+  })));
+  const slopedResult = await convertToNbt(slopedShape, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: false,
+    forceZ129: false,
+    baseName: "west-east-slope-test",
+    buildMode: BuildMode.StaircaseClassic,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+    westEastSlope: { run: 2, rise: 3 },
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (slopedResult.isZip) throw new Error("Expected single NBT export in W-E slope invariant test");
+  const stoneBlocks = parseStructureBlocks(new Uint8Array(gunzipSync(slopedResult.data)))
+    .filter(block => block.blockName === "minecraft:stone");
+  const expectedYByX = new Map([[0, 0], [1, 0], [2, 3], [3, 3]]);
+  for (const [x, expectedY] of expectedYByX) {
+    const actualY = stoneBlocks.find(block => block.x === x)?.y;
+    if (actualY !== expectedY) {
+      throw new Error(`Expected W-E slope stone at x=${x} to export y=${expectedY}, got ${actualY}`);
+    }
+  }
+
+  const zeroRunResult = await convertToNbt(slopedShape, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: false,
+    forceZ129: false,
+    baseName: "west-east-zero-run-slope-test",
+    buildMode: BuildMode.StaircaseClassic,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+    westEastSlope: { run: 0, rise: 2 },
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (zeroRunResult.isZip) throw new Error("Expected single NBT export in W-E zero-run slope invariant test");
+  const zeroRunStoneBlocks = parseStructureBlocks(new Uint8Array(gunzipSync(zeroRunResult.data)))
+    .filter(block => block.blockName === "minecraft:stone");
+  for (const x of [0, 1, 2, 3]) {
+    const actualY = zeroRunStoneBlocks.find(block => block.x === x)?.y;
+    if (actualY !== x * 2) {
+      throw new Error(`Expected W-E run=0 slope stone at x=${x} to export y=${x * 2}, got ${actualY}`);
+    }
+  }
+
+  const negativeRiseResult = await convertToNbt(slopedShape, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: false,
+    forceZ129: false,
+    baseName: "west-east-negative-rise-slope-test",
+    buildMode: BuildMode.StaircaseClassic,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+    westEastSlope: { run: 2, rise: -3 },
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (negativeRiseResult.isZip) throw new Error("Expected single NBT export in W-E negative-rise slope invariant test");
+  const negativeRiseStoneBlocks = parseStructureBlocks(new Uint8Array(gunzipSync(negativeRiseResult.data)))
+    .filter(block => block.blockName === "minecraft:stone");
+  const expectedNegativeRiseYByX = new Map([[0, 3], [1, 3], [2, 0], [3, 0]]);
+  for (const [x, expectedY] of expectedNegativeRiseYByX) {
+    const actualY = negativeRiseStoneBlocks.find(block => block.x === x)?.y;
+    if (actualY !== expectedY) {
+      throw new Error(`Expected W-E negative-rise stone at x=${x} to export y=${expectedY}, got ${actualY}`);
+    }
+  }
+
+  const markerShape: GeneratedShape = {
+    parts: [{
+      cells: new Map<number, ShapeCell>([
+        [toShapeCoordKey(0, 0, 0), { id: 1, isCustom: false }],
+        [toShapeCoordKey(5, 1, 0), [FillerRole.ShadeVoidDominant]],
+      ]),
+      bounds: { minY: 0, maxY: 1, minZ: 0, maxZ: 0 },
+      supportFloorYs: new Set<number>([0]),
+    }],
+    partType: ShapePartType.SingleColumn,
+    splitExportNames: null,
+    suppressedTransparentVsCollisionCount: 0,
+  };
+  const markerResult = await convertToNbt(markerShape, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [{ role: FillerRole.ShadeVoidDominant, block: "slime_block" }],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: false,
+    forceZ129: false,
+    baseName: "west-east-slope-marker-test",
+    buildMode: BuildMode.StaircaseClassic,
+    suppressStepDirection: SuppressStepDirection.NorthToSouth,
+    westEastSlope: { run: 2, rise: 3 },
+    markSuppressLoadSpotsInSchematic: true,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (markerResult.isZip) throw new Error("Expected single NBT export in W-E slope marker invariant test");
+  const markerBlocks = parseStructureBlocks(new Uint8Array(gunzipSync(markerResult.data)));
+  const markerBlock = markerBlocks.find(block => block.blockName.startsWith("minecraft:jigsaw"));
+  if (!markerBlock) throw new Error("Expected W-E slope marker invariant test to export a jigsaw marker");
+  if (markerBlock.y !== 1) {
+    throw new Error(`Expected W-E slope to leave marker y=1, got ${markerBlock.y}`);
+  }
+}
+
 function assertCrubTechPresetInvariant(): void {
   const preset = getBuiltinPreset(CRUBTECH_PRESET_NAME);
   if (!preset) throw new Error("Expected built-in CrubTech preset");
@@ -974,6 +1099,7 @@ async function main(): Promise<number> {
   await assertCrubTechLatePairPauseMarkerInvariants();
   assertDefaultLatePairYInvariant();
   await assertPaletteCollapseModeInvariants();
+  await assertWestEastSlopeExportInvariant();
   console.log("Inline invariants passed.");
   return 0;
 }

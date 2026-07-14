@@ -495,6 +495,10 @@ export const messages = {
     rangeButtonLabel(isStepRangeMode: boolean): string {
       return isStepRangeMode ? catalog.preview.stepRangeButton : catalog.preview.columnRangeButton;
     },
+    westEastSlopeButton: catalog.preview.westEastSlopeButton,
+    westEastSlopeTooltip: catalog.preview.westEastSlopeTooltip,
+    westEastSlopeRunTitle: catalog.preview.westEastSlopeRunTitle,
+    westEastSlopeRiseTitle: catalog.preview.westEastSlopeRiseTitle,
   },
   swatches: {
     transparent: catalog.swatches.transparent,
