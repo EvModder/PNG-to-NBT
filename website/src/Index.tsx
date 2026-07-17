@@ -110,8 +110,8 @@ import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorR
 import {
   createFillerAssignments,
   getSupportModeFillerRoles,
-  isCrubTechShadeBreakableValid,
-  isCrubTechShadePushableValid,
+  isCrubTechBreakableValid,
+  isCrubTechPushableValid,
   isFillerDisabled,
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
@@ -143,6 +143,7 @@ import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, Suppo
 import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
 import {
   getBuildModeDownloadSuffix,
+  buildModeUsesLayerGap,
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
   cycleSuppressStepDirection,
@@ -1428,35 +1429,9 @@ const Index = () => {
   const shadeFillerShadingDisabled = isShadeFillerDisabled(effectiveShadeFillerBlock);
   const crubTechShadeBreakableFillerShadingDisabled = isShadeFillerDisabled(effectiveCrubTechShadeBreakableFillerBlock);
   const crubTechShadePushableFillerShadingDisabled = isShadeFillerDisabled(effectiveCrubTechShadePushableFillerBlock);
+  const lateFillerShadingDisabled = isShadeFillerDisabled(effectiveSuppress2LayerLateFillerBlock);
   const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock);
   const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock);
-  const lateFillerShadingDisabled = isShadeFillerDisabled(effectiveSuppress2LayerLateFillerBlock);
-  const uiFillerAssignments = useMemo(
-    () => createFillerAssignments(
-      effectiveSupportFillerBlock,
-      effectiveShadeFillerBlock,
-      effectiveCrubTechShadeBreakableFillerBlock,
-      effectiveCrubTechShadePushableFillerBlock,
-      effectiveDominateVoidFillerBlock,
-      effectiveRecessiveVoidFillerBlock,
-      effectiveSuppress2LayerLateFillerBlock,
-      supportMode,
-      usesWaterForWater,
-      usesIceForWater,
-    ),
-    [
-      effectiveSupportFillerBlock,
-      effectiveShadeFillerBlock,
-      effectiveCrubTechShadeBreakableFillerBlock,
-      effectiveCrubTechShadePushableFillerBlock,
-      effectiveDominateVoidFillerBlock,
-      effectiveRecessiveVoidFillerBlock,
-      effectiveSuppress2LayerLateFillerBlock,
-      supportMode,
-      usesWaterForWater,
-      usesIceForWater,
-    ],
-  );
   const activeTransparentBlock = derivedImageStats?.hasTransparency
     ? (preset.selectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "")
     : "";
@@ -1778,10 +1753,42 @@ const Index = () => {
     !showFlatNbtSuppressStepModes;
   const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
   const crubTechControlsActive2LayerSettings = crubTech && isCrubTechBuildMode(effectiveBuildMode);
+  const effectiveSupportMode = crubTechControlsActive2LayerSettings && supportMode !== SupportMode.None
+    ? SupportMode.Steps
+    : supportMode;
+  const effectiveShowTransparentRow = !crubTechControlsActive2LayerSettings && showTransparentRow;
   const effectiveForceXZ128 = crubTechControlsActive2LayerSettings || forceXZ128;
   const effectiveForceZ129 = crubTechControlsActive2LayerSettings || forceZ129;
   const effectiveApplySupportFloorYs = crubTechControlsActive2LayerSettings || applySupportFloorYs;
   const effectiveBelowPlatformWater = crubTechControlsActive2LayerSettings || belowPlatformWater;
+  const uiFillerAssignments = useMemo(
+    () => createFillerAssignments(
+      effectiveSupportFillerBlock,
+      effectiveShadeFillerBlock,
+      effectiveCrubTechShadeBreakableFillerBlock,
+      effectiveCrubTechShadePushableFillerBlock,
+      effectiveSuppress2LayerLateFillerBlock,
+      effectiveDominateVoidFillerBlock,
+      effectiveRecessiveVoidFillerBlock,
+      effectiveSupportMode,
+      crubTechControlsActive2LayerSettings,
+      usesWaterForWater,
+      usesIceForWater,
+    ),
+    [
+      effectiveSupportFillerBlock,
+      effectiveShadeFillerBlock,
+      effectiveCrubTechShadeBreakableFillerBlock,
+      effectiveCrubTechShadePushableFillerBlock,
+      effectiveSuppress2LayerLateFillerBlock,
+      effectiveDominateVoidFillerBlock,
+      effectiveRecessiveVoidFillerBlock,
+      effectiveSupportMode,
+      crubTechControlsActive2LayerSettings,
+      usesWaterForWater,
+      usesIceForWater,
+    ],
+  );
   const colorBlockSelections = useMemo<ColorBlockSelections>(
     () => ({ selectedBlocks: preset.selectedBlocks, selectedBlocksCustom, customColors }),
     [preset.selectedBlocks, selectedBlocksCustom, customColors],
@@ -1806,32 +1813,19 @@ const Index = () => {
       [
         usedMaterialColorAssignments,
         usedMaterialFillerAssignments,
-        `support=${supportMode !== SupportMode.None ? 1 : 0}`,
+        `support=${effectiveSupportMode !== SupportMode.None ? 1 : 0}`,
         `supportFloorY=${effectiveApplySupportFloorYs ? 1 : 0}`,
       ].join("||"),
-    [usedMaterialColorAssignments, usedMaterialFillerAssignments, supportMode, effectiveApplySupportFloorYs],
+    [usedMaterialColorAssignments, usedMaterialFillerAssignments, effectiveSupportMode, effectiveApplySupportFloorYs],
   );
-  const visibleWaterLevelControls = useMemo(
-    () => {
-      if (!imageValid || !effectiveBelowPlatformWater || buildMode === BuildMode.Flat) return [];
-      const currentWaterDrops = crubTechControlsActive2LayerSettings
-        ? CRUBTECH_WATER_DROPS
-        : buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
-      return WATER_DROP_INPUT_ORDER
-        .filter(shade => usedWaterShades.has(shade))
-        .map(shade => ({ shade, value: currentWaterDrops[shade] }));
-    },
-    [
-      imageValid,
-      effectiveBelowPlatformWater,
-      buildMode,
-      crubTechControlsActive2LayerSettings,
-      usedWaterShades,
-      lightWaterDrop,
-      flatWaterDrop,
-      darkWaterDrop,
-    ],
-  );
+  const currentWaterDrops = crubTechControlsActive2LayerSettings
+    ? CRUBTECH_WATER_DROPS
+    : buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
+  const visibleWaterLevelControls = !imageHasWater || !effectiveBelowPlatformWater || effectiveBuildMode === BuildMode.Flat
+    ? []
+    : WATER_DROP_INPUT_ORDER
+      .filter(shade => usedWaterShades.has(shade))
+      .map(shade => ({ shade, value: currentWaterDrops[shade] }));
 
   useEffect(() => {
     if (!effectiveBelowPlatformWater || crubTechControlsActive2LayerSettings) return;
@@ -1870,7 +1864,7 @@ const Index = () => {
       [...usedColorKeys].map(key => [key, resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections)] as const),
     );
     const currentFillerAssignmentsByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, assignment.block]));
-    const currentSupportModeEnabled = supportMode !== SupportMode.None;
+    const currentSupportModeEnabled = effectiveSupportMode !== SupportMode.None;
     const changedColorKeys = previousMaterialInputs
       ? new Set(
           [...usedColorKeys].filter(key =>
@@ -2019,7 +2013,7 @@ const Index = () => {
     usedMaterialFillerAssignments,
     currentMaterialInputSignature,
     effectiveApplySupportFloorYs,
-    supportMode,
+    effectiveSupportMode,
   ]);
   const tileAnalyses = tileAnalysesState;
   const hasCurrentTileGeometryAnalysis = hasCurrentTileGeometryAnalyses(parsedTiles, tileGeometryAnalyses);
@@ -2087,17 +2081,22 @@ const Index = () => {
         !hasCurrentTileGeometryAnalysis
       )
     );
-  const enableStepsSupportOption = !imageData || supportModeVisibilityPending || tileAnalyses.some(tile =>
-    !!tile.supportShape?.parts.some(part =>
-      part.cells.entries().some(([coord, cell]) => {
-        if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
-        const [x, y, z] = parseShapeCoordKey(coord);
-        const supportFloorYs = effectiveApplySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
-        return isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs);
-      }),
-    ),
+  const enableStepsSupportOption = crubTechControlsActive2LayerSettings || (
+    !buildModeUsesLayerGap(effectiveBuildMode) && (
+      !imageData || supportModeVisibilityPending || tileAnalyses.some(tile =>
+        !!tile.supportShape?.parts.some(part =>
+          part.cells.entries().some(([coord, cell]) => {
+            if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
+            const [x, y, z] = parseShapeCoordKey(coord);
+            const supportFloorYs = effectiveApplySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+            return isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs);
+          }),
+        ),
+      )
+    )
   );
   const enableFragileSupportOption = useMemo(() => {
+    if (crubTechControlsActive2LayerSettings) return false;
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
       return Object.values(preset.selectedBlocks).some(hasFragileMappedBlock) ||
@@ -2121,7 +2120,14 @@ const Index = () => {
         }),
       ),
     );
-  }, [imageData, supportModeVisibilityPending, tileAnalyses, colorBlockSelections, effectiveApplySupportFloorYs]);
+  }, [
+    crubTechControlsActive2LayerSettings,
+    imageData,
+    supportModeVisibilityPending,
+    tileAnalyses,
+    colorBlockSelections,
+    effectiveApplySupportFloorYs,
+  ]);
   const staircaseModeOptions = useMemo(
     () => getStaircaseModeOptionsForState(
       imageValid,
@@ -2151,7 +2157,7 @@ const Index = () => {
   );
   const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
   const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
-  const supportModeTooltip = messages.supportMode.tooltip(supportMode);
+  const supportModeTooltip = messages.supportMode.tooltip(effectiveSupportMode);
   const suppressStepNorthSouthWarning = useMemo(
     () =>
       !!imageData &&
@@ -2233,23 +2239,33 @@ const Index = () => {
     [aggregateFillerRoleCounts],
   );
   const allSupportRoles = useMemo(
-    () => getSupportModeFillerRoles(SupportMode.All, usesWaterForWater, usesIceForWater),
+    () => getSupportModeFillerRoles(
+      SupportMode.All,
+      usesWaterForWater,
+      usesIceForWater,
+      false,
+    ),
     [usesWaterForWater, usesIceForWater],
   );
   const waterSupportRoles = useMemo(
-    () => getSupportModeFillerRoles(SupportMode.Water, usesWaterForWater, usesIceForWater),
+    () => getSupportModeFillerRoles(SupportMode.Water, usesWaterForWater, usesIceForWater, false),
     [usesWaterForWater, usesIceForWater],
   );
   const activeSupportRoles = useMemo(
-    () => getSupportModeFillerRoles(supportMode, usesWaterForWater, usesIceForWater),
-    [supportMode, usesWaterForWater, usesIceForWater],
+    () => getSupportModeFillerRoles(
+      effectiveSupportMode,
+      usesWaterForWater,
+      usesIceForWater,
+      crubTechControlsActive2LayerSettings,
+    ),
+    [effectiveSupportMode, usesWaterForWater, usesIceForWater, crubTechControlsActive2LayerSettings],
   );
-  const enableAllSupportOption = !imageData || supportModeVisibilityPending || getSupportModeRoleCount(
-    ...allSupportRoles,
-  ) > 0;
-  const enableWaterSupportOption = !imageData || supportModeVisibilityPending || getSupportModeRoleCount(
-    ...waterSupportRoles,
-  ) > 0;
+  const enableAllSupportOption = !crubTechControlsActive2LayerSettings && (
+    !imageData || supportModeVisibilityPending || getSupportModeRoleCount(...allSupportRoles) > 0
+  );
+  const enableWaterSupportOption = !crubTechControlsActive2LayerSettings && (
+    !imageData || supportModeVisibilityPending || getSupportModeRoleCount(...waterSupportRoles) > 0
+  );
   const showSupportModeSelector = !imageData || supportModeVisibilityPending || (
     enableAllSupportOption ||
     enableStepsSupportOption ||
@@ -2400,12 +2416,22 @@ const Index = () => {
   }, [replaceUploadedPreviewUrl]);
 
   useEffect(() => {
-    if (!imageData || previewBusy) return;
+    if (!imageData || previewBusy || crubTechControlsActive2LayerSettings) return;
     if (supportMode === SupportMode.All && !enableAllSupportOption) { setSupportMode(SupportMode.None); return; }
     if (supportMode === SupportMode.Fragile && (supportFillerIsFragile || !enableFragileSupportOption)) { setSupportMode(SupportMode.None); return; }
     if (supportMode === SupportMode.Steps && !enableStepsSupportOption) setSupportMode(SupportMode.None);
     if (supportMode === SupportMode.Water && !enableWaterSupportOption) setSupportMode(SupportMode.None);
-  }, [imageData, previewBusy, enableAllSupportOption, enableStepsSupportOption, enableFragileSupportOption, enableWaterSupportOption, supportMode, supportFillerIsFragile]);
+  }, [
+    imageData,
+    previewBusy,
+    crubTechControlsActive2LayerSettings,
+    enableAllSupportOption,
+    enableStepsSupportOption,
+    enableFragileSupportOption,
+    enableWaterSupportOption,
+    supportMode,
+    supportFillerIsFragile,
+  ]);
 
   useEffect(() => {
     if ((supportMode === SupportMode.Fragile || supportMode === SupportMode.All) && layerGap < 3) setLayerGap(3);
@@ -2867,7 +2893,7 @@ const Index = () => {
     setConverting(true);
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
-      const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, suppressStepDirection, useCrubTechShadeFillers);
+      const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, suppressStepDirection, crubTechControlsActive2LayerSettings);
       const exportTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
       const exportEntries: { name: string; data: Uint8Array }[] = [];
       const westEastSlope = westEastSlopeEnabled && westEastSlopeRise !== 0 && !isSuppressBuildMode(effectiveBuildMode)
@@ -2890,7 +2916,7 @@ const Index = () => {
           suppressStepDirection: activeSuppressDirection,
           westEastSlope,
           suppress2LayerLatePairY: effectiveSuppress2LayerLatePairY,
-          crubTech: useCrubTechShadeFillers,
+          crubTech: crubTechControlsActive2LayerSettings,
           markSuppressLoadSpotsInSchematic,
           suppressLoadSpotMarkerBlock,
         });
@@ -3024,16 +3050,15 @@ const Index = () => {
 
   const aggregateNorthRowSingleLine = tileGeometryAnalyses.every(tile => tile.northRowSingleLine);
 
-  const canGenerate = imageValid && !previewBusy && missingBlockCount === 0;
+  const canGenerate = imageValid && missingBlockCount === 0;
   const hasRequiredCol = imageValid && (hasCurrentMaterialAnalysis || holdResolvedMaterialUi);
   const transparentSortColorCount = useMemo(() => {
-    if (activeTransparentBlock !== "") return 0;
     const transparentShadeCounts = shadeCountsByColorKey.get(getColorRefKey({ id: TRANSPARENCY_BASE_INDEX, isCustom: false }));
     if (!transparentShadeCounts) return 0;
     let total = 0;
     for (const count of transparentShadeCounts.values()) total += count;
     return total;
-  }, [activeTransparentBlock, shadeCountsByColorKey]);
+  }, [shadeCountsByColorKey]);
   const colorTableSortCounts = useMemo(() => {
     if (transparentSortColorCount <= 0) return materialCountsDisplayView.colorCounts;
     return {
@@ -3102,11 +3127,13 @@ const Index = () => {
     (...roles: FillerRole[]) => roles.reduce((sum, role) => sum + (materialCountsDisplayView.fillerRoleCounts.get(role) ?? 0), 0),
     [materialCountsDisplayView],
   );
-  const aggregateCrubTechShadeBreakableRequiredCount = getAggregateRequiredFillerRoleCount(
+  const aggregateCrubTechBreakableRequiredCount = getAggregateRequiredFillerRoleCount(
     FillerRole.ShadeSuppressBreakable,
+    FillerRole.SupportBreakable,
   );
-  const aggregateCrubTechShadePushableRequiredCount = getAggregateRequiredFillerRoleCount(
+  const aggregateCrubTechPushableRequiredCount = getAggregateRequiredFillerRoleCount(
     FillerRole.ShadeSuppressPushable,
+    FillerRole.SupportPushable,
   );
   const aggregateLateFillerRequiredCount = getAggregateRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
   const aggregateDominateVoidFillerRequiredCount = getAggregateRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
@@ -3120,11 +3147,13 @@ const Index = () => {
     FillerRole.ShadeNorthRowPushable,
     FillerRole.ShadeSuppressPushable,
   );
-  const crubTechShadeBreakableFillerRequiredCount = getRequiredFillerRoleCount(
+  const crubTechBreakableFillerRequiredCount = getRequiredFillerRoleCount(
     FillerRole.ShadeSuppressBreakable,
+    FillerRole.SupportBreakable,
   );
-  const crubTechShadePushableFillerRequiredCount = getRequiredFillerRoleCount(
+  const crubTechPushableFillerRequiredCount = getRequiredFillerRoleCount(
     FillerRole.ShadeSuppressPushable,
+    FillerRole.SupportPushable,
   );
   const lateFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeSuppressLate);
   const dominateVoidFillerRequiredCount = getRequiredFillerRoleCount(FillerRole.ShadeVoidDominant);
@@ -3134,7 +3163,6 @@ const Index = () => {
     markSuppressLoadSpotsInSchematic &&
     !isSuppressBuildMode(buildMode) &&
     vsFillerSpotCount > 0;
-  const selectedLatePairSuppressMode = effectiveBuildMode === BuildMode.Suppress2LayerLatePairs;
   const showCrubTechControl = isCrubTechBuildMode(effectiveBuildMode);
   const showSuppressDirectionControl =
     !!imageData &&
@@ -3149,9 +3177,8 @@ const Index = () => {
   const setActiveSuppressDirection = directionControlUsesVsFillers
     ? setVsFillerLoadSpotDirection
     : setSuppressDirection;
-  const useCrubTechShadeFillers = crubTech && showCrubTechControl;
   const showLatePairsGapControl =
-    selectedLatePairSuppressMode &&
+    effectiveBuildMode === BuildMode.Suppress2LayerLatePairs &&
     twoLayerHasLateVoidNeed;
   const toolbarBuildSettingsProps = displayImageData && imageValid ? {
     lockFlatBuildMode: lockFlatBuildMode || (
@@ -3197,6 +3224,7 @@ const Index = () => {
   } : null;
   const showWaterSideSupportWarning =
     imageValid &&
+    !crubTechControlsActive2LayerSettings &&
     (supportMode === SupportMode.All || supportMode === SupportMode.Water) &&
     usesWaterForWater &&
     getSupportModeRoleCount(FillerRole.SupportWaterSides) > 0 &&
@@ -3206,20 +3234,22 @@ const Index = () => {
   const inGridShadingCountsAsWarning = hasInGridFillerNeed && isSuppressBuildMode(effectiveBuildMode);
   const hasComplexNorthNeed = northRowFillerCount > 0 && (showNooblineWarnings || !aggregateNorthRowSingleLine);
   const showNoFillerWarning =
-    !useCrubTechShadeFillers &&
+    !crubTechControlsActive2LayerSettings &&
     imageValid &&
     ((inGridShadingCountsAsWarning && shadeFillerShadingDisabled) || (hasComplexNorthNeed && shadeFillerShadingDisabled));
-  const showLateFillerInput =
-    !!imageData &&
-    buildMode === BuildMode.Suppress2LayerLateFillers &&
-    aggregateLateFillerRequiredCount > 0;
   const showSupportFillerInput =
-    supportMode !== SupportMode.None &&
+    effectiveSupportMode !== SupportMode.None &&
+    !crubTechControlsActive2LayerSettings &&
     (!imageData || aggregateSupportFillerRequiredCount > 0 || showWaterSideSupportWarning);
   const showShadeFillerControlFamily = !!imageData && (suppressFillerCount + northRowFillerCount) > 0;
-  const showShadeFillerInput = showShadeFillerControlFamily && !useCrubTechShadeFillers;
-  const showCrubTechShadeBreakableFillerInput = showShadeFillerControlFamily && useCrubTechShadeFillers;
-  const showCrubTechShadePushableFillerInput = showShadeFillerControlFamily && useCrubTechShadeFillers;
+  const showShadeFillerInput = showShadeFillerControlFamily && !crubTechControlsActive2LayerSettings;
+  const showCrubTechFillerInputs =
+    crubTechControlsActive2LayerSettings &&
+    crubTechBreakableFillerRequiredCount + crubTechPushableFillerRequiredCount > 0;
+  const showLateFillerInput =
+    !!imageData &&
+    effectiveBuildMode === BuildMode.Suppress2LayerLateFillers &&
+    aggregateLateFillerRequiredCount > 0;
   const shadeFillerIsNorthRowOnly = northRowFillerCount > 0 && suppressFillerCount === 0;
   const showDominateVoidFillerInput =
     !!imageData &&
@@ -3236,20 +3266,19 @@ const Index = () => {
       () => ({
         showSupportFillerInput,
         showShadeFillerInput,
-        showShadeBreakableFillerInput: showCrubTechShadeBreakableFillerInput,
-        showShadePushableFillerInput: showCrubTechShadePushableFillerInput,
+        showShadeBreakableFillerInput: showCrubTechFillerInputs,
+        showShadePushableFillerInput: showCrubTechFillerInputs,
+        showLateFillerInput,
         showDominateVoidFillerInput,
         showRecessiveVoidFillerInput,
-        showLateFillerInput,
       }),
       [
-        showDominateVoidFillerInput,
-        showLateFillerInput,
-        showRecessiveVoidFillerInput,
-        showCrubTechShadeBreakableFillerInput,
-        showCrubTechShadePushableFillerInput,
-        showShadeFillerInput,
         showSupportFillerInput,
+        showShadeFillerInput,
+        showCrubTechFillerInputs,
+        showLateFillerInput,
+        showDominateVoidFillerInput,
+        showRecessiveVoidFillerInput,
       ],
     ),
     fillerUiVisibilityPending,
@@ -3383,45 +3412,41 @@ const Index = () => {
   const canCopyImageShareUrl = tileCount === 1 && !!imageColorGrid && imageValid;
   const presetPrimaryActionTitle = presetDirty ? messages.presets.saveTitle : messages.presets.shareTitle;
   const hasValidNorthRowShadeFiller =
-    northRowFillerCount > 0 && (
-      useCrubTechShadeFillers
-        ? true
-        : !shadeFillerShadingDisabled
-    );
+    northRowFillerCount > 0 && (crubTechControlsActive2LayerSettings || !shadeFillerShadingDisabled);
   const showNorthRowAlignmentInfo =
 	    showAlignmentReminder &&
 	    imageValid &&
 	    tileGeometryAnalyses.length > 0 &&
 	    (effectiveForceZ129 || hasValidNorthRowShadeFiller);
   const noFillerWarning = useMemo(() => {
-    if (useCrubTechShadeFillers) {
+    if (crubTechControlsActive2LayerSettings) {
       const parts: string[] = [];
-      if (aggregateCrubTechShadeBreakableRequiredCount > 0) {
+      if (aggregateCrubTechBreakableRequiredCount > 0) {
         parts.push(
           crubTechShadeBreakableFillerShadingDisabled
             ? messages.preview.crubTechBreakableInvalid(
               effectiveCrubTechShadeBreakableFillerBlock,
-              aggregateCrubTechShadeBreakableRequiredCount,
+              aggregateCrubTechBreakableRequiredCount,
             )
-            : !isCrubTechShadeBreakableValid(effectiveCrubTechShadeBreakableFillerBlock)
+            : !isCrubTechBreakableValid(effectiveCrubTechShadeBreakableFillerBlock)
               ? messages.preview.crubTechBreakableBehaviorWarning(
                 effectiveCrubTechShadeBreakableFillerBlock,
-                aggregateCrubTechShadeBreakableRequiredCount,
+                aggregateCrubTechBreakableRequiredCount,
               )
               : "",
         );
       }
-      if (aggregateCrubTechShadePushableRequiredCount > 0) {
+      if (aggregateCrubTechPushableRequiredCount > 0) {
         parts.push(
           crubTechShadePushableFillerShadingDisabled
             ? messages.preview.crubTechPushableInvalid(
               effectiveCrubTechShadePushableFillerBlock,
-              aggregateCrubTechShadePushableRequiredCount,
+              aggregateCrubTechPushableRequiredCount,
             )
-            : !isCrubTechShadePushableValid(effectiveCrubTechShadePushableFillerBlock)
+            : !isCrubTechPushableValid(effectiveCrubTechShadePushableFillerBlock)
               ? messages.preview.crubTechPushableBehaviorWarning(
                 effectiveCrubTechShadePushableFillerBlock,
-                aggregateCrubTechShadePushableRequiredCount,
+                aggregateCrubTechPushableRequiredCount,
               )
               : "",
         );
@@ -3445,8 +3470,8 @@ const Index = () => {
     if (parts.length === 0) return null;
     return messages.preview.noFillerWarning(effectiveShadeFillerBlock, parts);
   }, [
-    aggregateCrubTechShadeBreakableRequiredCount,
-    aggregateCrubTechShadePushableRequiredCount,
+    aggregateCrubTechBreakableRequiredCount,
+    aggregateCrubTechPushableRequiredCount,
     effectiveBuildMode,
     effectiveCrubTechShadeBreakableFillerBlock,
     effectiveCrubTechShadePushableFillerBlock,
@@ -3459,7 +3484,7 @@ const Index = () => {
     crubTechShadePushableFillerShadingDisabled,
     showNoFillerWarning,
     showNooblineWarnings,
-    useCrubTechShadeFillers,
+    crubTechControlsActive2LayerSettings,
   ]);
   const waterSideSupportWarning = useMemo<ShapeWarning | null>(() => {
     if (!showWaterSideSupportWarning) return null;
@@ -3470,7 +3495,7 @@ const Index = () => {
     };
   }, [showWaterSideSupportWarning, effectiveSupportFillerBlock, supportFillerDisabled]);
   const fragileSupportOverrideWarning = useMemo<ShapeWarning | null>(() => {
-    if (!imageValid || !fragileSupportOverrideNeedStatsDisplay) return null;
+    if (!imageValid || !fragileSupportOverrideNeedStatsDisplay || crubTechControlsActive2LayerSettings) return null;
     if (supportMode === SupportMode.None) return null;
 
     const warningLines: string[] = [];
@@ -3486,6 +3511,7 @@ const Index = () => {
   }, [
     fragileSupportOverrideNeedStatsDisplay,
     imageValid,
+    crubTechControlsActive2LayerSettings,
     supportMode,
   ]);
   const vsFillerWarning = useMemo<ShapeWarning | null>(() => {
@@ -3819,6 +3845,7 @@ const Index = () => {
             isStackedLayout={isStackedLayout}
             presets={presets}
             builtInPresetCount={BUILTIN_PRESET_NAMES.length}
+            showCrubTechPreset={crubTechControlsActive2LayerSettings}
             activeIdx={activeIdx}
             selectPreset={selectPreset}
             activePresetBuiltinTooltip={activePresetBuiltinTooltip}
@@ -3829,7 +3856,7 @@ const Index = () => {
             deletePreset={deletePreset}
             createPreset={createPreset}
             showSupportModeSelector={showSupportModeSelector}
-            supportMode={supportMode}
+            supportMode={effectiveSupportMode}
             setSupportMode={setSupportMode}
             supportModeTooltip={supportModeTooltip}
             enableAllSupportOption={enableAllSupportOption}
@@ -3845,6 +3872,7 @@ const Index = () => {
             toolbarRef={fillerToolbarSectionRef}
             isStackedLayout={isStackedLayout}
             hasImageData={!!displayImageData}
+            crubTechIncludesSupport={effectiveSupportMode !== SupportMode.None}
             showSupportFillerInput={fillerUiVisibilityState.showSupportFillerInput}
             supportFillerBlock={supportFillerBlock}
             setSupportFillerBlock={setCommittedSupportFillerBlock}
@@ -3861,12 +3889,17 @@ const Index = () => {
             shadeBreakableFillerBlock={crubTechShadeBreakableFillerBlock}
             setShadeBreakableFillerBlock={setCommittedCrubTechShadeBreakableFillerBlock}
             shadeBreakableFillerShadingDisabled={crubTechShadeBreakableFillerShadingDisabled}
-            shadeBreakableFillerRequiredCount={crubTechShadeBreakableFillerRequiredCount}
+            shadeBreakableFillerRequiredCount={crubTechBreakableFillerRequiredCount}
             showShadePushableFillerInput={fillerUiVisibilityState.showShadePushableFillerInput}
             shadePushableFillerBlock={crubTechShadePushableFillerBlock}
             setShadePushableFillerBlock={setCommittedCrubTechShadePushableFillerBlock}
             shadePushableFillerShadingDisabled={crubTechShadePushableFillerShadingDisabled}
-            shadePushableFillerRequiredCount={crubTechShadePushableFillerRequiredCount}
+            shadePushableFillerRequiredCount={crubTechPushableFillerRequiredCount}
+            showLateFillerInput={fillerUiVisibilityState.showLateFillerInput}
+            suppress2LayerLateFillerBlock={suppress2LayerLateFillerBlock}
+            setSuppress2LayerLateFillerBlock={setCommittedSuppress2LayerLateFillerBlock}
+            lateFillerShadingDisabled={lateFillerShadingDisabled}
+            lateFillerRequiredCount={lateFillerRequiredCount}
             showDominateVoidFillerInput={fillerUiVisibilityState.showDominateVoidFillerInput}
             dominateVoidFillerBlock={dominateVoidFillerBlock}
             setDominateVoidFillerBlock={setCommittedDominateVoidFillerBlock}
@@ -3877,11 +3910,6 @@ const Index = () => {
             setRecessiveVoidFillerBlock={setCommittedRecessiveVoidFillerBlock}
             recessiveVoidFillerShadingDisabled={recessiveVoidFillerShadingDisabled}
             recessiveVoidFillerRequiredCount={recessiveVoidFillerRequiredCount}
-            showLateFillerInput={fillerUiVisibilityState.showLateFillerInput}
-            suppress2LayerLateFillerBlock={suppress2LayerLateFillerBlock}
-            setSuppress2LayerLateFillerBlock={setCommittedSuppress2LayerLateFillerBlock}
-            lateFillerShadingDisabled={lateFillerShadingDisabled}
-            lateFillerRequiredCount={lateFillerRequiredCount}
             formatRequiredCount={formatRequiredCount}
           />
           </div>
@@ -3915,7 +3943,7 @@ const Index = () => {
             setSortDir={setSortDir}
             showUnusedColors={showUnusedColors}
             setShowUnusedColors={setShowUnusedColors}
-            showTransparentRow={showTransparentRow}
+            showTransparentRow={effectiveShowTransparentRow}
             showExcludedBlocks={showExcludedBlocks}
             columnOrder={columnOrder}
             setColumnOrder={setColumnOrder}
@@ -4052,8 +4080,9 @@ const Index = () => {
       <SecretsSettingsDialog
         open={showSecretsDialog}
         onClose={() => setShowSecretsDialog(false)}
-        showTransparentRow={showTransparentRow}
+        showTransparentRow={effectiveShowTransparentRow}
         setShowTransparentRow={setShowTransparentRow}
+        showTransparentRowDisabled={crubTechControlsActive2LayerSettings}
         showExcludedBlocks={showExcludedBlocks}
         setShowExcludedBlocks={setShowExcludedBlocks}
         collapseDuplicateNbtPaletteStates={collapseDuplicateNbtPaletteStates}
@@ -4078,12 +4107,12 @@ const Index = () => {
         setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
         suppressLoadSpotMarkerBlock={suppressLoadSpotMarkerBlock}
         setSuppressLoadSpotMarkerBlock={setSuppressLoadSpotMarkerBlock}
+        showVsFillerWarnings={showVsFillerWarnings}
+        setShowVsFillerWarnings={setShowVsFillerWarnings}
         showAlignmentReminder={showAlignmentReminder}
         setShowAlignmentReminder={setShowAlignmentReminder}
         showNooblineWarnings={showNooblineWarnings}
         setShowNooblineWarnings={setShowNooblineWarnings}
-        showVsFillerWarnings={showVsFillerWarnings}
-        setShowVsFillerWarnings={setShowVsFillerWarnings}
       />
     </div>
   );

@@ -313,12 +313,14 @@ export const messages = {
     shadeRequiredTooltip(isNorthRowOnly: boolean): string {
       return isNorthRowOnly ? catalog.fillers.nooblineRequiredTooltip : catalog.fillers.shadeRequiredTooltip;
     },
-    crubTechBreakableLabel: catalog.fillers.crubTechBreakableLabel,
-    crubTechBreakableWarningLabel: catalog.fillers.crubTechBreakableWarningLabel,
+    crubTechBreakableLabel(includeSupport: boolean): string {
+      return includeSupport ? catalog.fillers.crubTechSupportBreakableLabel : catalog.fillers.crubTechBreakableLabel;
+    },
     crubTechBreakableTooltip: catalog.fillers.crubTechBreakableTooltip,
     crubTechBreakableRequiredTooltip: catalog.fillers.crubTechBreakableRequiredTooltip,
-    crubTechPushableLabel: catalog.fillers.crubTechPushableLabel,
-    crubTechPushableWarningLabel: catalog.fillers.crubTechPushableWarningLabel,
+    crubTechPushableLabel(includeSupport: boolean): string {
+      return includeSupport ? catalog.fillers.crubTechSupportPushableLabel : catalog.fillers.crubTechPushableLabel;
+    },
     crubTechPushableTooltip: catalog.fillers.crubTechPushableTooltip,
     crubTechPushableRequiredTooltip: catalog.fillers.crubTechPushableRequiredTooltip,
     dominateVoidLabel: catalog.fillers.dominateVoidLabel,

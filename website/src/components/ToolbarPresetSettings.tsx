@@ -8,7 +8,7 @@
 import type { RefObject } from "react";
 import { Plus, Save, Share2, Trash2 } from "lucide-react";
 import { messages } from "@/lib/messages";
-import { type BlockPreset } from "@/data/presets";
+import { CRUBTECH_PRESET_NAME, type BlockPreset } from "@/data/presets";
 import { SupportMode } from "@/types/ui";
 import { ToolbarBuildSettings, type ToolbarBuildSettingsProps } from "@/components/ToolbarBuildSettings";
 import {
@@ -23,6 +23,7 @@ type ToolbarPresetSettingsProps = {
   isStackedLayout: boolean;
   presets: BlockPreset[];
   builtInPresetCount: number;
+  showCrubTechPreset: boolean;
   activeIdx: number;
   selectPreset: (idx: number) => void;
   activePresetBuiltinTooltip: string;
@@ -51,6 +52,7 @@ export function ToolbarPresetSettings({
   isStackedLayout,
   presets,
   builtInPresetCount,
+  showCrubTechPreset,
   activeIdx,
   selectPreset,
   activePresetBuiltinTooltip,
@@ -89,7 +91,12 @@ export function ToolbarPresetSettings({
             >
               <optgroup label={messages.presets.builtInGroupLabel}>
                 {presets.slice(0, builtInPresetCount).map((preset, idx) => (
-                  <option key={idx} value={idx} title={messages.presets.builtinTooltip(preset.name)}>
+                  <option
+                    key={idx}
+                    value={idx}
+                    hidden={!showCrubTechPreset && preset.name === CRUBTECH_PRESET_NAME}
+                    title={messages.presets.builtinTooltip(preset.name)}
+                  >
                     {preset.name}
                   </option>
                 ))}

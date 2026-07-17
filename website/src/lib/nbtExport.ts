@@ -104,6 +104,8 @@ function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
       return "vs_filler";
     case FillerRole.SupportAll:
     case FillerRole.SupportFragile:
+    case FillerRole.SupportBreakable:
+    case FillerRole.SupportPushable:
     case FillerRole.SupportWaterBase:
     case FillerRole.SupportWaterSides:
     case FillerRole.SupportWaterSidesCovered:

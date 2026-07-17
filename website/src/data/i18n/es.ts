@@ -73,7 +73,7 @@ export const esCatalog = {
     } as const satisfies Record<SupportMode, string>,
     tooltips: {
       [SupportMode.None]: "Sin bloques de soporte (solo sombreado)",
-      [SupportMode.Steps]: "Añade bloques de soporte debajo de los escalones.",
+      [SupportMode.Steps]: "Añade bloques de soporte debajo de los bloques elevados.",
       [SupportMode.All]: "Añade bloques de soporte debajo de cada bloque.",
       [SupportMode.Fragile]: "Añade bloques de soporte debajo de los bloques frágiles.",
       [SupportMode.Water]: "Añade bloques de soporte alrededor del agua, o debajo de pilares de hielo (si se usa en lugar de agua).",
@@ -177,17 +177,17 @@ export const esCatalog = {
       "Colocaciones de relleno requeridas para el sombreado de la fila norte y de supresión en el rango de salida actual.",
     nooblineRequiredTooltip: "Colocaciones de relleno requeridas para el sombreado de la fila norte en el rango de salida actual.",
     crubTechBreakableLabel: "Shade-Breakable:",
-    crubTechBreakableWarningLabel: "Shade-Breakable",
+    crubTechSupportBreakableLabel: "Support/Shade-Breakable:",
     crubTechBreakableTooltip:
-      "Usado para los puntos de sombreado de 2 capas de CrubTech que deben romperse al ser empujados por pistón/slime.",
+      "Usado para las colocaciones de sombreado y soporte de 2 capas de CrubTech que deben romperse al ser empujadas por pistón/slime.",
     crubTechBreakableRequiredTooltip:
-      "Colocaciones requeridas del relleno de sombreado rompible de CrubTech para el rango de salida actual.",
+      "Colocaciones requeridas del relleno rompible de sombreado y soporte de CrubTech para el rango de salida actual.",
     crubTechPushableLabel: "Shade-Pushable:",
-    crubTechPushableWarningLabel: "Shade-Pushable",
+    crubTechSupportPushableLabel: "Support/Shade-Pushable:",
     crubTechPushableTooltip:
-      "Usado para los puntos de sombreado de 2 capas de CrubTech que deben seguir siendo empujables por pistón/slime.",
+      "Usado para las colocaciones de sombreado y soporte de 2 capas de CrubTech que deben seguir siendo empujables por pistón/slime.",
     crubTechPushableRequiredTooltip:
-      "Colocaciones requeridas del relleno de sombreado empujable de CrubTech para el rango de salida actual.",
+      "Colocaciones requeridas del relleno empujable de sombreado y soporte de CrubTech para el rango de salida actual.",
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Relleno-1",
     dominateVoidTooltip:
@@ -299,20 +299,20 @@ export const esCatalog = {
     noFillerInGridLine: "Se requieren algunos rellenos críticos de sombreado dentro de la cuadrícula de 128x128.",
     noFillerWarning: "El relleno de sombra está desactivado ({value}).\n{lines}",
     crubTechBreakableInvalid: {
-      one: "Shade-Breakable no es válido ({value}).\n{count} punto de sombreado de CrubTech lo requiere.",
-      other: "Shade-Breakable no es válido ({value}).\n{count} puntos de sombreado de CrubTech lo requieren.",
+      one: "Shade/Support-Breakable no es válido ({value}).\n{count} colocación de CrubTech lo requiere.",
+      other: "Shade/Support-Breakable no es válido ({value}).\n{count} colocaciones de CrubTech lo requieren.",
     } as PluralForms,
     crubTechPushableInvalid: {
-      one: "Shade-Pushable no es válido ({value}).\n{count} punto de sombreado de CrubTech lo requiere.",
-      other: "Shade-Pushable no es válido ({value}).\n{count} puntos de sombreado de CrubTech lo requieren.",
+      one: "Shade/Support-Pushable no es válido ({value}).\n{count} colocación de CrubTech lo requiere.",
+      other: "Shade/Support-Pushable no es válido ({value}).\n{count} colocaciones de CrubTech lo requieren.",
     } as PluralForms,
     crubTechBreakableBehaviorWarning: {
-      one: "Shade-Breakable debería romperse al ser empujado por pistón/slime ({value}).\n{count} punto de sombreado de CrubTech lo usa.",
-      other: "Shade-Breakable debería romperse al ser empujado por pistón/slime ({value}).\n{count} puntos de sombreado de CrubTech lo usan.",
+      one: "Shade/Support-Breakable debería romperse al ser empujado por pistón/slime ({value}).\n{count} colocación de CrubTech lo usa.",
+      other: "Shade/Support-Breakable debería romperse al ser empujado por pistón/slime ({value}).\n{count} colocaciones de CrubTech lo usan.",
     } as PluralForms,
     crubTechPushableBehaviorWarning: {
-      one: "Shade-Pushable debería seguir siendo empujable por pistón/slime ({value}).\n{count} punto de sombreado de CrubTech lo usa.",
-      other: "Shade-Pushable debería seguir siendo empujable por pistón/slime ({value}).\n{count} puntos de sombreado de CrubTech lo usan.",
+      one: "Shade/Support-Pushable debería seguir siendo empujable por pistón/slime ({value}).\n{count} colocación de CrubTech lo usa.",
+      other: "Shade/Support-Pushable debería seguir siendo empujable por pistón/slime ({value}).\n{count} colocaciones de CrubTech lo usan.",
     } as PluralForms,
     waterSideSupportInvalid:
       "El relleno de soporte no es válido ({value}).\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán.",
@@ -383,9 +383,9 @@ export const esCatalog = {
       showFlatNbtSuppressStepModes: "Mostrar opciones de suppress (steps) para esquemas planos",
       markSuppressLoadSpotsInSchematic: "Marcar puntos de carga de supresión de color en esquemas",
       suppressLoadSpotMarkerBlock: "Bloque marcador",
+      showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",
       showAlignmentReminder: "Mostrar recordatorio de alineación",
       showNooblineWarnings: "Mostrar advertencias para nooblines",
-      showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",
     },
   },
   credits: {

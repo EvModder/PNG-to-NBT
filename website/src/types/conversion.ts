@@ -109,6 +109,8 @@ export enum FillerRole {
 
   SupportAll = "support_all",
   SupportFragile = "support_fragile",
+  SupportBreakable = "support_breakable",
+  SupportPushable = "support_pushable",
   SupportWaterBase = "support_water_base",
   SupportWaterSides = "support_water_sides",
   SupportWaterSidesCovered = "support_water_sides_covered",

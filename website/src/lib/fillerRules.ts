@@ -5,8 +5,8 @@
  * - getSupportModeFillerRoles()
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
- * - isCrubTechShadeBreakableValid()
- * - isCrubTechShadePushableValid()
+ * - isCrubTechBreakableValid()
+ * - isCrubTechPushableValid()
  * - isWaterSideSupportFillerValid()
  * - buildFillerAssignmentMap()
  * - resolveAssignedFillerName()
@@ -38,6 +38,8 @@ function isShadeCriticalFillerRole(role: FillerRole): boolean {
     case FillerRole.ShadeSuppressLate:
     case FillerRole.ShadeVoidDominant:
     case FillerRole.ShadeVoidRecessive:
+    case FillerRole.SupportBreakable:
+    case FillerRole.SupportPushable:
       return true;
     default:
       return false;
@@ -78,7 +80,14 @@ export function getSupportModeFillerRoles(
   supportMode: SupportMode,
   usesDirectWaterBlock: boolean,
   usesIceWaterBlock: boolean,
+  useCrubTechSupport: boolean,
 ): FillerRole[] {
+  if (useCrubTechSupport) {
+    return supportMode === SupportMode.Steps
+      ? [FillerRole.SupportBreakable, FillerRole.SupportPushable]
+      : [];
+  }
+
   const roles: FillerRole[] = [];
   const shouldIncludeWaterPath = supportMode !== SupportMode.None;
   const shouldIncludeDirectWaterSupport = shouldIncludeWaterPath && usesDirectWaterBlock;
@@ -128,28 +137,34 @@ export function getSupportModeFillerRoles(
 export function createFillerAssignments(
   supportFillerBlock: string,
   shadeFillerBlock: string,
-  crubTechShadeBreakableFillerBlock: string,
-  crubTechShadePushableFillerBlock: string,
+  crubTechBreakableFillerBlock: string,
+  crubTechPushableFillerBlock: string,
+  suppress2LayerLateFillerBlock: string,
   dominateVoidFillerBlock: string,
   recessiveVoidFillerBlock: string,
-  suppress2LayerLateFillerBlock: string,
   supportMode: SupportMode,
+  useCrubTechSupport: boolean,
   usesDirectWaterBlock: boolean,
   usesIceWaterBlock: boolean,
 ): FillerAssignment[] {
   const assignments: FillerAssignment[] = [
     { role: FillerRole.ShadeSuppress, block: shadeFillerBlock },
     { role: FillerRole.ShadeNorthRow, block: shadeFillerBlock },
-    { role: FillerRole.ShadeSuppressBreakable, block: crubTechShadeBreakableFillerBlock },
+    { role: FillerRole.ShadeSuppressBreakable, block: crubTechBreakableFillerBlock },
     { role: FillerRole.ShadeNorthRowBreakable, block: CRUBTECH_NOOBLINE_FILLER_BLOCK },
-    { role: FillerRole.ShadeSuppressPushable, block: crubTechShadePushableFillerBlock },
+    { role: FillerRole.ShadeSuppressPushable, block: crubTechPushableFillerBlock },
     { role: FillerRole.ShadeNorthRowPushable, block: CRUBTECH_NOOBLINE_FILLER_BLOCK },
     { role: FillerRole.ShadeVoidDominant, block: dominateVoidFillerBlock || shadeFillerBlock },
     { role: FillerRole.ShadeVoidRecessive, block: recessiveVoidFillerBlock || shadeFillerBlock },
     { role: FillerRole.ShadeSuppressLate, block: suppress2LayerLateFillerBlock || shadeFillerBlock },
   ];
-  for (const role of getSupportModeFillerRoles(supportMode, usesDirectWaterBlock, usesIceWaterBlock)) {
-    assignments.push({ role, block: supportFillerBlock });
+  for (const role of getSupportModeFillerRoles(supportMode, usesDirectWaterBlock, usesIceWaterBlock, useCrubTechSupport)) {
+    const block = role === FillerRole.SupportBreakable
+      ? crubTechBreakableFillerBlock
+      : role === FillerRole.SupportPushable
+        ? crubTechPushableFillerBlock
+        : supportFillerBlock;
+    assignments.push({ role, block });
   }
   return assignments;
 }
@@ -172,14 +187,14 @@ export function isShadeFillerDisabled(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
-export function isCrubTechShadeBreakableValid(fillerBlock: string): boolean {
+export function isCrubTechBreakableValid(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   return !!normalized && !isShadeFillerDisabled(fillerBlock) && CRUBTECH_BREAKABLE_FILLER_BLOCKS.has(normalized);
 }
 
 // Callers:
 // - src/Index.tsx
-export function isCrubTechShadePushableValid(fillerBlock: string): boolean {
+export function isCrubTechPushableValid(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   return !!normalized && !isShadeFillerDisabled(fillerBlock) && !CRUBTECH_NON_PUSHABLE_FILLER_BLOCKS.has(normalized);
 }

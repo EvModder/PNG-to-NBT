@@ -29,11 +29,11 @@ export interface BlockPreset {
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarPresetSettings.tsx
 export const CRUBTECH_PRESET_NAME = "CrubTech";
 
 // Callers:
 // - src/Index.tsx
-// - src/components/ToolbarPresetSettings.tsx
 // - src/lib/codecPreset.ts
 export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear", CRUBTECH_PRESET_NAME] as const;
 

@@ -2,24 +2,26 @@
 import { gunzipSync } from "node:zlib";
 
 import {
-  DEFAULT_CRUBTECH_DARK_WATER_DROP,
-  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_LAYER_GAP,
+  DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH_LAYER_GAP,
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
-  DEFAULT_LAYER_GAP,
-  DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
+  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_CRUBTECH_DARK_WATER_DROP,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { CRUBTECH_PRESET_NAME, getBuiltinPreset } from "@/data/presets";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { convertToNbt } from "@/lib/nbtExport";
+import { createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
+import { SupportMode } from "@/types/ui";
 
 const VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH = 14;
 const CRUBTECH_WATER_COLOR_BLOCK = "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
@@ -551,13 +553,15 @@ async function assertCrubTechInvariants(): Promise<void> {
     { length: MAP_SIZE },
     () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
   );
-  // This shape deliberately produces both north-row and in-grid shade fillers
-  // on both x parities, so CrubTech must split in-grid suppress roles while
-  // keeping north-row/noobline roles piston-breakable.
+  // Exercise north-row, paired upper-layer, isolated upper-layer, and lower-layer fillers.
   colorGrid[0][0] = { id: 1, isCustom: false, shade: Shade.Flat };
   colorGrid[1][0] = { id: 1, isCustom: false, shade: Shade.Flat };
   colorGrid[2][2] = { id: 1, isCustom: false, shade: Shade.Flat };
   colorGrid[3][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[4][4] = { id: 1, isCustom: false, shade: Shade.Dark };
+  colorGrid[6][4] = { id: 1, isCustom: false, shade: Shade.Dark };
+  colorGrid[7][3] = { id: 1, isCustom: false, shade: Shade.Light };
+  colorGrid[8][3] = { id: 1, isCustom: false, shade: Shade.Dark };
 
   const withoutCrubTech = generateShapeMap(
     colorGrid,
@@ -622,6 +626,10 @@ async function assertCrubTechInvariants(): Promise<void> {
   let northRowPushableCount = 0;
   let breakableCount = 0;
   let pushableCount = 0;
+  let supportBreakableBottomCount = 0;
+  let supportPushableBottomCount = 0;
+  let supportBreakableTopCount = 0;
+  let supportPushableTopCount = 0;
   let legacyNorthRowWithCrubTechCount = 0;
   let legacyWithCrubTechCount = 0;
   for (const part of withCrubTech.parts) {
@@ -633,6 +641,14 @@ async function assertCrubTechInvariants(): Promise<void> {
       if (cell.includes(FillerRole.ShadeSuppressPushable)) pushableCount += 1;
       if (cell.includes(FillerRole.ShadeNorthRow)) legacyNorthRowWithCrubTechCount += 1;
       if (cell.includes(FillerRole.ShadeSuppress)) legacyWithCrubTechCount += 1;
+      if (cell.includes(FillerRole.SupportBreakable)) {
+        if (parseShapeCoordKey(coord)[1] < layerGap - 1) supportBreakableBottomCount += 1;
+        else supportBreakableTopCount += 1;
+      }
+      if (cell.includes(FillerRole.SupportPushable)) {
+        if (parseShapeCoordKey(coord)[1] < layerGap - 1) supportPushableBottomCount += 1;
+        else supportPushableTopCount += 1;
+      }
       const hasSuppressBreakable = cell.includes(FillerRole.ShadeSuppressBreakable);
       const hasSuppressPushable = cell.includes(FillerRole.ShadeSuppressPushable);
       if (!hasSuppressBreakable && !hasSuppressPushable) continue;
@@ -640,6 +656,12 @@ async function assertCrubTechInvariants(): Promise<void> {
       if (y < layerGap) {
         if (!hasSuppressPushable || hasSuppressBreakable) {
           throw new Error(`Expected CrubTech bottom-layer suppress filler at (${x}, ${y}, ${z}) to use pushable/resin role`);
+        }
+        continue;
+      }
+      if (y === layerGap + 1) {
+        if (!hasSuppressBreakable || hasSuppressPushable) {
+          throw new Error(`Expected raised CrubTech upper-layer suppress filler at (${x}, ${y}, ${z}) to use breakable/moss role`);
         }
         continue;
       }
@@ -669,6 +691,27 @@ async function assertCrubTechInvariants(): Promise<void> {
     throw new Error(
       `Expected no legacy shade fillers with CrubTech, got north_row=${legacyNorthRowWithCrubTechCount}, suppress=${legacyWithCrubTechCount}`,
     );
+  }
+  if (supportBreakableBottomCount === 0 || supportPushableBottomCount !== 0) {
+    throw new Error(
+      `Expected CrubTech bottom support to be breakable-only, got breakable=${supportBreakableBottomCount}, pushable=${supportPushableBottomCount}`,
+    );
+  }
+  if (supportBreakableTopCount === 0 || supportPushableTopCount === 0) {
+    throw new Error(
+      `Expected CrubTech upper support to split by paired occupancy, got breakable=${supportBreakableTopCount}, pushable=${supportPushableTopCount}`,
+    );
+  }
+  const supportRoleCases = [
+    [4, layerGap, 3, FillerRole.SupportPushable],
+    [6, layerGap, 3, FillerRole.SupportBreakable],
+    [8, 0, 2, FillerRole.SupportBreakable],
+  ] as const;
+  for (const [x, y, z, role] of supportRoleCases) {
+    const cell = withCrubTech.parts[0].cells.get(toShapeCoordKey(x, y, z));
+    if (!Array.isArray(cell) || !cell.includes(role)) {
+      throw new Error(`Expected CrubTech support at (${x}, ${y}, ${z}) to use ${role}`);
+    }
   }
   const plainSignals = buildSuppressLoadSpotMarkers(
     withCrubTech,
@@ -783,6 +826,71 @@ async function assertCrubTechInvariants(): Promise<void> {
     const count = glassCountsByY.get(y) ?? 0;
     if (count !== MAP_SIZE * MAP_SIZE) {
       throw new Error(`Expected full CrubTech glass platform at exported y=${y}, got ${count} blocks`);
+    }
+  }
+
+  const crubTechSupportAssignments = createFillerAssignments(
+    "diamond_block",
+    "stone",
+    "azalea",
+    "resin_block",
+    "stone",
+    "stone",
+    "stone",
+    SupportMode.Steps,
+    true,
+    false,
+    false,
+  );
+  const standardAllSupportRoles = getSupportModeFillerRoles(SupportMode.All, false, false, false);
+  const crubTechAllSupportRoles = getSupportModeFillerRoles(SupportMode.All, false, false, true);
+  if (
+    !standardAllSupportRoles.includes(FillerRole.SupportAll) ||
+    standardAllSupportRoles.includes(FillerRole.SupportBreakable) ||
+    standardAllSupportRoles.includes(FillerRole.SupportPushable)
+  ) {
+    throw new Error("Expected Support=All to retain standard support assignments outside CrubTech");
+  }
+  if (crubTechAllSupportRoles.length !== 0) {
+    throw new Error("Expected CrubTech to disable Support=All in favor of Support=Steps");
+  }
+  const crubTechSupportAssignmentsByRole = new Map(
+    crubTechSupportAssignments.map(assignment => [assignment.role, assignment.block]),
+  );
+  if (
+    crubTechSupportAssignmentsByRole.has(FillerRole.SupportAll) ||
+    crubTechSupportAssignmentsByRole.get(FillerRole.SupportBreakable) !== "azalea" ||
+    crubTechSupportAssignmentsByRole.get(FillerRole.SupportPushable) !== "resin_block"
+  ) {
+    throw new Error("Expected CrubTech Support=Steps to resolve to split support assignments");
+  }
+
+  const supportExportResult = await convertToNbt(withCrubTech, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: crubTechSupportAssignments,
+    applySupportFloorYs: true,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: true,
+    forceZ129: false,
+    baseName: "crubtech-support-test",
+    buildMode: BuildMode.Suppress2Layer,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+    crubTech: true,
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  if (supportExportResult.isZip) throw new Error("Expected single NBT export in CrubTech support invariant test");
+  const supportBytes = new Uint8Array(gunzipSync(supportExportResult.data));
+  assertBytesContainAscii(supportBytes, "minecraft:azalea", "CrubTech support export should include breakable support");
+  assertBytesContainAscii(supportBytes, "minecraft:resin_block", "CrubTech support export should include pushable support");
+  assertBytesDoNotContainAscii(supportBytes, "minecraft:diamond_block", "CrubTech Support=Steps should ignore the normal support block");
+  const supportBlocks = parseStructureBlocks(supportBytes);
+  for (const y of expectedPlatformYs) {
+    const glassCount = supportBlocks.filter(block => block.y === y && block.blockName === "minecraft:glass").length;
+    if (glassCount !== MAP_SIZE * MAP_SIZE) {
+      throw new Error(`Expected Support=Steps to preserve the full CrubTech glass platform at y=${y}, got ${glassCount} blocks`);
     }
   }
 }

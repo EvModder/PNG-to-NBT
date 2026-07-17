@@ -186,27 +186,6 @@ export function ToolbarBuildSettings({
     });
   }
 
-  if (showLayerGapControl && showCrubTechControl) {
-    groups.push({
-      key: "crubtech",
-      node: (
-        <label
-          className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
-          title={messages.buildMode.crubTechTooltip}
-        >
-          <span>{messages.buildMode.crubTechLabel}</span>
-          <input
-            type="checkbox"
-            checked={crubTech}
-            onChange={e => setCrubTech(e.target.checked)}
-            title={messages.buildMode.crubTechTooltip}
-            className="h-3.5 w-3.5 accent-primary"
-          />
-        </label>
-      ),
-    });
-  }
-
   if (showLayerGapControl && showLatePairsGapControl) {
     groups.push({
       key: "late-pairs-gap",
@@ -255,6 +234,27 @@ export function ToolbarBuildSettings({
             className="bg-input border border-border rounded px-1 h-6 text-foreground text-xs w-12 text-center disabled:opacity-55 disabled:cursor-not-allowed"
           />
         </>
+      ),
+    });
+  }
+
+  if (showLayerGapControl && showCrubTechControl) {
+    groups.push({
+      key: "crubtech",
+      node: (
+        <label
+          className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
+          title={messages.buildMode.crubTechTooltip}
+        >
+          <span>{messages.buildMode.crubTechLabel}</span>
+          <input
+            type="checkbox"
+            checked={crubTech}
+            onChange={e => setCrubTech(e.target.checked)}
+            title={messages.buildMode.crubTechTooltip}
+            className="h-3.5 w-3.5 accent-primary"
+          />
+        </label>
       ),
     });
   }

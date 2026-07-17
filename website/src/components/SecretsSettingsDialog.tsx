@@ -24,6 +24,7 @@ type SecretsSettingsDialogProps = {
   onClose: () => void;
   showTransparentRow: boolean;
   setShowTransparentRow: Dispatch<SetStateAction<boolean>>;
+  showTransparentRowDisabled?: boolean;
   showExcludedBlocks: boolean;
   setShowExcludedBlocks: Dispatch<SetStateAction<boolean>>;
   collapseDuplicateNbtPaletteStates: boolean;
@@ -48,12 +49,12 @@ type SecretsSettingsDialogProps = {
   setMarkSuppressLoadSpotsInSchematic: Dispatch<SetStateAction<boolean>>;
   suppressLoadSpotMarkerBlock: SuppressLoadSpotMarkerBlock;
   setSuppressLoadSpotMarkerBlock: Dispatch<SetStateAction<SuppressLoadSpotMarkerBlock>>;
+  showVsFillerWarnings: boolean;
+  setShowVsFillerWarnings: Dispatch<SetStateAction<boolean>>;
   showAlignmentReminder: boolean;
   setShowAlignmentReminder: Dispatch<SetStateAction<boolean>>;
   showNooblineWarnings: boolean;
   setShowNooblineWarnings: Dispatch<SetStateAction<boolean>>;
-  showVsFillerWarnings: boolean;
-  setShowVsFillerWarnings: Dispatch<SetStateAction<boolean>>;
 };
 
 type OptionRowProps = {
@@ -128,6 +129,7 @@ export function SecretsSettingsDialog({
   onClose,
   showTransparentRow,
   setShowTransparentRow,
+  showTransparentRowDisabled = false,
   showExcludedBlocks,
   setShowExcludedBlocks,
   collapseDuplicateNbtPaletteStates,
@@ -152,12 +154,12 @@ export function SecretsSettingsDialog({
   setMarkSuppressLoadSpotsInSchematic,
   suppressLoadSpotMarkerBlock,
   setSuppressLoadSpotMarkerBlock,
+  showVsFillerWarnings,
+  setShowVsFillerWarnings,
   showAlignmentReminder,
   setShowAlignmentReminder,
   showNooblineWarnings,
   setShowNooblineWarnings,
-  showVsFillerWarnings,
-  setShowVsFillerWarnings,
 }: SecretsSettingsDialogProps) {
   if (!open) return null;
 
@@ -195,6 +197,7 @@ export function SecretsSettingsDialog({
             checked={showTransparentRow}
             onChange={setShowTransparentRow}
             label={messages.dialogs.options.showTransparentRow}
+            disabled={showTransparentRowDisabled}
           />
           <OptionRow
             checked={showExcludedBlocks}
@@ -249,6 +252,11 @@ export function SecretsSettingsDialog({
             selectLabel={messages.dialogs.options.suppressLoadSpotMarkerBlock}
           />
           <OptionRow
+            checked={showVsFillerWarnings}
+            onChange={setShowVsFillerWarnings}
+            label={messages.dialogs.options.showVsFillerWarnings}
+          />
+          <OptionRow
             checked={showAlignmentReminder}
             onChange={setShowAlignmentReminder}
             label={messages.dialogs.options.showAlignmentReminder}
@@ -257,11 +265,6 @@ export function SecretsSettingsDialog({
             checked={showNooblineWarnings}
             onChange={setShowNooblineWarnings}
             label={messages.dialogs.options.showNooblineWarnings}
-          />
-          <OptionRow
-            checked={showVsFillerWarnings}
-            onChange={setShowVsFillerWarnings}
-            label={messages.dialogs.options.showVsFillerWarnings}
           />
         </div>
       </div>

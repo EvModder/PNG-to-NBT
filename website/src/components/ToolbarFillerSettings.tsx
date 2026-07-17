@@ -7,13 +7,13 @@
  */
 import { Fragment, useEffect, useState, type MutableRefObject, type ReactNode } from "react";
 import {
+  DEFAULT_SUPPORT_FILLER_BLOCK,
+  DEFAULT_SHADE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
+  DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
-  DEFAULT_SHADE_FILLER_BLOCK,
-  DEFAULT_SUPPORT_FILLER_BLOCK,
-  DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
 } from "@/data/defaultSettings";
 import { messages } from "@/lib/messages";
 import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
@@ -34,6 +34,7 @@ type ToolbarFillerSettingsProps = {
   toolbarRef: MutableRefObject<HTMLElement | null>;
   isStackedLayout: boolean;
   hasImageData: boolean;
+  crubTechIncludesSupport: boolean;
   showSupportFillerInput: boolean;
   supportFillerBlock: string;
   setSupportFillerBlock: (value: string) => void;
@@ -56,6 +57,11 @@ type ToolbarFillerSettingsProps = {
   setShadePushableFillerBlock: (value: string) => void;
   shadePushableFillerShadingDisabled: boolean;
   shadePushableFillerRequiredCount: number;
+  showLateFillerInput: boolean;
+  suppress2LayerLateFillerBlock: string;
+  setSuppress2LayerLateFillerBlock: (value: string) => void;
+  lateFillerShadingDisabled: boolean;
+  lateFillerRequiredCount: number;
   showDominateVoidFillerInput: boolean;
   dominateVoidFillerBlock: string;
   setDominateVoidFillerBlock: (value: string) => void;
@@ -66,11 +72,6 @@ type ToolbarFillerSettingsProps = {
   setRecessiveVoidFillerBlock: (value: string) => void;
   recessiveVoidFillerShadingDisabled: boolean;
   recessiveVoidFillerRequiredCount: number;
-  showLateFillerInput: boolean;
-  suppress2LayerLateFillerBlock: string;
-  setSuppress2LayerLateFillerBlock: (value: string) => void;
-  lateFillerShadingDisabled: boolean;
-  lateFillerRequiredCount: number;
   formatRequiredCount: (count: number) => ReactNode;
 };
 
@@ -148,6 +149,7 @@ export function ToolbarFillerSettings({
   toolbarRef,
   isStackedLayout,
   hasImageData,
+  crubTechIncludesSupport,
   showSupportFillerInput,
   supportFillerBlock,
   setSupportFillerBlock,
@@ -170,6 +172,11 @@ export function ToolbarFillerSettings({
   setShadePushableFillerBlock,
   shadePushableFillerShadingDisabled,
   shadePushableFillerRequiredCount,
+  showLateFillerInput,
+  suppress2LayerLateFillerBlock,
+  setSuppress2LayerLateFillerBlock,
+  lateFillerShadingDisabled,
+  lateFillerRequiredCount,
   showDominateVoidFillerInput,
   dominateVoidFillerBlock,
   setDominateVoidFillerBlock,
@@ -180,11 +187,6 @@ export function ToolbarFillerSettings({
   setRecessiveVoidFillerBlock,
   recessiveVoidFillerShadingDisabled,
   recessiveVoidFillerRequiredCount,
-  showLateFillerInput,
-  suppress2LayerLateFillerBlock,
-  setSuppress2LayerLateFillerBlock,
-  lateFillerShadingDisabled,
-  lateFillerRequiredCount,
   formatRequiredCount,
 }: ToolbarFillerSettingsProps) {
   const groups: { key: string; node: ReactNode }[] = [];
@@ -234,7 +236,7 @@ export function ToolbarFillerSettings({
       key: "shade-breakable",
       node: (
         <FillerField
-          label={messages.fillers.crubTechBreakableLabel}
+          label={messages.fillers.crubTechBreakableLabel(crubTechIncludesSupport)}
           tooltip={messages.fillers.crubTechBreakableTooltip}
           value={shadeBreakableFillerBlock}
           setValue={setShadeBreakableFillerBlock}
@@ -252,7 +254,7 @@ export function ToolbarFillerSettings({
       key: "shade-pushable",
       node: (
         <FillerField
-          label={messages.fillers.crubTechPushableLabel}
+          label={messages.fillers.crubTechPushableLabel(crubTechIncludesSupport)}
           tooltip={messages.fillers.crubTechPushableTooltip}
           value={shadePushableFillerBlock}
           setValue={setShadePushableFillerBlock}
@@ -260,6 +262,24 @@ export function ToolbarFillerSettings({
           showRequiredBadge={hasImageData && !shadePushableFillerShadingDisabled && shadePushableFillerRequiredCount > 0}
           requiredTooltip={messages.fillers.crubTechPushableRequiredTooltip}
           requiredCountLabel={formatRequiredCount(shadePushableFillerRequiredCount)}
+        />
+      ),
+    });
+  }
+
+  if (showLateFillerInput) {
+    groups.push({
+      key: "late",
+      node: (
+        <FillerField
+          label={messages.fillers.lateLabel}
+          tooltip={messages.fillers.lateTooltip}
+          value={suppress2LayerLateFillerBlock}
+          setValue={setSuppress2LayerLateFillerBlock}
+          placeholder={DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK}
+          showRequiredBadge={hasImageData && !lateFillerShadingDisabled && lateFillerRequiredCount > 0}
+          requiredTooltip={messages.fillers.lateRequiredTooltip}
+          requiredCountLabel={formatRequiredCount(lateFillerRequiredCount)}
         />
       ),
     });
@@ -296,24 +316,6 @@ export function ToolbarFillerSettings({
           showRequiredBadge={hasImageData && !recessiveVoidFillerShadingDisabled && recessiveVoidFillerRequiredCount > 0}
           requiredTooltip={messages.fillers.recessiveVoidRequiredTooltip}
           requiredCountLabel={formatRequiredCount(recessiveVoidFillerRequiredCount)}
-        />
-      ),
-    });
-  }
-
-  if (showLateFillerInput) {
-    groups.push({
-      key: "late",
-      node: (
-        <FillerField
-          label={messages.fillers.lateLabel}
-          tooltip={messages.fillers.lateTooltip}
-          value={suppress2LayerLateFillerBlock}
-          setValue={setSuppress2LayerLateFillerBlock}
-          placeholder={DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK}
-          showRequiredBadge={hasImageData && !lateFillerShadingDisabled && lateFillerRequiredCount > 0}
-          requiredTooltip={messages.fillers.lateRequiredTooltip}
-          requiredCountLabel={formatRequiredCount(lateFillerRequiredCount)}
         />
       ),
     });

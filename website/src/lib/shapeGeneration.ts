@@ -528,19 +528,24 @@ function buildShapePart(
   supportFloorYs?: ReadonlySet<number>,
   loweredWaterBlocks: ShapeBlock[] = [],
   suppressedTransparentVsCollisionCount = 0,
+  crubTechSupportUpperY?: number,
 ): RawShapePart {
   assertShapeBlockZRange(blocks);
   assertShapeBlockZRange(loweredWaterBlocks);
   const bounds = measureShapeBounds(blocks, loweredWaterBlocks);
+  const effectiveSupportFloorYs = supportFloorYs ?? new Set<number>([bounds.minY - 1]);
   const fillerCandidates = includeDefaultFillerCandidates
     ? [...buildFillerCandidates(blocks, loweredWaterBlocks), ...buildBelowOnlyWaterFillerCandidates(blocks, loweredWaterBlocks), ...extraFillerCandidates]
     : extraFillerCandidates;
+  if (crubTechSupportUpperY !== undefined) {
+    applyCrubTechSupportRoles(fillerCandidates, blocks, loweredWaterBlocks, effectiveSupportFloorYs, crubTechSupportUpperY);
+  }
   return {
     blocks,
     loweredWaterBlocks,
     fillerCandidates,
     bounds,
-    supportFloorYs: supportFloorYs ?? new Set<number>([bounds.minY - 1]),
+    supportFloorYs: effectiveSupportFloorYs,
     suppressedTransparentVsCollisionCount,
   };
 }
@@ -572,6 +577,21 @@ function getCrubTechShadeFillerRole(
     : FillerRole.ShadeSuppressBreakable;
 }
 
+function getCrubTechSupportRole(
+  x: number,
+  y: number,
+  z: number,
+  upperY: number,
+  occupied: ReadonlySet<ShapeCoordKey>,
+): FillerRole.SupportBreakable | FillerRole.SupportPushable {
+  if (y < upperY) return FillerRole.SupportBreakable;
+  if (y !== upperY) return FillerRole.SupportPushable;
+  const pairX = (x & 1) === 0 ? x + 1 : x - 1;
+  return occupied.has(toShapeCoordKey(pairX, y, z))
+    ? FillerRole.SupportBreakable
+    : FillerRole.SupportPushable;
+}
+
 function applyCrubTechShadeFillerRoles(
   fillerPlacements: Map<ShapeCoordKey, ShapeRef>,
   occupied: ReadonlySet<ShapeCoordKey>,
@@ -581,6 +601,29 @@ function applyCrubTechShadeFillerRoles(
     if (ref.kind !== "filler" || !isCrubTechShadeFillerRole(ref.role)) continue;
     const [x, y, z] = parseShapeCoordKey(coord);
     ref.role = getCrubTechShadeFillerRole(ref.role, x, y, z, upperY, occupied, fillerPlacements);
+  }
+}
+
+function applyCrubTechSupportRoles(
+  fillerCandidates: FillerCandidate[],
+  blocks: ShapeBlock[],
+  loweredWaterBlocks: ShapeBlock[],
+  supportFloorYs: ReadonlySet<number>,
+  upperY: number,
+): void {
+  const occupied = new Set<ShapeCoordKey>();
+  for (const block of blocks) occupied.add(toShapeCoordKey(block.x, block.y, block.z));
+  for (const block of loweredWaterBlocks) occupied.add(toShapeCoordKey(block.x, block.y, block.z));
+
+  const supportCandidates = fillerCandidates.filter(candidate =>
+    candidate.roles.includes(FillerRole.SupportAll) && !supportFloorYs.has(candidate.y),
+  );
+  for (const candidate of supportCandidates) {
+    occupied.add(toShapeCoordKey(candidate.x, candidate.y, candidate.z));
+  }
+  for (const candidate of supportCandidates) {
+    const role = getCrubTechSupportRole(candidate.x, candidate.y, candidate.z, upperY, occupied);
+    if (!candidate.roles.includes(role)) candidate.roles.push(role);
   }
 }
 
@@ -2155,12 +2198,8 @@ function buildSuppressDualLayerBlocks(
     occupied.add(coord);
   }
 
-  const supportFloorYs = new Set<number>();
-  for (const block of blocks) {
-    if (isWaterBlock(block)) continue;
-    if (block.y !== lowerY && block.y !== upperY && block.y !== lateY) continue;
-    supportFloorYs.add(block.y - 1);
-  }
+  const supportFloorYs = new Set<number>([lowerY - 1, upperY - 1]);
+  if (buildMode === BuildMode.Suppress2LayerLatePairs) supportFloorYs.add(lateY - 1);
 
   return { blocks, loweredWaterBlocks, supportFloorYs };
 }
@@ -2880,7 +2919,7 @@ function getCachedSuppress2LayerParts(
       useCrubTech,
       waterDrops,
     );
-    return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks)];
+    return [buildShapePart(blocks, [], true, supportFloorYs, loweredWaterBlocks, 0, useCrubTech ? Math.max(1, layerGap) : undefined)];
   });
 }
 

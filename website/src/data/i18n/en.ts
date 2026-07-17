@@ -80,7 +80,7 @@ export const enCatalog = {
     } as const satisfies Record<SupportMode, string>,
     tooltips: {
       [SupportMode.None]: "No support blocks (shading only)",
-      [SupportMode.Steps]: "Adds support blocks below staircase steps.",
+      [SupportMode.Steps]: "Adds support blocks below raised blocks.",
       [SupportMode.All]: "Adds support blocks below every block.",
       [SupportMode.Fragile]: "Adds support blocks below fragile blocks.",
       [SupportMode.Water]: "Adds support blocks around water, or below ice pillars (if used instead of water).",
@@ -181,17 +181,17 @@ export const enCatalog = {
     shadeRequiredTooltip: "Required north-row and suppress-shading filler placements for the current output range.",
     nooblineRequiredTooltip: "Required north-row shading filler placements for the current output range.",
     crubTechBreakableLabel: "Shade-Breakable:",
-    crubTechBreakableWarningLabel: "Shade-Breakable",
+    crubTechSupportBreakableLabel: "Support/Shade-Breakable:",
     crubTechBreakableTooltip:
-      "Used for CrubTech 2-layer shading spots that should break when pushed by piston/slime.",
+      "Used for CrubTech 2-layer shade and support placements that should break when pushed by piston/slime.",
     crubTechBreakableRequiredTooltip:
-      "Required CrubTech breakable shading filler placements for the current output range.",
+      "Required CrubTech breakable shade and support filler placements for the current output range.",
     crubTechPushableLabel: "Shade-Pushable:",
-    crubTechPushableWarningLabel: "Shade-Pushable",
+    crubTechSupportPushableLabel: "Support/Shade-Pushable:",
     crubTechPushableTooltip:
-      "Used for CrubTech 2-layer shading spots that must remain pushable by piston/slime.",
+      "Used for CrubTech 2-layer shade and support placements that must remain pushable by piston/slime.",
     crubTechPushableRequiredTooltip:
-      "Required CrubTech pushable shading filler placements for the current output range.",
+      "Required CrubTech pushable shade and support filler placements for the current output range.",
     dominateVoidLabel: "VS-1:",
     dominateVoidWarningLabel: "VS-Filler-1",
     dominateVoidTooltip:
@@ -303,20 +303,20 @@ export const enCatalog = {
     noFillerInGridLine: "Some shading-critical fillers are required inside the 128x128 grid.",
     noFillerWarning: "Shade-Filler is disabled ({value}).\n{lines}",
     crubTechBreakableInvalid: {
-      one: "Shade-Breakable is invalid ({value}).\n{count} CrubTech shading spot requires it.",
-      other: "Shade-Breakable is invalid ({value}).\n{count} CrubTech shading spots require it.",
+      one: "Shade/Support-Breakable is invalid ({value}).\n{count} CrubTech placement requires it.",
+      other: "Shade/Support-Breakable is invalid ({value}).\n{count} CrubTech placements require it.",
     } as PluralForms,
     crubTechPushableInvalid: {
-      one: "Shade-Pushable is invalid ({value}).\n{count} CrubTech shading spot requires it.",
-      other: "Shade-Pushable is invalid ({value}).\n{count} CrubTech shading spots require it.",
+      one: "Shade/Support-Pushable is invalid ({value}).\n{count} CrubTech placement requires it.",
+      other: "Shade/Support-Pushable is invalid ({value}).\n{count} CrubTech placements require it.",
     } as PluralForms,
     crubTechBreakableBehaviorWarning: {
-      one: "Shade-Breakable should break when pushed by piston/slime ({value}).\n{count} CrubTech shading spot uses it.",
-      other: "Shade-Breakable should break when pushed by piston/slime ({value}).\n{count} CrubTech shading spots use it.",
+      one: "Shade/Support-Breakable should break when pushed by piston/slime ({value}).\n{count} CrubTech placement uses it.",
+      other: "Shade/Support-Breakable should break when pushed by piston/slime ({value}).\n{count} CrubTech placements use it.",
     } as PluralForms,
     crubTechPushableBehaviorWarning: {
-      one: "Shade-Pushable should remain pushable by piston/slime ({value}).\n{count} CrubTech shading spot uses it.",
-      other: "Shade-Pushable should remain pushable by piston/slime ({value}).\n{count} CrubTech shading spots use it.",
+      one: "Shade/Support-Pushable should remain pushable by piston/slime ({value}).\n{count} CrubTech placement uses it.",
+      other: "Shade/Support-Pushable should remain pushable by piston/slime ({value}).\n{count} CrubTech placements use it.",
     } as PluralForms,
     waterSideSupportInvalid:
       "Support filler is invalid ({value}).\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported.",
@@ -387,9 +387,9 @@ export const enCatalog = {
       showFlatNbtSuppressStepModes: "Show suppress (steps) options for Flat schematics",
       markSuppressLoadSpotsInSchematic: "Mark color-suppress load-spots in schematics",
       suppressLoadSpotMarkerBlock: "Marker block",
+      showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",
       showAlignmentReminder: "Show alignment reminder",
       showNooblineWarnings: "Show warnings for nooblines",
-      showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",
     },
   },
   credits: {
