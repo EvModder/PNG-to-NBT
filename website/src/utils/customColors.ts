@@ -19,7 +19,6 @@
  * - src/lib/blockId.ts
  * - src/lib/codecPreset.ts
  * - src/lib/colorGridParsingCore.ts
- * - tests/run.mts
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import type { ColorRgb } from "@/types/color";
@@ -83,7 +82,6 @@ export function buildCustomBlocksByBase(customColors: readonly ColorRgb[]): Reco
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
 export function normalizeCustomSelectedBlocks(
   customColors: readonly ColorRgb[],
   selectedBlocksCustom?: Readonly<Record<number, string>>,

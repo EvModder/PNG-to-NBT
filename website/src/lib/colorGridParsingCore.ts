@@ -94,7 +94,6 @@ function getNearestPaletteColors(
 
 // Callers:
 // - src/lib/colorGridParsing.ts
-// - src/lib/tileParsing.worker.ts
 export function createEmptyColorGrid(): ColorGrid {
   return Array.from({ length: MAP_SIZE }, () => Array<ShadedColorRef>(MAP_SIZE).fill(TRANSPARENT_COLOR));
 }

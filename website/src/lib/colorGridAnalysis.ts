@@ -12,9 +12,13 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/colorGridParsing.ts
+ * - src/lib/colorGridParsingCore.ts
  * - src/lib/shapeGeneration.ts
- * - tests/run.mts
+ * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/tileGeometry.worker.ts
+ * - src/lib/tileGeometryWorkerTypes.ts
+ * - src/lib/tileParsingWorkerTypes.ts
  */
 import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
 import { getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
@@ -22,6 +26,7 @@ import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { type ColorGrid, Shade, type ColorRef } from "@/types/color";
 
 // Callers:
+// - src/lib/colorGridParsingCore.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeGeneration.ts
 export enum PixelParity {
@@ -32,17 +37,19 @@ export enum PixelParity {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
-// - tests/run.mts
+// - src/lib/tileGeometryWorkerTypes.ts
 export type WaterDrops = readonly [dark: number, flat: number, light: number];
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
+// - src/lib/colorGridParsingCore.ts
 export type ColorFrequencyMap = Map<ColorRef, Map<Shade, number>>;
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
+// - src/lib/colorGridParsing.ts
+// - src/lib/colorGridParsingCore.ts
+// - src/lib/tileParsingWorkerTypes.ts
 export interface ColorGridStats {
   allSameShade?: Shade;
   colorFrequencyMap: ColorFrequencyMap;
@@ -57,7 +64,9 @@ export interface ColorGridStats {
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
+// - src/lib/colorGridParsingCore.ts
+// - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometryWorkerTypes.ts
 export enum FlatModeBehavior {
   None = "none",
   Plain = "plain",
@@ -73,7 +82,6 @@ export function getPixelParity(x: number, z: number): PixelParity {
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
 export function hasStepMixOpportunity(
   colorGrid: ColorGrid,
   options: { waterDrops?: WaterDrops },
@@ -209,7 +217,6 @@ function analyzeFlatModeBehavior(colorGrid: ColorGrid): FlatModeBehavior {
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
 export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
   const colorFrequencyMap = computeColorFrequencyMap(colorGrid);
   return {

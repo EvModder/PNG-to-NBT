@@ -15,8 +15,9 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/shapeAnalysis.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/previewImageEdits.ts
+ * - src/lib/shapeAnalysis.ts
  */
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "../data/mapColors";
 import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
@@ -162,6 +163,7 @@ export function isFillerDisabled(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/previewImageEdits.ts
 export function isShadeFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   if (!normalized) return false;

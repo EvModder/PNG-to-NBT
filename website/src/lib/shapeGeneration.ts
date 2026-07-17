@@ -3032,8 +3032,6 @@ function getGeneratedShape(
 
 // Callers:
 // - src/lib/tileGeometry.worker.ts
-// - tests/run.mts
-// - tests/invariants.mts
 export function generateShapeMap(
   colorGrid: ColorGrid,
   allSameShade: Shade | undefined,

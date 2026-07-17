@@ -7,33 +7,40 @@
  * - ShapePart
  *
  * Callers:
- * - src/lib/suppressLoadMarkers.ts
+ * - src/Index.tsx
+ * - src/lib/buildModeShapes.ts
+ * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
- * - src/lib/shapeModel.ts
+ * - src/lib/shapeAnalysisCache.ts
  * - src/lib/shapeGeneration.ts
- * - src/lib/nbtExport.ts
+ * - src/lib/shapeModel.ts
+ * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/tileGeometryWorkerTypes.ts
  */
 import type { ColorRef } from "./color";
 import { FillerRole } from "./conversion";
 
 // Callers:
-// - src/lib/suppressLoadMarkers.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
-// - tests/invariants.mts
+// - src/lib/suppressLoadMarkers.ts
 export enum ShapePartType {
   SingleColumn = "single_column",
   SuppressStepPhases = "suppress_step_phases",
 }
 
 // Callers:
+// - src/Index.tsx
+// - src/lib/buildModeShapes.ts
+// - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeAnalysisCache.ts
 // - src/lib/shapeGeneration.ts
-// - src/lib/nbtExport.ts
-// - tests/invariants.mts
+// - src/lib/tileGeometryWorkerTypes.ts
 export interface GeneratedShape {
   parts: ShapePart[];
   partType: ShapePartType;
@@ -44,7 +51,6 @@ export interface GeneratedShape {
 // Callers:
 // - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
-// - tests/invariants.mts
 export type ShapeCell = ColorRef | FillerRole[];
 
 // Callers:

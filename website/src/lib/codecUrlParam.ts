@@ -152,14 +152,12 @@ async function encodeSingleUrlParamBytes(bytes: Uint8Array): Promise<string> {
 
 // Callers:
 // - src/lib/codecColorGrid.ts
-// - src/lib/codecPreset.ts
 export async function encodeUrlParamBytes(bytes: Uint8Array): Promise<string> {
   return encodeSingleUrlParamBytes(bytes);
 }
 
 // Callers:
 // - src/lib/codecColorGrid.ts
-// - src/lib/codecPreset.ts
 export async function decodeUrlParamBytes(encoded: string): Promise<Uint8Array | null> {
   if (!encoded) return null;
   try {

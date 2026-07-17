@@ -7,37 +7,41 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/components/PanelImagePreview.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/data/defaultSettings.ts
- * - src/data/i18n/*
- * - src/utils/conversion.ts
+ * - src/data/i18n/en.ts
+ * - src/data/i18n/es.ts
+ * - src/lib/buildModeShapes.ts
+ * - src/lib/codecPreset.ts
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
- * - src/lib/codecPreset.ts
+ * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
- * - src/lib/shapeModel.ts
  * - src/lib/shapeGeneration.ts
- * - src/lib/nbtExport.ts
+ * - src/lib/shapeModel.ts
  * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/tileGeometry.worker.ts
+ * - src/lib/tileGeometryWorkerTypes.ts
  * - src/types/shape.ts
- * - tests/run.mts
+ * - src/utils/conversion.ts
  */
 
 // Callers:
 // - src/Index.tsx
-// - src/components/PanelImagePreview.tsx
 // - src/components/ToolbarBuildSettings.tsx
 // - src/data/defaultSettings.ts
-// - src/data/i18n/*
-// - src/utils/conversion.ts
-// - src/lib/messages.ts
+// - src/data/i18n/en.ts
+// - src/data/i18n/es.ts
+// - src/lib/buildModeShapes.ts
 // - src/lib/codecPreset.ts
+// - src/lib/messages.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
-// - tests/run.mts
+// - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometryWorkerTypes.ts
+// - src/utils/conversion.ts
 export enum BuildMode {
   Flat = "flat",
   InclineUp = "incline_up",
@@ -61,14 +65,16 @@ export enum BuildMode {
 // - src/Index.tsx
 // - src/components/ToolbarBuildSettings.tsx
 // - src/data/defaultSettings.ts
-// - src/data/i18n/*
-// - src/utils/conversion.ts
-// - src/lib/messages.ts
+// - src/data/i18n/en.ts
+// - src/data/i18n/es.ts
 // - src/lib/codecPreset.ts
+// - src/lib/messages.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
-// - tests/run.mts
+// - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometryWorkerTypes.ts
+// - src/utils/conversion.ts
 export enum SuppressStepDirection {
   EastToWest = "east_to_west",
   WestToEast = "west_to_east",
@@ -79,10 +85,13 @@ export enum SuppressStepDirection {
 // Callers:
 // - src/Index.tsx
 // - src/lib/fillerRules.ts
+// - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
-// - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/shapeModel.ts
+// - src/lib/suppressLoadMarkers.ts
+// - src/lib/tileGeometryWorkerTypes.ts
 // - src/types/shape.ts
 export enum FillerRole {
   ShadeNorthRow = "shade_north_row",

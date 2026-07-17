@@ -7,10 +7,12 @@
  * - SUPPORTED_LOCALES
  * - getLocalePreference()
  * - setLocalePreference()
+ * - getLocaleLabel()
  * - messages
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PackedBlockIcon.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCredits.tsx
  * - src/components/PanelCustomColors.tsx
@@ -20,6 +22,10 @@
  * - src/components/ToolbarFillerSettings.tsx
  * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/colorGridParsing.ts
+ * - src/lib/colorGridParsingCore.ts
+ * - src/lib/tileParsing.worker.ts
+ * - src/lib/tileParsingWorkerClient.ts
+ * - src/lib/tileParsingWorkerTypes.ts
  *
  * Notes:
  * - Selects the active locale catalog and applies interpolation/plural formatting at runtime.
@@ -172,6 +178,7 @@ function formatCropRemovalAxis(
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelImagePreview.tsx
+// - src/lib/colorGridParsing.ts
 export enum PaletteNoticeKind {
   Freeform = "freeform",
   SizeError = "size_error",
@@ -187,6 +194,9 @@ export enum PaletteNoticeKind {
 // - src/Index.tsx
 // - src/components/PanelImagePreview.tsx
 // - src/lib/colorGridParsing.ts
+// - src/lib/colorGridParsingCore.ts
+// - src/lib/tileParsingWorkerClient.ts
+// - src/lib/tileParsingWorkerTypes.ts
 export type PaletteNotice =
   | { kind: PaletteNoticeKind.Freeform; tone: "info" | "warning" | "error"; text: string }
   | { kind: PaletteNoticeKind.SizeError; width: number; height: number }
@@ -199,6 +209,7 @@ export type PaletteNotice =
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PackedBlockIcon.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/PanelCredits.tsx
 // - src/components/PanelCustomColors.tsx
@@ -208,6 +219,8 @@ export type PaletteNotice =
 // - src/components/ToolbarFillerSettings.tsx
 // - src/components/ToolbarPresetSettings.tsx
 // - src/lib/colorGridParsing.ts
+// - src/lib/colorGridParsingCore.ts
+// - src/lib/tileParsing.worker.ts
 export const messages = {
   locale: catalog.locale,
   common: catalog.common,

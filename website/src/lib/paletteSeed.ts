@@ -4,7 +4,6 @@
  *
  * Callers:
  * - src/Index.tsx
- * - tests/run.mts
  */
 import { BASE_COLORS } from "@/data/mapColors";
 
@@ -19,7 +18,6 @@ function hashString32(input: string): number {
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
 export function getPaletteSeedOffset(blockMapping: Record<number, string>): number {
   const serialized = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => `${i + 1}:${blockMapping[i + 1] ?? ""}`).join("|");
   return hashString32(serialized);

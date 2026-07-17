@@ -20,7 +20,6 @@ import { FlatModeBehavior, type WaterDrops } from "@/lib/colorGridAnalysis";
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
 export type TileWaterSetting =
   | { kind: "below-platform"; drops: WaterDrops }

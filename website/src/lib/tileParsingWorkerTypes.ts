@@ -17,7 +17,6 @@ import type { ColorGridStats } from "@/lib/colorGridAnalysis";
 import type { ColorGrid, ColorRgb } from "@/types/color";
 
 // Callers:
-// - src/lib/tileParsing.worker.ts
 // - src/lib/tileParsingWorkerClient.ts
 export type TileParsingWorkerTile = {
   row: number;

@@ -162,6 +162,7 @@ export function createImageDataFromColorGrid(colorGrid: ColorGrid, customColors:
 
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
+// - src/components/PanelCustomColors.tsx
 export function getHue(r: number, g: number, b: number): number {
   const [rn, gn, bn] = [r / 255, g / 255, b / 255];
   const max = Math.max(rn, gn, bn);

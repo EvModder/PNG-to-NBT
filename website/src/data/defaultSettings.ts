@@ -1,14 +1,16 @@
 /**
  * Public API:
  * - DEFAULT_*
+ * - SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS
+ * - SuppressLoadSpotMarkerBlock
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/nbtExport.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/utils/colorTableLayout.ts
- * - tests/run.mts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, SupportMode } from "@/types/ui";
@@ -16,7 +18,6 @@ import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, Suppo
 // Callers:
 // - src/Index.tsx
 // - src/components/ToolbarFillerSettings.tsx
-// - tests/run.mts
 export const DEFAULT_ACTIVE_PRESET_NAME = "Fullblock";
 export const DEFAULT_SUPPORT_FILLER_BLOCK = "cobblestone";
 export const DEFAULT_SHADE_FILLER_BLOCK = "resin_block";
@@ -41,8 +42,6 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 // - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
-// - tests/invariants.mts
-// - tests/run.mts
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
 export const DEFAULT_SUPPORT_MODE = SupportMode.None;
 export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
@@ -92,7 +91,6 @@ export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
 export const DEFAULT_CONVERT_UNSUPPORTED_COLORS = true;
 export const DEFAULT_CROP_IMAGE = true;
 export const DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS = false;

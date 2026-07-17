@@ -5,8 +5,9 @@
  * - renderBlockIconAtlasEntryToCanvas()
  *
  * Callers:
- * - src/components/PanelColorBlockTable.tsx
  * - src/components/PackedBlockIcon.tsx
+ * - src/components/PanelColorBlockTable.tsx
+ * - src/components/PanelCustomColors.tsx
  */
 import { BLOCK_ICON_ATLASES, type BlockIconAtlasName } from "@/data/blockIconAtlases";
 import { stripDefaultBlockNamespace } from "@/lib/blockId";
@@ -40,6 +41,7 @@ function toBlockIconKey(raw: string): string {
 
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
+// - src/components/PanelCustomColors.tsx
 export function getBlockIconAsset(block: string): BlockIconAsset {
   const atlasKey = toBlockIconKey(block);
   return {

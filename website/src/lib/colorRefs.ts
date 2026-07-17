@@ -55,7 +55,6 @@ export function addColorRefCount(
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/PanelCustomColors.tsx
 export function getColorRefCount(

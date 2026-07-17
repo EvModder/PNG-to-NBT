@@ -1,6 +1,5 @@
 /**
  * Public API:
- * - DEFAULT_SWATCH_SHADES
  * - SWATCH_TOOLTIP_OFFSET_PX
  * - formatSwatchHex()
  * - getOrderedSwatchShades()
@@ -15,10 +14,7 @@
 import type { CSSProperties } from "react";
 import { Shade } from "@/data/mapColors";
 
-// Callers:
-// - src/components/PanelColorBlockTable.tsx
-// - src/components/PanelCustomColors.tsx
-export const DEFAULT_SWATCH_SHADES: readonly Shade[] = [Shade.Dark, Shade.Flat, Shade.Light];
+const DEFAULT_SWATCH_SHADES: readonly Shade[] = [Shade.Dark, Shade.Flat, Shade.Light];
 
 // Callers:
 // - src/components/PanelColorBlockTable.tsx

@@ -3,9 +3,8 @@
  * - getColorGridCacheKey()
  *
  * Callers:
- * - src/lib/colorGridParsingCore.ts
- * - src/lib/colorGridParsing.ts
  * - src/Index.tsx
+ * - src/lib/colorGridParsingCore.ts
  */
 import type { ColorGrid } from "@/types/color";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
@@ -29,9 +28,8 @@ function getHashId(state: HashState): string {
 }
 
 // Callers:
-// - src/lib/colorGridParsingCore.ts
-// - src/lib/colorGridParsing.ts
 // - src/Index.tsx
+// - src/lib/colorGridParsingCore.ts
 export function getColorGridCacheKey(colorGrid: ColorGrid): string {
   const hashState = createHashState();
   for (let x = 0; x < MAP_SIZE; ++x) {

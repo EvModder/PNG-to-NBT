@@ -1,6 +1,5 @@
 /**
  * Public API:
- * - FragileSupportRule
  * - FRAGILE_SUPPORT_RULES
  * - isFragileBlock()
  *
@@ -105,10 +104,7 @@ type FragileSupportRuleValue = {
   replacementBlock: string;
 };
 
-// Callers:
-// - src/Index.tsx
-// - src/lib/shapeModel.ts
-export type FragileSupportRule = Readonly<FragileSupportRuleValue>;
+type FragileSupportRule = Readonly<FragileSupportRuleValue>;
 
 // Callers:
 // - src/Index.tsx

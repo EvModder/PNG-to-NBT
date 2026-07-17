@@ -4,7 +4,6 @@
  *
  * Callers:
  * - src/lib/nbtExport.ts
- * - tests/invariants.mts
  */
 import {
   DEFAULT_CRUBTECH_LAYER_GAP,
@@ -539,7 +538,6 @@ function buildCrubTechSignalLamps(
 
 // Callers:
 // - src/lib/nbtExport.ts
-// - tests/invariants.mts
 export function buildSuppressLoadSpotMarkers(
   shape: GeneratedShape,
   buildMode: BuildMode,

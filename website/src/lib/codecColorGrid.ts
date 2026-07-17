@@ -292,6 +292,8 @@ function decodeAlignedColorGridBytes(bytes: Uint8Array, filterMode: AlignedFilte
   return colorGrid;
 }
 
+// Callers:
+// - src/Index.tsx
 export async function encodeColorGrid(colorGrid: ColorGrid): Promise<string> {
   const colorGridStateTable = buildColorGridStateTable(colorGrid);
   const variants: [string, Uint8Array][] = [
@@ -314,6 +316,8 @@ export async function encodeColorGrid(colorGrid: ColorGrid): Promise<string> {
   return best ?? "";
 }
 
+// Callers:
+// - src/Index.tsx
 export async function decodeColorGrid(encoded: string): Promise<ColorGrid | null> {
   if (!encoded) return null;
 

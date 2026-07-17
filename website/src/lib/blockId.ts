@@ -16,12 +16,10 @@
  * - src/lib/blockIconAtlas.ts
  * - src/lib/fillerRules.ts
  * - src/lib/nbtExport.ts
- * - src/lib/codecPreset.ts
- * - src/lib/suppressLoadMarkers.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
- * - tests/run.mts
+ * - src/lib/suppressLoadMarkers.ts
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import type { ColorRef, ColorRgb } from "@/types/color";
@@ -41,15 +39,12 @@ export function stripDefaultBlockNamespace(raw: string): string {
 // - src/lib/fillerRules.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeModel.ts
-// - tests/run.mts
 export function normalizeBlockId(raw: string): string {
   return stripDefaultBlockNamespace(raw).toLowerCase().split("[")[0];
 }
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/codecPreset.ts
-// - tests/run.mts
 export function sanitizeUserBlockEntry(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";

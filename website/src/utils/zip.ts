@@ -3,6 +3,7 @@
  * - createZip()
  *
  * Callers:
+ * - src/Index.tsx
  * - src/lib/nbtExport.ts
  */
 function crc32(data: Uint8Array): number {
@@ -30,6 +31,7 @@ interface ZipEntry {
 }
 
 // Callers:
+// - src/Index.tsx
 // - src/lib/nbtExport.ts
 export function createZip(entries: ZipEntry[]): Uint8Array {
   const out: number[] = [];

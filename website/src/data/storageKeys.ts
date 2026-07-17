@@ -4,13 +4,15 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/codecPreset.ts
+ * - src/lib/messages.ts
  * - src/main.tsx
- * - src/data/presets.ts
  */
 // Callers:
 // - src/Index.tsx
+// - src/lib/codecPreset.ts
+// - src/lib/messages.ts
 // - src/main.tsx
-// - src/data/presets.ts
 export const STORAGE_KEYS = {
   presets: "mapart_presets",
   theme: "mapart_theme",

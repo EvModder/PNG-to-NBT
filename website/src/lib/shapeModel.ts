@@ -13,10 +13,11 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/suppressLoadMarkers.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
+ * - src/lib/suppressLoadMarkers.ts
  */
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import type { ColorRef } from "@/types/color";
@@ -26,16 +27,16 @@ import { MAP_SIZE } from "@/utils/color";
 import { type ColorBlockSelections, normalizeBlockId, resolveAssignedColorBlock } from "@/lib/blockId";
 
 // Callers:
-// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/suppressLoadMarkers.ts
 export function isShapeColorCell(cell: ShapeCell): cell is ColorRef {
   return !Array.isArray(cell);
 }
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export function isShapeFillerCell(cell: ShapeCell): cell is FillerRole[] {
@@ -49,17 +50,17 @@ const SHAPE_COORD_Y_SIZE = 8192;
 
 // Callers:
 // - src/lib/shapeGeneration.ts
-// - tests/invariants.mts
 export function toShapeCoordKey(x: number, y: number, z: number): ShapeCoordKey {
   return ((x + 1) * SHAPE_COORD_Y_SIZE + (y + SHAPE_COORD_Y_OFFSET)) * SHAPE_COORD_Z_SIZE + (z + SHAPE_COORD_Z_OFFSET);
 }
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressLoadMarkers.ts
 export function parseShapeCoordKey(key: ShapeCoordKey): [number, number, number] {
   const z = (key % SHAPE_COORD_Z_SIZE) - SHAPE_COORD_Z_OFFSET;
   const yBlock = Math.floor(key / SHAPE_COORD_Z_SIZE);

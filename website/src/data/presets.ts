@@ -12,7 +12,6 @@
  * - src/Index.tsx
  * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/codecPreset.ts
- * - tests/run.mts
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import type { ColorRgb } from "@/types/color";
@@ -21,7 +20,6 @@ import type { ColorRgb } from "@/types/color";
 // - src/Index.tsx
 // - src/components/ToolbarPresetSettings.tsx
 // - src/lib/codecPreset.ts
-// - tests/run.mts
 export interface BlockPreset {
   name: string;
   customColors?: ColorRgb[];
@@ -37,7 +35,6 @@ export const CRUBTECH_PRESET_NAME = "CrubTech";
 // - src/Index.tsx
 // - src/components/ToolbarPresetSettings.tsx
 // - src/lib/codecPreset.ts
-// - tests/run.mts
 export const BUILTIN_PRESET_NAMES = ["Fullblock", "Carpets", "PistonClear", CRUBTECH_PRESET_NAME] as const;
 
 function buildPistonClearPreset(): BlockPreset {
@@ -280,7 +277,7 @@ export function arePresetBlocksEqual(
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
+// - src/lib/codecPreset.ts
 export const getBuiltinPreset = (name: string): BlockPreset | null => BUILTIN_BUILDERS[name]?.() ?? null;
 // Callers:
 // - src/Index.tsx

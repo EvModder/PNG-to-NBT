@@ -1,15 +1,14 @@
 /**
  * Public API:
+ * - ParsedColorGridTile
+ * - ColorGridSetParseResult
  * - convertImageToColorGrid()
- * - convertFileToColorGrid()
  * - convertImageToColorGridSet()
- * - convertFileToColorGridSet()
  * - loadImageDataFromFile()
  * - convertImageToColorGridSetAsync()
  *
  * Callers:
  * - src/Index.tsx
- * - tests/run.mts
  */
 import * as UTIF from "utif";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
@@ -200,9 +199,6 @@ function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[]): Palette
   return notices;
 }
 
-// Callers:
-// - src/Index.tsx
-// - tests/run.mts
 export function convertImageToColorGrid(
   imageData: ImageData,
   customColors: ColorRgb[],
@@ -257,18 +253,6 @@ export function convertImageToColorGrid(
     ],
     hasBlockingIssue: converted.unsupportedColors.length > 0,
   };
-}
-
-// Callers:
-// - src/Index.tsx
-export async function convertFileToColorGrid(
-  file: File,
-  customColors: ColorRgb[],
-  convertUnsupported = false,
-  cropImage = false,
-): Promise<ColorGridParseResult> {
-  const imageData = await loadImageDataFromFile(file);
-  return convertImageToColorGrid(imageData, customColors, convertUnsupported, cropImage);
 }
 
 // Callers:
@@ -423,16 +407,4 @@ export async function convertImageToColorGridSetAsync(
       paletteNotices: [...preprocessed.paletteNotices, ...fallback.paletteNotices],
     };
   }
-}
-
-// Callers:
-// - src/Index.tsx
-export async function convertFileToColorGridSet(
-  file: File,
-  customColors: ColorRgb[],
-  convertUnsupported = false,
-  cropImage = false,
-): Promise<ColorGridSetParseResult> {
-  const imageData = await loadImageDataFromFile(file);
-  return convertImageToColorGridSet(imageData, customColors, convertUnsupported, cropImage);
 }

@@ -4,10 +4,12 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
  */
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PanelColorBlockTable.tsx
 export function formatStacks(count: number): string {
   if (count < 64) return String(count);
   const shulkerBoxes = Math.floor(count / (64 * 27));

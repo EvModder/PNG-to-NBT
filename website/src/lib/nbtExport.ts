@@ -5,8 +5,6 @@
  *
  * Callers:
  * - src/Index.tsx
- * - tests/run.mts
- * - tests/invariants.mts
  */
 import { MAP_SIZE } from "@/utils/color";
 import {
@@ -527,9 +525,6 @@ export async function convertToNbtEntries(
   return [await buildSingleEntry(shape, parts, options)];
 }
 
-// Callers:
-// - tests/run.mts
-// - tests/invariants.mts
 export async function convertToNbt(
   shape: GeneratedShape,
   options: ExportOptions,

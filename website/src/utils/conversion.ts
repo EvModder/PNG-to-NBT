@@ -17,11 +17,11 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
+ * - src/lib/buildModeShapes.ts
  * - src/lib/codecPreset.ts
- * - src/lib/suppressLoadMarkers.ts
- * - src/lib/shapeGeneration.ts
  * - src/lib/nbtExport.ts
- * - tests/run.mts
+ * - src/lib/shapeGeneration.ts
+ * - src/lib/suppressLoadMarkers.ts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
@@ -36,7 +36,6 @@ const SUPPRESS_STEP_DIRECTIONS = [
 // Callers:
 // - src/Index.tsx
 // - src/lib/codecPreset.ts
-// - tests/run.mts
 export function isSuppressStepDirection(raw: unknown): raw is SuppressStepDirection {
   return Object.values(SuppressStepDirection).includes(raw as SuppressStepDirection);
 }
@@ -113,6 +112,7 @@ export function getSuppressStepDirectionRotationDegrees(direction: SuppressStepD
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/buildModeShapes.ts
 // - src/lib/shapeGeneration.ts
 export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
@@ -142,7 +142,6 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
-// - tests/run.mts
 export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.SuppressStepPairs:
@@ -154,6 +153,7 @@ export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
 }
 
 // Callers:
+// - src/Index.tsx
 // - src/components/ToolbarBuildSettings.tsx
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
@@ -184,14 +184,12 @@ export function isCrubTechBuildMode(buildMode: BuildMode): boolean {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeGeneration.ts
-// - tests/run.mts
 export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
   return buildMode === BuildMode.StaircaseParty;
 }
 
 // Callers:
 // - src/Index.tsx
-// - tests/run.mts
 export function shouldIncludeTransparentBlocks(
   blockMapping: Record<number, string>,
   hasTransparency: boolean,

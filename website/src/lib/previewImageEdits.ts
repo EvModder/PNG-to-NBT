@@ -22,6 +22,7 @@ import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { MAP_SIZE } from "@/utils/color";
 
 // Callers:
+// - src/Index.tsx
 // - src/lib/previewImageStore.ts
 export interface PreviewPixelReplacement {
   x: number;
@@ -66,7 +67,7 @@ type CollectPreviewVisiblePixelMaskOptions = {
 };
 
 // Callers:
-// - src/lib/previewImageStore.ts
+// - src/Index.tsx
 export function collectVsFillerPreviewReplacements(
   {
     shape,
