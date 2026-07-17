@@ -28,14 +28,7 @@ export const DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK = "slime_block";
 export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
 
 // Callers:
-// - src/Index.tsx
-// - src/components/SecretsSettingsDialog.tsx
-// - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
-// - tests/run.mts
-export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "barrier"] as const;
-export type SuppressLoadSpotMarkerBlock = typeof SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS[number];
-export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBlock = "jigsaw";
 export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 
 // Callers:
@@ -63,10 +56,12 @@ export const DEFAULT_BUILD_AT_WORLD_MIN_Y = true;
 
 // Callers:
 // - src/Index.tsx
+// - src/components/SecretsSettingsDialog.tsx
+// - src/lib/suppressLoadMarkers.ts
 // - src/utils/colorTableLayout.ts
 export const DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW = false;
-export const DEFAULT_SHOW_NAMES = false;
 export const DEFAULT_SHOW_IDS = false;
+export const DEFAULT_SHOW_NAMES = false;
 export const DEFAULT_SHOW_OPTIONS = false;
 export const DEFAULT_BLOCK_DISPLAY_MODE: BlockDisplayMode = "textures";
 export const DEFAULT_BLOCK_COLUMN_EXPANDED = true;
@@ -85,6 +80,9 @@ export const DEFAULT_BELOW_PLATFORM_WATER = false;
 export const DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS = true;
 export const DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES = false;
 export const DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC = false;
+export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "barrier"] as const;
+export type SuppressLoadSpotMarkerBlock = typeof SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS[number];
+export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBlock = "jigsaw";
 export const DEFAULT_SHOW_VS_FILLER_WARNINGS = true;
 export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
 export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;

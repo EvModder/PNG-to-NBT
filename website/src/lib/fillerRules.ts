@@ -81,7 +81,7 @@ export function getSupportModeFillerRoles(
 ): FillerRole[] {
   const roles: FillerRole[] = [];
   const shouldIncludeWaterPath = supportMode !== SupportMode.None;
-  const shouldIncludeDirectWaterSupport = supportMode !== SupportMode.None && usesDirectWaterBlock;
+  const shouldIncludeDirectWaterSupport = shouldIncludeWaterPath && usesDirectWaterBlock;
 
   switch (supportMode) {
     case SupportMode.Steps:
@@ -113,7 +113,7 @@ export function getSupportModeFillerRoles(
   }
 
   if (
-    supportMode !== SupportMode.None &&
+    shouldIncludeWaterPath &&
     usesIceWaterBlock &&
     !roles.includes(FillerRole.SupportWaterBase)
   ) {

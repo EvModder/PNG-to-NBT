@@ -555,7 +555,9 @@ export function PanelColorBlockTable({
     const displayCustomBlocks = textureCollapsed
       ? (selectedBlock !== "" && selectedIsCustomOption ? [selectedBlock] : [])
       : customBlocks.toSorted();
-    const reqCount = getBaseDisplayRequiredCount(idx);
+    const reqCount = idx === TRANSPARENCY_BASE_INDEX
+      ? (selectedBlock ? getBaseSortRequiredCount(idx) : 0)
+      : getBaseDisplayRequiredCount(idx);
     const cells: Record<ColumnId, React.ReactNode> = {
       clr: idx === TRANSPARENCY_BASE_INDEX ? (
         <div
@@ -761,6 +763,7 @@ export function PanelColorBlockTable({
     getBlockGroups,
     getBaseColorKey,
     getBaseDisplayRequiredCount,
+    getBaseSortRequiredCount,
     getBlockIconAsset,
     getColorSwatchShades,
     getColorSwatchStyle,

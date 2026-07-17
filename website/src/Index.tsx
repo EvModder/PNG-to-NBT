@@ -1,62 +1,62 @@
 import { startTransition, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect, useEffectEvent, type ChangeEvent } from "react";
 import { Languages, Moon, Sun } from "lucide-react";
 import {
-  DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
   DEFAULT_ACTIVE_PRESET_NAME,
-  DEFAULT_APPLY_SUPPORT_FLOOR_YS,
-  DEFAULT_BELOW_PLATFORM_WATER,
-  DEFAULT_BLOCK_COLUMN_EXPANDED,
-  DEFAULT_BLOCK_DISPLAY_MODE,
-  DEFAULT_BUILD_MODE,
-  DEFAULT_BUILD_AT_WORLD_MIN_Y,
-  DEFAULT_COLUMN_ORDER,
-  DEFAULT_CONVERT_UNSUPPORTED_COLORS,
-  DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES,
+  DEFAULT_SUPPORT_FILLER_BLOCK,
+  DEFAULT_SHADE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
-  DEFAULT_CRUBTECH,
-  DEFAULT_CRUBTECH_DARK_WATER_DROP,
-  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
-  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
-  DEFAULT_CROP_IMAGE,
-  DEFAULT_DARK_WATER_DROP,
+  DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
-  DEFAULT_FLAT_WATER_DROP,
-  DEFAULT_FORCE_XZ128,
-  DEFAULT_FORCE_Z129,
-  DEFAULT_LAYER_GAP,
-  DEFAULT_LIGHT_WATER_DROP,
-  SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
-  DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
-  DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
-  DEFAULT_MAX_PER_SPLIT,
-  DEFAULT_MIX_STEPS,
-  DEFAULT_PALETTE_SEED,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
-  DEFAULT_SHADE_FILLER_BLOCK,
-  DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
-  DEFAULT_SHOW_ALIGNMENT_REMINDER,
-  DEFAULT_SHOW_EXCLUDED_BLOCKS,
-  DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
-  DEFAULT_SHOW_IDS,
-  DEFAULT_SHOW_NAMES,
-  DEFAULT_SHOW_NOOBLINE_WARNINGS,
-  DEFAULT_SHOW_OPTIONS,
-  DEFAULT_MC_UNITS,
-  DEFAULT_SHOW_TRANSPARENT_ROW,
-  DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW,
-  DEFAULT_SHOW_VS_FILLER_WARNINGS,
-  DEFAULT_SORT_DIR,
-  DEFAULT_SORT_KEY,
-  DEFAULT_SUPPORT_FILLER_BLOCK,
+  DEFAULT_BUILD_MODE,
   DEFAULT_SUPPORT_MODE,
   DEFAULT_SUPPRESS_STEP_DIRECTION,
-  DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK,
+  DEFAULT_VS_FILLER_LOAD_DIRECTION,
+  DEFAULT_PALETTE_SEED,
+  DEFAULT_LAYER_GAP,
+  DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH_LAYER_GAP,
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
-  DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
+  DEFAULT_CRUBTECH,
+  DEFAULT_MIX_STEPS,
+  DEFAULT_LIGHT_WATER_DROP,
+  DEFAULT_FLAT_WATER_DROP,
+  DEFAULT_DARK_WATER_DROP,
+  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
+  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_CRUBTECH_DARK_WATER_DROP,
+  DEFAULT_BUILD_AT_WORLD_MIN_Y,
+  DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW,
+  DEFAULT_SHOW_IDS,
+  DEFAULT_SHOW_NAMES,
+  DEFAULT_SHOW_OPTIONS,
+  DEFAULT_BLOCK_DISPLAY_MODE,
+  DEFAULT_BLOCK_COLUMN_EXPANDED,
+  DEFAULT_SORT_KEY,
+  DEFAULT_SORT_DIR,
+  DEFAULT_MC_UNITS,
+  DEFAULT_MAX_PER_SPLIT,
+  DEFAULT_COLUMN_ORDER,
+  DEFAULT_SHOW_TRANSPARENT_ROW,
+  DEFAULT_SHOW_EXCLUDED_BLOCKS,
+  DEFAULT_COLLAPSE_DUPLICATE_NBT_PALETTE_STATES,
+  DEFAULT_FORCE_XZ128,
+  DEFAULT_FORCE_Z129,
+  DEFAULT_APPLY_SUPPORT_FLOOR_YS,
+  DEFAULT_BELOW_PLATFORM_WATER,
+  DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
+  DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
+  DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
+  SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
   type SuppressLoadSpotMarkerBlock,
-  DEFAULT_VS_FILLER_LOAD_DIRECTION,
+  DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
+  DEFAULT_SHOW_VS_FILLER_WARNINGS,
+  DEFAULT_SHOW_ALIGNMENT_REMINDER,
+  DEFAULT_SHOW_NOOBLINE_WARNINGS,
+  DEFAULT_CONVERT_UNSUPPORTED_COLORS,
+  DEFAULT_CROP_IMAGE,
+  DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
@@ -819,6 +819,17 @@ const Index = () => {
     const storedBuildMode = loadCached(LS_KEYS.buildMode, DEFAULT_BUILD_MODE);
     return Object.values(BuildMode).includes(storedBuildMode as BuildMode) ? storedBuildMode : DEFAULT_BUILD_MODE;
   });
+  const [supportMode, setSupportMode] = useState<SupportMode>(() =>
+    loadCached(LS_KEYS.supportMode, DEFAULT_SUPPORT_MODE),
+  );
+  const [suppressStepDirection, setSuppressDirection] = useState<SuppressStepDirection>(() => {
+    const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
+    return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
+  });
+  const [vsFillerLoadSpotDirection, setVsFillerLoadSpotDirection] = useState<SuppressStepDirection>(() => {
+    const storedDirection = loadCached(LS_KEYS.vsFillerLoadSpotDirection, DEFAULT_VS_FILLER_LOAD_DIRECTION);
+    return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_VS_FILLER_LOAD_DIRECTION;
+  });
   const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.paletteSeed, DEFAULT_PALETTE_SEED));
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, DEFAULT_LAYER_GAP));
@@ -830,49 +841,16 @@ const Index = () => {
   const [crubTech, setCrubTech] = useState(() => loadCached(LS_KEYS.crubTech, DEFAULT_CRUBTECH));
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
-  const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
-  const [suppressStepDirection, setSuppressDirection] = useState<SuppressStepDirection>(() => {
-    const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
-    return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
-  });
-  const [vsFillerLoadSpotDirection, setVsFillerLoadSpotDirection] = useState<SuppressStepDirection>(() => {
-    const storedDirection = loadCached(LS_KEYS.vsFillerLoadSpotDirection, DEFAULT_VS_FILLER_LOAD_DIRECTION);
-    return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_VS_FILLER_LOAD_DIRECTION;
-  });
   const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, DEFAULT_LIGHT_WATER_DROP));
   const calcLightWaterDrop = useDeferredValue(lightWaterDrop);
   const [flatWaterDrop, setFlatWaterDrop] = useState(() => loadCached(LS_KEYS.flatWaterDrop, DEFAULT_FLAT_WATER_DROP));
   const calcFlatWaterDrop = useDeferredValue(flatWaterDrop);
   const [darkWaterDrop, setDarkWaterDrop] = useState(() => loadCached(LS_KEYS.darkWaterDrop, DEFAULT_DARK_WATER_DROP));
   const calcDarkWaterDrop = useDeferredValue(darkWaterDrop);
-  const [colRangeEnabled, setColRangeEnabled] = useState(false);
-  const [colStart, setColStart] = useState(0);
-  const [colEnd, setColEnd] = useState(127);
-  const [westEastSlopeEnabled, setWestEastSlopeEnabled] = useState(false);
-  const [westEastSlopeRun, setWestEastSlopeRunState] = useState(DEFAULT_WEST_EAST_SLOPE_RUN);
-  const [westEastSlopeRise, setWestEastSlopeRiseState] = useState(DEFAULT_WEST_EAST_SLOPE_RISE);
-  const setWestEastSlopeRun = useCallback((value: number) => setWestEastSlopeRunState(clampWestEastSlopeRun(value)), []);
-  const setWestEastSlopeRise = useCallback((value: number) => setWestEastSlopeRiseState(clampWestEastSlopeRise(value)), []);
-  const colStartRef = useRef(0);
-  const colEndRef = useRef(127);
-  useEffect(() => { colStartRef.current = colStart; }, [colStart]);
-  useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
-  const [supportMode, setSupportMode] = useState<SupportMode>(() =>
-    loadCached(LS_KEYS.supportMode, DEFAULT_SUPPORT_MODE),
-  );
-  const [customColors, setCustomColors] = useState<ColorRgb[]>([]);
-  const [selectedBlocksCustom, setSelectedBlocksCustom] = useState<Record<number, string>>({});
-  const [customMode, setCustomMode] = useState<"custom" | number>("custom");
-  const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
-  const [imageData, setImageData] = useState<ImageData | null>(null);
-  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null);
+  const [buildAtWorldMinY, setBuildAtWorldMinY] = useState(() => loadCached(LS_KEYS.buildAtWorldMinY, DEFAULT_BUILD_AT_WORLD_MIN_Y));
   const [showVsFillersInPreview, setShowVsFillersInPreview] = useState(() => loadCached(LS_KEYS.showVsFillersInPreview, DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW));
-  const [imageName, setImageName] = useState("");
-  const [imageValid, setImageValid] = useState(false);
-  const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
-  const [converting, setConverting] = useState(false);
-  const [showNames, setShowNames] = useState(() => loadCached(LS_KEYS.showNames, DEFAULT_SHOW_NAMES));
   const [showIds, setShowIds] = useState(() => loadCached(LS_KEYS.showIds, DEFAULT_SHOW_IDS));
+  const [showNames, setShowNames] = useState(() => loadCached(LS_KEYS.showNames, DEFAULT_SHOW_NAMES));
   const [showOptions, setShowOptions] = useState(() => loadCached(LS_KEYS.showOptions, DEFAULT_SHOW_OPTIONS));
   const [blockDisplayMode, setBlockDisplayMode] = useState<BlockDisplayMode>(() =>
     loadCached(LS_KEYS.blockDisplayMode, DEFAULT_BLOCK_DISPLAY_MODE),
@@ -880,13 +858,8 @@ const Index = () => {
   const [blockColExpanded, setBlockColExpanded] = useState(() => loadCached(LS_KEYS.blockColExpanded, DEFAULT_BLOCK_COLUMN_EXPANDED));
   const [sortKey, setSortKey] = useState<SortKey>(() => loadCached(LS_KEYS.sortKey, DEFAULT_SORT_KEY));
   const [sortDir, setSortDir] = useState<SortDir>(() => loadCached(LS_KEYS.sortDir, DEFAULT_SORT_DIR));
-  const [showUnusedColors, setShowUnusedColors] = useState(false);
   const [showStacks, setShowStacks] = useState(() => loadCached(LS_KEYS.showStacks, DEFAULT_MC_UNITS));
   const [showMaxPerSplit, setShowMaxPerSplit] = useState(() => loadCached(LS_KEYS.maxPerSplit, DEFAULT_MAX_PER_SPLIT));
-  const [isDark, setIsDark] = useState(resolveDarkTheme);
-  const [localePreference, setLocalePreferenceState] = useState<LocalePreference>(getLocalePreference);
-  const [convertUnsupported, /* setConvertUnsupported */] = useState(DEFAULT_CONVERT_UNSUPPORTED_COLORS); // always on; checkbox not shown
-  const [cropImage, /* setCropImage */] = useState(DEFAULT_CROP_IMAGE); // always on; checkbox not shown
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => loadCached(LS_KEYS.columnOrder, DEFAULT_COLUMN_ORDER));
   const [showTransparentRow, setShowTransparentRow] = useState(() => loadCached(LS_KEYS.showTransparentRow, DEFAULT_SHOW_TRANSPARENT_ROW));
   const [showExcludedBlocks, setShowExcludedBlocks] = useState(() => loadCached(LS_KEYS.showExcludedBlocks, DEFAULT_SHOW_EXCLUDED_BLOCKS));
@@ -915,7 +888,34 @@ const Index = () => {
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
+  const [convertUnsupported, /* setConvertUnsupported */] = useState(DEFAULT_CONVERT_UNSUPPORTED_COLORS); // always on; checkbox not shown
+  const [cropImage, /* setCropImage */] = useState(DEFAULT_CROP_IMAGE); // always on; checkbox not shown
+  const [customColors, setCustomColors] = useState<ColorRgb[]>([]);
+  const [selectedBlocksCustom, setSelectedBlocksCustom] = useState<Record<number, string>>({});
+  const [customMode, setCustomMode] = useState<"custom" | number>("custom");
+  const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
+  const [imageData, setImageData] = useState<ImageData | null>(null);
+  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null);
+  const [imageName, setImageName] = useState("");
+  const [imageValid, setImageValid] = useState(false);
+  const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
+  const [converting, setConverting] = useState(false);
+  const [showUnusedColors, setShowUnusedColors] = useState(false);
+  const [isDark, setIsDark] = useState(resolveDarkTheme);
+  const [localePreference, setLocalePreferenceState] = useState<LocalePreference>(getLocalePreference);
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
+  const [colRangeEnabled, setColRangeEnabled] = useState(false);
+  const [colStart, setColStart] = useState(0);
+  const [colEnd, setColEnd] = useState(127);
+  const [westEastSlopeEnabled, setWestEastSlopeEnabled] = useState(false);
+  const [westEastSlopeRun, setWestEastSlopeRunState] = useState(DEFAULT_WEST_EAST_SLOPE_RUN);
+  const [westEastSlopeRise, setWestEastSlopeRiseState] = useState(DEFAULT_WEST_EAST_SLOPE_RISE);
+  const setWestEastSlopeRun = useCallback((value: number) => setWestEastSlopeRunState(clampWestEastSlopeRun(value)), []);
+  const setWestEastSlopeRise = useCallback((value: number) => setWestEastSlopeRiseState(clampWestEastSlopeRise(value)), []);
+  const colStartRef = useRef(0);
+  const colEndRef = useRef(127);
+  useEffect(() => { colStartRef.current = colStart; }, [colStart]);
+  useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
   const [decodedColorGrid, setDecodedColorGrid] = useState<ColorGrid | null>(null);
   const [parsedImageSetState, setParsedImageSetState] = useState<ColorGridSetParseResult | null>(null);
   const [isParsingImage, setIsParsingImage] = useState(false);
@@ -1108,37 +1108,37 @@ const Index = () => {
   }, [presets, activeIdx, presetDirty]);
   const persistedSettings = useMemo(
     () => ({
+      [LS_KEYS.activePreset]: preset.name,
       [LS_KEYS.supportFiller]: supportFillerBlock,
       [LS_KEYS.shadeFiller]: shadeFillerBlock,
       [LS_KEYS.crubTechShadeBreakableFiller]: crubTechShadeBreakableFillerBlock,
       [LS_KEYS.crubTechShadePushableFiller]: crubTechShadePushableFillerBlock,
+      [LS_KEYS.suppress2LayerLateFiller]: suppress2LayerLateFillerBlock,
+      [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
+      [LS_KEYS.recessiveVoidFiller]: recessiveVoidFillerBlock,
       [LS_KEYS.buildMode]: buildMode,
       [LS_KEYS.supportMode]: supportMode,
-      [LS_KEYS.showStacks]: showStacks,
-      [LS_KEYS.maxPerSplit]: showMaxPerSplit,
+      [LS_KEYS.suppressStepDirection]: suppressStepDirection,
+      [LS_KEYS.vsFillerLoadSpotDirection]: vsFillerLoadSpotDirection,
+      [LS_KEYS.paletteSeed]: proPaletteSeed,
+      [LS_KEYS.layerGap]: layerGap,
+      [LS_KEYS.suppress2LayerLatePairsGap]: suppress2LayerLatePairsGap,
+      [LS_KEYS.crubTech]: crubTech,
+      [LS_KEYS.mixSteps]: mixSteps,
+      [LS_KEYS.lightWaterDrop]: lightWaterDrop,
+      [LS_KEYS.flatWaterDrop]: flatWaterDrop,
+      [LS_KEYS.darkWaterDrop]: darkWaterDrop,
+      [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
+      [LS_KEYS.showVsFillersInPreview]: showVsFillersInPreview,
       [LS_KEYS.showIds]: showIds,
       [LS_KEYS.showNames]: showNames,
       [LS_KEYS.showOptions]: showOptions,
       [LS_KEYS.blockDisplayMode]: blockDisplayMode,
       [LS_KEYS.blockColExpanded]: blockColExpanded,
-      [LS_KEYS.activePreset]: preset.name,
       [LS_KEYS.sortKey]: sortKey,
       [LS_KEYS.sortDir]: sortDir,
-      [LS_KEYS.layerGap]: layerGap,
-      [LS_KEYS.suppress2LayerLatePairsGap]: suppress2LayerLatePairsGap,
-      [LS_KEYS.crubTech]: crubTech,
-      [LS_KEYS.mixSteps]: mixSteps,
-      [LS_KEYS.buildAtWorldMinY]: buildAtWorldMinY,
-      [LS_KEYS.suppressStepDirection]: suppressStepDirection,
-      [LS_KEYS.vsFillerLoadSpotDirection]: vsFillerLoadSpotDirection,
-      [LS_KEYS.lightWaterDrop]: lightWaterDrop,
-      [LS_KEYS.flatWaterDrop]: flatWaterDrop,
-      [LS_KEYS.darkWaterDrop]: darkWaterDrop,
-      [LS_KEYS.suppress2LayerLateFiller]: suppress2LayerLateFillerBlock,
-      [LS_KEYS.paletteSeed]: proPaletteSeed,
-      [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
-      [LS_KEYS.recessiveVoidFiller]: recessiveVoidFillerBlock,
-      [LS_KEYS.showVsFillersInPreview]: showVsFillersInPreview,
+      [LS_KEYS.showStacks]: showStacks,
+      [LS_KEYS.maxPerSplit]: showMaxPerSplit,
       [LS_KEYS.columnOrder]: columnOrder,
       [LS_KEYS.showTransparentRow]: showTransparentRow,
       [LS_KEYS.showExcludedBlocks]: showExcludedBlocks,
@@ -1156,37 +1156,37 @@ const Index = () => {
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
     }),
     [
+      preset.name,
       supportFillerBlock,
       shadeFillerBlock,
       crubTechShadeBreakableFillerBlock,
       crubTechShadePushableFillerBlock,
+      suppress2LayerLateFillerBlock,
+      dominateVoidFillerBlock,
+      recessiveVoidFillerBlock,
       buildMode,
       supportMode,
-      showStacks,
-      showMaxPerSplit,
+      suppressStepDirection,
+      vsFillerLoadSpotDirection,
+      proPaletteSeed,
+      layerGap,
+      suppress2LayerLatePairsGap,
+      crubTech,
+      mixSteps,
+      lightWaterDrop,
+      flatWaterDrop,
+      darkWaterDrop,
+      buildAtWorldMinY,
+      showVsFillersInPreview,
       showIds,
       showNames,
       showOptions,
       blockDisplayMode,
       blockColExpanded,
-      preset.name,
       sortKey,
       sortDir,
-      layerGap,
-      suppress2LayerLatePairsGap,
-      crubTech,
-      mixSteps,
-      buildAtWorldMinY,
-      suppressStepDirection,
-      vsFillerLoadSpotDirection,
-      lightWaterDrop,
-      flatWaterDrop,
-      darkWaterDrop,
-      suppress2LayerLateFillerBlock,
-      proPaletteSeed,
-      dominateVoidFillerBlock,
-      recessiveVoidFillerBlock,
-      showVsFillersInPreview,
+      showStacks,
+      showMaxPerSplit,
       columnOrder,
       showTransparentRow,
       showExcludedBlocks,

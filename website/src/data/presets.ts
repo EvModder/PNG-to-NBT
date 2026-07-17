@@ -260,9 +260,9 @@ function buildCrubTechPreset(): BlockPreset {
 }
 
 const BUILTIN_BUILDERS: Record<string, () => BlockPreset> = {
-  PistonClear: buildPistonClearPreset,
-  Carpets: buildCarpetsPreset,
   Fullblock: buildFullblockPreset,
+  Carpets: buildCarpetsPreset,
+  PistonClear: buildPistonClearPreset,
   [CRUBTECH_PRESET_NAME]: buildCrubTechPreset,
 };
 

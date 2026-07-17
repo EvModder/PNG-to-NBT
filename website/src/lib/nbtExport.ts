@@ -8,11 +8,11 @@
  */
 import { MAP_SIZE } from "@/utils/color";
 import {
-  DEFAULT_CRUBTECH_DARK_WATER_DROP,
-  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_NBT_AUTHOR,
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
-  DEFAULT_NBT_AUTHOR,
+  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
+  DEFAULT_CRUBTECH_DARK_WATER_DROP,
 } from "@/data/defaultSettings";
 import type { ColorRef } from "@/types/color";
 import type { GeneratedShape, ShapePart } from "@/types/shape";
