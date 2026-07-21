@@ -34,7 +34,7 @@ import {
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
 import { normalizeBlockId, sanitizeUserBlockEntry } from "@/lib/blockId";
-import { computeColorGridStats, hasStepMixOpportunity } from "@/lib/colorGridAnalysis";
+import { computeColorGridStats, hasStepMixOpportunity, requiresTwoLayerLateShading } from "@/lib/colorGridAnalysis";
 import { convertImageToColorGrid } from "@/lib/colorGridParsing";
 import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import {
@@ -823,7 +823,7 @@ async function runFixtureCase(
       ? getPaletteSeedOffset(testCase.preset.selectedBlocks)
       : 0;
 
-  const twoLayerHasLateVoidNeed = (imageStats.voidShadowStats.dominant ?? 0) > 0;
+  const twoLayerRequiresLateShading = requiresTwoLayerLateShading(colorGrid, activeWaterDrops);
   const includeTransparentBlocks = shouldIncludeTransparentBlocks(
     testCase.preset.selectedBlocks,
     derivedImageStats.hasTransparency,
@@ -835,7 +835,7 @@ async function runFixtureCase(
     derivedImageStats.allSameShade,
     imageHasWater,
     derivedImageStats.hasTransparency,
-    twoLayerHasLateVoidNeed,
+    twoLayerRequiresLateShading,
     {
       layerGap: testCase.settings.layerGap,
       mixSteps: showMixStepsToggle && testCase.settings.mixSteps,
@@ -883,7 +883,7 @@ async function runFixtureCase(
       showMixStepsToggle,
       effectiveBuildMode,
       isFlatShape,
-      twoLayerHasLateVoidNeed,
+      twoLayerRequiresLateShading,
     },
   };
 

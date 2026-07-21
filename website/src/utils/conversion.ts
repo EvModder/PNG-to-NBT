@@ -9,6 +9,7 @@
  * - shouldIncludeTransparentBlocks()
  * - getBuildModeRangeMax()
  * - getVisibleSuppressBuildModes()
+ * - resolveBuildModeSelection()
  * - isSuppressStepDirection()
  * - getBuildModeDownloadSuffix()
  * - getSuppressStepDirectionRotationDegrees()
@@ -215,8 +216,8 @@ export function getBuildModeRangeMax(buildMode: BuildMode): number {
 
 // Callers:
 // - src/Index.tsx
-export function getVisibleSuppressBuildModes(hasTwoLayerLateVoidNeed: boolean): BuildMode[] {
-  return hasTwoLayerLateVoidNeed
+export function getVisibleSuppressBuildModes(requiresTwoLayerLateShading: boolean): BuildMode[] {
+  return requiresTwoLayerLateShading
     ? [
         BuildMode.SuppressSplitRow,
         BuildMode.SuppressSplitChecker,
@@ -232,6 +233,55 @@ export function getVisibleSuppressBuildModes(hasTwoLayerLateVoidNeed: boolean): 
         BuildMode.SuppressStepChecker,
         BuildMode.Suppress2Layer,
       ];
+}
+
+// Callers:
+// - src/Index.tsx
+export function resolveBuildModeSelection(
+  buildMode: BuildMode,
+  suppressStepDirection: SuppressStepDirection,
+  lockFlatBuildMode: boolean,
+  switchToSuppressCheckerIfContainsVoidShadows: boolean,
+  hasVoidShadow: boolean,
+  preferLatePairs: boolean,
+  staircaseModes: readonly BuildMode[],
+  suppressModes: readonly BuildMode[],
+): { buildMode: BuildMode; suppressStepDirection: SuppressStepDirection } {
+  let nextBuildMode = buildMode;
+  let nextSuppressStepDirection = suppressStepDirection;
+
+  if (lockFlatBuildMode) return { buildMode: BuildMode.Flat, suppressStepDirection };
+  if (switchToSuppressCheckerIfContainsVoidShadows && hasVoidShadow && isStaircaseBuildMode(nextBuildMode)) {
+    nextBuildMode = BuildMode.SuppressStepChecker;
+    nextSuppressStepDirection = SuppressStepDirection.EastToWest;
+  } else if (nextBuildMode === BuildMode.Flat) {
+    nextBuildMode = BuildMode.StaircaseClassic;
+  }
+
+  const visibleModes = new Set([...staircaseModes, ...suppressModes]);
+  if (visibleModes.has(nextBuildMode)) {
+    return { buildMode: nextBuildMode, suppressStepDirection: nextSuppressStepDirection };
+  }
+  if (
+    nextBuildMode === BuildMode.Suppress2Layer &&
+    preferLatePairs &&
+    visibleModes.has(BuildMode.Suppress2LayerLatePairs)
+  ) {
+    nextBuildMode = BuildMode.Suppress2LayerLatePairs;
+  } else if (nextBuildMode === BuildMode.Suppress2Layer && visibleModes.has(BuildMode.Suppress2LayerLateFillers)) {
+    nextBuildMode = BuildMode.Suppress2LayerLateFillers;
+  } else if (
+    (nextBuildMode === BuildMode.Suppress2LayerLateFillers || nextBuildMode === BuildMode.Suppress2LayerLatePairs) &&
+    visibleModes.has(BuildMode.Suppress2Layer)
+  ) {
+    nextBuildMode = BuildMode.Suppress2Layer;
+  } else if (nextBuildMode === BuildMode.Suppress2LayerLatePairs && visibleModes.has(BuildMode.Suppress2LayerLateFillers)) {
+    nextBuildMode = BuildMode.Suppress2LayerLateFillers;
+  } else {
+    nextBuildMode = staircaseModes[0] ?? BuildMode.StaircaseClassic;
+  }
+
+  return { buildMode: nextBuildMode, suppressStepDirection: nextSuppressStepDirection };
 }
 
 // Callers:

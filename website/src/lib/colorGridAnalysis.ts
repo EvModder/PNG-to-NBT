@@ -6,9 +6,11 @@
  * - FlatModeBehavior
  * - PixelParity
  * - getPixelParity()
+ * - requiresTwoLayerLateShading()
  * - hasStepMixOpportunity()
  * - computeColorGridStats()
  * - collectShadeCountsByColorRefKey()
+ * - summarizeVoidShadows()
  *
  * Callers:
  * - src/Index.tsx
@@ -62,6 +64,12 @@ export interface ColorGridStats {
   };
 }
 
+type VoidShadowSummary = {
+  hasAnyVoidShadow: boolean;
+  northToSouthSelectable: boolean;
+  southToNorthSelectable: boolean;
+};
+
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridParsingCore.ts
@@ -78,6 +86,31 @@ export enum FlatModeBehavior {
 // - src/lib/suppressLoadMarkers.ts
 export function getPixelParity(x: number, z: number): PixelParity {
   return ((x + z) & 1) === 0 ? PixelParity.Recessive : PixelParity.Dominant;
+}
+
+// Callers:
+// - src/Index.tsx
+export function requiresTwoLayerLateShading(colorGrid: ColorGrid, waterDrops?: WaterDrops): boolean {
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    for (let z = 1; z < MAP_SIZE; ++z) {
+      const color = colorGrid[x][z];
+      if (
+        getPixelParity(x, z) !== PixelParity.Dominant ||
+        isTransparentColor(color) ||
+        isWaterColor(color) ||
+        color.shade === Shade.Light
+      ) continue;
+
+      const north = colorGrid[x][z - 1];
+      if (isTransparentColor(north)) return true;
+      if (!waterDrops || !isWaterColor(north)) continue;
+      const waterDrop = (waterDrops as readonly (number | undefined)[])[north.shade];
+      if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${north.shade}`);
+      const fillerY = color.shade === Shade.Dark ? 1 : 0;
+      if (-waterDrop !== fillerY) return true;
+    }
+  }
+  return false;
 }
 
 // Callers:
@@ -247,4 +280,25 @@ export function collectShadeCountsByColorRefKey(
     }
   }
   return countsByColorKey;
+}
+
+// Callers:
+// - src/Index.tsx
+export function summarizeVoidShadows(tileImageStats: readonly ColorGridStats[]): VoidShadowSummary {
+  let hasAnyVoidShadow = false;
+  let northToSouthSelectable = true;
+  let southToNorthSelectable = true;
+
+  for (const { voidShadowStats } of tileImageStats) {
+    if (voidShadowStats.dominant > 0) {
+      hasAnyVoidShadow = true;
+      northToSouthSelectable = false;
+    }
+    if (voidShadowStats.recessive > 0) {
+      hasAnyVoidShadow = true;
+      southToNorthSelectable = false;
+    }
+  }
+
+  return { hasAnyVoidShadow, northToSouthSelectable, southToNorthSelectable };
 }

@@ -73,7 +73,9 @@ import {
   type ColorFrequencyMap,
   computeColorGridStats,
   FlatModeBehavior,
+  requiresTwoLayerLateShading,
   hasStepMixOpportunity,
+  summarizeVoidShadows,
   type ColorGridStats,
   type WaterDrops,
 } from "@/lib/colorGridAnalysis";
@@ -153,6 +155,7 @@ import {
   isSuppressBuildMode,
   isCrubTechBuildMode,
   getVisibleSuppressBuildModes,
+  resolveBuildModeSelection,
   shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
 import { getClipboardImageFile } from "@/utils/imageInput";
@@ -694,14 +697,14 @@ function getStaircaseModeOptionsForState(
 }
 
 function getSuppressModeOptionsForState(
-  twoLayerHasLateVoidNeed: boolean,
+  requiresTwoLayerLateShading: boolean,
   hasMultipleTiles: boolean,
   showFlatNbtSuppressStepOptions: boolean,
 ): ModeOption[] {
   if (showFlatNbtSuppressStepOptions) {
     return BASE_SUPPRESS_OPTIONS.filter(option => isSuppressStepsBuildMode(option.value));
   }
-  const visibleModes = new Set(getVisibleSuppressBuildModes(twoLayerHasLateVoidNeed));
+  const visibleModes = new Set(getVisibleSuppressBuildModes(requiresTwoLayerLateShading));
   return BASE_SUPPRESS_OPTIONS.filter(option => {
     if (hasMultipleTiles && (option.value === BuildMode.SuppressSplitRow || option.value === BuildMode.SuppressSplitChecker)) {
       return false;
@@ -734,48 +737,6 @@ function getBuildAtWorldMinYEligibleForBuildMode(
     const shape = getShapeForBuildMode(tile.baseShapeMap, buildMode, tile.isFlatShape);
     return !!shape && hasBuildAtWorldMinYOpportunity(tile.tile.colorGrid, shape, applySupportFloorYs);
   });
-}
-
-function resolveBuildModeSelection(
-  buildMode: BuildMode,
-  suppressStepDirection: SuppressStepDirection,
-  lockFlatBuildMode: boolean,
-  hasVoidShadow: boolean,
-  staircaseModeOptions: readonly ModeOption[],
-  suppressModeOptions: readonly ModeOption[],
-): { buildMode: BuildMode; suppressStepDirection: SuppressStepDirection } {
-  let nextBuildMode = buildMode;
-  let nextSuppressStepDirection = suppressStepDirection;
-
-  if (lockFlatBuildMode) {
-    return { buildMode: BuildMode.Flat, suppressStepDirection };
-  }
-
-  if (DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS && hasVoidShadow && isStaircaseBuildMode(nextBuildMode)) {
-    nextBuildMode = BuildMode.SuppressStepChecker;
-    nextSuppressStepDirection = SuppressStepDirection.EastToWest;
-  } else if (nextBuildMode === BuildMode.Flat) {
-    nextBuildMode = BuildMode.StaircaseClassic;
-  }
-
-  const visibleModes = new Set<BuildMode>([
-    ...staircaseModeOptions.map(option => option.value),
-    ...suppressModeOptions.map(option => option.value),
-  ]);
-
-  if (!visibleModes.has(nextBuildMode)) {
-    if (nextBuildMode === BuildMode.Suppress2Layer && visibleModes.has(BuildMode.Suppress2LayerLateFillers)) {
-      nextBuildMode = BuildMode.Suppress2LayerLateFillers;
-    } else if (nextBuildMode === BuildMode.Suppress2LayerLatePairs && visibleModes.has(BuildMode.Suppress2Layer)) {
-      nextBuildMode = BuildMode.Suppress2Layer;
-    } else if (nextBuildMode === BuildMode.Suppress2LayerLatePairs && visibleModes.has(BuildMode.Suppress2LayerLateFillers)) {
-      nextBuildMode = BuildMode.Suppress2LayerLateFillers;
-    } else {
-      nextBuildMode = staircaseModeOptions[0]?.value ?? BuildMode.StaircaseClassic;
-    }
-  }
-
-  return { buildMode: nextBuildMode, suppressStepDirection: nextSuppressStepDirection };
 }
 
 const getStoredTheme = (): "light" | "dark" | null => {
@@ -1238,33 +1199,7 @@ const Index = () => {
     () => [...usedColorKeys].some(key => parseColorRefKey(key).isCustom),
     [usedColorKeys],
   );
-  const voidShadowSummary = useMemo(() => {
-    let hasDominantVoidShadow = false;
-    let hasAnyVoidShadow = false;
-    let northToSouthSelectable = true;
-    let southToNorthSelectable = true;
-
-    for (const stats of tileImageStats) {
-      const dominant = stats.voidShadowStats.dominant ?? 0;
-      const recessive = stats.voidShadowStats.recessive ?? 0;
-      if (dominant > 0) {
-        hasDominantVoidShadow = true;
-        hasAnyVoidShadow = true;
-        northToSouthSelectable = false;
-      }
-      if (recessive > 0) {
-        hasAnyVoidShadow = true;
-        southToNorthSelectable = false;
-      }
-    }
-
-    return {
-      hasDominantVoidShadow,
-      hasAnyVoidShadow,
-      northToSouthSelectable,
-      southToNorthSelectable,
-    };
-  }, [tileImageStats]);
+  const voidShadowSummary = useMemo(() => summarizeVoidShadows(tileImageStats), [tileImageStats]);
   const usedWaterShades = getUsedWaterShades(usedShadesByColorKey);
   const imageHasWater = usedWaterShades.size > 0;
   const paletteUsageInfo = derivedImageStats?.paletteUsageInfo ?? null;
@@ -1353,7 +1288,16 @@ const Index = () => {
       }),
     [buildMode, imageValid, parsedTiles, tileDerivedImageStats, getTileWaterSetting],
   );
-  const twoLayerHasLateVoidNeed = voidShadowSummary.hasDominantVoidShadow;
+  const twoLayerRequiresLateShading = useMemo(
+    () => parsedTiles.some((tile, index) => {
+      const waterSetting = getTileWaterSetting(tileDerivedImageStats[index], BuildMode.Suppress2Layer);
+      return requiresTwoLayerLateShading(
+        tile.colorGrid,
+        waterSetting?.kind === "below-platform" ? waterSetting.drops : undefined,
+      );
+    }),
+    [getTileWaterSetting, parsedTiles, tileDerivedImageStats],
+  );
   const crubTechControlsCurrent2LayerSettings = crubTech && isCrubTechBuildMode(buildMode);
   const crubTechControlsLatePairsGap = crubTechControlsCurrent2LayerSettings;
   const effectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : layerGap;
@@ -1534,7 +1478,7 @@ const Index = () => {
           nextShowFlatNbtSuppressStepOptions,
         );
         const nextSuppressModeOptions = getSuppressModeOptionsForState(
-          twoLayerHasLateVoidNeed,
+          twoLayerRequiresLateShading,
           hasMultipleTiles,
           nextShowFlatNbtSuppressStepOptions,
         );
@@ -1542,9 +1486,11 @@ const Index = () => {
           buildMode,
           suppressStepDirection,
           nextLockFlatBuildMode,
+          DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
           hasVoidShadow,
-          nextStaircaseModeOptions,
-          nextSuppressModeOptions,
+          crubTech,
+          nextStaircaseModeOptions.map(option => option.value),
+          nextSuppressModeOptions.map(option => option.value),
         );
         const nextResolvedBuildMode = nextResolvedBuildSelection.buildMode;
         const nextResolvedSuppressStepDirection = nextResolvedBuildSelection.suppressStepDirection;
@@ -1639,7 +1585,7 @@ const Index = () => {
               allSameShade: tile.derivedImageStats.allSameShade,
               hasWater: tile.hasWater,
               hasTransparency: tile.derivedImageStats.hasTransparency,
-              hasTwoLayerLateVoidNeed: twoLayerHasLateVoidNeed,
+              requiresTwoLayerLateShading: twoLayerRequiresLateShading,
               includeTransparentBlocks,
               waterSetting,
               flatModeBehavior: tile.derivedImageStats.flatModeBehavior,
@@ -1709,7 +1655,7 @@ const Index = () => {
     transparentBlockMapping,
     buildMode,
     getTileWaterSetting,
-    twoLayerHasLateVoidNeed,
+    twoLayerRequiresLateShading,
     calcLayerGap,
     calcEffectiveLayerGap,
     calcEffectiveSuppress2LayerLatePairY,
@@ -2148,8 +2094,8 @@ const Index = () => {
   );
 
   const suppressModeOptions = useMemo(
-    () => getSuppressModeOptionsForState(twoLayerHasLateVoidNeed, hasMultipleTiles, showFlatNbtSuppressStepOptions),
-    [twoLayerHasLateVoidNeed, hasMultipleTiles, showFlatNbtSuppressStepOptions],
+    () => getSuppressModeOptionsForState(twoLayerRequiresLateShading, hasMultipleTiles, showFlatNbtSuppressStepOptions),
+    [twoLayerRequiresLateShading, hasMultipleTiles, showFlatNbtSuppressStepOptions],
   );
   const buildAtWorldMinYEligible = useMemo(
     () => getBuildAtWorldMinYEligibleForBuildMode(tileBaseAnalyses, effectiveBuildMode, effectiveApplySupportFloorYs),
@@ -3179,7 +3125,7 @@ const Index = () => {
     : setSuppressDirection;
   const showLatePairsGapControl =
     effectiveBuildMode === BuildMode.Suppress2LayerLatePairs &&
-    twoLayerHasLateVoidNeed;
+    twoLayerRequiresLateShading;
   const toolbarBuildSettingsProps = displayImageData && imageValid ? {
     lockFlatBuildMode: lockFlatBuildMode || (
       !!imageData &&

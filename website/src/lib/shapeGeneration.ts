@@ -2055,12 +2055,26 @@ function buildSuppressDualLayerBlocks(
   const isRecessive = (x: number, z: number) => getPixelParity(x, z) === PixelParity.Recessive;
   const isDominant = (x: number, z: number) => getPixelParity(x, z) === PixelParity.Dominant;
   const shadeDeltaFromSouth = (shade: Shade) => (shade === Shade.Light ? 1 : shade === Shade.Flat ? 0 : -1);
+  // Keep the north pixel correct during the full update, then add its provider for the dominant-only update.
+  const needsLateDominantShade = (x: number, z: number, color: ShadedColorRef) => {
+    if (
+      !isDominant(x, z) ||
+      isTransparentColor(color) ||
+      isWaterColor(color) ||
+      color.shade === Shade.Light ||
+      z === 0
+    ) return false;
+    const north = colorGrid[x][z - 1];
+    if (isTransparentColor(north)) return true;
+    if (!belowPlatformWater || !isWaterColor(north)) return false;
+    const northWaterY = lowerY - getWaterDrop(waterDrops, north.shade);
+    const fillerY = lowerY + (color.shade === Shade.Dark ? 1 : 0);
+    return northWaterY !== fillerY;
+  };
   const isLatePairDominantColor = (x: number, z: number, color: ShadedColorRef) =>
     buildMode === BuildMode.Suppress2LayerLatePairs &&
-    isDominant(x, z) &&
     color.shade === Shade.Flat &&
-    z > 0 &&
-    isTransparentColor(colorGrid[x][z - 1]);
+    needsLateDominantShade(x, z, color);
   const addBlock = (x: number, y: number, z: number, ref: ShapeRef) => {
     const coord = toShapeCoordKey(x, y, z);
     if (occupied.has(coord)) return;
@@ -2160,8 +2174,7 @@ function buildSuppressDualLayerBlocks(
       const fillZ = z - 1;
       const coord = toShapeCoordKey(x, fillY, fillZ);
       if (occupied.has(coord)) continue;
-      const lateSuppressDominantVoid = isDominant(x, z) && fillZ >= 0 && isTransparentColor(colorGrid[x][fillZ]);
-      if (lateSuppressDominantVoid) {
+      if (needsLateDominantShade(x, z, color)) {
         if (buildMode === BuildMode.Suppress2LayerLatePairs) {
           const lateCoord = toShapeCoordKey(x, lateY, fillZ);
           if (!occupied.has(lateCoord)) fillerPlacements.set(lateCoord, { kind: "filler", role: getShadeFillerRole(fillZ) });
@@ -3076,7 +3089,7 @@ export function generateShapeMap(
   allSameShade: Shade | undefined,
   hasWater: boolean,
   hasTransparency: boolean,
-  hasTwoLayerLateVoidNeed: boolean,
+  requiresTwoLayerLateShading: boolean,
   options: {
     layerGap: number;
     mixSteps?: boolean;
@@ -3116,7 +3129,7 @@ export function generateShapeMap(
     collapseStaircaseModes,
     includeFlatNorthline,
   );
-  const suppressVisibleModes: BuildMode[] = hasTwoLayerLateVoidNeed
+  const suppressVisibleModes: BuildMode[] = requiresTwoLayerLateShading
     ? [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]
     : [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2Layer];
   const seenShapeSignatures = new Set<GeneratedShapeSignatureId>();

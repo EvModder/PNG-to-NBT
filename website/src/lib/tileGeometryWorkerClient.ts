@@ -127,7 +127,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     input.allSameShade ?? "",
     input.hasWater ? 1 : 0,
     input.hasTransparency ? 1 : 0,
-    input.hasTwoLayerLateVoidNeed ? 1 : 0,
+    input.requiresTwoLayerLateShading ? 1 : 0,
     input.includeTransparentBlocks ? 1 : 0,
     serializeWaterSetting(input.waterSetting),
     input.flatModeBehavior,

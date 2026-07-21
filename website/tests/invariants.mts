@@ -14,12 +14,13 @@ import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { CRUBTECH_PRESET_NAME, getBuiltinPreset } from "@/data/presets";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
+import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAnalysis";
 import { convertToNbt } from "@/lib/nbtExport";
 import { createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
-import { Shade, type ColorGrid } from "@/types/color";
+import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 import { SupportMode } from "@/types/ui";
 
@@ -1004,11 +1005,69 @@ async function assertCrubTechWaterPlatformInvariant(): Promise<void> {
   }
 }
 
+function assertTwoLayerLatePairEligibilityInvariants(): void {
+  const transparent = TRANSPARENT_COLOR;
+  const solid = { id: 1, isCustom: false, shade: Shade.Flat } satisfies ShadedColorRef;
+  const water = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Flat } satisfies ShadedColorRef;
+  const flat = { id: 2, isCustom: false, shade: Shade.Flat } satisfies ShadedColorRef;
+  const dark = { ...flat, shade: Shade.Dark } satisfies ShadedColorRef;
+  const light = { ...flat, shade: Shade.Light } satisfies ShadedColorRef;
+  const droppedWater = [8, 4, 2] as const;
+  const levelWater = [0, 0, 0] as const;
+  const cases: readonly [string, number, ShadedColorRef, ShadedColorRef, WaterDrops | undefined, boolean][] = [
+    ["dominant flat south of transparency", 0, transparent, flat, undefined, true],
+    ["dominant dark south of transparency", 0, transparent, dark, undefined, true],
+    ["dominant light south of transparency", 0, transparent, light, undefined, false],
+    ["recessive flat south of transparency", 1, transparent, flat, undefined, false],
+    ["dominant flat south of solid", 0, solid, flat, droppedWater, false],
+    ["dominant dark south of solid", 0, solid, dark, droppedWater, false],
+    ["dominant flat south of dropped water", 0, water, flat, droppedWater, true],
+    ["dominant dark south of dropped water", 0, water, dark, droppedWater, true],
+    ["dominant light south of dropped water", 0, water, light, droppedWater, false],
+    ["recessive flat south of dropped water", 1, water, flat, droppedWater, false],
+    ["dominant flat south of level water", 0, water, flat, levelWater, false],
+    ["dominant dark south of level water", 0, water, dark, levelWater, true],
+    ["dark water south of transparency", 0, transparent, { ...water, shade: Shade.Dark }, droppedWater, false],
+    ["flat water south of water", 0, water, water, droppedWater, false],
+  ];
+
+  for (const [label, x, north, color, waterDrops, expected] of cases) {
+    const colorGrid: ColorGrid = Array.from(
+      { length: MAP_SIZE },
+      () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
+    );
+    colorGrid[x][0] = north;
+    colorGrid[x][1] = color;
+    const actual = requiresTwoLayerLateShading(colorGrid, waterDrops);
+    if (actual !== expected) throw new Error(`Unexpected late-pair eligibility for ${label}: ${actual}`);
+  }
+}
+
 async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
   const colorGrid: ColorGrid = Array.from(
     { length: MAP_SIZE },
     () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR),
   );
+  const waterDrops = [
+    DEFAULT_CRUBTECH_DARK_WATER_DROP + 1,
+    DEFAULT_CRUBTECH_FLAT_WATER_DROP + 1,
+    DEFAULT_CRUBTECH_LIGHT_WATER_DROP + 1,
+  ] as const;
+  colorGrid[4][0] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Flat };
+  colorGrid[4][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[6][0] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Flat };
+  colorGrid[6][1] = { id: 1, isCustom: false, shade: Shade.Dark };
+  colorGrid[9][0] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Flat };
+  colorGrid[9][1] = { id: 1, isCustom: false, shade: Shade.Flat };
+  colorGrid[12][0] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Flat };
+  colorGrid[12][1] = { id: 1, isCustom: false, shade: Shade.Light };
+  colorGrid[14][1] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Flat };
+  if (requiresTwoLayerLateShading(colorGrid)) {
+    throw new Error("Expected top-aligned water not to require 2-layer late pairs");
+  }
+  if (!requiresTwoLayerLateShading(colorGrid, waterDrops)) {
+    throw new Error("Expected dropped water south-neighbor shading to require 2-layer late pairs");
+  }
   colorGrid[0][1] = { id: 1, isCustom: false, shade: Shade.Flat };
   colorGrid[1][1] = { id: 1, isCustom: false, shade: Shade.Flat };
   colorGrid[3][2] = { id: 1, isCustom: false, shade: Shade.Flat };
@@ -1018,12 +1077,13 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
   const shape = generateShapeMap(
     colorGrid,
     undefined,
-    false,
+    true,
     true,
     true,
     {
       layerGap,
       suppress2LayerLatePairY: latePairY,
+      waterSetting: { kind: "below-platform", drops: waterDrops },
       mixSteps: false,
       paletteSeed: 0,
       buildAtWorldMinY: false,
@@ -1037,6 +1097,44 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
     },
   )[BuildMode.Suppress2LayerLatePairs];
   if (!shape) throw new Error("Expected suppress 2-layer late-pairs shape in CrubTech pause-marker invariant test");
+  const cells = shape.parts[0]?.cells;
+  if (!cells || shape.parts.length !== 1) throw new Error("Expected one CrubTech late-pairs shape part");
+  const flatColor = cells.get(toShapeCoordKey(4, latePairY, 1));
+  const flatFiller = cells.get(toShapeCoordKey(4, latePairY, 0));
+  if (
+    !flatColor ||
+    Array.isArray(flatColor) ||
+    flatColor.id !== 1 ||
+    !Array.isArray(flatFiller) ||
+    !flatFiller.includes(FillerRole.ShadeSuppressPushable)
+  ) {
+    throw new Error("Expected dropped-water flat color and filler together on the late-pairs layer");
+  }
+  const darkColor = cells.get(toShapeCoordKey(6, 0, 1));
+  const darkFiller = cells.get(toShapeCoordKey(6, latePairY, 0));
+  if (
+    !darkColor ||
+    Array.isArray(darkColor) ||
+    darkColor.id !== 1 ||
+    !Array.isArray(darkFiller) ||
+    !darkFiller.includes(FillerRole.ShadeSuppressPushable)
+  ) {
+    throw new Error("Expected dropped-water dark color prebuilt below and only its filler on the late-pairs layer");
+  }
+  if (
+    cells.has(toShapeCoordKey(4, 0, 1)) ||
+    cells.has(toShapeCoordKey(4, 0, 0)) ||
+    cells.has(toShapeCoordKey(6, 1, 0)) ||
+    cells.has(toShapeCoordKey(9, latePairY, 0)) ||
+    cells.has(toShapeCoordKey(9, latePairY, 1))
+  ) {
+    throw new Error("Expected no lower misplaced or recessive dropped-water late-pair cells");
+  }
+  for (const x of [12, 14]) {
+    if (cells.has(toShapeCoordKey(x, latePairY, 0)) || cells.has(toShapeCoordKey(x, latePairY, 1))) {
+      throw new Error(`Expected no late-pair cells for light/water target at x=${x}`);
+    }
+  }
 
   const expectedStepStartXs = new Set<number>();
   let lateLayerPushableCount = 0;
@@ -1075,6 +1173,9 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
       .filter(marker => marker.z === MAP_SIZE && marker.blockName === "minecraft:redstone_lamp[lit=true]")
       .map(marker => marker.x),
   );
+  if ([9, 13, 15].some(x => markerStepStartXs.has(x))) {
+    throw new Error("Expected recessive, light, and water-target CrubTech lamps to remain off");
+  }
   const expectedXs = [...expectedStepStartXs].sort((a, b) => a - b);
   const actualXs = [...markerStepStartXs].sort((a, b) => a - b);
   if (actualXs.length !== expectedXs.length || actualXs.some((x, index) => x !== expectedXs[index])) {
@@ -1202,6 +1303,7 @@ function assertDefaultLatePairYInvariant(): void {
 async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
   assertCrubTechPresetInvariant();
+  assertTwoLayerLatePairEligibilityInvariants();
   await assertCrubTechInvariants();
   await assertCrubTechWaterPlatformInvariant();
   await assertCrubTechLatePairPauseMarkerInvariants();

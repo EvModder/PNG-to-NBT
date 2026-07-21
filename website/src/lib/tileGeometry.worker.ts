@@ -64,7 +64,7 @@ function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileFinalGeo
     input.allSameShade,
     input.hasWater,
     input.hasTransparency,
-    input.hasTwoLayerLateVoidNeed,
+    input.requiresTwoLayerLateShading,
     {
       layerGap: input.layerGap,
       mixSteps: input.mixSteps,
