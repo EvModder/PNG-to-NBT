@@ -2,6 +2,8 @@
  * Public API:
  * - convertToNbt()
  * - convertToNbtEntries()
+ * - getCrubTechLayerSplitSectionCount()
+ * - convertToCrubTechLayerSplitNbtEntries()
  *
  * Callers:
  * - src/Index.tsx
@@ -292,6 +294,12 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
   return resolved.toSorted(comparePaletteSourceBlocks);
 }
 
+function materializeShapeParts(shape: GeneratedShape, options: ExportOptions): PaletteSourceBlock[][] {
+  return shape.parts.map(part =>
+    materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
+  );
+}
+
 function applyWestEastSlope(blocks: PaletteSourceBlock[], options: ExportOptions): void {
   if (!options.westEastSlope || isSuppressBuildMode(options.buildMode)) return;
   const rawRun = Number.isFinite(options.westEastSlope.run) ? Math.trunc(options.westEastSlope.run) : 0;
@@ -485,11 +493,11 @@ async function buildSplitEntries(
   ];
 }
 
-async function buildSingleEntry(
+function assembleCombinedExportBlocks(
   shape: GeneratedShape,
   parts: PaletteSourceBlock[][],
   options: ExportOptions,
-): Promise<NbtExportEntry> {
+): PaletteSourceBlock[] {
   const blocks = parts.flat();
   appendCrubTechPlatformBlocks(blocks, shape, options);
   for (const marker of buildSuppressLoadSpotMarkers(
@@ -505,9 +513,17 @@ async function buildSingleEntry(
   )) {
     blocks.push(marker);
   }
+  return blocks;
+}
+
+async function buildSingleEntry(
+  shape: GeneratedShape,
+  parts: PaletteSourceBlock[][],
+  options: ExportOptions,
+): Promise<NbtExportEntry> {
   return {
     name: `${options.baseName}.nbt`,
-    data: await writeExportBlocksToNbt(blocks, options),
+    data: await writeExportBlocksToNbt(assembleCombinedExportBlocks(shape, parts, options), options),
   };
 }
 
@@ -517,12 +533,63 @@ export async function convertToNbtEntries(
   shape: GeneratedShape,
   options: ExportOptions,
 ): Promise<NbtExportEntry[]> {
-  const parts = shape.parts.map(part =>
-    materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
-  );
+  const parts = materializeShapeParts(shape, options);
   for (const partBlocks of parts) applyWestEastSlope(partBlocks, options);
   if (shape.splitExportNames) return buildSplitEntries(parts, options, shape.splitExportNames);
   return [await buildSingleEntry(shape, parts, options)];
+}
+
+// Predicts how many section .nbt files convertToCrubTechLayerSplitNbtEntries() emits for one tile.
+// Callers:
+// - src/Index.tsx
+export function getCrubTechLayerSplitSectionCount(buildMode: BuildMode, hasWater: boolean): number {
+  return 2 + (buildMode === BuildMode.Suppress2LayerLatePairs ? 1 : 0) + (hasWater ? 1 : 0);
+}
+
+// Splits a CrubTech schematic into per-layer sections along the platform Y bands:
+// the bottom platform and everything below it form the water assembly, each block
+// layer starts just above its platform, and the late-pairs band (platform, pairs,
+// and signal lamps) starts at the late platform.
+// Callers:
+// - src/Index.tsx
+export async function convertToCrubTechLayerSplitNbtEntries(
+  shape: GeneratedShape,
+  options: ExportOptions,
+): Promise<NbtExportEntry[]> {
+  if (options.crubTech !== true || !isCrubTechBuildMode(options.buildMode)) {
+    throw new Error(`Layer-split export requires an active CrubTech build mode: ${options.buildMode}`);
+  }
+
+  const blocks = assembleCombinedExportBlocks(shape, materializeShapeParts(shape, options), options);
+  const platformYs = [...new Set(shape.parts.flatMap(part => [...part.supportFloorYs]))].sort((a, b) => a - b);
+  const bottomPlatformY = platformYs[0] ?? -1;
+  const upperPlatformY = platformYs[1] ?? bottomPlatformY + 1;
+  const latePlatformY = options.buildMode === BuildMode.Suppress2LayerLatePairs
+    ? platformYs[2] ?? (options.suppress2LayerLatePairY !== undefined ? options.suppress2LayerLatePairY - 1 : undefined)
+    : undefined;
+
+  const layer1Blocks: PaletteSourceBlock[] = [];
+  const layer2Blocks: PaletteSourceBlock[] = [];
+  const latePairBlocks: PaletteSourceBlock[] = [];
+  const waterBlocks: PaletteSourceBlock[] = [];
+  for (const block of blocks) {
+    if (block.y <= bottomPlatformY) waterBlocks.push(block);
+    else if (block.y < upperPlatformY) layer1Blocks.push(block);
+    else if (latePlatformY !== undefined && block.y >= latePlatformY) latePairBlocks.push(block);
+    else layer2Blocks.push(block);
+  }
+
+  const sections: [sectionName: string, sectionBlocks: PaletteSourceBlock[]][] = [
+    ["1", layer1Blocks],
+    ["2", layer2Blocks],
+  ];
+  if (latePlatformY !== undefined) sections.push(["late_pairs", latePairBlocks]);
+  if (waterBlocks.length > 0) sections.push(["water", waterBlocks]);
+
+  return Promise.all(sections.map(async ([sectionName, sectionBlocks]) => ({
+    name: `${options.baseName}-${sectionName}.nbt`,
+    data: await writeExportBlocksToNbt(sectionBlocks, options),
+  })));
 }
 
 export async function convertToNbt(

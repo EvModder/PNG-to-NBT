@@ -15,7 +15,7 @@ import { CRUBTECH_PRESET_NAME, getBuiltinPreset } from "@/data/presets";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAnalysis";
-import { convertToNbt } from "@/lib/nbtExport";
+import { convertToCrubTechLayerSplitNbtEntries, convertToNbt } from "@/lib/nbtExport";
 import { createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { generateShapeMap } from "@/lib/shapeGeneration";
@@ -825,6 +825,52 @@ async function assertCrubTechInvariants(): Promise<void> {
     throw new Error(`Expected no plain CrubTech late-pair glass platform, got ${omittedLatePlatformCount} blocks`);
   }
 
+  const plainLayerSplitEntries = await convertToCrubTechLayerSplitNbtEntries(withCrubTech, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [
+      { role: FillerRole.ShadeNorthRowBreakable, block: "diamond_block" },
+      { role: FillerRole.ShadeNorthRowPushable, block: "diamond_block" },
+      { role: FillerRole.ShadeSuppressBreakable, block: "gold_block" },
+      { role: FillerRole.ShadeSuppressPushable, block: "emerald_block" },
+    ],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: true,
+    forceZ129: false,
+    baseName: "crubtech-noobline-test",
+    buildMode: BuildMode.Suppress2Layer,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+    crubTech: true,
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  const plainLayerSplitNames = plainLayerSplitEntries.map(entry => entry.name);
+  const expectedPlainLayerSplitNames = ["crubtech-noobline-test-1.nbt", "crubtech-noobline-test-2.nbt"];
+  if (
+    plainLayerSplitNames.length !== expectedPlainLayerSplitNames.length ||
+    plainLayerSplitNames.some((name, index) => name !== expectedPlainLayerSplitNames[index])
+  ) {
+    throw new Error(`Unexpected plain CrubTech layer-split entries: [${plainLayerSplitNames.join(", ")}]`);
+  }
+  const plainLayer1Bytes = new Uint8Array(gunzipSync(plainLayerSplitEntries[0].data));
+  const plainLayer2Bytes = new Uint8Array(gunzipSync(plainLayerSplitEntries[1].data));
+  assertBytesContainAscii(plainLayer1Bytes, "minecraft:stone", "Layer-split section 1 should contain the dominant-layer colors");
+  assertBytesContainAscii(plainLayer1Bytes, "minecraft:moss_block", "Layer-split section 1 should contain the noobline fillers");
+  assertBytesDoNotContainAscii(plainLayer1Bytes, "minecraft:glass", "Layer-split section 1 should not contain platform glass");
+  assertBytesDoNotContainAscii(plainLayer1Bytes, "minecraft:gold_block", "Layer-split section 1 should not contain upper-layer breakable fillers");
+  assertBytesContainAscii(plainLayer2Bytes, "minecraft:glass", "Layer-split section 2 should contain the upper platform glass");
+  assertBytesContainAscii(plainLayer2Bytes, "minecraft:gold_block", "Layer-split section 2 should contain upper-layer breakable fillers");
+  assertBytesDoNotContainAscii(plainLayer2Bytes, "minecraft:redstone_lamp", "Plain layer-split sections should not contain signal lamps");
+  const plainLayerSplitBlockCount =
+    parseStructureBlocks(plainLayer1Bytes).length + parseStructureBlocks(plainLayer2Bytes).length;
+  if (plainLayerSplitBlockCount !== exportedBlocks.length) {
+    throw new Error(
+      `Expected plain layer-split sections to cover the full export: ${plainLayerSplitBlockCount} !== ${exportedBlocks.length}`,
+    );
+  }
+
   const crubTechSupportAssignments = createFillerAssignments(
     "diamond_block",
     "stone",
@@ -1243,6 +1289,64 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
     "minecraft:redstone_lamp",
     "CrubTech export should include pause/continue signal lamps",
   );
+
+  const layerSplitEntries = await convertToCrubTechLayerSplitNbtEntries(shape, {
+    selectedBlocks: { 1: "stone" },
+    selectedBlocksCustom: {},
+    customColors: [],
+    fillerAssignments: [
+      { role: FillerRole.ShadeSuppressBreakable, block: "moss_block" },
+      { role: FillerRole.ShadeSuppressPushable, block: "resin_block" },
+    ],
+    applySupportFloorYs: false,
+    collapseDuplicatePaletteStates: true,
+    forceXZ128: true,
+    forceZ129: false,
+    baseName: "crubtech-pause-marker-test",
+    buildMode: BuildMode.Suppress2LayerLatePairs,
+    suppressStepDirection: SuppressStepDirection.WestToEast,
+    suppress2LayerLatePairY: latePairY,
+    crubTech: true,
+    markSuppressLoadSpotsInSchematic: false,
+    suppressLoadSpotMarkerBlock: "jigsaw",
+  });
+  const layerSplitNames = layerSplitEntries.map(entry => entry.name);
+  const expectedLayerSplitNames = [
+    "crubtech-pause-marker-test-1.nbt",
+    "crubtech-pause-marker-test-2.nbt",
+    "crubtech-pause-marker-test-late_pairs.nbt",
+    "crubtech-pause-marker-test-water.nbt",
+  ];
+  if (
+    layerSplitNames.length !== expectedLayerSplitNames.length ||
+    layerSplitNames.some((name, index) => name !== expectedLayerSplitNames[index])
+  ) {
+    throw new Error(`Unexpected CrubTech layer-split entries: [${layerSplitNames.join(", ")}]`);
+  }
+  const [layer1Bytes, layer2Bytes, latePairBytes, waterBytes] = layerSplitEntries.map(
+    entry => new Uint8Array(gunzipSync(entry.data)),
+  );
+  assertBytesContainAscii(layer1Bytes, "minecraft:stone", "Layer-split section 1 should contain the dominant-layer colors");
+  assertBytesDoNotContainAscii(layer1Bytes, "minecraft:glass", "Layer-split section 1 should not contain platform glass");
+  assertBytesContainAscii(layer2Bytes, "minecraft:glass", "Layer-split section 2 should contain the upper platform glass");
+  assertBytesDoNotContainAscii(layer2Bytes, "minecraft:redstone_lamp", "Layer-split section 2 should not contain signal lamps");
+  assertBytesContainAscii(latePairBytes, "minecraft:glass", "Layer-split late_pairs section should contain the late platform glass");
+  assertBytesContainAscii(latePairBytes, "minecraft:redstone_lamp", "Layer-split late_pairs section should contain the signal lamps");
+  assertBytesContainAscii(latePairBytes, "minecraft:resin_block", "Layer-split late_pairs section should contain late pushable fillers");
+  assertBytesContainAscii(waterBytes, "minecraft:glass", "Layer-split water section should contain the bottom platform glass");
+  assertBytesContainAscii(waterBytes, "minecraft:glass_pane", "Layer-split water section should contain the water shade panes");
+  assertBytesContainAscii(waterBytes, "minecraft:chain", "Layer-split water section should contain the catcher chains");
+  assertBytesContainAscii(waterBytes, "minecraft:water", "Layer-split water section should contain the water columns");
+  const layerSplitBlockCount = layerSplitEntries.reduce(
+    (sum, entry) => sum + parseStructureBlocks(new Uint8Array(gunzipSync(entry.data))).length,
+    0,
+  );
+  const singleExportBlockCount = parseStructureBlocks(new Uint8Array(gunzipSync(exportResult.data))).length;
+  if (layerSplitBlockCount !== singleExportBlockCount) {
+    throw new Error(
+      `Expected layer-split sections to cover the full export: ${layerSplitBlockCount} !== ${singleExportBlockCount}`,
+    );
+  }
 }
 
 function assertDefaultLatePairYInvariant(): void {

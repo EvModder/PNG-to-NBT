@@ -48,6 +48,9 @@ type PanelImagePreviewProps = {
   usesIceForWater: boolean;
   clearImage: () => void;
   handleConvertAndDownload: () => void;
+  showLayerSplitButton: boolean;
+  handleLayerSplitConvertAndDownload: () => void;
+  layerSplitButtonLabel: string;
   converting: boolean;
   generateButtonLabel: string;
   busy: boolean;
@@ -180,6 +183,9 @@ export function PanelImagePreview({
   usesIceForWater,
   clearImage,
   handleConvertAndDownload,
+  showLayerSplitButton,
+  handleLayerSplitConvertAndDownload,
+  layerSplitButtonLabel,
   converting,
   generateButtonLabel,
   busy,
@@ -531,7 +537,7 @@ export function PanelImagePreview({
         </div>
       )}
       {imageData && canGenerate && (
-        <div className="mt-2 flex justify-start">
+        <div className="mt-2 flex justify-start gap-2">
           <button
             type="button"
             onClick={handleConvertAndDownload}
@@ -540,6 +546,16 @@ export function PanelImagePreview({
           >
             {converting ? messages.upload.convertButton(true, false) : generateButtonLabel}
           </button>
+          {showLayerSplitButton && (
+            <button
+              type="button"
+              onClick={handleLayerSplitConvertAndDownload}
+              disabled={converting || busy}
+              className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {layerSplitButtonLabel}
+            </button>
+          )}
         </div>
       )}
     </section>

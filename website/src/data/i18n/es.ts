@@ -282,6 +282,8 @@ export const esCatalog = {
     convertButtonNbt: "Generar .nbt",
     convertButtonZip: "Generar .zip",
     convertButtonZipCount: "Generar .zip ({count} ids)",
+    convertButtonLayerSplit: "Por capas ({count})",
+    convertButtonLayerSplitZip: "Por capas .zip ({count})",
   },
   preview: {
     missingBlockAssignments: {

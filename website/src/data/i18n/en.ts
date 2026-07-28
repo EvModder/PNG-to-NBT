@@ -286,6 +286,8 @@ export const enCatalog = {
     convertButtonNbt: "Generate .nbt",
     convertButtonZip: "Generate .zip",
     convertButtonZipCount: "Generate .zip ({count} ids)",
+    convertButtonLayerSplit: "Layer-split ({count})",
+    convertButtonLayerSplitZip: "Layer-split .zip ({count})",
   },
   preview: {
     missingBlockAssignments: {

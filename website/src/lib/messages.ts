@@ -416,6 +416,12 @@ export const messages = {
     convertButtonZipCount(count: number): string {
       return formatTemplate(catalog.upload.convertButtonZipCount, { count });
     },
+    convertButtonLayerSplit(count: number): string {
+      return formatTemplate(catalog.upload.convertButtonLayerSplit, { count });
+    },
+    convertButtonLayerSplitZip(count: number): string {
+      return formatTemplate(catalog.upload.convertButtonLayerSplitZip, { count });
+    },
   },
   preview: {
     missingBlockAssignments(count: number): string {

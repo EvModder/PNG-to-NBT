@@ -60,7 +60,7 @@ import {
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
-import { convertToNbtEntries } from "@/lib/nbtExport";
+import { convertToCrubTechLayerSplitNbtEntries, convertToNbtEntries, getCrubTechLayerSplitSectionCount } from "@/lib/nbtExport";
 import {
   convertImageToColorGridSet,
   convertImageToColorGridSetAsync,
@@ -2834,7 +2834,7 @@ const Index = () => {
     return () => window.removeEventListener("paste", handlePaste);
   }, []);
 
-  const handleConvertAndDownload = async () => {
+  const runConvertAndDownload = async (layerSplit: boolean) => {
     if (!imageValid || tileAnalyses.length === 0) return;
     setConverting(true);
     try {
@@ -2846,9 +2846,10 @@ const Index = () => {
         ? { run: westEastSlopeRun, rise: westEastSlopeRise }
         : undefined;
 
+      const convertTileToNbtEntries = layerSplit ? convertToCrubTechLayerSplitNbtEntries : convertToNbtEntries;
       for (const tile of exportTileAnalyses) {
         if (!tile.supportShape) throw new Error(messages.parsing.conversionFailed);
-        const tileEntries = await convertToNbtEntries(tile.supportShape, {
+        const tileEntries = await convertTileToNbtEntries(tile.supportShape, {
           selectedBlocks: preset.selectedBlocks,
           fillerAssignments: uiFillerAssignments,
           applySupportFloorYs: effectiveApplySupportFloorYs,
@@ -2901,6 +2902,13 @@ const Index = () => {
       setPaletteNotices([messages.parsing.errorNotice((e as Error).message || messages.parsing.conversionFailed)]);
     }
     setConverting(false);
+  };
+
+  const handleConvertAndDownload = () => {
+    void runConvertAndDownload(false);
+  };
+  const handleLayerSplitConvertAndDownload = () => {
+    void runConvertAndDownload(true);
   };
 
   const addCustomColor = () => {
@@ -3354,6 +3362,20 @@ const Index = () => {
       );
     },
     [hasMultipleTiles, effectiveSelectedTileCount, buildMode],
+  );
+  const layerSplitNbtCount = useMemo(
+    () => activeOutputTileAnalyses.reduce(
+      (sum, tile) => sum + getCrubTechLayerSplitSectionCount(effectiveBuildMode, tile.hasWater),
+      0,
+    ),
+    [activeOutputTileAnalyses, effectiveBuildMode],
+  );
+  const layerSplitGenerateButtonLabel = useMemo(
+    () =>
+      hasMultipleTiles && effectiveSelectedTileCount !== 1
+        ? messages.upload.convertButtonLayerSplitZip(layerSplitNbtCount)
+        : messages.upload.convertButtonLayerSplit(layerSplitNbtCount),
+    [hasMultipleTiles, effectiveSelectedTileCount, layerSplitNbtCount],
   );
   const canCopyImageShareUrl = tileCount === 1 && !!imageColorGrid && imageValid;
   const presetPrimaryActionTitle = presetDirty ? messages.presets.saveTitle : messages.presets.shareTitle;
@@ -3982,6 +4004,9 @@ const Index = () => {
               usesIceForWater={usesIceForWater}
               clearImage={clearImage}
               handleConvertAndDownload={handleConvertAndDownload}
+              showLayerSplitButton={crubTechControlsActive2LayerSettings}
+              handleLayerSplitConvertAndDownload={handleLayerSplitConvertAndDownload}
+              layerSplitButtonLabel={layerSplitGenerateButtonLabel}
               converting={converting}
               generateButtonLabel={generateButtonLabel}
               busy={previewBusy}
