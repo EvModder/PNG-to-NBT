@@ -18,7 +18,7 @@ import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
+import { isSuppressBuildMode } from "@/utils/conversion";
 
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
@@ -299,12 +299,10 @@ function getMaxSupportFloorY(shape: GeneratedShape): number | null {
   return Number.isFinite(maxSupportFloorY) ? maxSupportFloorY : null;
 }
 
-function getDefaultCrubTechLatePairY(shape: GeneratedShape, buildMode: BuildMode): number {
+function getDefaultCrubTechLatePairY(shape: GeneratedShape): number {
   const maxSupportFloorY = getMaxSupportFloorY(shape);
   if (maxSupportFloorY === null) return DEFAULT_CRUBTECH_LAYER_GAP + DEFAULT_CRUBTECH_LATE_PAIRS_GAP;
-  return buildMode === BuildMode.Suppress2Layer
-    ? maxSupportFloorY + 1 + DEFAULT_CRUBTECH_LATE_PAIRS_GAP
-    : maxSupportFloorY + 1;
+  return maxSupportFloorY + 1;
 }
 
 function getCrubTechSignalLampY(shape: GeneratedShape, latePairY: number): number | null {
@@ -507,20 +505,19 @@ function buildCrubTechSignalLamps(
   enabled: boolean,
   latePairY: number,
 ): LoadSpotMarkerEntry[] {
-  if (!enabled || !isCrubTechBuildMode(buildMode)) {
+  // Plain 2-layer has no late build pass, so it emits no pause/continue lamps.
+  if (!enabled || buildMode !== BuildMode.Suppress2LayerLatePairs) {
     return [];
   }
   const lampY = getCrubTechSignalLampY(shape, latePairY);
   if (lampY === null) return [];
 
   const stepStartXs = new Set<number>();
-  if (buildMode === BuildMode.Suppress2LayerLatePairs) {
-    for (const part of shape.parts) {
-      for (const [coord] of part.cells) {
-        const [x, y, z] = parseShapeCoordKey(coord);
-        if (y !== latePairY || x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
-        stepStartXs.add(getCrubTechStepStartX(x));
-      }
+  for (const part of shape.parts) {
+    for (const [coord] of part.cells) {
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (y !== latePairY || x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
+      stepStartXs.add(getCrubTechStepStartX(x));
     }
   }
 
@@ -545,7 +542,7 @@ export function buildSuppressLoadSpotMarkers(
   options: BuildLoadSpotMarkerOptions,
 ): LoadSpotMarkerEntry[] {
   const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
-  const crubTechLatePairY = options.suppress2LayerLatePairY ?? getDefaultCrubTechLatePairY(shape, buildMode);
+  const crubTechLatePairY = options.suppress2LayerLatePairY ?? getDefaultCrubTechLatePairY(shape);
   return [
     ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),
     ...buildCrubTechSignalLamps(

@@ -722,18 +722,9 @@ async function assertCrubTechInvariants(): Promise<void> {
       crubTech: true,
       suppressLoadSpotMarkerBlock: "jigsaw",
     },
-  ).filter(marker => marker.z === MAP_SIZE && marker.blockName.startsWith("minecraft:redstone_lamp"));
-  if (plainSignals.length !== MAP_SIZE / 2) {
-    throw new Error(`Expected ${MAP_SIZE / 2} plain CrubTech signal lamps, got ${plainSignals.length}`);
-  }
-  const expectedPlainSignalY = layerGap + DEFAULT_CRUBTECH_LATE_PAIRS_GAP + 3;
-  const misplacedPlainSignal = plainSignals.find(marker => marker.y !== expectedPlainSignalY);
-  if (misplacedPlainSignal) {
-    throw new Error(`Expected plain CrubTech signal lamps at y=${expectedPlainSignalY}, got y=${misplacedPlainSignal.y}`);
-  }
-  const litPlainSignal = plainSignals.find(marker => marker.blockName === "minecraft:redstone_lamp[lit=true]");
-  if (litPlainSignal) {
-    throw new Error(`Expected plain CrubTech signal lamps to be unlit, got lit lamp at x=${litPlainSignal.x}`);
+  ).filter(marker => marker.blockName.startsWith("minecraft:redstone_lamp"));
+  if (plainSignals.length !== 0) {
+    throw new Error(`Expected no plain CrubTech signal lamps, got ${plainSignals.length}`);
   }
 
   const bottomLayerGrid: ColorGrid = Array.from(
@@ -808,7 +799,7 @@ async function assertCrubTechInvariants(): Promise<void> {
   assertBytesContainAscii(bytes, "minecraft:moss_block", "CrubTech noobline export should force moss");
   assertBytesDoNotContainAscii(bytes, "minecraft:diamond_block", "CrubTech noobline export should ignore caller-provided north-row blocks");
   assertBytesContainAscii(bytes, "minecraft:glass", "Plain CrubTech export should include prebuilt platform glass");
-  assertBytesContainAscii(bytes, "minecraft:redstone_lamp", "Plain CrubTech export should include all-off signal lamps");
+  assertBytesDoNotContainAscii(bytes, "minecraft:redstone_lamp", "Plain CrubTech export should omit signal lamps");
   assertBytesDoNotContainAscii(bytes, "minecraft:glass_pane", "No-water CrubTech export should omit water platform panes");
   assertBytesDoNotContainAscii(bytes, "minecraft:chain", "No-water CrubTech export should omit water catcher chains");
   assertBytesDoNotContainAscii(bytes, "minecraft:water", "No-water CrubTech export should omit falling water columns");
@@ -822,12 +813,16 @@ async function assertCrubTechInvariants(): Promise<void> {
   if (omittedBottomPlatformCount !== 0) {
     throw new Error(`Expected no CrubTech bottom glass platform without water colors, got ${omittedBottomPlatformCount} blocks`);
   }
-  const expectedPlatformYs = [layerGap - 1, layerGap - 1 + DEFAULT_CRUBTECH_LATE_PAIRS_GAP];
+  const expectedPlatformYs = [layerGap - 1];
   for (const y of expectedPlatformYs) {
     const count = glassCountsByY.get(y) ?? 0;
     if (count !== MAP_SIZE * MAP_SIZE) {
       throw new Error(`Expected full CrubTech glass platform at exported y=${y}, got ${count} blocks`);
     }
+  }
+  const omittedLatePlatformCount = glassCountsByY.get(layerGap - 1 + DEFAULT_CRUBTECH_LATE_PAIRS_GAP) ?? 0;
+  if (omittedLatePlatformCount !== 0) {
+    throw new Error(`Expected no plain CrubTech late-pair glass platform, got ${omittedLatePlatformCount} blocks`);
   }
 
   const crubTechSupportAssignments = createFillerAssignments(
@@ -1195,13 +1190,9 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
       suppressLoadSpotMarkerBlock: "jigsaw",
     },
   );
-  const plainModeSignalLamps = plainModeMarkers.filter(marker => marker.z === MAP_SIZE && marker.blockName.startsWith("minecraft:redstone_lamp"));
-  if (plainModeSignalLamps.length !== MAP_SIZE / 2) {
-    throw new Error(`Expected ${MAP_SIZE / 2} plain CrubTech signal lamps, got ${plainModeSignalLamps.length}`);
-  }
-  const plainModeLitLamp = plainModeSignalLamps.find(marker => marker.blockName === "minecraft:redstone_lamp[lit=true]");
-  if (plainModeLitLamp) {
-    throw new Error(`Expected plain CrubTech signal lamps to be unlit, got lit lamp at x=${plainModeLitLamp.x}`);
+  const plainModeSignalLamps = plainModeMarkers.filter(marker => marker.blockName.startsWith("minecraft:redstone_lamp"));
+  if (plainModeSignalLamps.length !== 0) {
+    throw new Error(`Expected no plain-mode CrubTech signal lamps, got ${plainModeSignalLamps.length}`);
   }
   const misplacedLamp = signalLamps.find(marker => marker.y !== expectedLampY);
   if (misplacedLamp) {

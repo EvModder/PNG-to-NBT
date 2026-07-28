@@ -9,7 +9,6 @@
 import { MAP_SIZE } from "@/utils/color";
 import {
   DEFAULT_NBT_AUTHOR,
-  DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
   DEFAULT_CRUBTECH_FLAT_WATER_DROP,
   DEFAULT_CRUBTECH_DARK_WATER_DROP,
@@ -170,7 +169,7 @@ type ExportBoundsOptions = Pick<
 >;
 
 function hasCrubTechPauseMarkers(options: ExportBoundsOptions): boolean {
-  return options.crubTech === true && isCrubTechBuildMode(options.buildMode);
+  return options.crubTech === true && options.buildMode === BuildMode.Suppress2LayerLatePairs;
 }
 
 function getLoadMarkerDistance(options: ExportBoundsOptions): number {
@@ -367,10 +366,9 @@ function appendCrubTechPlatformBlocks(
   for (const part of shape.parts) {
     for (const y of part.supportFloorYs) platformYs.add(y);
   }
-  if (options.suppress2LayerLatePairY !== undefined) {
+  // Plain 2-layer has no late build pass, so it gets no late-pair platform (or lamps).
+  if (options.buildMode === BuildMode.Suppress2LayerLatePairs && options.suppress2LayerLatePairY !== undefined) {
     platformYs.add(options.suppress2LayerLatePairY - 1);
-  } else if (options.buildMode === BuildMode.Suppress2Layer && platformYs.size > 0) {
-    platformYs.add(Math.max(...platformYs) + DEFAULT_CRUBTECH_LATE_PAIRS_GAP);
   }
   if (platformYs.size === 0) return;
 
