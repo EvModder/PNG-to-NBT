@@ -4,6 +4,7 @@ website/reports/
 website/.tmp*
 work_files/
 sample_imgs/
+minecraft-wiki/
 upstream-compare-*/
 
 # Log crap
