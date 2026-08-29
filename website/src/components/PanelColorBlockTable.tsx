@@ -745,7 +745,7 @@ export function PanelColorBlockTable({
     return (
       <div
         key={idx}
-        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 ${
+        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 odd:bg-foreground/[0.02] ${
           isMissing ? "relative z-[1] rounded" : ""
         }`}
         style={gridColsStyle}

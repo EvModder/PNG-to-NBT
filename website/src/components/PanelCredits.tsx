@@ -74,7 +74,15 @@ export function PanelCredits({
         >
           {messages.credits.evModderName}
         </a>{" "}
-        — {messages.credits.evModderRole}
+        — {messages.credits.evModderRole}{" "}
+        <a
+          href={messages.credits.mapToolsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          {messages.credits.mapToolsName}
+        </a>
       </p>
       <p>
         <a
