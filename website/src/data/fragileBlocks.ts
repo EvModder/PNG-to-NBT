@@ -25,7 +25,7 @@ const FRAGILE_BLOCKS = new Set([
   "dark_oak_pressure_plate", "crimson_pressure_plate", "warped_pressure_plate",
   "cherry_pressure_plate", "pale_oak_pressure_plate",
   "light_weighted_pressure_plate", "heavy_weighted_pressure_plate",
-  "mangrove_pressure_plate",
+  "mangrove_pressure_plate", "polished_blackstone_pressure_plate",
 
     // Signs (standing)
   "oak_sign", "birch_sign", "spruce_sign", "jungle_sign", "acacia_sign",
