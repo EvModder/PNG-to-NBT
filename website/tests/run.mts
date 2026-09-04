@@ -55,6 +55,13 @@ import { SupportMode } from "@/types/ui";
 const TEST_ROOT = import.meta.dir;
 const CASES_ROOT = path.join(TEST_ROOT, "cases");
 const FAILURE_ROOT = path.join(TEST_ROOT, "failures");
+const REPO_ROOT = path.resolve(TEST_ROOT, "../..");
+
+// Reports and console output are shared/committed, so they must never carry absolute
+// local paths; the absolute forms stay in use for actual file I/O.
+function toRepoRelativePath(absolutePath: string): string {
+  return path.relative(REPO_ROOT, absolutePath);
+}
 const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
 type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -577,7 +584,7 @@ async function persistFailureArtifacts(caseName: string, payload: FailurePayload
   if (payload.actualData && payload.actualExt) {
     await writeFile(path.join(targetDir, `actual${payload.actualExt}`), payload.actualData);
   }
-  return targetDir;
+  return toRepoRelativePath(targetDir);
 }
 
 async function findFixtureCaseJsons(rootDir: string): Promise<DiscoveredCase[]> {
@@ -763,8 +770,8 @@ async function runFixtureCase(
       title: `Blocking image parsing issue in ${testCase.discovered.caseName}`,
       report: {
         caseName: testCase.discovered.caseName,
-        inputPath: testCase.inputPath,
-        outputPath: testCase.outputPath,
+        inputPath: toRepoRelativePath(testCase.inputPath),
+        outputPath: toRepoRelativePath(testCase.outputPath),
         paletteNotices: analysis.paletteNotices,
         hasBlockingIssue: analysis.hasBlockingIssue,
         settings: testCase.settings,
@@ -860,8 +867,8 @@ async function runFixtureCase(
 
   const reportBase = {
     caseName: testCase.discovered.caseName,
-    inputPath: testCase.inputPath,
-    outputPath: testCase.outputPath,
+    inputPath: toRepoRelativePath(testCase.inputPath),
+    outputPath: toRepoRelativePath(testCase.outputPath),
     baseName: testCase.baseName,
     preset: testCase.preset.name,
     selectedWaterBlock,
@@ -989,7 +996,7 @@ async function runFixtureCase(
       ok: false,
       reason: [
         `Byte mismatch in ${testCase.discovered.caseName}`,
-        `output: ${testCase.outputPath}`,
+        `output: ${toRepoRelativePath(testCase.outputPath)}`,
         `artifacts: ${artifactsDir}`,
       ].join("\n"),
       artifactsDir,
@@ -1005,7 +1012,7 @@ async function main(): Promise<number> {
   const requestedCases = new Set(rawArgs.filter(arg => arg !== "--update"));
   const discovered = await findFixtureCaseJsons(CASES_ROOT);
   if (discovered.length === 0) {
-    console.log(`No export fixture cases found under ${CASES_ROOT}`);
+    console.log(`No export fixture cases found under ${toRepoRelativePath(CASES_ROOT)}`);
     return 0;
   }
 
