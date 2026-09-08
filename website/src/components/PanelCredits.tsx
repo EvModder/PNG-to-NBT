@@ -95,6 +95,17 @@ export function PanelCredits({
         </a>{" "}
         — {messages.credits.gu2t4vRole}
       </p>
+      <p>
+        <a
+          href={messages.credits.crubleighUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          {messages.credits.crubleighName}
+        </a>{" "}
+        — {messages.credits.crubleighRole}
+      </p>
       <p>GPT <OpenAiCreditIcon /> — {messages.credits.gptNote}</p>
     </div>
   );
