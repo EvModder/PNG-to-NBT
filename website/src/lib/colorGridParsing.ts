@@ -2,6 +2,7 @@
  * Public API:
  * - ParsedColorGridTile
  * - ColorGridSetParseResult
+ * - getTargetTileDimensions()
  * - convertImageToColorGrid()
  * - convertImageToColorGridSet()
  * - loadImageDataFromFile()
@@ -9,8 +10,10 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelImagePreview.tsx
  */
 import * as UTIF from "utif";
+import { type InvalidDimensionsMode } from "@/data/defaultSettings";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { MAP_SIZE } from "@/utils/color";
 import { type ColorGrid, type ColorRgb } from "@/types/color";
@@ -81,27 +84,78 @@ function cropImageData(
   return new ImageData(croppedData, width, height);
 }
 
-function maybeCropImageToTileMultiples(imageData: ImageData, cropImage: boolean): ImagePreprocessResult {
-  if (!cropImage) return { imageData, paletteNotices: [] };
+function padImageData(
+  imageData: ImageData,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): ImageData {
+  const paddedData = new Uint8ClampedArray(width * height * 4);
+  const sourceRowWidth = imageData.width * 4;
 
-  const targetWidth = imageData.width - (imageData.width % MAP_SIZE);
-  const targetHeight = imageData.height - (imageData.height % MAP_SIZE);
-  const shouldCrop =
-    (targetWidth !== imageData.width || targetHeight !== imageData.height) &&
-    targetWidth >= MAP_SIZE &&
-    targetHeight >= MAP_SIZE;
+  for (let row = 0; row < imageData.height; ++row) {
+    const sourceStart = row * sourceRowWidth;
+    const targetStart = ((top + row) * width + left) * 4;
+    paddedData.set(imageData.data.subarray(sourceStart, sourceStart + sourceRowWidth), targetStart);
+  }
 
-  if (!shouldCrop) return { imageData, paletteNotices: [] };
+  return new ImageData(paddedData, width, height);
+}
 
-  const left = Math.floor((imageData.width - targetWidth) / 2);
-  const top = Math.floor((imageData.height - targetHeight) / 2);
-  const right = imageData.width - targetWidth - left;
-  const bottom = imageData.height - targetHeight - top;
+// Callers:
+// - src/Index.tsx
+// - src/components/PanelImagePreview.tsx
+export function getTargetTileDimensions(
+  width: number,
+  height: number,
+  mode: InvalidDimensionsMode,
+): { width: number; height: number } {
+  if (mode === "reject" || width <= 0 || height <= 0) return { width, height };
+  if (mode === "pad") {
+    return {
+      width: Math.max(MAP_SIZE, Math.ceil(width / MAP_SIZE) * MAP_SIZE),
+      height: Math.max(MAP_SIZE, Math.ceil(height / MAP_SIZE) * MAP_SIZE),
+    };
+  }
+  const croppedWidth = width - (width % MAP_SIZE);
+  const croppedHeight = height - (height % MAP_SIZE);
+  // Too small to crop down to a whole tile; leave it for the size check to reject.
+  if (croppedWidth < MAP_SIZE || croppedHeight < MAP_SIZE) return { width, height };
+  return { width: croppedWidth, height: croppedHeight };
+}
 
+function resizeImageToTileMultiples(
+  imageData: ImageData,
+  mode: InvalidDimensionsMode,
+): ImagePreprocessResult {
+  const target = getTargetTileDimensions(imageData.width, imageData.height, mode);
+  if (target.width === imageData.width && target.height === imageData.height) {
+    return { imageData, paletteNotices: [] };
+  }
+
+  if (mode === "pad") {
+    const left = Math.floor((target.width - imageData.width) / 2);
+    const top = Math.floor((target.height - imageData.height) / 2);
+    const right = target.width - imageData.width - left;
+    const bottom = target.height - imageData.height - top;
+    return {
+      imageData: padImageData(imageData, left, top, target.width, target.height),
+      paletteNotices: [
+        messages.parsing.paddedImageNotice(target.width, target.height),
+        messages.parsing.paddedImageAddedPixelsNotice(left, right, top, bottom),
+      ],
+    };
+  }
+
+  const left = Math.floor((imageData.width - target.width) / 2);
+  const top = Math.floor((imageData.height - target.height) / 2);
+  const right = imageData.width - target.width - left;
+  const bottom = imageData.height - target.height - top;
   return {
-    imageData: cropImageData(imageData, left, top, targetWidth, targetHeight),
+    imageData: cropImageData(imageData, left, top, target.width, target.height),
     paletteNotices: [
-      messages.parsing.croppedImageNotice(targetWidth, targetHeight),
+      messages.parsing.croppedImageNotice(target.width, target.height),
       messages.parsing.croppedImageRemovedPixelsNotice(left, right, top, bottom),
     ],
   };
@@ -203,9 +257,9 @@ export function convertImageToColorGrid(
   imageData: ImageData,
   customColors: ColorRgb[],
   convertUnsupported = false,
-  cropImage = false,
+  invalidDimensionsMode: InvalidDimensionsMode = "reject",
 ): ColorGridParseResult {
-  const preprocessed = maybeCropImageToTileMultiples(imageData, cropImage);
+  const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
   const workingImageData = preprocessed.imageData;
   const baseLookup = getBaseColorLookup();
   const customLookup = buildCustomShadeLookup(customColors);
@@ -261,9 +315,9 @@ export function convertImageToColorGridSet(
   imageData: ImageData,
   customColors: ColorRgb[],
   convertUnsupported = false,
-  cropImage = false,
+  invalidDimensionsMode: InvalidDimensionsMode = "reject",
 ): ColorGridSetParseResult {
-  const preprocessed = maybeCropImageToTileMultiples(imageData, cropImage);
+  const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
   const baseImageData = preprocessed.imageData;
   const validWidth = baseImageData.width > 0 && baseImageData.width % MAP_SIZE === 0;
   const validHeight = baseImageData.height > 0 && baseImageData.height % MAP_SIZE === 0;
@@ -354,10 +408,10 @@ export async function convertImageToColorGridSetAsync(
   imageData: ImageData,
   customColors: ColorRgb[],
   convertUnsupported = false,
-  cropImage = false,
+  invalidDimensionsMode: InvalidDimensionsMode = "reject",
   onProgress?: (completed: number, total: number) => void,
 ): Promise<ColorGridSetParseResult> {
-  const preprocessed = maybeCropImageToTileMultiples(imageData, cropImage);
+  const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
   const baseImageData = preprocessed.imageData;
   const validWidth = baseImageData.width > 0 && baseImageData.width % MAP_SIZE === 0;
   const validHeight = baseImageData.height > 0 && baseImageData.height % MAP_SIZE === 0;
@@ -379,7 +433,8 @@ export async function convertImageToColorGridSetAsync(
   const tileRows = baseImageData.height / MAP_SIZE;
   const totalTiles = tileCols * tileRows;
   if (totalTiles <= 1 || typeof Worker === "undefined") {
-    return convertImageToColorGridSet(imageData, customColors, convertUnsupported, cropImage);
+    const result = convertImageToColorGridSet(baseImageData, customColors, convertUnsupported);
+    return { ...result, paletteNotices: [...preprocessed.paletteNotices, ...result.paletteNotices] };
   }
 
   try {
@@ -401,7 +456,8 @@ export async function convertImageToColorGridSetAsync(
       hasBlockingIssue: workerResult.hasBlockingIssue,
     };
   } catch {
-    const fallback = convertImageToColorGridSet(baseImageData, customColors, convertUnsupported, false);
+    // baseImageData was already resized above, so re-parsing must leave its dimensions alone.
+    const fallback = convertImageToColorGridSet(baseImageData, customColors, convertUnsupported, "reject");
     return {
       ...fallback,
       paletteNotices: [...preprocessed.paletteNotices, ...fallback.paletteNotices],

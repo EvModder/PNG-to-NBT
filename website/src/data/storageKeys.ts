@@ -64,4 +64,6 @@ export const STORAGE_KEYS = {
   showVsFillerWarnings: "mapart_secret_show_vs_filler_warnings",
   showAlignmentReminder: "mapart_secret_show_alignment_reminder",
   showNooblineWarnings: "mapart_secret_show_noobline_warnings",
+  autoFixInvalidDimensions: "mapart_secret_auto_fix_invalid_dimensions",
+  invalidDimensionsStrategy: "mapart_secret_invalid_dimensions_strategy",
 } as const;

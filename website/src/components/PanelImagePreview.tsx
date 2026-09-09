@@ -5,8 +5,10 @@
  * Callers:
  * - src/Index.tsx
  */
-import type { MutableRefObject, RefObject } from "react";
+import { Fragment, type MutableRefObject, type RefObject } from "react";
 import { Trash2 } from "lucide-react";
+import { type InvalidDimensionsStrategy } from "@/data/defaultSettings";
+import { getTargetTileDimensions } from "@/lib/colorGridParsing";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
 import { DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { MUTED_INLINE_TOGGLE_CONTROL_CLASS, PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
@@ -24,6 +26,7 @@ type PaletteNoticeGroup = {
 type PanelImagePreviewProps = {
   fileRef: RefObject<HTMLInputElement | null>;
   imageData: ImageData | null;
+  originalImageDimensions: { width: number; height: number } | null;
   previewImageUrl: string | null;
   fallbackPreviewImageUrl: string | null;
   imageName: string;
@@ -34,6 +37,7 @@ type PanelImagePreviewProps = {
   showVsFillersInPreview: boolean;
   setShowVsFillersInPreview: (value: boolean) => void;
   paletteNotices: PaletteNotice[];
+  onResolveInvalidDimensions: (strategy: InvalidDimensionsStrategy) => void;
   imageValid: boolean;
   missingBlockCount: number;
   noFillerWarning: string | null;
@@ -113,31 +117,76 @@ function WarningBanner({
   );
 }
 
+type ImageSizeActionsProps = {
+  width: number;
+  height: number;
+  currentMode?: InvalidDimensionsStrategy;
+  onResolveInvalidDimensions: (strategy: InvalidDimensionsStrategy) => void;
+};
+
+// A mode is only offered when it would actually reshape this image: cropping cannot
+// help an image with a side under 128, and neither helps a zero-sized one.
+function ImageSizeActions({ width, height, currentMode, onResolveInvalidDimensions }: ImageSizeActionsProps) {
+  const padded = getTargetTileDimensions(width, height, "pad");
+  const cropped = getTargetTileDimensions(width, height, "crop");
+  const actions: { mode: InvalidDimensionsStrategy; text: string }[] = [];
+  if (currentMode !== "pad" && (padded.width !== width || padded.height !== height)) {
+    actions.push({ mode: "pad", text: currentMode ? messages.parsing.imageSizePadInstead : messages.parsing.imageSizePadActionText(padded.width, padded.height) });
+  }
+  if (currentMode !== "crop" && (cropped.width !== width || cropped.height !== height)) {
+    actions.push({ mode: "crop", text: currentMode ? messages.parsing.imageSizeCropInstead : messages.parsing.imageSizeCropActionText(cropped.width, cropped.height) });
+  }
+  if (actions.length === 0) return null;
+
+  return (
+    <span className={currentMode ? undefined : "block text-xs font-medium"}>
+      {currentMode && " "}
+      {actions.map((action, index) => (
+        <Fragment key={action.mode}>
+          {index > 0 && <span className="text-warning/60"> | </span>}
+          <button
+            type="button"
+            className="text-warning underline underline-offset-2 hover:text-foreground"
+            onClick={() => onResolveInvalidDimensions(action.mode)}
+          >
+            {currentMode ? `(${action.text})` : action.text}
+          </button>
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
+// Header notice kind -> the detail notice that belongs in the same banner as it.
+const RESIZE_NOTICE_DETAIL_KINDS: Partial<Record<PaletteNoticeKind, PaletteNoticeKind>> = {
+  [PaletteNoticeKind.CroppedImage]: PaletteNoticeKind.CroppedImageRemovedPixels,
+  [PaletteNoticeKind.PaddedImage]: PaletteNoticeKind.PaddedImageAddedPixels,
+};
+
 function getPaletteNoticeGroupContainerTone(notices: readonly PaletteNotice[]): "info" | "warning" | "error" {
-  if (notices[0]?.kind === PaletteNoticeKind.CroppedImage) return "warning";
+  const firstKind = notices[0]?.kind;
+  if (firstKind !== undefined && firstKind in RESIZE_NOTICE_DETAIL_KINDS) return "warning";
   return messages.parsing.bannerTone([...notices]);
 }
 
 function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteNoticeGroup[] {
   const groups: PaletteNoticeGroup[] = [];
-  let currentNonCropGroup: PaletteNotice[] = [];
+  let currentNonResizeGroup: PaletteNotice[] = [];
 
-  const flushCurrentNonCropGroup = () => {
-    if (currentNonCropGroup.length === 0) return;
+  const flushCurrentNonResizeGroup = () => {
+    if (currentNonResizeGroup.length === 0) return;
     groups.push({
-      notices: currentNonCropGroup,
-      containerTone: getPaletteNoticeGroupContainerTone(currentNonCropGroup),
+      notices: currentNonResizeGroup,
+      containerTone: getPaletteNoticeGroupContainerTone(currentNonResizeGroup),
     });
-    currentNonCropGroup = [];
+    currentNonResizeGroup = [];
   };
 
   for (let index = 0; index < paletteNotices.length; ++index) {
     const notice = paletteNotices[index];
-    if (
-      notice?.kind === PaletteNoticeKind.CroppedImage &&
-      paletteNotices[index + 1]?.kind === PaletteNoticeKind.CroppedImageRemovedPixels
-    ) {
-      flushCurrentNonCropGroup();
+    const detailKind = notice ? RESIZE_NOTICE_DETAIL_KINDS[notice.kind] : undefined;
+    if (detailKind !== undefined && paletteNotices[index + 1]?.kind === detailKind) {
+      flushCurrentNonResizeGroup();
       const notices = [notice, paletteNotices[index + 1]];
       groups.push({
         notices,
@@ -147,10 +196,10 @@ function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteN
       continue;
     }
 
-    currentNonCropGroup.push(notice);
+    currentNonResizeGroup.push(notice);
   }
 
-  flushCurrentNonCropGroup();
+  flushCurrentNonResizeGroup();
   return groups;
 }
 
@@ -159,6 +208,7 @@ function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteN
 export function PanelImagePreview({
   fileRef,
   imageData,
+  originalImageDimensions,
   previewImageUrl,
   fallbackPreviewImageUrl,
   imageName,
@@ -169,6 +219,7 @@ export function PanelImagePreview({
   showVsFillersInPreview,
   setShowVsFillersInPreview,
   paletteNotices,
+  onResolveInvalidDimensions,
   imageValid,
   missingBlockCount,
   noFillerWarning,
@@ -396,8 +447,27 @@ export function PanelImagePreview({
               }`}
             >
               {messages.parsing.noticeText(notice)}
+              {(notice.kind === PaletteNoticeKind.CroppedImage || notice.kind === PaletteNoticeKind.PaddedImage) && <>
+                {originalImageDimensions && <ImageSizeActions
+                  width={originalImageDimensions.width}
+                  height={originalImageDimensions.height}
+                  currentMode={notice.kind === PaletteNoticeKind.CroppedImage ? "crop" : "pad"}
+                  onResolveInvalidDimensions={onResolveInvalidDimensions}
+                />}
+                .
+              </>}
             </p>
           ))}
+          {group.notices.map((notice, noticeIndex) =>
+            notice.kind === PaletteNoticeKind.SizeError ? (
+              <ImageSizeActions
+                key={`${groupIndex}-${noticeIndex}-actions`}
+                width={notice.width}
+                height={notice.height}
+                onResolveInvalidDimensions={onResolveInvalidDimensions}
+              />
+            ) : null,
+          )}
         </div>
       ))}
 

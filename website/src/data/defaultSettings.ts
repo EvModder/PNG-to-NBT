@@ -1,13 +1,18 @@
 /**
  * Public API:
  * - DEFAULT_*
+ * - INVALID_DIMENSIONS_STRATEGY_OPTIONS
+ * - InvalidDimensionsMode
+ * - InvalidDimensionsStrategy
  * - SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS
  * - SuppressLoadSpotMarkerBlock
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/PanelImagePreview.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/colorGridParsing.ts
  * - src/lib/nbtExport.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/utils/colorTableLayout.ts
@@ -90,5 +95,15 @@ export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;
 // Callers:
 // - src/Index.tsx
 export const DEFAULT_CONVERT_UNSUPPORTED_COLORS = true;
-export const DEFAULT_CROP_IMAGE = true;
 export const DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS = false;
+
+// Callers:
+// - src/Index.tsx
+// - src/components/SecretsSettingsDialog.tsx
+// - src/lib/colorGridParsing.ts
+export const INVALID_DIMENSIONS_STRATEGY_OPTIONS = ["crop", "pad"] as const;
+export type InvalidDimensionsStrategy = typeof INVALID_DIMENSIONS_STRATEGY_OPTIONS[number];
+// What the parser is asked to do: a strategy when auto-fix is on, otherwise reject.
+export type InvalidDimensionsMode = InvalidDimensionsStrategy | "reject";
+export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = true;
+export const DEFAULT_INVALID_DIMENSIONS_STRATEGY: InvalidDimensionsStrategy = "crop";

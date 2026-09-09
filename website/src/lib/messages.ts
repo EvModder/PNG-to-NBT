@@ -155,24 +155,53 @@ function formatBlockIdList(blockIds: readonly string[]): string {
   return `[${formatted[0]}, ${formatted[1]}, ... +${formatted.length - 2}]`;
 }
 
-function formatCropRemovalAxis(
+function formatDimensionChangeAxis(
   countA: number,
   sideA: string,
   countB: number,
   sideB: string,
   pairedSides: string,
+  singleSideTemplate: string,
+  pairedSidesTemplate: string,
 ): string | null {
   if (countA <= 0 && countB <= 0) return null;
   if (countA > 0 && countB > 0) {
-    return formatTemplate(catalog.parsing.cropRemovedPairedSides, {
+    return formatTemplate(pairedSidesTemplate, {
       count: Math.min(countA, countB),
       sides: pairedSides,
     });
   }
-  return formatTemplate(catalog.parsing.cropRemovedSingleSide, {
+  return formatTemplate(singleSideTemplate, {
     count: countA > 0 ? countA : countB,
     side: countA > 0 ? sideA : sideB,
   });
+}
+
+function formatDimensionChangeLines(
+  edges: { left: number; right: number; top: number; bottom: number },
+  singleSideTemplate: string,
+  pairedSidesTemplate: string,
+): string {
+  return [
+    formatDimensionChangeAxis(
+      edges.left,
+      catalog.parsing.cropSideLeft,
+      edges.right,
+      catalog.parsing.cropSideRight,
+      catalog.parsing.cropSidesLeftRight,
+      singleSideTemplate,
+      pairedSidesTemplate,
+    ),
+    formatDimensionChangeAxis(
+      edges.top,
+      catalog.parsing.cropSideTop,
+      edges.bottom,
+      catalog.parsing.cropSideBottom,
+      catalog.parsing.cropSidesTopBottom,
+      singleSideTemplate,
+      pairedSidesTemplate,
+    ),
+  ].filter((line): line is string => !!line).join("\n");
 }
 
 // Callers:
@@ -186,6 +215,8 @@ export enum PaletteNoticeKind {
   ConvertedPaletteColors = "converted_palette_colors",
   CroppedImage = "cropped_image",
   CroppedImageRemovedPixels = "cropped_image_removed_pixels",
+  PaddedImage = "padded_image",
+  PaddedImageAddedPixels = "padded_image_added_pixels",
   ReducedUniqueColors = "reduced_unique_colors",
   LossyFormatHint = "lossy_format_hint",
 }
@@ -204,6 +235,8 @@ export type PaletteNotice =
   | { kind: PaletteNoticeKind.ConvertedPaletteColors; convertedCount: number; totalInputColorCount: number }
   | { kind: PaletteNoticeKind.CroppedImage; width: number; height: number }
   | { kind: PaletteNoticeKind.CroppedImageRemovedPixels; left: number; right: number; top: number; bottom: number }
+  | { kind: PaletteNoticeKind.PaddedImage; width: number; height: number }
+  | { kind: PaletteNoticeKind.PaddedImageAddedPixels; left: number; right: number; top: number; bottom: number }
   | { kind: PaletteNoticeKind.ReducedUniqueColors; fewerOutputColorCount: number }
   | { kind: PaletteNoticeKind.LossyFormatHint; formatLabel: string };
 
@@ -551,6 +584,14 @@ export const messages = {
     imageSizeNotice(width: number, height: number): PaletteNotice {
       return { kind: PaletteNoticeKind.SizeError, width, height };
     },
+    imageSizePadActionText(width: number, height: number): string {
+      return formatTemplate(catalog.parsing.imageSizePadAction, { width, height });
+    },
+    imageSizeCropActionText(width: number, height: number): string {
+      return formatTemplate(catalog.parsing.imageSizeCropAction, { width, height });
+    },
+    imageSizePadInstead: catalog.parsing.imageSizePadInstead,
+    imageSizeCropInstead: catalog.parsing.imageSizeCropInstead,
     unsupportedPaletteColorsNotice(colors: number[]): PaletteNotice {
       return { kind: PaletteNoticeKind.UnsupportedPaletteColors, colors };
     },
@@ -562,6 +603,12 @@ export const messages = {
     },
     croppedImageRemovedPixelsNotice(left: number, right: number, top: number, bottom: number): PaletteNotice {
       return { kind: PaletteNoticeKind.CroppedImageRemovedPixels, left, right, top, bottom };
+    },
+    paddedImageNotice(width: number, height: number): PaletteNotice {
+      return { kind: PaletteNoticeKind.PaddedImage, width, height };
+    },
+    paddedImageAddedPixelsNotice(left: number, right: number, top: number, bottom: number): PaletteNotice {
+      return { kind: PaletteNoticeKind.PaddedImageAddedPixels, left, right, top, bottom };
     },
     reducedUniqueColorsNotice(fewerOutputColorCount: number): PaletteNotice {
       return { kind: PaletteNoticeKind.ReducedUniqueColors, fewerOutputColorCount };
@@ -577,10 +624,7 @@ export const messages = {
         case PaletteNoticeKind.Freeform:
           return notice.text;
         case PaletteNoticeKind.SizeError:
-          return formatTemplate(catalog.parsing.imageSizeError, {
-            width: notice.width,
-            height: notice.height,
-          });
+          return catalog.parsing.imageSizeError;
         case PaletteNoticeKind.UnsupportedPaletteColors: {
           const shown = notice.colors.slice(0, 10);
           return formatPlural(catalog.parsing.unsupportedPaletteColors, notice.colors.length, {
@@ -602,25 +646,23 @@ export const messages = {
             width: notice.width,
             height: notice.height,
           });
-        case PaletteNoticeKind.CroppedImageRemovedPixels: {
-          const lines = [
-            formatCropRemovalAxis(
-              notice.left,
-              catalog.parsing.cropSideLeft,
-              notice.right,
-              catalog.parsing.cropSideRight,
-              catalog.parsing.cropSidesLeftRight,
-            ),
-            formatCropRemovalAxis(
-              notice.top,
-              catalog.parsing.cropSideTop,
-              notice.bottom,
-              catalog.parsing.cropSideBottom,
-              catalog.parsing.cropSidesTopBottom,
-            ),
-          ].filter((line): line is string => !!line);
-          return lines.join("\n");
-        }
+        case PaletteNoticeKind.CroppedImageRemovedPixels:
+          return formatDimensionChangeLines(
+            notice,
+            catalog.parsing.cropRemovedSingleSide,
+            catalog.parsing.cropRemovedPairedSides,
+          );
+        case PaletteNoticeKind.PaddedImage:
+          return formatTemplate(catalog.parsing.paddedImage, {
+            width: notice.width,
+            height: notice.height,
+          });
+        case PaletteNoticeKind.PaddedImageAddedPixels:
+          return formatDimensionChangeLines(
+            notice,
+            catalog.parsing.padAddedSingleSide,
+            catalog.parsing.padAddedPairedSides,
+          );
         case PaletteNoticeKind.ReducedUniqueColors:
           return formatPlural(catalog.parsing.reducedUniqueColors, notice.fewerOutputColorCount, {
             count: notice.fewerOutputColorCount,
@@ -636,9 +678,11 @@ export const messages = {
         case PaletteNoticeKind.SizeError:
         case PaletteNoticeKind.UnsupportedPaletteColors:
         case PaletteNoticeKind.CroppedImageRemovedPixels:
+        case PaletteNoticeKind.PaddedImageAddedPixels:
         case PaletteNoticeKind.ReducedUniqueColors:
           return "error";
         case PaletteNoticeKind.CroppedImage:
+        case PaletteNoticeKind.PaddedImage:
         case PaletteNoticeKind.ConvertedPaletteColors:
         case PaletteNoticeKind.LossyFormatHint:
           return "warning";

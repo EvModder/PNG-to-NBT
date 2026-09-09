@@ -8,16 +8,23 @@
 import type { Dispatch, SetStateAction } from "react";
 import { X } from "lucide-react";
 import {
+  INVALID_DIMENSIONS_STRATEGY_OPTIONS,
   SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
+  type InvalidDimensionsStrategy,
   type SuppressLoadSpotMarkerBlock,
 } from "@/data/defaultSettings";
 import { messages } from "@/lib/messages";
 import { MUTED_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
-const SUPPRESS_LOAD_SPOT_MARKER_SELECT_WIDTH_CH = Math.max(
+// Both dropdowns share a width so the column lines up; the widest option in either wins.
+const SETTINGS_SELECT_WIDTH_CH = Math.max(
   ...SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.map(block => block.length),
+  ...INVALID_DIMENSIONS_STRATEGY_OPTIONS.map(
+    strategy => messages.dialogs.options.invalidDimensionsStrategies[strategy].length,
+  ),
 );
+const SETTINGS_SELECT_WIDTH = `calc(${SETTINGS_SELECT_WIDTH_CH}ch + 2.75rem)`;
 
 type SecretsSettingsDialogProps = {
   open: boolean;
@@ -55,6 +62,10 @@ type SecretsSettingsDialogProps = {
   setShowAlignmentReminder: Dispatch<SetStateAction<boolean>>;
   showNooblineWarnings: boolean;
   setShowNooblineWarnings: Dispatch<SetStateAction<boolean>>;
+  autoFixInvalidDimensions: boolean;
+  setAutoFixInvalidDimensions: Dispatch<SetStateAction<boolean>>;
+  invalidDimensionsStrategy: InvalidDimensionsStrategy;
+  setInvalidDimensionsStrategy: Dispatch<SetStateAction<InvalidDimensionsStrategy>>;
 };
 
 type OptionRowProps = {
@@ -79,23 +90,27 @@ function OptionRow({ checked, onChange, label, disabled = false }: OptionRowProp
   );
 }
 
-type OptionSelectRowProps = {
+type OptionSelectRowProps<T extends string> = {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: string;
-  value: SuppressLoadSpotMarkerBlock;
-  onValueChange: (value: SuppressLoadSpotMarkerBlock) => void;
+  value: T;
+  onValueChange: (value: T) => void;
+  options: readonly T[];
+  optionLabel?: (value: T) => string;
   selectLabel: string;
 };
 
-function OptionSelectRow({
+function OptionSelectRow<T extends string>({
   checked,
   onCheckedChange,
   label,
   value,
   onValueChange,
+  options,
+  optionLabel,
   selectLabel,
-}: OptionSelectRowProps) {
+}: OptionSelectRowProps<T>) {
   return (
     <div className="flex items-center gap-2">
       <label className="flex min-w-0 flex-1 items-center gap-2 cursor-pointer">
@@ -109,13 +124,13 @@ function OptionSelectRow({
       </label>
       <select
         value={value}
-        onChange={event => onValueChange(event.target.value as SuppressLoadSpotMarkerBlock)}
+        onChange={event => onValueChange(event.target.value as T)}
         aria-label={selectLabel}
         className="min-w-0 shrink-0 rounded border border-border bg-input px-1.5 py-0.5 text-xs text-foreground"
-        style={{ width: `calc(${SUPPRESS_LOAD_SPOT_MARKER_SELECT_WIDTH_CH}ch + 2.75rem)` }}
+        style={{ width: SETTINGS_SELECT_WIDTH }}
       >
-        {SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.map(block => (
-          <option key={block} value={block}>{block}</option>
+        {options.map(option => (
+          <option key={option} value={option}>{optionLabel ? optionLabel(option) : option}</option>
         ))}
       </select>
     </div>
@@ -160,6 +175,10 @@ export function SecretsSettingsDialog({
   setShowAlignmentReminder,
   showNooblineWarnings,
   setShowNooblineWarnings,
+  autoFixInvalidDimensions,
+  setAutoFixInvalidDimensions,
+  invalidDimensionsStrategy,
+  setInvalidDimensionsStrategy,
 }: SecretsSettingsDialogProps) {
   if (!open) return null;
 
@@ -243,12 +262,13 @@ export function SecretsSettingsDialog({
             onChange={setShowFlatNbtSuppressStepModes}
             label={messages.dialogs.options.showFlatNbtSuppressStepModes}
           />
-          <OptionSelectRow
+          <OptionSelectRow<SuppressLoadSpotMarkerBlock>
             checked={markSuppressLoadSpotsInSchematic}
             onCheckedChange={setMarkSuppressLoadSpotsInSchematic}
             label={messages.dialogs.options.markSuppressLoadSpotsInSchematic}
             value={suppressLoadSpotMarkerBlock}
             onValueChange={setSuppressLoadSpotMarkerBlock}
+            options={SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS}
             selectLabel={messages.dialogs.options.suppressLoadSpotMarkerBlock}
           />
           <OptionRow
@@ -265,6 +285,16 @@ export function SecretsSettingsDialog({
             checked={showNooblineWarnings}
             onChange={setShowNooblineWarnings}
             label={messages.dialogs.options.showNooblineWarnings}
+          />
+          <OptionSelectRow<InvalidDimensionsStrategy>
+            checked={autoFixInvalidDimensions}
+            onCheckedChange={setAutoFixInvalidDimensions}
+            label={messages.dialogs.options.autoFixInvalidDimensions}
+            value={invalidDimensionsStrategy}
+            onValueChange={setInvalidDimensionsStrategy}
+            options={INVALID_DIMENSIONS_STRATEGY_OPTIONS}
+            optionLabel={strategy => messages.dialogs.options.invalidDimensionsStrategies[strategy]}
+            selectLabel={messages.dialogs.options.invalidDimensionsStrategy}
           />
         </div>
       </div>

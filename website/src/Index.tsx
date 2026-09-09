@@ -1,4 +1,4 @@
-import { startTransition, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect, useEffectEvent, type ChangeEvent } from "react";
+import { startTransition, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect, useEffectEvent, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
 import { Languages, Moon, Sun } from "lucide-react";
 import {
   DEFAULT_ACTIVE_PRESET_NAME,
@@ -55,8 +55,12 @@ import {
   DEFAULT_SHOW_ALIGNMENT_REMINDER,
   DEFAULT_SHOW_NOOBLINE_WARNINGS,
   DEFAULT_CONVERT_UNSUPPORTED_COLORS,
-  DEFAULT_CROP_IMAGE,
   DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
+  INVALID_DIMENSIONS_STRATEGY_OPTIONS,
+  type InvalidDimensionsStrategy,
+  type InvalidDimensionsMode,
+  DEFAULT_AUTO_FIX_INVALID_DIMENSIONS,
+  DEFAULT_INVALID_DIMENSIONS_STRATEGY,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
@@ -64,6 +68,7 @@ import { convertToCrubTechLayerSplitNbtEntries, convertToNbtEntries, getCrubTech
 import {
   convertImageToColorGridSet,
   convertImageToColorGridSetAsync,
+  getTargetTileDimensions,
   type ColorGridSetParseResult,
   type ParsedColorGridTile,
   loadImageDataFromFile,
@@ -543,14 +548,10 @@ function getTileShapeForDimensions(width: number, height: number): TileShape {
   };
 }
 
-function getExpectedTileShape(imageData: ImageData | null, cropImage: boolean): TileShape {
+function getExpectedTileShape(imageData: ImageData | null, mode: InvalidDimensionsMode): TileShape {
   if (!imageData) return { tileRows: 0, tileCols: 0, tileCount: 0 };
-  return cropImage
-    ? getTileShapeForDimensions(
-        imageData.width - (imageData.width % MAP_SIZE),
-        imageData.height - (imageData.height % MAP_SIZE),
-      )
-    : getTileShapeForDimensions(imageData.width, imageData.height);
+  const target = getTargetTileDimensions(imageData.width, imageData.height, mode);
+  return getTileShapeForDimensions(target.width, target.height);
 }
 
 function shouldUpdateMainThreadProgress(
@@ -850,8 +851,32 @@ const Index = () => {
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
+  const [invalidDimensionsStrategyOverride, setInvalidDimensionsStrategyOverride] =
+    useState<InvalidDimensionsStrategy | null>(null);
+  const [autoFixInvalidDimensions, setAutoFixInvalidDimensions] = useState(() =>
+    loadCached(LS_KEYS.autoFixInvalidDimensions, DEFAULT_AUTO_FIX_INVALID_DIMENSIONS),
+  );
+  const [invalidDimensionsStrategy, setInvalidDimensionsStrategy] = useState<InvalidDimensionsStrategy>(() => {
+    const stored = loadCached(LS_KEYS.invalidDimensionsStrategy, DEFAULT_INVALID_DIMENSIONS_STRATEGY);
+    return INVALID_DIMENSIONS_STRATEGY_OPTIONS.includes(stored as InvalidDimensionsStrategy)
+      ? stored as InvalidDimensionsStrategy
+      : DEFAULT_INVALID_DIMENSIONS_STRATEGY;
+  });
+  // A size-error action retargets just the loaded image; the saved settings are untouched.
+  const effectiveInvalidDimensionsMode = invalidDimensionsStrategyOverride
+    ?? (autoFixInvalidDimensions ? invalidDimensionsStrategy : "reject");
+  const handleAutoFixInvalidDimensionsChange = useCallback<Dispatch<SetStateAction<boolean>>>(value => {
+    setInvalidDimensionsStrategyOverride(null);
+    setAutoFixInvalidDimensions(value);
+  }, []);
+  const handleInvalidDimensionsStrategyChange = useCallback<Dispatch<SetStateAction<InvalidDimensionsStrategy>>>(
+    value => {
+      setInvalidDimensionsStrategyOverride(null);
+      setInvalidDimensionsStrategy(value);
+    },
+    [],
+  );
   const [convertUnsupported, /* setConvertUnsupported */] = useState(DEFAULT_CONVERT_UNSUPPORTED_COLORS); // always on; checkbox not shown
-  const [cropImage, /* setCropImage */] = useState(DEFAULT_CROP_IMAGE); // always on; checkbox not shown
   const [customColors, setCustomColors] = useState<ColorRgb[]>([]);
   const [selectedBlocksCustom, setSelectedBlocksCustom] = useState<Record<number, string>>({});
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
@@ -925,7 +950,7 @@ const Index = () => {
       (parsedImageSetState?.hasBlockingIssue ?? false) ||
       paletteNotices.length > 0
     );
-  const expectedTileShape = getExpectedTileShape(imageData, cropImage);
+  const expectedTileShape = getExpectedTileShape(imageData, effectiveInvalidDimensionsMode);
   const tileRows = parsedImageSet?.tileRows ?? expectedTileShape.tileRows;
   const tileCols = parsedImageSet?.tileCols ?? expectedTileShape.tileCols;
   const tileCount = parsedTiles.length > 0 ? parsedTiles.length : expectedTileShape.tileCount;
@@ -1116,6 +1141,8 @@ const Index = () => {
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
+      [LS_KEYS.autoFixInvalidDimensions]: autoFixInvalidDimensions,
+      [LS_KEYS.invalidDimensionsStrategy]: invalidDimensionsStrategy,
     }),
     [
       preset.name,
@@ -1164,6 +1191,8 @@ const Index = () => {
       showVsFillerWarnings,
       showAlignmentReminder,
       showNooblineWarnings,
+      autoFixInvalidDimensions,
+      invalidDimensionsStrategy,
     ],
   );
   const persistedSettingsRef = useRef<Record<string, unknown>>({});
@@ -2703,7 +2732,7 @@ const Index = () => {
 
     let cancelled = false;
     const exactTileCount = getTileShapeForDimensions(imageData.width, imageData.height).tileCount;
-    if (!cropImage && exactTileCount === 0) {
+    if (effectiveInvalidDimensionsMode === "reject" && exactTileCount === 0) {
       setParsedImageSetState({
         imageData,
         tiles: [],
@@ -2719,7 +2748,7 @@ const Index = () => {
       setParseProgress(null);
       return;
     }
-    const expectedTileCount = getExpectedTileShape(imageData, cropImage).tileCount;
+    const expectedTileCount = getExpectedTileShape(imageData, effectiveInvalidDimensionsMode).tileCount;
     const singleTileImage = expectedTileCount === 1;
     setIsParsingImage(true);
     setParseProgress(!singleTileImage && expectedTileCount > 0 ? { completed: 0, total: expectedTileCount } : null);
@@ -2730,13 +2759,13 @@ const Index = () => {
         let lastParseProgressUpdateAt = performance.now();
         if (cancelled) return;
         const analysis = singleTileImage
-          ? convertImageToColorGridSet(imageData, customColors, convertUnsupported, cropImage)
+          ? convertImageToColorGridSet(imageData, customColors, convertUnsupported, effectiveInvalidDimensionsMode)
           : await (async () => {
               return convertImageToColorGridSetAsync(
                 imageData,
                 customColors,
                 convertUnsupported,
-                cropImage,
+                effectiveInvalidDimensionsMode,
                 (completed, total) => {
                   if (cancelled) return;
                   const now = performance.now();
@@ -2774,13 +2803,14 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [decodedColorGrid, imageData, parseRelevantCustomColorKey, convertUnsupported, cropImage, imageLossyFormatLabel]);
+  }, [decodedColorGrid, imageData, parseRelevantCustomColorKey, convertUnsupported, effectiveInvalidDimensionsMode, imageLossyFormatLabel]);
 
   const handleFile = useCallback(
     (file: File) => {
       const requestId = fileLoadRequestIdRef.current + 1;
       fileLoadRequestIdRef.current = requestId;
       replaceUploadedPreviewUrl(URL.createObjectURL(file));
+      setInvalidDimensionsStrategyOverride(null);
       setPendingIncomingTileCount(null);
       setDecodedColorGrid(null);
       setSelectedTileIndices([]);
@@ -2791,7 +2821,7 @@ const Index = () => {
       loadImageDataFromFile(file)
         .then(nextImageData => {
           if (fileLoadRequestIdRef.current !== requestId) return;
-          setPendingIncomingTileCount(getExpectedTileShape(nextImageData, cropImage).tileCount);
+          setPendingIncomingTileCount(getExpectedTileShape(nextImageData, autoFixInvalidDimensions ? invalidDimensionsStrategy : "reject").tileCount);
           setImageData(nextImageData);
           setImageName(file.name);
           setImageLossyFormatLabel(isLikelyLossyImageFile(file) ? getLossyImageFormatLabel(file) : null);
@@ -2820,7 +2850,7 @@ const Index = () => {
           if (fileRef.current) fileRef.current.value = "";
         });
     },
-    [cropImage, getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
+    [autoFixInvalidDimensions, invalidDimensionsStrategy, getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
   );
 
   const handlePaste = useEffectEvent((event: ClipboardEvent) => {
@@ -3980,6 +4010,7 @@ const Index = () => {
             <PanelImagePreview
               fileRef={fileRef}
               imageData={displayImageData}
+              originalImageDimensions={imageData}
               previewImageUrl={previewImageUrl}
               fallbackPreviewImageUrl={hasBlockingSizeError ? null : uploadedPreviewUrl}
               imageName={hasRejectedUploadedImage ? "" : imageName}
@@ -3990,6 +4021,7 @@ const Index = () => {
               showVsFillersInPreview={showVsFillersInPreview}
               setShowVsFillersInPreview={setShowVsFillersInPreview}
               paletteNotices={paletteNotices}
+              onResolveInvalidDimensions={setInvalidDimensionsStrategyOverride}
               imageValid={imageValid}
               missingBlockCount={missingBlockCount}
               noFillerWarning={noFillerWarning}
@@ -4084,6 +4116,10 @@ const Index = () => {
         setShowAlignmentReminder={setShowAlignmentReminder}
         showNooblineWarnings={showNooblineWarnings}
         setShowNooblineWarnings={setShowNooblineWarnings}
+        autoFixInvalidDimensions={autoFixInvalidDimensions}
+        setAutoFixInvalidDimensions={handleAutoFixInvalidDimensionsChange}
+        invalidDimensionsStrategy={invalidDimensionsStrategy}
+        setInvalidDimensionsStrategy={handleInvalidDimensionsStrategyChange}
       />
     </div>
   );
