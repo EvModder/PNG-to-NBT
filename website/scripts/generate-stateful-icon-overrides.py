@@ -23,6 +23,7 @@ AXIS_X_OVERRIDES = {
 }
 
 DOWN_FACE_OVERRIDES = {
+    "sculk_vein[down=true]": ("sculk_vein", ["top", "side", "bottom"]),
     "glow_lichen[down=true]": ("glow_lichen", ["top", "side", "bottom"]),
     "resin_clump[down=true]": ("resin_clump", ["top", "side", "bottom"]),
 }

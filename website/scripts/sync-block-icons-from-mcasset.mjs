@@ -31,7 +31,6 @@ const SIDE_ICON_PREFER_ITEM_PATTERNS = [
   /_button$/,
   /_pressure_plate$/,
   /_sign$/,
-  /_hanging_sign$/,
   /_banner$/,
   /_bed$/,
   /_candle$/,
@@ -43,8 +42,8 @@ const SIDE_ICON_PREFER_ITEM_PATTERNS = [
 const SIDE_ICON_NEVER_PREFER_ITEM_BLOCKS = new Set([
   "nether_sprouts",
   "nether_wart",
-  "sugar_cane",
   "pointed_dripstone",
+  "sulfur_spike",
 ]);
 const BLOCK_TEXTURE_CANDIDATE_OVERRIDES = {
   // Use a connected-line texture for icon generation (the UI renders this as a plus).
@@ -80,10 +79,10 @@ const BLOCK_TEXTURE_CANDIDATE_OVERRIDES = {
     side: ["assets/minecraft/textures/block/pointed_dripstone_up_tip.png"],
     bottom: ["assets/minecraft/textures/block/pointed_dripstone_up_base.png"],
   },
-  weeping_vines: {
-    top: ["assets/minecraft/textures/block/weeping_vines_plant.png"],
-    side: ["assets/minecraft/textures/block/weeping_vines_plant.png"],
-    bottom: ["assets/minecraft/textures/block/weeping_vines_plant.png"],
+  sulfur_spike: {
+    top: ["assets/minecraft/textures/block/sulfur_spike_up_base.png"],
+    side: ["assets/minecraft/textures/block/sulfur_spike_up_tip.png"],
+    bottom: ["assets/minecraft/textures/block/sulfur_spike_up_base.png"],
   },
 };
 

@@ -2,7 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { blockIdOnly, mapLegacyBlockId, normalizeBlockEntry } from "./block-entry-utils.mjs";
-import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, isExcludedBlockPattern } from "./excluded-blocks.mjs";
+import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, OMITTED_BLOCK_PATTERNS, isExcludedBlockPattern } from "./excluded-blocks.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
@@ -52,6 +52,8 @@ async function loadAllBlockstateIds() {
   if (!json?.files) return [];
   return json.files
     .filter(f => f.endsWith(".json"))
+    // These assets render entities, not registered blocks.
+    .filter(f => f !== "item_frame.json" && f !== "glow_item_frame.json")
     .map(f => f.replace(/\.json$/, ""))
     .sort();
 }
@@ -115,7 +117,9 @@ async function main() {
   const missingAll = allBlockstateIds.filter(id => !mapBlockIds.has(id));
   const missingPatternExcluded = missingAll.filter(isExcludedBlockPattern);
   const missingExplicitExcluded = missingAll.filter(id => EXCLUDED_BLOCK_IDS.has(id));
-  const missingActionable = missingAll.filter(id => !isExcludedBlockPattern(id) && !EXCLUDED_BLOCK_IDS.has(id));
+  const missingOmitted = missingAll.filter(id => OMITTED_BLOCK_PATTERNS.some(rx => rx.test(id)));
+  const missingActionable = missingAll.filter(id => !isExcludedBlockPattern(id) && !EXCLUDED_BLOCK_IDS.has(id)
+    && !OMITTED_BLOCK_PATTERNS.some(rx => rx.test(id)));
 
   const excludedPresentInMapColors = [...EXCLUDED_BLOCK_IDS].filter(id => mapBlockIds.has(id));
   const explicitExcludedIds = [...new Set(parseExplicitExcludedIds(excludedTs).map(entry => mapLegacyBlockId(blockIdOnly(entry))))];
@@ -124,6 +128,7 @@ async function main() {
     .sort();
 
   await writeReport("missing-all.txt", missingAll);
+  await writeReport("missing-omitted.txt", missingOmitted);
   await writeReport("missing-actionable.txt", missingActionable);
   await writeReport("missing-excluded-pattern.txt", missingPatternExcluded);
   await writeReport("missing-excluded-explicit.txt", missingExplicitExcluded);
@@ -149,8 +154,9 @@ async function main() {
       `Minecraft version: ${latestVersion}`,
       `Color rows parsed: ${rows.length}`,
       `Unique mapped block IDs: ${mapBlockIds.size}`,
-      `Registry block IDs: ${allBlockstateIds.length}`,
+      `Blockstate asset IDs: ${allBlockstateIds.length}`,
       `Missing (all): ${missingAll.length}`,
+      `Missing (intentionally omitted): ${missingOmitted.length}`,
       `Missing (excluded by pattern): ${missingPatternExcluded.length}`,
       `Missing (excluded explicit): ${missingExplicitExcluded.length}`,
       `Missing (actionable): ${missingActionable.length}`,
@@ -170,8 +176,9 @@ async function main() {
 
   console.log(`Minecraft version: ${latestVersion}`);
   console.log(`Unique mapped block IDs: ${mapBlockIds.size}`);
-  console.log(`Registry block IDs: ${allBlockstateIds.length}`);
+  console.log(`Blockstate asset IDs: ${allBlockstateIds.length}`);
   console.log(`Missing (all): ${missingAll.length}`);
+  console.log(`Missing (intentionally omitted): ${missingOmitted.length}`);
   console.log(`Missing (actionable): ${missingActionable.length}`);
   console.log(`Explicit excluded IDs missing category: ${uncategorizedExplicitExcluded.length}`);
   console.log(`Duplicates within row: ${dupWithin.length}`);

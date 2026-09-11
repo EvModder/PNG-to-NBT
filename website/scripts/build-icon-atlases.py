@@ -82,7 +82,6 @@ def write_manifest(manifests: dict[str, dict]) -> None:
     content = """/**
  * Public API:
  * - BlockIconAtlasName
- * - BlockIconAtlasManifest
  * - BLOCK_ICON_ATLASES
  *
  * Callers:
@@ -96,9 +95,7 @@ def write_manifest(manifests: dict[str, dict]) -> None:
 // - src/lib/blockIconAtlas.ts
 export type BlockIconAtlasName = "primary" | "unused";
 
-// Callers:
-// - src/lib/blockIconAtlas.ts
-export interface BlockIconAtlasManifest {
+interface BlockIconAtlasManifest {
   src: string;
   cellSize: number;
   columns: number;

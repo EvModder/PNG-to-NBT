@@ -2,7 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { blockIdOnly, normalizeBlockEntry } from "./block-entry-utils.mjs";
-import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS } from "./excluded-blocks.mjs";
+import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, OMITTED_BLOCK_PATTERNS } from "./excluded-blocks.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
@@ -106,26 +106,20 @@ async function fileExists(p) {
 
 async function resolveSource(blockEntry) {
   const normalized = normalizeBlockEntry(blockEntry);
+  if (/\baxis=[xz]\b/.test(normalized)) {
+    const side = path.join(SOURCE_ICON_ROOT, "blocks", blockIdOnly(normalized), "side.png");
+    if (await fileExists(side)) return side;
+  }
   const exactCustom = path.join(SOURCE_ICON_ROOT, "custom", `${normalized}.png`);
   if (await fileExists(exactCustom)) return exactCustom;
 
   const primaryBlockId = blockIdOnly(normalized);
   const candidateBlockIds = (() => {
     const out = [primaryBlockId];
-    if (primaryBlockId.endsWith("_wall_hanging_sign")) {
-      out.push(
-        primaryBlockId.replace(/_wall_hanging_sign$/, "_hanging_sign"),
-        primaryBlockId.replace(/_wall_hanging_sign$/, "_sign"),
-        "oak_sign",
-      );
-    } else if (primaryBlockId.endsWith("_hanging_sign")) {
-      out.push(primaryBlockId.replace(/_hanging_sign$/, "_sign"), "oak_sign");
-    } else if (primaryBlockId.endsWith("_wall_sign")) {
-      out.push(primaryBlockId.replace(/_wall_sign$/, "_sign"), "oak_sign");
-    } else if (primaryBlockId.endsWith("_sign")) {
+    if (primaryBlockId.endsWith("_sign")) {
       out.push("oak_sign");
     }
-    if (primaryBlockId.endsWith("_lightning_rod")) out.push("lightning_rod");
+    if (primaryBlockId.startsWith("waxed_")) out.push(primaryBlockId.slice(6));
     if (primaryBlockId === "chain_command_block" || primaryBlockId === "repeating_command_block") {
       out.push("command_block");
     }
@@ -207,6 +201,7 @@ async function main() {
   }
 
   const excludedUnusedIds = sourceBlockIds
+    .filter(id => !OMITTED_BLOCK_PATTERNS.some(rx => rx.test(id)))
     .filter(id => !mappedBlockIds.has(id) && isExplicitlyExcludedBlockId(id))
     .sort();
   for (const blockId of excludedUnusedIds) {

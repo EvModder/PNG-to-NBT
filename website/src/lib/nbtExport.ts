@@ -63,7 +63,7 @@ const EXPORT_PALETTE_ROLE_ORDER = ["visible", "shading", "vs_filler", "support",
 const CRUBTECH_PLATFORM_BLOCK_NAME = "minecraft:glass";
 const CRUBTECH_GLASS_PANE_BLOCK_NAME = "minecraft:glass_pane[east=true,north=true,south=true,west=true]";
 const CRUBTECH_WATERLOGGED_GLASS_PANE_BLOCK_NAME = "minecraft:glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
-const CRUBTECH_CATCHER_CHAIN_BLOCK_NAME = "minecraft:chain[axis=z]";
+const CRUBTECH_CATCHER_CHAIN_BLOCK_NAME = "minecraft:iron_chain[axis=z]";
 const CRUBTECH_FALLING_WATER_BLOCK_NAME = "minecraft:water[level=8]";
 
 interface PaletteIndexedBlock {

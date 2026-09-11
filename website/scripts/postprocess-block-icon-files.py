@@ -68,7 +68,7 @@ DYE_TINTS = {
 GRASS_TINT_IDS = {
     "grass_block",
     "short_grass",
-    "tall_grass",
+    "bush",
     "fern",
 }
 FOLIAGE_TINT_IDS = {
@@ -82,9 +82,6 @@ FOLIAGE_TINT_IDS = {
     "mangrove_leaves",
     "azalea_leaves",
     "flowering_azalea_leaves",
-    "vine",
-    "vines",
-    "sugar_cane",
     "lily_pad",
 }
 WATERLOGGED_SKIP_TINT_IDS = {
@@ -267,6 +264,13 @@ def crop_center(img: Image.Image, out_height: int) -> Image.Image:
     return src.crop((0, top, min(16, src.width), top + out_height))
 
 
+def texture_pieces(img: Image.Image, pieces: list) -> Image.Image:
+    out = Image.new("RGBA", (16, 16))
+    for uv, pos in pieces:
+        out.alpha_composite(img.crop(uv), pos)
+    return out
+
+
 def main() -> None:
     if not ICON_DIR.exists():
         print("No primary icon dir found; skipping postprocess.")
@@ -317,6 +321,11 @@ def main() -> None:
         if normalized.size != img.size or normalized.tobytes() != img.tobytes():
             img = normalized
             img.save(png)
+
+        if bid == "chorus_plant":
+            # Show the eight-pixel core with vertical connections, for the icon only.
+            slice_center_x(img, 8).save(png)
+            continue
 
         if bid == "chiseled_bookshelf":
             img = img.transpose(Image.Transpose.ROTATE_180)
@@ -378,12 +387,23 @@ def main() -> None:
             continue
 
         if bid.endswith("_pressure_plate") or bid in PRESSURE_PLATE_IDS:
-            slice_bottom(img, 2).save(png)
+            out = Image.new("RGBA", (16, 16))
+            # Top-surface edge above the one-pixel side, matching the model renderer.
+            edge = img.crop((1, 14, 15, 16))
+            out.alpha_composite(edge, (1, 14))
+            out.save(png)
             plates += 1
             continue
 
         if bid.endswith("_trapdoor"):
-            slice_bottom(img, 3).save(png)
+            # Vanilla uses a reversed bottom strip or, for orientable models, the top strip.
+            if bid in {"oak_trapdoor", "dark_oak_trapdoor", "iron_trapdoor"} or bid.endswith("copper_trapdoor"):
+                edge = img.crop((0, 13, 16, 16)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            else:
+                edge = img.crop((0, 0, 16, 3))
+            out = Image.new("RGBA", (16, 16))
+            out.alpha_composite(edge, (0, 13))
+            out.save(png)
             trapdoors += 1
             continue
 
@@ -398,32 +418,32 @@ def main() -> None:
         if bid.endswith("_stairs"):
             out = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
             lower = img.crop((0, 8, 16, 16))
-            step = img.resize((8, 8), resample=Image.Resampling.NEAREST)
+            step = img.crop((8, 0, 16, 8))
             out.paste(lower, (0, 8), lower)
-            out.paste(step, (0, 0), step)
-            out.save(png)
+            out.paste(step, (8, 0), step)
+            out.transpose(Image.Transpose.FLIP_LEFT_RIGHT).save(png)
             stairs += 1
             continue
 
         if bid.endswith("_fence_gate"):
-            compress_x(img, 8).save(png)
+            # Vanilla template_fence_gate front-face UVs and bounds.
+            texture_pieces(img, [
+                ((0, 0, 2, 11), (0, 2)), ((14, 0, 16, 11), (14, 2)),
+                ((6, 1, 8, 10), (6, 3)), ((8, 1, 10, 10), (8, 3)),
+                ((2, 7, 6, 10), (2, 9)), ((2, 1, 6, 4), (2, 3)),
+                ((10, 7, 14, 10), (10, 9)), ((10, 1, 14, 4), (10, 3)),
+            ]).save(png)
             fence_gates += 1
             continue
 
         if bid.endswith("_fence"):
-            compress_x(img, 6).save(png)
+            texture_pieces(img, [((6, 0, 10, 16), (6, 0))]).save(png)
             fences += 1
             continue
 
-        if (
-            bid.endswith("_wall")
-            and not bid.endswith("_wall_sign")
-            and not bid.endswith("_wall_hanging_sign")
-            and not bid.endswith("_wall_head")
-            and not bid.endswith("_wall_skull")
-            and bid not in {"wall_torch", "soul_wall_torch"}
-        ):
-            compress_x(img, 7).save(png)
+        if bid.endswith("_wall"):
+            # Standalone wall post, with no connected arms.
+            texture_pieces(img, [((4, 0, 12, 16), (4, 0))]).save(png)
             walls += 1
             continue
 

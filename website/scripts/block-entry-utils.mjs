@@ -27,7 +27,6 @@ export function blockIdOnly(entry) {
 const BLOCK_ID_ALIASES = {
   chain: "iron_chain",
   jigsaw_block: "jigsaw",
-  vines: "vine",
   lapis_lazuli_ore: "lapis_ore",
 };
 

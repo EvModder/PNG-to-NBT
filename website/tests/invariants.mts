@@ -28,7 +28,7 @@ const VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH = 14;
 const CRUBTECH_WATER_COLOR_BLOCK = "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
 const CRUBTECH_EXPORT_GLASS_PANE = "minecraft:glass_pane[east=true,north=true,south=true,west=true]";
 const CRUBTECH_EXPORT_WATERLOGGED_GLASS_PANE = "minecraft:glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
-const CRUBTECH_EXPORT_CATCHER_CHAIN = "minecraft:chain[axis=z]";
+const CRUBTECH_EXPORT_CATCHER_CHAIN = "minecraft:iron_chain[axis=z]";
 const CRUBTECH_EXPORT_FALLING_WATER = "minecraft:water[level=8]";
 
 function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, label: string): void {
@@ -801,7 +801,7 @@ async function assertCrubTechInvariants(): Promise<void> {
   assertBytesContainAscii(bytes, "minecraft:glass", "Plain CrubTech export should include prebuilt platform glass");
   assertBytesDoNotContainAscii(bytes, "minecraft:redstone_lamp", "Plain CrubTech export should omit signal lamps");
   assertBytesDoNotContainAscii(bytes, "minecraft:glass_pane", "No-water CrubTech export should omit water platform panes");
-  assertBytesDoNotContainAscii(bytes, "minecraft:chain", "No-water CrubTech export should omit water catcher chains");
+  assertBytesDoNotContainAscii(bytes, "minecraft:iron_chain", "No-water CrubTech export should omit water catcher chains");
   assertBytesDoNotContainAscii(bytes, "minecraft:water", "No-water CrubTech export should omit falling water columns");
   const exportedBlocks = parseStructureBlocks(bytes);
   const glassCountsByY = new Map<number, number>();
@@ -1335,7 +1335,7 @@ async function assertCrubTechLatePairPauseMarkerInvariants(): Promise<void> {
   assertBytesContainAscii(latePairBytes, "minecraft:resin_block", "Layer-split late_pairs section should contain late pushable fillers");
   assertBytesContainAscii(waterBytes, "minecraft:glass", "Layer-split water section should contain the bottom platform glass");
   assertBytesContainAscii(waterBytes, "minecraft:glass_pane", "Layer-split water section should contain the water shade panes");
-  assertBytesContainAscii(waterBytes, "minecraft:chain", "Layer-split water section should contain the catcher chains");
+  assertBytesContainAscii(waterBytes, "minecraft:iron_chain", "Layer-split water section should contain the catcher chains");
   assertBytesContainAscii(waterBytes, "minecraft:water", "Layer-split water section should contain the water columns");
   const layerSplitBlockCount = layerSplitEntries.reduce(
     (sum, entry) => sum + parseStructureBlocks(new Uint8Array(gunzipSync(entry.data))).length,

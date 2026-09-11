@@ -14,7 +14,6 @@ PRIMARY_ROOT = ROOT / "public" / "block-icons" / "primary"
 UNUSED_ROOT = ROOT / "public" / "block-icons" / "unused"
 ATLAS_CELL_SIZE = 16
 BLOCK_TEXTURE_HOST = "https://assets.mcasset.cloud/latest/assets/minecraft/textures/block"
-ITEM_TEXTURE_HOST = "https://assets.mcasset.cloud/latest/assets/minecraft/textures/item"
 ENTITY_SHULKER_HOST = "https://assets.mcasset.cloud/latest/assets/minecraft/textures/entity/shulker"
 SSL_CONTEXT = ssl._create_unverified_context()
 
@@ -36,32 +35,6 @@ SHULKER_BLOCK_IDS = [
     "green_shulker_box",
     "red_shulker_box",
     "black_shulker_box",
-]
-HANGING_SIGN_BLOCK_IDS = [
-    "acacia_hanging_sign",
-    "acacia_wall_hanging_sign",
-    "bamboo_hanging_sign",
-    "bamboo_wall_hanging_sign",
-    "birch_hanging_sign",
-    "birch_wall_hanging_sign",
-    "cherry_hanging_sign",
-    "cherry_wall_hanging_sign",
-    "crimson_hanging_sign",
-    "crimson_wall_hanging_sign",
-    "dark_oak_hanging_sign",
-    "dark_oak_wall_hanging_sign",
-    "jungle_hanging_sign",
-    "jungle_wall_hanging_sign",
-    "mangrove_hanging_sign",
-    "mangrove_wall_hanging_sign",
-    "oak_hanging_sign",
-    "oak_wall_hanging_sign",
-    "pale_oak_hanging_sign",
-    "pale_oak_wall_hanging_sign",
-    "spruce_hanging_sign",
-    "spruce_wall_hanging_sign",
-    "warped_hanging_sign",
-    "warped_wall_hanging_sign",
 ]
 COMMAND_BLOCK_SIDE_TEXTURES = {
     "command_block": "https://assets.mcasset.cloud/latest/assets/minecraft/textures/block/command_block_side.png",
@@ -101,10 +74,6 @@ def shulker_entity_url(block_id: str) -> str:
         return f"{ENTITY_SHULKER_HOST}/shulker.png"
     color = block_id.removesuffix("_shulker_box")
     return f"{ENTITY_SHULKER_HOST}/shulker_{color}.png"
-
-
-def hanging_sign_item_url(block_id: str) -> str:
-    return f"{ITEM_TEXTURE_HOST}/{block_id.replace('_wall_hanging_sign', '_hanging_sign')}.png"
 
 
 def render_shulker_icon(texture: Image.Image) -> Image.Image:
@@ -154,9 +123,6 @@ def main() -> int:
         icon.save(UNUSED_ROOT / f"{block_id}.png", optimize=True)
         if block_id == "purple_shulker_box":
             icon.save(PRIMARY_ROOT / f"{block_id}.png", optimize=True)
-    for block_id in HANGING_SIGN_BLOCK_IDS:
-        icon = fetch_image(hanging_sign_item_url(block_id)).resize((ATLAS_CELL_SIZE, ATLAS_CELL_SIZE), RESAMPLE_NEAREST)
-        icon.save(UNUSED_ROOT / f"{block_id}.png", optimize=True)
     for block_id, texture_url in COMMAND_BLOCK_SIDE_TEXTURES.items():
         render_command_block_icon(fetch_image(texture_url)).save(UNUSED_ROOT / f"{block_id}.png", optimize=True)
     for block_id, texture_url in SPECIAL_BLOCK_TEXTURES.items():
@@ -167,7 +133,7 @@ def main() -> int:
         optimize=True,
     )
     print(
-        f"Rendered {len(SHULKER_BLOCK_IDS)} shulker icons, {len(HANGING_SIGN_BLOCK_IDS)} hanging sign icons, "
+        f"Rendered {len(SHULKER_BLOCK_IDS)} shulker icons "
         f"and portal overrides into {UNUSED_ROOT.relative_to(ROOT)}"
     )
     return 0
