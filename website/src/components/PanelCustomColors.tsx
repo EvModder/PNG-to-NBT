@@ -68,7 +68,7 @@ type PanelCustomColorsProps = {
   onUpdateBlock: (baseIndex: number, block: string) => void;
   onSelectCustomBlock: (customIndex: number, block: string) => void;
   onRemoveCustomBlock: (customIndex: number, block: string, baseIndex: number | null) => void;
-  onCopyColorToClipboard: (r: number, g: number, b: number) => void;
+  onCopyColorToClipboard: (r: number, g: number, b: number, position: { x: number; y: number }) => void;
   sortColorCounts: Readonly<Record<string, number>>;
   displayColorCounts: Readonly<Record<string, number>>;
   formatRequiredCount: (count: number) => string | number;
@@ -289,6 +289,12 @@ export function PanelCustomColors({
     title: string | undefined,
   ) => {
     const swatchColors = swatchShades.map(shade => rgbForShade(shade));
+    const copySwatchColor = (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
+      const [r, g, b] = rgbForShade(shade);
+      onCopyColorToClipboard(r, g, b, { x: event.clientX, y: event.clientY });
+    };
     return (
       <button
         type="button"
@@ -317,11 +323,8 @@ export function PanelCustomColors({
           );
         }}
         onMouseLeave={() => setSwatchTooltip(null)}
-        onClick={event => {
-          const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
-          const [r, g, b] = rgbForShade(shade);
-          onCopyColorToClipboard(r, g, b);
-        }}
+        onClick={copySwatchColor}
+        onContextMenu={copySwatchColor}
         title={title}
       />
     );
@@ -402,7 +405,7 @@ export function PanelCustomColors({
         <div className="flex items-center gap-0.5 min-w-0 h-6">
           <div
             className={`flex-1 flex items-center gap-0.5 h-6 min-w-0 px-0.5 ${
-              textureCollapsed ? "justify-center overflow-x-hidden" : "overflow-x-auto"
+              textureCollapsed ? "justify-center overflow-x-hidden" : "block-options-scroll overflow-x-auto"
             }`}
           >
             {!isBaseRow && (!textureCollapsed || !selectedIsListedCustomBlock) && (

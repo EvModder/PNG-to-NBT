@@ -92,7 +92,7 @@ const ITEM_ICON_SOURCES = {
 };
 
 function isLogOrStem(id) {
-  return id.endsWith("_log") || id.endsWith("_stem") || id.endsWith("_stripped_log");
+  return id.endsWith("_log") || id.endsWith("_stem");
 }
 
 async function fileExists(p) {

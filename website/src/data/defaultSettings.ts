@@ -84,13 +84,13 @@ export const DEFAULT_APPLY_SUPPORT_FLOOR_YS = true;
 export const DEFAULT_BELOW_PLATFORM_WATER = false;
 export const DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS = true;
 export const DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES = false;
+export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
+export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;
+export const DEFAULT_SHOW_VS_FILLER_WARNINGS = true;
 export const DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC = false;
 export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "barrier"] as const;
 export type SuppressLoadSpotMarkerBlock = typeof SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS[number];
 export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBlock = "jigsaw";
-export const DEFAULT_SHOW_VS_FILLER_WARNINGS = true;
-export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
-export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;
 
 // Callers:
 // - src/Index.tsx

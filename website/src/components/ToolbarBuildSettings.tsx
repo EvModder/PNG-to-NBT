@@ -346,7 +346,7 @@ export function ToolbarBuildSettings({
             {messages.buildMode.label}
           </span>
           <select
-            className={`bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
+            className={`base-select-picker bg-input border border-border rounded px-2 h-6 text-xs cursor-help ${
               buildMode === BuildMode.SuppressSplitRow ? "text-muted-foreground" : "text-foreground"
             }`}
             value={buildMode}

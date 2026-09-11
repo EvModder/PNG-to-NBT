@@ -36,6 +36,7 @@ export const enCatalog = {
     add: "Add",
     remove: "Remove",
     close: "Close",
+    copied: "Copied!",
     clearSelectionSymbol: "∅",
     missingTextureSymbol: "?",
     openSecretsSettings: "Open secret settings",
@@ -46,7 +47,7 @@ export const enCatalog = {
     newPresetTitle: "Name new preset from current settings",
   },
   app: {
-    title: "Image → NBT",
+    title: "Image → Schematic",
   },
   blocks: {
     iceWaterTooltip:
@@ -298,6 +299,7 @@ export const enCatalog = {
       "Note: Align 128x128 color area to the map grid.\nExpect 1 extra top north row (NBT is 128x129).",
     iceConversionInfo:
       "Note: Ice has been selected for water-color.\nConvert it to water in-game for colors to be accurate.",
+    eyeblossomWarning: "Eyeblossom colors change with day/night.",
     iceConversionWarning:
       "Warning: Ice has been selected for water-color.\nThis build contains floating ice pillars.\nIce cannot convert to water unless the pillar has support beneath it.",
     noFillerNorthRowLine: "North-row shading requires filler placements.",
@@ -387,11 +389,11 @@ export const enCatalog = {
       belowPlatformWater: "Below-platform water",
       skipEmptySuppressSteps: "Skip empty suppress steps",
       showFlatNbtSuppressStepModes: "Show suppress (steps) options for Flat schematics",
-      markSuppressLoadSpotsInSchematic: "Mark color-suppress load-spots in schematics",
-      suppressLoadSpotMarkerBlock: "Marker block",
-      showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",
       showAlignmentReminder: "Show alignment reminder",
       showNooblineWarnings: "Show warnings for nooblines",
+      showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",
+      markSuppressLoadSpotsInSchematic: "Mark color-suppress load-spots in schematics",
+      suppressLoadSpotMarkerBlock: "Marker block",
       autoFixInvalidDimensions: "Auto-fix invalid input dimensions",
       invalidDimensionsStrategy: "Fix method",
       invalidDimensionsStrategies: {

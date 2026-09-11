@@ -114,7 +114,7 @@ type PanelColorBlockTableProps = {
   formatRequiredCount: (count: number) => string | number;
   missingColorKeys: ReadonlySet<ColorRefKey>;
   onUpdateBlock: (baseIndex: number, block: string) => void;
-  onCopyColorToClipboard: (r: number, g: number, b: number) => void;
+  onCopyColorToClipboard: (r: number, g: number, b: number, position: { x: number; y: number }) => void;
   onLayoutChange: (layout: ColorTableLayout) => void;
   onMinWidthChange: (widthPx: number) => void;
 };
@@ -546,6 +546,12 @@ export function PanelColorBlockTable({
   const renderColorRow = useCallback((idx: number) => {
     const color = BASE_COLORS[idx];
     const swatchShades = getColorSwatchShades(idx);
+    const copySwatchColor = (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
+      const [r, g, b] = getShadedRgb({ id: idx, shade });
+      onCopyColorToClipboard(r, g, b, { x: event.clientX, y: event.clientY });
+    };
     const isMissing = missingColorKeys.has(getBaseColorKey(idx));
     const { all: allBlocks, regular: regularBlocks, custom: customBlocks } = getBlockGroups(idx);
     const selectedBlock = selectedBlocks[idx] || "";
@@ -594,11 +600,8 @@ export function PanelColorBlockTable({
           onMouseEnter={event => handleSwatchTooltip(event, idx, swatchShades)}
           onMouseMove={event => handleSwatchTooltip(event, idx, swatchShades)}
           onMouseLeave={() => queueSwatchTooltip(null)}
-          onClick={event => {
-            const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
-            const [r, g, b] = getShadedRgb({ id: idx, shade });
-            onCopyColorToClipboard(r, g, b);
-          }}
+          onClick={copySwatchColor}
+          onContextMenu={copySwatchColor}
         />
       ),
       id: (
@@ -649,7 +652,7 @@ export function PanelColorBlockTable({
         <div key="block" className="min-w-0 h-6">
           <div
             className={`flex items-center gap-0.5 h-6 min-w-0 px-0.5 ${
-              textureCollapsed ? "justify-center overflow-x-hidden" : "overflow-x-auto"
+              textureCollapsed ? "justify-center overflow-x-hidden" : "block-options-scroll overflow-x-auto"
             }`}
           >
             {(!textureCollapsed || selectedBlock === "") && (
@@ -745,7 +748,7 @@ export function PanelColorBlockTable({
     return (
       <div
         key={idx}
-        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 odd:bg-foreground/[0.02] ${
+        className={`grid gap-1 items-center py-px text-xs transition-colors min-w-0 odd:bg-[color-mix(in_srgb,hsl(var(--foreground))_2%,hsl(var(--card)))] ${
           isMissing ? "relative z-[1] rounded" : ""
         }`}
         style={gridColsStyle}

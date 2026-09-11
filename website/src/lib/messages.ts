@@ -462,6 +462,7 @@ export const messages = {
     },
     northRowAlignmentInfo: catalog.preview.northRowAlignmentInfo,
     iceConversionInfo: catalog.preview.iceConversionInfo,
+    eyeblossomWarning: catalog.preview.eyeblossomWarning,
     iceConversionWarning: catalog.preview.iceConversionWarning,
     noFillerNorthRowLine: catalog.preview.noFillerNorthRowLine,
     noFillerSuppressLine: catalog.preview.noFillerSuppressLine,

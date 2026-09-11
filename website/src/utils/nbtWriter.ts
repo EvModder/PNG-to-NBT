@@ -87,6 +87,7 @@ export function writeStructureNbt(
   const w = new NbtWriter();
 
   w.beginCompound("");
+  // TODO: Accept the selected Minecraft version's DataVersion from the exporter alongside its palette IDs.
   w.intTag("DataVersion", 3837);
 
   w.beginList("size", TAG.Int, 3);

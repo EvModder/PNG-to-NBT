@@ -52,16 +52,16 @@ type SecretsSettingsDialogProps = {
   setSkipEmptySuppressSteps: Dispatch<SetStateAction<boolean>>;
   showFlatNbtSuppressStepModes: boolean;
   setShowFlatNbtSuppressStepModes: Dispatch<SetStateAction<boolean>>;
-  markSuppressLoadSpotsInSchematic: boolean;
-  setMarkSuppressLoadSpotsInSchematic: Dispatch<SetStateAction<boolean>>;
-  suppressLoadSpotMarkerBlock: SuppressLoadSpotMarkerBlock;
-  setSuppressLoadSpotMarkerBlock: Dispatch<SetStateAction<SuppressLoadSpotMarkerBlock>>;
-  showVsFillerWarnings: boolean;
-  setShowVsFillerWarnings: Dispatch<SetStateAction<boolean>>;
   showAlignmentReminder: boolean;
   setShowAlignmentReminder: Dispatch<SetStateAction<boolean>>;
   showNooblineWarnings: boolean;
   setShowNooblineWarnings: Dispatch<SetStateAction<boolean>>;
+  showVsFillerWarnings: boolean;
+  setShowVsFillerWarnings: Dispatch<SetStateAction<boolean>>;
+  markSuppressLoadSpotsInSchematic: boolean;
+  setMarkSuppressLoadSpotsInSchematic: Dispatch<SetStateAction<boolean>>;
+  suppressLoadSpotMarkerBlock: SuppressLoadSpotMarkerBlock;
+  setSuppressLoadSpotMarkerBlock: Dispatch<SetStateAction<SuppressLoadSpotMarkerBlock>>;
   autoFixInvalidDimensions: boolean;
   setAutoFixInvalidDimensions: Dispatch<SetStateAction<boolean>>;
   invalidDimensionsStrategy: InvalidDimensionsStrategy;
@@ -77,7 +77,7 @@ type OptionRowProps = {
 
 function OptionRow({ checked, onChange, label, disabled = false }: OptionRowProps) {
   return (
-    <label className={`flex items-center gap-2 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+    <label className={`flex items-center gap-1 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
       <input
         type="checkbox"
         checked={checked}
@@ -113,7 +113,7 @@ function OptionSelectRow<T extends string>({
 }: OptionSelectRowProps<T>) {
   return (
     <div className="flex items-center gap-2">
-      <label className="flex min-w-0 flex-1 items-center gap-2 cursor-pointer">
+      <label className="flex min-w-0 flex-1 items-center gap-1 cursor-pointer">
         <input
           type="checkbox"
           checked={checked}
@@ -126,7 +126,7 @@ function OptionSelectRow<T extends string>({
         value={value}
         onChange={event => onValueChange(event.target.value as T)}
         aria-label={selectLabel}
-        className="min-w-0 shrink-0 rounded border border-border bg-input px-1.5 py-0.5 text-xs text-foreground"
+        className="h-6 min-w-0 shrink-0 rounded border border-border bg-input px-1.5 text-xs text-foreground"
         style={{ width: SETTINGS_SELECT_WIDTH }}
       >
         {options.map(option => (
@@ -165,16 +165,16 @@ export function SecretsSettingsDialog({
   setSkipEmptySuppressSteps,
   showFlatNbtSuppressStepModes,
   setShowFlatNbtSuppressStepModes,
-  markSuppressLoadSpotsInSchematic,
-  setMarkSuppressLoadSpotsInSchematic,
-  suppressLoadSpotMarkerBlock,
-  setSuppressLoadSpotMarkerBlock,
-  showVsFillerWarnings,
-  setShowVsFillerWarnings,
   showAlignmentReminder,
   setShowAlignmentReminder,
   showNooblineWarnings,
   setShowNooblineWarnings,
+  showVsFillerWarnings,
+  setShowVsFillerWarnings,
+  markSuppressLoadSpotsInSchematic,
+  setMarkSuppressLoadSpotsInSchematic,
+  suppressLoadSpotMarkerBlock,
+  setSuppressLoadSpotMarkerBlock,
   autoFixInvalidDimensions,
   setAutoFixInvalidDimensions,
   invalidDimensionsStrategy,
@@ -188,12 +188,13 @@ export function SecretsSettingsDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-card border border-border rounded-md p-3 shadow-lg"
+        className="w-full max-w-md bg-card border border-border rounded-md p-2 shadow-lg"
         role="dialog"
         aria-modal="true"
         aria-label={messages.dialogs.secretSettingsTitle}
         onKeyDown={event => {
           if (event.key !== "Escape") return;
+          event.preventDefault();
           onClose();
         }}
         onClick={event => event.stopPropagation()}
@@ -211,7 +212,7 @@ export function SecretsSettingsDialog({
             <X size={14} strokeWidth={2.1} />
           </button>
         </div>
-        <div className="space-y-2 text-xs">
+        <div className="space-y-0.5 text-xs [&>*]:min-h-6">
           <OptionRow
             checked={showTransparentRow}
             onChange={setShowTransparentRow}
@@ -262,20 +263,6 @@ export function SecretsSettingsDialog({
             onChange={setShowFlatNbtSuppressStepModes}
             label={messages.dialogs.options.showFlatNbtSuppressStepModes}
           />
-          <OptionSelectRow<SuppressLoadSpotMarkerBlock>
-            checked={markSuppressLoadSpotsInSchematic}
-            onCheckedChange={setMarkSuppressLoadSpotsInSchematic}
-            label={messages.dialogs.options.markSuppressLoadSpotsInSchematic}
-            value={suppressLoadSpotMarkerBlock}
-            onValueChange={setSuppressLoadSpotMarkerBlock}
-            options={SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS}
-            selectLabel={messages.dialogs.options.suppressLoadSpotMarkerBlock}
-          />
-          <OptionRow
-            checked={showVsFillerWarnings}
-            onChange={setShowVsFillerWarnings}
-            label={messages.dialogs.options.showVsFillerWarnings}
-          />
           <OptionRow
             checked={showAlignmentReminder}
             onChange={setShowAlignmentReminder}
@@ -285,6 +272,20 @@ export function SecretsSettingsDialog({
             checked={showNooblineWarnings}
             onChange={setShowNooblineWarnings}
             label={messages.dialogs.options.showNooblineWarnings}
+          />
+          <OptionRow
+            checked={showVsFillerWarnings}
+            onChange={setShowVsFillerWarnings}
+            label={messages.dialogs.options.showVsFillerWarnings}
+          />
+          <OptionSelectRow<SuppressLoadSpotMarkerBlock>
+            checked={markSuppressLoadSpotsInSchematic}
+            onCheckedChange={setMarkSuppressLoadSpotsInSchematic}
+            label={messages.dialogs.options.markSuppressLoadSpotsInSchematic}
+            value={suppressLoadSpotMarkerBlock}
+            onValueChange={setSuppressLoadSpotMarkerBlock}
+            options={SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS}
+            selectLabel={messages.dialogs.options.suppressLoadSpotMarkerBlock}
           />
           <OptionSelectRow<InvalidDimensionsStrategy>
             checked={autoFixInvalidDimensions}

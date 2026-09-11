@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
-import { blockIdOnly, mapLegacyBlockId } from "./block-entry-utils.mjs";
+import { blockIdOnly } from "./block-entry-utils.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
@@ -222,10 +222,9 @@ async function pickModelIdForBlock(blockId) {
 }
 
 async function resolveBlockTextureTriplet(blockId) {
-  const assetBlockId = mapLegacyBlockId(blockId);
-  const directBlock = `block/${assetBlockId}`;
-  const directItem = `item/${assetBlockId}`;
-  const modelId = await pickModelIdForBlock(assetBlockId);
+  const directBlock = `block/${blockId}`;
+  const directItem = `item/${blockId}`;
+  const modelId = await pickModelIdForBlock(blockId);
   const model = await loadResolvedModel(modelId);
 
   let topRef = null;
@@ -269,7 +268,7 @@ async function resolveBlockTextureTriplet(blockId) {
     sideCandidates: [side, `assets/minecraft/textures/${directItem}.png`, FALLBACK_TEXTURE],
     bottomCandidates: [bottom, `assets/minecraft/textures/${directItem}.png`, FALLBACK_TEXTURE],
   };
-  const override = BLOCK_TEXTURE_CANDIDATE_OVERRIDES[assetBlockId];
+  const override = BLOCK_TEXTURE_CANDIDATE_OVERRIDES[blockId];
   if (override) {
     const prependUnique = (base, extra = []) => [...extra, ...base.filter(v => !extra.includes(v))];
     resolved.topCandidates = prependUnique(resolved.topCandidates, override.top);
@@ -416,8 +415,7 @@ async function main() {
   }
 
   const allBlockstates = await loadAllBlockstateIds();
-  // Compare against canonical block ids so legacy mapColors names do not show as false-missing.
-  const mapBlockSet = new Set(blockIds.map(mapLegacyBlockId));
+  const mapBlockSet = new Set(blockIds);
   const missingFromMapColors = allBlockstates.filter(id => !mapBlockSet.has(id));
 
   const unresolvedPath = path.join(REPORT_ROOT, "unresolved-textures.txt");

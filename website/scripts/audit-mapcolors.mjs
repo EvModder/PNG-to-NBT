@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
-import { blockIdOnly, mapLegacyBlockId, normalizeBlockEntry } from "./block-entry-utils.mjs";
+import { blockIdOnly, normalizeBlockEntry } from "./block-entry-utils.mjs";
 import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, OMITTED_BLOCK_PATTERNS, isExcludedBlockPattern } from "./excluded-blocks.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -108,7 +108,7 @@ async function main() {
   const mapBlockIds = new Set();
   for (const row of rows) {
     for (const entry of row.entries) {
-      mapBlockIds.add(mapLegacyBlockId(blockIdOnly(entry)));
+      mapBlockIds.add(blockIdOnly(entry));
     }
   }
 
@@ -122,7 +122,7 @@ async function main() {
     && !OMITTED_BLOCK_PATTERNS.some(rx => rx.test(id)));
 
   const excludedPresentInMapColors = [...EXCLUDED_BLOCK_IDS].filter(id => mapBlockIds.has(id));
-  const explicitExcludedIds = [...new Set(parseExplicitExcludedIds(excludedTs).map(entry => mapLegacyBlockId(blockIdOnly(entry))))];
+  const explicitExcludedIds = [...new Set(parseExplicitExcludedIds(excludedTs).map(blockIdOnly))];
   const uncategorizedExplicitExcluded = explicitExcludedIds
     .filter(id => !isExcludedBlockPattern(id) && !EXCLUDED_BLOCK_IDS.has(id))
     .sort();

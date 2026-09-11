@@ -122,6 +122,8 @@ export const WATER_BASE_INDEX = 12;
 // - src/utils/color.ts
 // - src/utils/colorTableLayout.ts
 // - src/utils/customColors.ts
+// TODO: Minecraft version selection should drive block IDs, availability and map colors together.
+// The catalog currently targets 26.2; keep exports aligned with the selected version.
 export const BASE_COLORS: ColorRgbBase[] = [
   { name: "NONE", r: 0, g: 0, b: 0, blocks: ["glass", "glass_pane", "end_rod", "tripwire", "flower_pot", "cake", "iron_bars", "waxed_copper_bars", "waxed_exposed_copper_bars", "waxed_weathered_copper_bars", "waxed_oxidized_copper_bars", "oxidized_copper_bars", "iron_chain", "waxed_copper_chain", "waxed_exposed_copper_chain", "waxed_weathered_copper_chain", "waxed_oxidized_copper_chain", "oxidized_copper_chain"] },
   { name: "GRASS", r: 127, g: 178, b: 56, blocks: ["grass_block", "slime_block"] },

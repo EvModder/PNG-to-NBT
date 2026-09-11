@@ -1,3 +1,10 @@
+/**
+ * Public API:
+ * - Index (default)
+ *
+ * Callers:
+ * - src/main.tsx
+ */
 import { startTransition, useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useLayoutEffect, useEffectEvent, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
 import { Languages, Moon, Sun } from "lucide-react";
 import {
@@ -47,13 +54,13 @@ import {
   DEFAULT_BELOW_PLATFORM_WATER,
   DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
   DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
+  DEFAULT_SHOW_ALIGNMENT_REMINDER,
+  DEFAULT_SHOW_NOOBLINE_WARNINGS,
+  DEFAULT_SHOW_VS_FILLER_WARNINGS,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
   SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
   type SuppressLoadSpotMarkerBlock,
   DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
-  DEFAULT_SHOW_VS_FILLER_WARNINGS,
-  DEFAULT_SHOW_ALIGNMENT_REMINDER,
-  DEFAULT_SHOW_NOOBLINE_WARNINGS,
   DEFAULT_CONVERT_UNSUPPORTED_COLORS,
   DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
   INVALID_DIMENSIONS_STRATEGY_OPTIONS,
@@ -839,6 +846,9 @@ const Index = () => {
     LS_KEYS.showFlatNbtSuppressStepModes,
     DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   ));
+  const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
+  const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
+  const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [markSuppressLoadSpotsInSchematic, setMarkSuppressLoadSpotsInSchematic] = useState(() =>
     loadCached(LS_KEYS.markSuppressLoadSpotsInSchematic, DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC),
   );
@@ -848,9 +858,6 @@ const Index = () => {
       ? stored as SuppressLoadSpotMarkerBlock
       : DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK;
   });
-  const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
-  const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
-  const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
   const [invalidDimensionsStrategyOverride, setInvalidDimensionsStrategyOverride] =
     useState<InvalidDimensionsStrategy | null>(null);
   const [autoFixInvalidDimensions, setAutoFixInvalidDimensions] = useState(() =>
@@ -891,6 +898,16 @@ const Index = () => {
   const [isDark, setIsDark] = useState(resolveDarkTheme);
   const [localePreference, setLocalePreferenceState] = useState<LocalePreference>(getLocalePreference);
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
+  useEffect(() => {
+    const openSecrets = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.repeat || event.defaultPrevented) return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable], [role=dialog], dialog")) return;
+      setShowSecretsDialog(true);
+    };
+    window.addEventListener("keydown", openSecrets);
+    return () => window.removeEventListener("keydown", openSecrets);
+  }, []);
+  const [copiedColor, setCopiedColor] = useState<{ x: number; y: number } | null>(null);
   const [colRangeEnabled, setColRangeEnabled] = useState(false);
   const [colStart, setColStart] = useState(0);
   const [colEnd, setColEnd] = useState(127);
@@ -1136,11 +1153,11 @@ const Index = () => {
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
       [LS_KEYS.skipEmptySuppressSteps]: skipEmptySuppressSteps,
       [LS_KEYS.showFlatNbtSuppressStepModes]: showFlatNbtSuppressStepModes,
-      [LS_KEYS.markSuppressLoadSpotsInSchematic]: markSuppressLoadSpotsInSchematic,
-      [LS_KEYS.suppressLoadSpotMarkerBlock]: suppressLoadSpotMarkerBlock,
-      [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
+      [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
+      [LS_KEYS.markSuppressLoadSpotsInSchematic]: markSuppressLoadSpotsInSchematic,
+      [LS_KEYS.suppressLoadSpotMarkerBlock]: suppressLoadSpotMarkerBlock,
       [LS_KEYS.autoFixInvalidDimensions]: autoFixInvalidDimensions,
       [LS_KEYS.invalidDimensionsStrategy]: invalidDimensionsStrategy,
     }),
@@ -1186,11 +1203,11 @@ const Index = () => {
       belowPlatformWater,
       skipEmptySuppressSteps,
       showFlatNbtSuppressStepModes,
-      markSuppressLoadSpotsInSchematic,
-      suppressLoadSpotMarkerBlock,
-      showVsFillerWarnings,
       showAlignmentReminder,
       showNooblineWarnings,
+      showVsFillerWarnings,
+      markSuppressLoadSpotsInSchematic,
+      suppressLoadSpotMarkerBlock,
       autoFixInvalidDimensions,
       invalidDimensionsStrategy,
     ],
@@ -1327,7 +1344,7 @@ const Index = () => {
     }),
     [getTileWaterSetting, parsedTiles, tileDerivedImageStats],
   );
-  const crubTechControlsCurrent2LayerSettings = crubTech && isCrubTechBuildMode(buildMode);
+  const crubTechControlsCurrent2LayerSettings = imageValid && crubTech && isCrubTechBuildMode(buildMode);
   const crubTechControlsLatePairsGap = crubTechControlsCurrent2LayerSettings;
   const effectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : layerGap;
   const calcEffectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : calcLayerGap;
@@ -1727,7 +1744,7 @@ const Index = () => {
     !flatRequiresVsFillers &&
     !showFlatNbtSuppressStepModes;
   const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
-  const crubTechControlsActive2LayerSettings = crubTech && isCrubTechBuildMode(effectiveBuildMode);
+  const crubTechControlsActive2LayerSettings = imageValid && crubTech && isCrubTechBuildMode(effectiveBuildMode);
   const effectiveSupportMode = crubTechControlsActive2LayerSettings && supportMode !== SupportMode.None
     ? SupportMode.Steps
     : supportMode;
@@ -2996,8 +3013,15 @@ const Index = () => {
     applyPresetAndCustomColorUpdate(nextPresetBlocks, nextCustomState.customColors, nextCustomState.selectedBlocksCustom);
   }, [applyPresetAndCustomColorUpdate, customColors, selectedBlocksCustom, preset.selectedBlocks]);
 
-  const copyColorToClipboard = (r: number, g: number, b: number) =>
-    navigator.clipboard.writeText(`#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`);
+  const copyColorToClipboard = (r: number, g: number, b: number, position: { x: number; y: number }) => {
+    const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
+    navigator.clipboard.writeText(hex).then(() => setCopiedColor(position), console.error);
+  };
+  useEffect(() => {
+    if (!copiedColor) return;
+    const timeout = setTimeout(() => setCopiedColor(null), 1500);
+    return () => clearTimeout(timeout);
+  }, [copiedColor]);
 
   const handleTileSelection = useCallback((tileIndex: number, modifiers: TileSelectionModifiers) => {
     const additive = modifiers.metaKey || modifiers.ctrlKey;
@@ -3656,7 +3680,8 @@ const Index = () => {
     const targetBottomRaw = Math.min(viewportBottom - PAGE_CONTENT_PADDING_PX, leftBottom);
     // Keep credits visible on-screen even after scrolling past the left-column bottom.
     const targetBottom = Math.max(creditsRect.height, targetBottomRaw);
-    const naturalTop = creditsRect.top - currentGap;
+    // Read the rendered offset; currentGap may be awaiting a React commit.
+    const naturalTop = creditsRect.top - new DOMMatrixReadOnly(getComputedStyle(creditsEl).transform).m42;
     const desiredTop = targetBottom - creditsRect.height;
     const nextGap = Math.max(0, Math.round(desiredTop - naturalTop));
     if (Math.abs(nextGap - currentGap) > 1) {
@@ -3778,12 +3803,23 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border px-2 py-1.5 flex items-center justify-between bg-[hsl(var(--header-bg))]">
+      {copiedColor && (
+        <div role="status" className="fixed z-[60] rounded border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md pointer-events-none whitespace-nowrap"
+          style={{
+            left: copiedColor.x,
+            top: copiedColor.y,
+            transform: `translate(${copiedColor.x > window.innerWidth / 2 ? "calc(-100% - 0.75rem)" : "0.75rem"}, ${copiedColor.y < 48 ? "0.75rem" : "calc(-100% - 0.75rem)"})`,
+          }}>
+          {messages.common.copied}
+        </div>
+      )}
+      <header className="border-b border-border pl-[17px] pr-2 py-1.5 flex items-center justify-between bg-[hsl(var(--header-bg))]">
         <h1 className="text-base font-bold text-primary">
           <button
             type="button"
             className="hover:underline decoration-dotted underline-offset-2"
             onClick={() => setShowSecretsDialog(true)}
+            aria-keyshortcuts="Escape"
             title={messages.common.openSecretsSettings}
           >
             {messages.app.title}
@@ -4024,6 +4060,9 @@ const Index = () => {
               onResolveInvalidDimensions={setInvalidDimensionsStrategyOverride}
               imageValid={imageValid}
               missingBlockCount={missingBlockCount}
+              usesEyeblossoms={imageValid && Object.entries(materialCountsDisplayView.blockCounts).some(
+                ([block, count]) => count > 0 && ["open_eyeblossom", "closed_eyeblossom"].includes(normalizeBlockId(block)),
+              )}
               noFillerWarning={noFillerWarning}
               suppressStepNorthSouthWarning={suppressStepNorthSouthWarning}
               waterSideSupportWarning={waterSideSupportWarning}
@@ -4106,16 +4145,16 @@ const Index = () => {
         setSkipEmptySuppressSteps={setSkipEmptySuppressSteps}
         showFlatNbtSuppressStepModes={showFlatNbtSuppressStepModes}
         setShowFlatNbtSuppressStepModes={setShowFlatNbtSuppressStepModes}
-        markSuppressLoadSpotsInSchematic={markSuppressLoadSpotsInSchematic}
-        setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
-        suppressLoadSpotMarkerBlock={suppressLoadSpotMarkerBlock}
-        setSuppressLoadSpotMarkerBlock={setSuppressLoadSpotMarkerBlock}
-        showVsFillerWarnings={showVsFillerWarnings}
-        setShowVsFillerWarnings={setShowVsFillerWarnings}
         showAlignmentReminder={showAlignmentReminder}
         setShowAlignmentReminder={setShowAlignmentReminder}
         showNooblineWarnings={showNooblineWarnings}
         setShowNooblineWarnings={setShowNooblineWarnings}
+        showVsFillerWarnings={showVsFillerWarnings}
+        setShowVsFillerWarnings={setShowVsFillerWarnings}
+        markSuppressLoadSpotsInSchematic={markSuppressLoadSpotsInSchematic}
+        setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
+        suppressLoadSpotMarkerBlock={suppressLoadSpotMarkerBlock}
+        setSuppressLoadSpotMarkerBlock={setSuppressLoadSpotMarkerBlock}
         autoFixInvalidDimensions={autoFixInvalidDimensions}
         setAutoFixInvalidDimensions={handleAutoFixInvalidDimensionsChange}
         invalidDimensionsStrategy={invalidDimensionsStrategy}

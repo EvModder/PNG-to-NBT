@@ -29,6 +29,7 @@ export const esCatalog = {
     add: "Añadir",
     remove: "Quitar",
     close: "Cerrar",
+    copied: "¡Copiado!",
     clearSelectionSymbol: "∅",
     missingTextureSymbol: "?",
     openSecretsSettings: "Abrir ajustes secretos",
@@ -39,7 +40,7 @@ export const esCatalog = {
     newPresetTitle: "Nombrar nuevo preset según la configuración actual",
   },
   app: {
-    title: "Imagen → NBT",
+    title: "Imagen → Esquema",
   },
   blocks: {
     iceWaterTooltip:
@@ -294,6 +295,7 @@ export const esCatalog = {
       "Nota: Alinea el área de color 128x128 con la cuadrícula del mapa.\nEspera 1 fila norte adicional arriba (el NBT es 128x129).",
     iceConversionInfo:
       "Nota: Se ha seleccionado hielo para el color del agua.\nConviértelo en agua dentro del juego para que los colores sean correctos.",
+    eyeblossomWarning: "Flores de ojo: el color cambia entre día y noche.",
     iceConversionWarning:
       "Advertencia: Se ha seleccionado hielo para el color del agua.\nEsta construcción contiene pilares de hielo flotantes.\nEl hielo no puede convertirse en agua si el pilar no tiene soporte debajo.",
     noFillerNorthRowLine: "El sombreado de la fila norte requiere colocaciones de relleno.",
@@ -383,11 +385,11 @@ export const esCatalog = {
       belowPlatformWater: "Agua bajo la plataforma",
       skipEmptySuppressSteps: "Omitir pasos suppress vacíos",
       showFlatNbtSuppressStepModes: "Mostrar opciones de suppress (steps) para esquemas planos",
-      markSuppressLoadSpotsInSchematic: "Marcar puntos de carga de supresión de color en esquemas",
-      suppressLoadSpotMarkerBlock: "Bloque marcador",
-      showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",
       showAlignmentReminder: "Mostrar recordatorio de alineación",
       showNooblineWarnings: "Mostrar advertencias para nooblines",
+      showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",
+      markSuppressLoadSpotsInSchematic: "Marcar puntos de carga de supresión de color en esquemas",
+      suppressLoadSpotMarkerBlock: "Bloque marcador",
       autoFixInvalidDimensions: "Autocorregir dimensiones de entrada no válidas",
       invalidDimensionsStrategy: "Método de corrección",
       invalidDimensionsStrategies: {

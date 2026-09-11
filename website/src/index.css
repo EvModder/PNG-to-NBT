@@ -90,6 +90,33 @@
   }
 }
 
+.block-options-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--foreground) / 0.45) transparent;
+
+  /* Firefox's partial ::-webkit-scrollbar support does not include thumb styling. */
+  @supports selector(::-webkit-scrollbar-thumb) {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: hsl(var(--foreground) / 0.45);
+    }
+
+    &::-webkit-scrollbar-track,
+    &::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+  }
+}
+
 /* Remove number input spinners */
 .no-spinner::-webkit-inner-spin-button,
 .no-spinner::-webkit-outer-spin-button {
@@ -104,4 +131,24 @@
 select option[data-muted="true"] {
   color: hsl(var(--muted-foreground));
   -webkit-text-fill-color: hsl(var(--muted-foreground));
+}
+
+/* Browser-dependent: opt the shading-method picker into customizable-select rendering.
+   Native popups on macOS align the selected option over the control, so the list opens
+   scrolled whenever the selection sits far down it. base-select instead anchors an
+   in-page popover under the control, showing the whole list from the top. Ignored by
+   browsers without support, which keep the native popup.
+   The UA picker styling is fine as-is apart from its light background, which has to
+   follow the theme. */
+@supports (appearance: base-select) {
+  select.base-select-picker,
+  select.base-select-picker::picker(select) {
+    appearance: base-select;
+  }
+
+  select.base-select-picker::picker(select) {
+    background: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+    border-color: hsl(var(--border));
+  }
 }

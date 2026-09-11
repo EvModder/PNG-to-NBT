@@ -40,6 +40,7 @@ type PanelImagePreviewProps = {
   onResolveInvalidDimensions: (strategy: InvalidDimensionsStrategy) => void;
   imageValid: boolean;
   missingBlockCount: number;
+  usesEyeblossoms: boolean;
   noFillerWarning: string | null;
   suppressStepNorthSouthWarning: string | null;
   waterSideSupportWarning: PreviewWarning | null;
@@ -222,6 +223,7 @@ export function PanelImagePreview({
   onResolveInvalidDimensions,
   imageValid,
   missingBlockCount,
+  usesEyeblossoms,
   noFillerWarning,
   suppressStepNorthSouthWarning,
   waterSideSupportWarning,
@@ -295,14 +297,16 @@ export function PanelImagePreview({
             <h2 className={titleClassName}>{messages.upload.title}</h2>
           )}
         </div>
-        <p
-          className={`absolute bottom-0 left-0 right-0 flex items-center text-[11px] leading-none text-primary font-mono truncate ${headerActionInsetClassName} ${
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className={`absolute bottom-0 left-0 right-0 flex items-center cursor-pointer text-left text-[11px] leading-none text-primary font-mono truncate ${headerActionInsetClassName} ${
             imageName ? "" : "invisible"
           }`}
           aria-hidden={imageName ? undefined : true}
         >
           {imageName || "\u00A0"}
-        </p>
+        </button>
         <div className="absolute right-0 top-0 inline-flex min-w-0 items-center gap-1.5">
           {showVsFillersInPreviewToggle && (
             <label
@@ -477,6 +481,7 @@ export function PanelImagePreview({
           tone="error"
         />
       )}
+      {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
       {noFillerWarning && <WarningBanner text={noFillerWarning} tone="warning" />}
       {suppressStepNorthSouthWarning && <WarningBanner text={suppressStepNorthSouthWarning} tone="warning" />}
       {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
