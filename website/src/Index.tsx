@@ -68,6 +68,7 @@ import {
   type InvalidDimensionsMode,
   DEFAULT_AUTO_FIX_INVALID_DIMENSIONS,
   DEFAULT_INVALID_DIMENSIONS_STRATEGY,
+  DEFAULT_MINECRAFT_VERSION,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
@@ -174,7 +175,9 @@ import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
 import { BuildMode, SuppressStepDirection, type FillerAssignment, FillerRole } from "@/types/conversion";
 import { getPaletteSeedOffset } from "@/lib/paletteSeed";
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
+import { isFragileBlock } from "@/data/fragileBlocks";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
+import { getVersionedSelections, getVersionedSupportRules } from "@/lib/minecraftVersion";
 import {
   arePresetBlocksEqual,
   BUILTIN_PRESET_NAMES,
@@ -869,6 +872,10 @@ const Index = () => {
       ? stored as InvalidDimensionsStrategy
       : DEFAULT_INVALID_DIMENSIONS_STRATEGY;
   });
+  const [minecraftVersion, setMinecraftVersion] = useState<MinecraftVersion>(() => {
+    const stored = loadCached(LS_KEYS.minecraftVersion, DEFAULT_MINECRAFT_VERSION);
+    return Object.hasOwn(MINECRAFT_VERSIONS, stored) ? stored as MinecraftVersion : DEFAULT_MINECRAFT_VERSION;
+  });
   // A size-error action retargets just the loaded image; the saved settings are untouched.
   const effectiveInvalidDimensionsMode = invalidDimensionsStrategyOverride
     ?? (autoFixInvalidDimensions ? invalidDimensionsStrategy : "reject");
@@ -929,6 +936,7 @@ const Index = () => {
   const [tileSelectionAnchorIndex, setTileSelectionAnchorIndex] = useState<number | null>(null);
   const [imageLossyFormatLabel, setImageLossyFormatLabel] = useState<string | null>(null);
   const previousMaterialInputsRef = useRef<{
+    minecraftVersion: MinecraftVersion;
     signature: string;
     colorAssignmentsByKey: Map<ColorRefKey, string>;
     fillerAssignmentsByRole: Map<FillerRole, string>;
@@ -1026,6 +1034,10 @@ const Index = () => {
   );
 
   const preset = presets[activeIdx] || getBuiltinPreset(DEFAULT_ACTIVE_PRESET_NAME)!;
+  const effectiveSelectedBlocks = useMemo(
+    () => getVersionedSelections(preset.selectedBlocks, minecraftVersion),
+    [preset.selectedBlocks, minecraftVersion],
+  );
   const activePresetBuiltinTooltip = activeIdx < BUILTIN_PRESET_NAMES.length
     ? messages.presets.builtinTooltip(preset.name)
     : undefined;
@@ -1160,6 +1172,7 @@ const Index = () => {
       [LS_KEYS.suppressLoadSpotMarkerBlock]: suppressLoadSpotMarkerBlock,
       [LS_KEYS.autoFixInvalidDimensions]: autoFixInvalidDimensions,
       [LS_KEYS.invalidDimensionsStrategy]: invalidDimensionsStrategy,
+      [LS_KEYS.minecraftVersion]: minecraftVersion,
     }),
     [
       preset.name,
@@ -1210,6 +1223,7 @@ const Index = () => {
       suppressLoadSpotMarkerBlock,
       autoFixInvalidDimensions,
       invalidDimensionsStrategy,
+      minecraftVersion,
     ],
   );
   const persistedSettingsRef = useRef<Record<string, unknown>>({});
@@ -1223,8 +1237,8 @@ const Index = () => {
 
   const showPaletteSeedToggle = buildModeUsesPaletteSeed(buildMode);
   const paletteSeedOffset = useMemo(
-    () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(preset.selectedBlocks) : 0),
-    [showPaletteSeedToggle, calcProPaletteSeed, preset.selectedBlocks],
+    () => (showPaletteSeedToggle && calcProPaletteSeed ? getPaletteSeedOffset(effectiveSelectedBlocks) : 0),
+    [showPaletteSeedToggle, calcProPaletteSeed, effectiveSelectedBlocks],
   );
   const tileImageStats = useMemo(
     () => (parsedTiles.length > 0 && imageValid ? parsedTiles.map(tile => tile.imageStats) : []),
@@ -1271,7 +1285,7 @@ const Index = () => {
   const showMaxPerSplitOption = hasMultipleTiles && selectedTileCount !== 1;
   const analysisBusy = isParsingImage || isAnalyzingTiles;
   const previewBusy = analysisBusy || isAnalyzingMaterials;
-  const selectedWaterBlock = preset.selectedBlocks[WATER_BASE_INDEX] ?? BASE_COLORS[WATER_BASE_INDEX].blocks[0] ?? "";
+  const selectedWaterBlock = effectiveSelectedBlocks[WATER_BASE_INDEX];
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
   const effectiveSupportFillerBlock = supportFillerBlock.trim() || DEFAULT_SUPPORT_FILLER_BLOCK;
@@ -1423,7 +1437,7 @@ const Index = () => {
   const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock);
   const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock);
   const activeTransparentBlock = derivedImageStats?.hasTransparency
-    ? (preset.selectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "")
+    ? (effectiveSelectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "")
     : "";
   const transparentBlockMapping = useMemo(
     () => ({ [TRANSPARENCY_BASE_INDEX]: activeTransparentBlock }),
@@ -1782,8 +1796,8 @@ const Index = () => {
     ],
   );
   const colorBlockSelections = useMemo<ColorBlockSelections>(
-    () => ({ selectedBlocks: preset.selectedBlocks, selectedBlocksCustom, customColors }),
-    [preset.selectedBlocks, selectedBlocksCustom, customColors],
+    () => ({ selectedBlocks: effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion }),
+    [effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion],
   );
   const usedMaterialColorAssignments = useMemo(
     () => [...usedColorKeys]
@@ -1807,8 +1821,9 @@ const Index = () => {
         usedMaterialFillerAssignments,
         `support=${effectiveSupportMode !== SupportMode.None ? 1 : 0}`,
         `supportFloorY=${effectiveApplySupportFloorYs ? 1 : 0}`,
+        minecraftVersion,
       ].join("||"),
-    [usedMaterialColorAssignments, usedMaterialFillerAssignments, effectiveSupportMode, effectiveApplySupportFloorYs],
+    [usedMaterialColorAssignments, usedMaterialFillerAssignments, effectiveSupportMode, effectiveApplySupportFloorYs, minecraftVersion],
   );
   const currentWaterDrops = crubTechControlsActive2LayerSettings
     ? CRUBTECH_WATER_DROPS
@@ -1846,7 +1861,8 @@ const Index = () => {
     const totalTiles = tileGeometryAnalyses.length;
     const previousMaterialInputs = previousMaterialInputsRef.current;
     const materialAnalysisOptions = {
-      selectedBlocks: preset.selectedBlocks,
+      selectedBlocks: effectiveSelectedBlocks,
+      minecraftVersion,
       selectedBlocksCustom,
       fillerAssignments: uiFillerAssignments,
       applySupportFloorYs: effectiveApplySupportFloorYs,
@@ -1878,6 +1894,7 @@ const Index = () => {
       if (!previousTile?.materialNeedStats || !tile.supportShape) return false;
       if (previousTile.tile.cacheKey !== tile.tile.cacheKey || previousTile.supportShape !== tile.supportShape) return false;
       if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== effectiveApplySupportFloorYs) return false;
+      if (previousMaterialInputs.minecraftVersion !== minecraftVersion) return false;
       if (hasAnySharedValue(tile.derivedImageStats.usedShadesByColorKey.keys(), changedColorKeys)) return false;
       if (hasAnySharedValue(tile.fillerNeedStats?.roleCounts.keys() ?? [], changedFillerRoles)) return false;
       return true;
@@ -1919,6 +1936,7 @@ const Index = () => {
       )
     ) {
       previousMaterialInputsRef.current = {
+        minecraftVersion,
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
@@ -1985,6 +2003,7 @@ const Index = () => {
 
       if (cancelled) return;
       previousMaterialInputsRef.current = {
+        minecraftVersion,
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
@@ -2091,7 +2110,7 @@ const Index = () => {
     if (crubTechControlsActive2LayerSettings) return false;
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
-      return Object.values(preset.selectedBlocks).some(hasFragileMappedBlock) ||
+      return Object.values(effectiveSelectedBlocks).some(hasFragileMappedBlock) ||
         customColors.some((_, customIndex) =>
           hasFragileMappedBlock(getSelectedCustomColorBlock(selectedBlocksCustom, customIndex, customColors))
         );
@@ -2173,7 +2192,8 @@ const Index = () => {
   );
   const buildMaterialAnalysisOptions = useCallback(
     (fillerAssignments: FillerAssignment[], includeRange: boolean) => ({
-      selectedBlocks: preset.selectedBlocks,
+      selectedBlocks: effectiveSelectedBlocks,
+      minecraftVersion,
       fillerAssignments,
       applySupportFloorYs: effectiveApplySupportFloorYs,
       customColors,
@@ -2182,7 +2202,7 @@ const Index = () => {
         ? (isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] })
         : {}),
     }),
-    [preset.selectedBlocks, effectiveApplySupportFloorYs, customColors, selectedBlocksCustom, colRangeEnabled, isStepRangeMode, colStart, colEnd],
+    [effectiveSelectedBlocks, minecraftVersion, effectiveApplySupportFloorYs, customColors, selectedBlocksCustom, colRangeEnabled, isStepRangeMode, colStart, colEnd],
   );
 
   const selectedTileMaterialNeedStats = useMemo(() => {
@@ -2528,7 +2548,7 @@ const Index = () => {
 
   const updateBlock = (baseIndex: number, block: string) => {
     const nextBlock = sanitizeUserBlockEntry(block);
-    const currentBlock = preset.selectedBlocks[baseIndex] ?? "";
+    const currentBlock = effectiveSelectedBlocks[baseIndex] ?? "";
     if (nextBlock === currentBlock) return;
     if (baseIndex === TRANSPARENCY_BASE_INDEX) setPendingTransparentMaterialRefresh(true);
     applyPresetAndCustomColorUpdate(
@@ -2897,7 +2917,8 @@ const Index = () => {
       for (const tile of exportTileAnalyses) {
         if (!tile.supportShape) throw new Error(messages.parsing.conversionFailed);
         const tileEntries = await convertTileToNbtEntries(tile.supportShape, {
-          selectedBlocks: preset.selectedBlocks,
+          selectedBlocks: effectiveSelectedBlocks,
+          minecraftVersion,
           fillerAssignments: uiFillerAssignments,
           applySupportFloorYs: effectiveApplySupportFloorYs,
           collapseDuplicatePaletteStates: collapseDuplicateNbtPaletteStates,
@@ -3300,6 +3321,7 @@ const Index = () => {
     [selectedTileAnalysis, colRangeEnabled, isStepRangeMode, colStart, colEnd],
   );
   const selectedTilePreviewVsFillerReplacements = useVsFillerPreviewReplacements({
+    minecraftVersion,
     shape: selectedTileAnalysis?.supportShape ?? null,
     shadeFillerBlock,
     dominateVoidFillerBlock,
@@ -3323,6 +3345,7 @@ const Index = () => {
           ? []
           : offsetPreviewPixelReplacements(
               collectVsFillerPreviewReplacements({
+                minecraftVersion,
                 shape: tile.supportShape,
                 shadeFillerBlock,
                 dominateVoidFillerBlock,
@@ -3337,6 +3360,7 @@ const Index = () => {
       showVsFillersInPreviewToggle,
       selectedTileAnalysis,
       selectedTilePreviewVsFillerReplacements,
+      minecraftVersion,
       tileAnalyses,
       shadeFillerBlock,
       dominateVoidFillerBlock,
@@ -3522,7 +3546,7 @@ const Index = () => {
 
     const warningLines: string[] = [];
 
-    for (const [blockId, rule] of FRAGILE_SUPPORT_RULES) {
+    for (const [blockId, rule] of getVersionedSupportRules(minecraftVersion)) {
       if ((fragileSupportOverrideNeedStatsDisplay.overrideCounts[blockId] ?? 0) <= 0) continue;
       warningLines.push(messages.preview.fragileSupportOverrideWarning(blockId, rule.validSupportBlocks));
     }
@@ -3532,6 +3556,7 @@ const Index = () => {
       : null;
   }, [
     fragileSupportOverrideNeedStatsDisplay,
+    minecraftVersion,
     imageValid,
     crubTechControlsActive2LayerSettings,
     supportMode,
@@ -3951,6 +3976,7 @@ const Index = () => {
           <div className={`${isStackedLayout ? "order-3" : "mt-2"} space-y-2`}>
           {/* Color → Block */}
           <PanelColorBlockTable
+            minecraftVersion={minecraftVersion}
             isStackedLayout={isStackedLayout}
             imageValid={colorTableDisplayState.imageValid}
             belowPlatformWater={effectiveBelowPlatformWater}
@@ -3981,7 +4007,7 @@ const Index = () => {
             showExcludedBlocks={showExcludedBlocks}
             columnOrder={columnOrder}
             setColumnOrder={setColumnOrder}
-            selectedBlocks={preset.selectedBlocks}
+            selectedBlocks={effectiveSelectedBlocks}
             customBlocksByBase={customBlocksByBase}
             usedShadesByColorKey={colorTableDisplayState.usedShadesByColorKey}
             shadeCountsByColorKey={colorTableDisplayState.shadeCountsByColorKey}
@@ -3999,7 +4025,7 @@ const Index = () => {
             isStackedLayout={isStackedLayout}
             customColors={customColors}
             selectedBlocksCustom={selectedBlocksCustom}
-            selectedBlocks={preset.selectedBlocks}
+            selectedBlocks={effectiveSelectedBlocks}
             columnOrder={columnOrder}
             blockColumnWidthPx={colorTableLayout.blockWidthPx}
             requiredColumnWidthPx={colorTableLayout.requiredWidthPx}
@@ -4120,6 +4146,8 @@ const Index = () => {
         </div>
       </div>
       <SecretsSettingsDialog
+        minecraftVersion={minecraftVersion}
+        setMinecraftVersion={setMinecraftVersion}
         open={showSecretsDialog}
         onClose={() => setShowSecretsDialog(false)}
         showTransparentRow={effectiveShowTransparentRow}

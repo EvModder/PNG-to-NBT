@@ -23,6 +23,7 @@
  * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
+ * - src/lib/nbtExport.ts
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/lib/tileParsingWorkerTypes.ts
@@ -253,6 +254,7 @@ export type PaletteNotice =
 // - src/components/ToolbarPresetSettings.tsx
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/nbtExport.ts
 // - src/lib/tileParsing.worker.ts
 export const messages = {
   locale: catalog.locale,
@@ -582,6 +584,9 @@ export const messages = {
     tiffNoImageData: catalog.parsing.tiffNoImageData,
     genericDecodeFailure: catalog.parsing.genericDecodeFailure,
     conversionFailed: catalog.parsing.conversionFailed,
+    blockUnavailableInVersion(block: string, version: string): string {
+      return formatTemplate(catalog.parsing.blockUnavailableInVersion, { block, version });
+    },
     imageSizeNotice(width: number, height: number): PaletteNotice {
       return { kind: PaletteNoticeKind.SizeError, width, height };
     },

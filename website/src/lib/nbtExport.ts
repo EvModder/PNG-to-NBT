@@ -11,6 +11,7 @@
 import { MAP_SIZE } from "@/utils/color";
 import {
   DEFAULT_NBT_AUTHOR,
+  DEFAULT_MINECRAFT_VERSION,
   DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
   DEFAULT_CRUBTECH_FLAT_WATER_DROP,
   DEFAULT_CRUBTECH_DARK_WATER_DROP,
@@ -20,6 +21,9 @@ import type { GeneratedShape, ShapePart } from "@/types/shape";
 import { CRUBTECH_NOOBLINE_FILLER_BLOCK, buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
 import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
+import { getVersionedBlockName, isBlockAvailable } from "./minecraftVersion";
+import { messages } from "./messages";
 import { createZip } from "@/utils/zip";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { Shade, WATER_BASE_INDEX } from "@/data/mapColors";
@@ -119,6 +123,7 @@ function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
 function buildStructurePaletteStateEntries(
   blocks: readonly PaletteSourceBlock[],
   collapseDuplicatePaletteStates: boolean,
+  version: MinecraftVersion,
 ): { paletteBlockIds: string[]; stateBlocks: PaletteIndexedBlock[] } {
   const paletteBlockIds: string[] = [];
   const blockIndexesByRole: Record<ExportPaletteRole, number[]> = {
@@ -138,7 +143,7 @@ function buildStructurePaletteStateEntries(
   for (const paletteRole of EXPORT_PALETTE_ROLE_ORDER) {
     const paletteIndexByBlockName = sharedPaletteIndexByBlockName ?? new Map<string, number>();
     for (const blockIndex of blockIndexesByRole[paletteRole]) {
-      const blockName = blocks[blockIndex].blockName;
+      const blockName = getVersionedBlockName(blocks[blockIndex].blockName, version);
       let state = paletteIndexByBlockName.get(blockName);
       if (state === undefined) {
         state = paletteBlockIds.length;
@@ -471,11 +476,16 @@ async function writeExportBlocksToNbt(
   options: ExportOptions,
 ): Promise<Uint8Array> {
   const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
+  const version = options.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION;
   const { paletteBlockIds, stateBlocks } = buildStructurePaletteStateEntries(
     blocks,
     options.collapseDuplicatePaletteStates !== false,
+    version,
   );
-  return gzipCompress(writeStructureNbt(stateBlocks, paletteBlockIds, sizeX, sizeY, sizeZ, DEFAULT_NBT_AUTHOR));
+  for (const block of paletteBlockIds) {
+    if (!isBlockAvailable(block, version)) throw new Error(messages.parsing.blockUnavailableInVersion(block, version));
+  }
+  return gzipCompress(writeStructureNbt(stateBlocks, paletteBlockIds, sizeX, sizeY, sizeZ, MINECRAFT_VERSIONS[version].dataVersion, DEFAULT_NBT_AUTHOR));
 }
 
 async function buildSplitEntries(

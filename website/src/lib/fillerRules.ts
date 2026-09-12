@@ -24,7 +24,7 @@ import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 
-const TRANSPARENT_FILLER_BLOCKS = new Set<string>(BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId));
+const TRANSPARENT_FILLER_BLOCKS = new Set<string>(["chain", ...BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId)]);
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
 
 function isShadeCriticalFillerRole(role: FillerRole): boolean {

@@ -396,6 +396,7 @@ export const enCatalog = {
       suppressLoadSpotMarkerBlock: "Marker block",
       autoFixInvalidDimensions: "Auto-fix invalid input dimensions",
       invalidDimensionsStrategy: "Fix method",
+      minecraftVersion: "Minecraft version",
       invalidDimensionsStrategies: {
         crop: "Crop",
         pad: "Pad",
@@ -429,6 +430,7 @@ export const enCatalog = {
     tiffNoImageData: "TIFF file contains no image data.",
     genericDecodeFailure: "Unable to decode this image format.",
     conversionFailed: "Conversion failed",
+    blockUnavailableInVersion: "{block} is unavailable in Minecraft {version}. Choose another block or version.",
     imageSizeError: "Invalid input image dimensions",
     imageSizePadAction: "Pad to {width}×{height}",
     imageSizeCropAction: "Crop to {width}×{height}",

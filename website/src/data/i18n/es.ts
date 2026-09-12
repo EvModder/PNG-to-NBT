@@ -392,6 +392,7 @@ export const esCatalog = {
       suppressLoadSpotMarkerBlock: "Bloque marcador",
       autoFixInvalidDimensions: "Autocorregir dimensiones de entrada no válidas",
       invalidDimensionsStrategy: "Método de corrección",
+      minecraftVersion: "Versión de Minecraft",
       invalidDimensionsStrategies: {
         crop: "Recortar",
         pad: "Rellenar",
@@ -425,6 +426,7 @@ export const esCatalog = {
     tiffNoImageData: "El archivo TIFF no contiene datos de imagen.",
     genericDecodeFailure: "No se puede decodificar este formato de imagen.",
     conversionFailed: "La conversión falló",
+    blockUnavailableInVersion: "{block} no está disponible en Minecraft {version}. Elige otro bloque o versión.",
     imageSizeError: "Dimensiones de entrada no válidas",
     imageSizePadAction: "Rellenar a {width}×{height}",
     imageSizeCropAction: "Recortar a {width}×{height}",

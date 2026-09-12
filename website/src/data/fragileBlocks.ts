@@ -5,6 +5,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/minecraftVersion.ts
  * - src/lib/shapeModel.ts
  *
  * Notes:
@@ -112,8 +113,7 @@ type FragileSupportRuleValue = {
 type FragileSupportRule = Readonly<FragileSupportRuleValue>;
 
 // Callers:
-// - src/Index.tsx
-// - src/lib/shapeModel.ts
+// - src/lib/minecraftVersion.ts
 export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ["fire", { validSupportBlocks: ["netherrack"], replacementBlock: "netherrack" }],
   ["soul_fire", { validSupportBlocks: ["soul_sand", "soul_soil"], replacementBlock: "soul_soil" }],
@@ -144,7 +144,7 @@ export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ["open_eyeblossom", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["closed_eyeblossom", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   // Intentionally omitted for simplicity, but perfectly valid supports: [sand, red_sand, and terracotta variants].
-  ["dead_bush", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["dead_bush", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "farmland"], replacementBlock: "dirt" }],
 ]);
 
 function getBaseBlockId(blockId: string): string {

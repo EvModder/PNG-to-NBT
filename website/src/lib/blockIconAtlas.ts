@@ -31,6 +31,7 @@ const KNOWN_UNUSED_ICON_KEYS = new Set(Object.keys(BLOCK_ICON_ATLASES.unused.ent
 
 function toBlockIconKey(raw: string): string {
   return stripDefaultBlockNamespace(raw)
+    .replace(/^chain(?=\[|$)/, "iron_chain")
     .replace(/__/g, "__us__")
     .replace(/\[/g, "__lb__")
     .replace(/\]/g, "__rb__")

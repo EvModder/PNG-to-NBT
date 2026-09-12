@@ -12,8 +12,10 @@
  */
 import { useMemo } from "react";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
-import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
-import { normalizeBlockId } from "@/lib/blockId";
+import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
+import { getMinecraftCatalog } from "@/lib/minecraftVersion";
+import { normalizeBlockId, toDisplayName } from "@/lib/blockId";
 import { FillerRole } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import { isShadeFillerDisabled } from "@/lib/fillerRules";
@@ -37,23 +39,24 @@ export interface PreviewPixelReplacement {
 // - src/lib/previewImageStore.ts
 export type PreviewPixelMask = Uint8Array;
 
-const BLOCK_BASE_COLOR_INDEX = new Map<string, number>(
-  [...BASE_COLORS.entries()].flatMap(([baseIndex, baseColor]) =>
-    [
-      ...baseColor.blocks,
-      ...(EXCLUDED_BLOCKS[baseIndex] ?? []),
-    ].map(block => [normalizeBlockId(block), baseIndex] as const),
-  ),
-);
+const BLOCK_BASE_COLOR_INDEX = new Map(Object.keys(MINECRAFT_VERSIONS).map(key => {
+  const version = key as MinecraftVersion;
+  const catalog = getMinecraftCatalog(version);
+  return [version, new Map(catalog.blocks.flatMap((blocks, id) =>
+    [...blocks, ...catalog.excluded[id]].map(block => [block, id] as const),
+  ))] as const;
+}));
 
-function getBlockLightShadeReplacement(block: string): readonly [number, number, number] | null {
-  const baseIndex = BLOCK_BASE_COLOR_INDEX.get(normalizeBlockId(block));
+function getBlockLightShadeReplacement(block: string, version: MinecraftVersion): readonly [number, number, number] | null {
+  const colors = BLOCK_BASE_COLOR_INDEX.get(version)!;
+  const baseIndex = colors.get(toDisplayName(block)) ?? colors.get(normalizeBlockId(block));
   if (baseIndex === undefined || baseIndex === TRANSPARENCY_BASE_INDEX) return null;
   const { r, g, b } = BASE_COLORS[baseIndex];
   return [r, g, b];
 }
 
 type CollectVsFillerPreviewReplacementOptions = {
+  minecraftVersion?: MinecraftVersion;
   shape: GeneratedShape | null;
   shadeFillerBlock: string;
   dominateVoidFillerBlock: string;
@@ -75,14 +78,15 @@ export function collectVsFillerPreviewReplacements(
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
     xColumnRange,
+    minecraftVersion = DEFAULT_MINECRAFT_VERSION,
   }: CollectVsFillerPreviewReplacementOptions,
 ): PreviewPixelReplacement[] {
   if (!shape) return [];
 
   const dominantBlock = dominateVoidFillerBlock || shadeFillerBlock;
   const recessiveBlock = recessiveVoidFillerBlock || shadeFillerBlock;
-  const dominantRgb = isShadeFillerDisabled(dominantBlock) ? null : getBlockLightShadeReplacement(dominantBlock);
-  const recessiveRgb = isShadeFillerDisabled(recessiveBlock) ? null : getBlockLightShadeReplacement(recessiveBlock);
+  const dominantRgb = isShadeFillerDisabled(dominantBlock) ? null : getBlockLightShadeReplacement(dominantBlock, minecraftVersion);
+  const recessiveRgb = isShadeFillerDisabled(recessiveBlock) ? null : getBlockLightShadeReplacement(recessiveBlock, minecraftVersion);
 
   const roles = [
     ...(dominantRgb ? [FillerRole.ShadeVoidDominant] : []),
@@ -131,6 +135,7 @@ export function useVsFillerPreviewReplacements(
     () => collectVsFillerPreviewReplacements(options),
     [
       options.shape,
+      options.minecraftVersion,
       options.shadeFillerBlock,
       options.dominateVoidFillerBlock,
       options.recessiveVoidFillerBlock,

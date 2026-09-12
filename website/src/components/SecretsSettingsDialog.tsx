@@ -14,12 +14,14 @@ import {
   type SuppressLoadSpotMarkerBlock,
 } from "@/data/defaultSettings";
 import { messages } from "@/lib/messages";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { MUTED_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
-// Both dropdowns share a width so the column lines up; the widest option in either wins.
+// Dropdowns share a width so the column lines up; the widest option wins.
 const SETTINGS_SELECT_WIDTH_CH = Math.max(
   ...SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.map(block => block.length),
+  ...Object.values(MINECRAFT_VERSIONS).map(version => version.label.length),
   ...INVALID_DIMENSIONS_STRATEGY_OPTIONS.map(
     strategy => messages.dialogs.options.invalidDimensionsStrategies[strategy].length,
   ),
@@ -66,6 +68,8 @@ type SecretsSettingsDialogProps = {
   setAutoFixInvalidDimensions: Dispatch<SetStateAction<boolean>>;
   invalidDimensionsStrategy: InvalidDimensionsStrategy;
   setInvalidDimensionsStrategy: Dispatch<SetStateAction<InvalidDimensionsStrategy>>;
+  minecraftVersion: MinecraftVersion;
+  setMinecraftVersion: Dispatch<SetStateAction<MinecraftVersion>>;
 };
 
 type OptionRowProps = {
@@ -179,6 +183,8 @@ export function SecretsSettingsDialog({
   setAutoFixInvalidDimensions,
   invalidDimensionsStrategy,
   setInvalidDimensionsStrategy,
+  minecraftVersion,
+  setMinecraftVersion,
 }: SecretsSettingsDialogProps) {
   if (!open) return null;
 
@@ -297,6 +303,20 @@ export function SecretsSettingsDialog({
             optionLabel={strategy => messages.dialogs.options.invalidDimensionsStrategies[strategy]}
             selectLabel={messages.dialogs.options.invalidDimensionsStrategy}
           />
+          <label className="flex items-center justify-between gap-2">
+            <span>{messages.dialogs.options.minecraftVersion}</span>
+            <select
+              value={minecraftVersion}
+              aria-label={messages.dialogs.options.minecraftVersion}
+              onChange={event => setMinecraftVersion(event.target.value as MinecraftVersion)}
+              className="h-6 min-w-0 shrink-0 rounded border border-border bg-input px-1.5 text-xs text-foreground"
+              style={{ width: SETTINGS_SELECT_WIDTH }}
+            >
+              {Object.entries(MINECRAFT_VERSIONS).map(([version, { label }]) => (
+                <option key={version} value={version}>{label}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
     </div>

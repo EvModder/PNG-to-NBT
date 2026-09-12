@@ -13,7 +13,9 @@
  * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/colorGridParsing.ts
+ * - src/lib/minecraftVersion.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/previewImageEdits.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/utils/colorTableLayout.ts
  */
@@ -107,3 +109,9 @@ export type InvalidDimensionsStrategy = typeof INVALID_DIMENSIONS_STRATEGY_OPTIO
 export type InvalidDimensionsMode = InvalidDimensionsStrategy | "reject";
 export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = true;
 export const DEFAULT_INVALID_DIMENSIONS_STRATEGY: InvalidDimensionsStrategy = "crop";
+// Callers:
+// - src/Index.tsx
+// - src/lib/minecraftVersion.ts
+// - src/lib/nbtExport.ts
+// - src/lib/previewImageEdits.ts
+export const DEFAULT_MINECRAFT_VERSION = "26.2";

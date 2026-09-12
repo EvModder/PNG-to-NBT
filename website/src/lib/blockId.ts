@@ -22,6 +22,7 @@
  * - src/lib/suppressLoadMarkers.ts
  */
 import { BASE_COLORS } from "@/data/mapColors";
+import type { MinecraftVersion } from "@/data/minecraftVersions";
 import type { ColorRef, ColorRgb } from "@/types/color";
 import { getSelectedCustomColorBlock } from "@/utils/customColors";
 
@@ -73,6 +74,7 @@ export function sanitizeUserBlockEntry(raw: string): string {
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
 export interface ColorBlockSelections {
+  minecraftVersion?: MinecraftVersion;
   selectedBlocks: Record<number, string>;
   selectedBlocksCustom: Record<number, string>;
   customColors: ColorRgb[];
@@ -135,6 +137,7 @@ export function hasAssignedColorBlock(
 }
 
 // Callers:
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 export function toDisplayName(blockName: string): string {
   const stripped = stripDefaultBlockNamespace(blockName);

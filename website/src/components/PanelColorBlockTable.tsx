@@ -18,7 +18,8 @@ import {
 import { Glasses, Minus, PanelRightClose, PanelRightOpen, Plus } from "lucide-react";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { BASE_COLORS, Shade, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
-import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
+import type { MinecraftVersion } from "@/data/minecraftVersions";
+import { getMinecraftCatalog, getVersionedBlockName, isBlockAvailable } from "@/lib/minecraftVersion";
 import { getBlockIconAsset } from "@/lib/blockIconAtlas";
 import { getColorRefCount, getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { normalizeBlockId } from "@/lib/blockId";
@@ -75,6 +76,7 @@ function getConditionalBaseBlocks(baseIndex: number, belowPlatformWater: boolean
 }
 
 type PanelColorBlockTableProps = {
+  minecraftVersion: MinecraftVersion;
   isStackedLayout: boolean;
   imageValid: boolean;
   belowPlatformWater: boolean;
@@ -163,6 +165,7 @@ function measureNoWrapSectionWidth(el: HTMLElement): number {
 // Callers:
 // - src/Index.tsx
 export function PanelColorBlockTable({
+  minecraftVersion,
   isStackedLayout,
   imageValid,
   belowPlatformWater,
@@ -217,6 +220,7 @@ export function PanelColorBlockTable({
   );
   const dragColRef = useRef<ColumnId | null>(null);
   const dragColumnIndicatorRef = useRef<ColumnDragIndicator | null>(null);
+  const catalog = getMinecraftCatalog(minecraftVersion);
   const [dragColumnIndicator, setDragColumnIndicator] = useState<ColumnDragIndicator | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<SwatchTooltip | null>(null);
   const swatchTooltipRafRef = useRef<number | null>(null);
@@ -255,9 +259,9 @@ export function PanelColorBlockTable({
   const longestBlockName = useMemo(() => {
     let longest: string = messages.common.none;
     for (let idx = 0; idx < BASE_COLORS.length; ++idx) {
-      const excluded = showExcludedBlocks ? EXCLUDED_BLOCKS[idx] ?? [] : [];
+      const excluded = showExcludedBlocks ? catalog.excluded[idx] : [];
       const extra = customBlocksByBase[idx] || [];
-      for (const block of BASE_COLORS[idx].blocks) if (block.length > longest.length) longest = block;
+      for (const block of catalog.blocks[idx]) if (block.length > longest.length) longest = block;
       for (const block of getConditionalBaseBlocks(idx, belowPlatformWater)) if (block.length > longest.length) longest = block;
       for (const block of excluded) if (block.length > longest.length) longest = block;
       for (const block of extra) if (block.length > longest.length) longest = block;
@@ -265,7 +269,7 @@ export function PanelColorBlockTable({
       if (selected.length > longest.length) longest = selected;
     }
     return longest;
-  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks]);
+  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks, catalog]);
 
   const sortedIndices = useMemo(() => {
     const base = showTransparentRow ? [TRANSPARENCY_BASE_INDEX, ...DEFAULT_COLOR_ROW_ORDER] : [...DEFAULT_COLOR_ROW_ORDER];
@@ -273,7 +277,7 @@ export function PanelColorBlockTable({
     const dir = sortDir === "asc" ? 1 : -1;
     const sorters: Record<string, (a: number, b: number) => number> = {
       name: (a, b) => dir * BASE_COLORS[a].name.localeCompare(BASE_COLORS[b].name),
-      options: (a, b) => dir * (BASE_COLORS[a].blocks.length - BASE_COLORS[b].blocks.length),
+      options: (a, b) => dir * (catalog.blocks[a].length - catalog.blocks[b].length),
       color: (a, b) =>
         dir *
         (getHue(BASE_COLORS[a].r, BASE_COLORS[a].g, BASE_COLORS[a].b) -
@@ -282,7 +286,7 @@ export function PanelColorBlockTable({
       required: (a, b) => dir * (getBaseSortRequiredCount(a) - getBaseSortRequiredCount(b)),
     };
     return sorters[sortKey] ? base.toSorted(sorters[sortKey]) : base;
-  }, [sortKey, sortDir, getBaseSortRequiredCount, showTransparentRow]);
+  }, [sortKey, sortDir, getBaseSortRequiredCount, showTransparentRow, catalog]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
     if (!imageValid || usedShadesByColorKey.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
@@ -460,12 +464,13 @@ export function PanelColorBlockTable({
   }, [setColumnOrder]);
 
   const getBlockGroups = useCallback((idx: number) => {
-    const excluded = showExcludedBlocks ? EXCLUDED_BLOCKS[idx] ?? [] : [];
-    const extra = customBlocksByBase[idx] || [];
+    const excluded = showExcludedBlocks ? catalog.excluded[idx] : [];
+    const extra = (customBlocksByBase[idx] || []).filter(block => isBlockAvailable(block, minecraftVersion))
+      .map(block => getVersionedBlockName(block, minecraftVersion));
     const selected = selectedBlocks[idx] || "";
     const regular = [
-      ...BASE_COLORS[idx].blocks,
-      ...excluded.filter(block => !BASE_COLORS[idx].blocks.includes(block)),
+      ...catalog.blocks[idx],
+      ...excluded.filter(block => !catalog.blocks[idx].includes(block)),
     ];
     const withBelowPlatformWater = [
       ...regular,
@@ -480,7 +485,7 @@ export function PanelColorBlockTable({
       custom,
       all: [...withBelowPlatformWater, ...custom],
     };
-  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks]);
+  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks, catalog, minecraftVersion]);
 
   const getColorSwatchShades = useCallback((idx: number): Shade[] => {
     return [...getOrderedSwatchShades(imageValid, usedShadesByColorKey.get(getBaseColorKey(idx)))] as Shade[];
