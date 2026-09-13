@@ -11,6 +11,8 @@
  * - computeColorGridStats()
  * - collectShadeCountsByColorRefKey()
  * - summarizeVoidShadows()
+ * - deriveImageStats()
+ * - aggregateDerivedImageStats()
  *
  * Callers:
  * - src/Index.tsx
@@ -23,7 +25,7 @@
  * - src/lib/tileParsingWorkerTypes.ts
  */
 import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
-import { getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
+import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { type ColorGrid, Shade, type ColorRef } from "@/types/color";
 
@@ -43,7 +45,6 @@ export enum PixelParity {
 export type WaterDrops = readonly [dark: number, flat: number, light: number];
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/colorGridParsingCore.ts
 export type ColorFrequencyMap = Map<ColorRef, Map<Shade, number>>;
 
@@ -301,4 +302,90 @@ export function summarizeVoidShadows(tileImageStats: readonly ColorGridStats[]):
   }
 
   return { hasAnyVoidShadow, northToSouthSelectable, southToNorthSelectable };
+}
+
+type DerivedImageStats = {
+  allSameShade?: Shade;
+  flatModeBehavior: FlatModeBehavior;
+  hasTransparency: boolean;
+  paletteUsageInfo: {
+    uniqueShadeCount: number;
+    uniqueBaseColorCount: number;
+  };
+  usedShadesByColorKey: Map<ColorRefKey, Set<Shade>>;
+};
+
+function collectUsedShadesByColorKey(colorFrequencyMap: ColorFrequencyMap): Map<ColorRefKey, Set<Shade>> {
+  const usedShadesByColorKey = new Map<ColorRefKey, Set<Shade>>();
+  for (const [colorKey, shadeFrequencyMap] of colorFrequencyMap) {
+    usedShadesByColorKey.set(getColorRefKey(colorKey), new Set(shadeFrequencyMap.keys()));
+  }
+  return usedShadesByColorKey;
+}
+
+function summarizeUsedShadesByColorKey(
+  usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>,
+): Pick<DerivedImageStats, "hasTransparency" | "paletteUsageInfo"> {
+  let hasTransparency = false;
+  let uniqueShadeCount = 0;
+  let uniqueBaseColorCount = 0;
+
+  for (const [colorKey, shades] of usedShadesByColorKey) {
+    const color = parseColorRefKey(colorKey);
+    if (color.isCustom) {
+      uniqueShadeCount += shades.size;
+      continue;
+    }
+
+    if (color.id === TRANSPARENCY_BASE_INDEX) {
+      if (shades.has(Shade.Dark)) {
+        hasTransparency = true;
+      }
+      continue;
+    }
+
+    ++uniqueBaseColorCount;
+    uniqueShadeCount += shades.size;
+  }
+
+  return {
+    hasTransparency,
+    paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
+  };
+}
+
+// Callers:
+// - src/Index.tsx
+export function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
+  const usedShadesByColorKey = collectUsedShadesByColorKey(imageStats.colorFrequencyMap);
+  return {
+    allSameShade: imageStats.allSameShade,
+    flatModeBehavior: imageStats.flatModeBehavior,
+    usedShadesByColorKey,
+    ...summarizeUsedShadesByColorKey(usedShadesByColorKey),
+  };
+}
+
+// Callers:
+// - src/Index.tsx
+export function aggregateDerivedImageStats(tileImageStats: readonly ColorGridStats[]): DerivedImageStats {
+  const usedShadesByColorKey = new Map<ColorRefKey, Set<Shade>>();
+  for (const imageStats of tileImageStats) {
+    for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
+      const stableKey = getColorRefKey(colorKey);
+      let shades = usedShadesByColorKey.get(stableKey);
+      if (!shades) {
+        shades = new Set<Shade>();
+        usedShadesByColorKey.set(stableKey, shades);
+      }
+      for (const shade of shadeFrequencyMap.keys()) shades.add(shade);
+    }
+  }
+
+  return {
+    allSameShade: undefined,
+    flatModeBehavior: FlatModeBehavior.None,
+    usedShadesByColorKey,
+    ...summarizeUsedShadesByColorKey(usedShadesByColorKey),
+  };
 }

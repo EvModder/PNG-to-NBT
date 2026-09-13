@@ -13,7 +13,7 @@ import {
 } from "@/utils/conversion";
 import { FillerRole, BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { type ColorGrid, Shade } from "@/types/color";
-import type { ShadedColorRef } from "@/types/color";
+import type { ColorRef, ShadedColorRef } from "@/types/color";
 import type { GeneratedShape, ShapeCell, ShapeCoordKey, ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { PixelParity, getPixelParity, type WaterDrops } from "./colorGridAnalysis";
@@ -41,6 +41,7 @@ type ShapeBlockSet = {
   loweredWaterBlocks: ShapeBlock[];
 };
 interface RawShapePart {
+  suppressStepIndex?: number;
   blocks: ShapeBlock[];
   loweredWaterBlocks: ShapeBlock[];
   fillerCandidates: FillerCandidate[];
@@ -79,7 +80,7 @@ type ShapeCacheKeyId = string & { readonly __shapeCacheKeyId: unique symbol };
 type GeneratedShapeSignatureId = string & { readonly __generatedShapeSignatureId: unique symbol };
 type CachedGeneratedShape = {
   shape: GeneratedShape;
-  signatureId: GeneratedShapeSignatureId;
+  signatureId?: GeneratedShapeSignatureId;
 };
 // Alias build modes are canonicalized before staircase-mode dispatch.
 type StaircaseInternalBuildMode =
@@ -200,6 +201,9 @@ function getGridShapeCache(colorGrid: ColorGrid): GridShapeCache {
 
 type HashState = [number, number, number, number];
 
+// Signatures need role identity, not the same role-name characters for every cell.
+const FILLER_ROLE_SIGNATURE_IDS = new Map(Object.values(FillerRole).map((role, index) => [role, index]));
+
 function createHashState(): HashState {
   return [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];
 }
@@ -226,6 +230,7 @@ function getGeneratedShapeSignatureId(shape: GeneratedShape): GeneratedShapeSign
   mixUint32(state, shape.parts.length);
 
   for (const part of shape.parts) {
+    if (part.suppressStepIndex !== undefined) mixUint32(state, part.suppressStepIndex);
     mixUint32(state, part.bounds.minY);
     mixUint32(state, part.bounds.maxY);
     mixUint32(state, part.bounds.minZ);
@@ -234,9 +239,13 @@ function getGeneratedShapeSignatureId(shape: GeneratedShape): GeneratedShapeSign
     mixUint32(state, floorYs.length);
     for (const floorY of floorYs) mixUint32(state, floorY);
 
-    const cells = [...part.cells.entries()].sort(([coordA], [coordB]) => coordA - coordB);
-    mixUint32(state, cells.length);
-    for (const [coord, cell] of cells) {
+    const coords = new Float64Array(part.cells.size);
+    let index = 0;
+    for (const coord of part.cells.keys()) coords[index++] = coord;
+    coords.sort();
+    mixUint32(state, coords.length);
+    for (const coord of coords) {
+      const cell = part.cells.get(coord)!;
       mixUint32(state, coord);
       if (!Array.isArray(cell)) {
         mixUint32(state, 0);
@@ -246,9 +255,9 @@ function getGeneratedShapeSignatureId(shape: GeneratedShape): GeneratedShapeSign
       }
 
       mixUint32(state, 1);
-      const roles = [...cell].sort();
+      const roles = cell.length > 1 ? [...cell].sort() : cell;
       mixUint32(state, roles.length);
-      for (const role of roles) mixString(state, role);
+      for (const role of roles) mixUint32(state, FILLER_ROLE_SIGNATURE_IDS.get(role)!);
     }
   }
 
@@ -398,9 +407,9 @@ function buildFillerCandidates(blocks: ShapeBlock[], occupiedExtraBlocks: ShapeB
 
   const groundedColumns = Array.from({ length: MAP_SIZE }, () => Array<boolean>(MAP_SIZE).fill(false));
   const sortedTopEntries = [...maxY.entries()].sort((a, b) => {
-    const [ax, az] = parseColumnCoordKey(a[0]);
-    const [bx, bz] = parseColumnCoordKey(b[0]);
-    return ax !== bx ? ax - bx : bz - az;
+    // Packed column keys sort by X; within each X, visit Z south-to-north.
+    const columnDelta = Math.floor(a[0] / COLUMN_COORD_Z_SIZE) - Math.floor(b[0] / COLUMN_COORD_Z_SIZE);
+    return columnDelta || b[0] - a[0];
   });
   const hasGroundedNeighborConnection = (coord: ColumnCoordKey, neighborCoord: ColumnCoordKey, neighborX: number, neighborZ: number) => {
     if (neighborX < 0 || neighborX >= MAP_SIZE || neighborZ < 0 || neighborZ >= MAP_SIZE || !groundedColumns[neighborX][neighborZ]) return false;
@@ -465,27 +474,13 @@ function buildFillerCandidates(blocks: ShapeBlock[], occupiedExtraBlocks: ShapeB
     addWaterSideCandidate(block.x, block.y - 1, block.z);
   }
 
-  return [...byCoord.values()];
-}
-
-function buildBelowOnlyWaterFillerCandidates(blocks: ShapeBlock[], occupiedExtraBlocks: ShapeBlock[] = []): FillerCandidate[] {
-  const occupied = new Set<ShapeCoordKey>();
-  const waterBottoms = new Map<ColumnCoordKey, PositionedEntry>();
-
-  for (const block of blocks) {
-    occupied.add(toShapeCoordKey(block.x, block.y, block.z));
-    if (!isWaterBlock(block)) continue;
-    const coord = toColumnCoordKey(block.x, block.z);
-    const current = waterBottoms.get(coord);
-    if (!current || block.y < current.y) waterBottoms.set(coord, { x: block.x, y: block.y, z: block.z });
-  }
-  for (const block of occupiedExtraBlocks) occupied.add(toShapeCoordKey(block.x, block.y, block.z));
-
-  const candidates: FillerCandidate[] = [];
-  for (const bottom of waterBottoms.values()) {
-    const belowKey = toShapeCoordKey(bottom.x, bottom.y - 1, bottom.z);
+  const candidates = [...byCoord.values()];
+  for (const [coord, range] of waterRange) {
+    const [x, z] = parseColumnCoordKey(coord);
+    const y = range.minY - 1;
+    const belowKey = toShapeCoordKey(x, y, z);
     if (occupied.has(belowKey)) continue;
-    candidates.push({ x: bottom.x, y: bottom.y - 1, z: bottom.z, roles: [FillerRole.SupportWaterBase] });
+    candidates.push({ x, y, z, roles: [FillerRole.SupportWaterBase] });
   }
   return candidates;
 }
@@ -535,7 +530,7 @@ function buildShapePart(
   const bounds = measureShapeBounds(blocks, loweredWaterBlocks);
   const effectiveSupportFloorYs = supportFloorYs ?? new Set<number>([bounds.minY - 1]);
   const fillerCandidates = includeDefaultFillerCandidates
-    ? [...buildFillerCandidates(blocks, loweredWaterBlocks), ...buildBelowOnlyWaterFillerCandidates(blocks, loweredWaterBlocks), ...extraFillerCandidates]
+    ? [...buildFillerCandidates(blocks, loweredWaterBlocks), ...extraFillerCandidates]
     : extraFillerCandidates;
   if (crubTechSupportUpperY !== undefined) {
     applyCrubTechSupportRoles(fillerCandidates, blocks, loweredWaterBlocks, effectiveSupportFloorYs, crubTechSupportUpperY);
@@ -554,7 +549,7 @@ function getShadeFillerRole(z: number): FillerRole {
   return z < 0 ? FillerRole.ShadeNorthRow : FillerRole.ShadeSuppress;
 }
 
-function isCrubTechShadeFillerRole(role: FillerRole): boolean {
+function isCrubTechShadeFillerRole(role: FillerRole): role is FillerRole.ShadeNorthRow | FillerRole.ShadeSuppress {
   return role === FillerRole.ShadeNorthRow || role === FillerRole.ShadeSuppress;
 }
 
@@ -1204,7 +1199,6 @@ function applyStaircaseVariantGroupPostProcess<T extends PositionedEntry>(
   if (!Number.isFinite(valleyMaxY)) return;
 
   const primaryTopY = new Map<ColumnCoordKey, number>();
-  const primaryMinY = new Map<ColumnCoordKey, number>();
   const primaryZByColumn = new Map<number, number[]>();
   const segments: GroupSegment[] = [];
 
@@ -1215,19 +1209,16 @@ function applyStaircaseVariantGroupPostProcess<T extends PositionedEntry>(
 
     const allPrimaryZ = [...primaryInfo.keys()].sort((a, b) => a - b);
     const topY = new Map<number, number>();
-    const minY = new Map<number, number>();
     for (const z of allPrimaryZ) {
       const row = zRows.get(z);
       if (!row) continue;
-      minY.set(z, row.minY);
       topY.set(z, row.maxY);
     }
 
-    const primaryZ = allPrimaryZ.filter(z => topY.has(z) && minY.has(z));
+    const primaryZ = allPrimaryZ.filter(z => topY.has(z));
     if (primaryZ.length > 0) primaryZByColumn.set(x, primaryZ);
     for (const z of primaryZ) {
       primaryTopY.set(rowKey(x, z), topY.get(z)!);
-      primaryMinY.set(rowKey(x, z), minY.get(z)!);
     }
     if (primaryZ.length === 0) continue;
 
@@ -1380,16 +1371,11 @@ function applyStaircaseVariantGroupPostProcess<T extends PositionedEntry>(
     return [...deltas].sort((a, b) => a - b);
   };
 
-  const isGroupShadeSafe = (groupIds: Set<number>, delta: number): boolean => {
-    const movingPrimaryRows = new Set<ColumnCoordKey>();
-    const affectedColumns = new Set<number>();
-
-    for (const segmentId of groupIds) {
-      const segment = segments[segmentId];
-      affectedColumns.add(segment.x);
-      for (const z of segment.primaryZ) movingPrimaryRows.add(rowKey(segment.x, z));
-    }
-
+  const isGroupShadeSafe = (
+    movingPrimaryRows: ReadonlySet<ColumnCoordKey>,
+    affectedColumns: ReadonlySet<number>,
+    delta: number,
+  ): boolean => {
     for (const x of affectedColumns) {
       const primaryInfo = pixelByColumn.get(x);
       const primaryZ = primaryZByColumn.get(x);
@@ -1425,7 +1411,6 @@ function applyStaircaseVariantGroupPostProcess<T extends PositionedEntry>(
         for (const block of row.blocks) block.y += delta;
         const coord = rowKey(row.x, row.z);
         if (primaryTopY.has(coord)) primaryTopY.set(coord, primaryTopY.get(coord)! + delta);
-        if (primaryMinY.has(coord)) primaryMinY.set(coord, primaryMinY.get(coord)! + delta);
       }
       segment.minY += delta;
       segment.maxY += delta;
@@ -1441,9 +1426,17 @@ function applyStaircaseVariantGroupPostProcess<T extends PositionedEntry>(
       const maxLift = valleyMaxY - groupMaxY;
       if (maxLift <= 0) break;
 
+      const movingPrimaryRows = new Set<ColumnCoordKey>();
+      const affectedColumns = new Set<number>();
+      for (const segmentId of groupIds) {
+        const segment = segments[segmentId];
+        affectedColumns.add(segment.x);
+        for (const z of segment.primaryZ) movingPrimaryRows.add(rowKey(segment.x, z));
+      }
+
       let chosenDelta = 0;
       for (const delta of collectCandidateDeltas(groupIds, maxLift)) {
-        if (!isGroupShadeSafe(groupIds, delta)) continue;
+        if (!isGroupShadeSafe(movingPrimaryRows, affectedColumns, delta)) continue;
         moveGroup(groupIds, delta);
         const expanded = expandGroup(groupIds);
         if (expanded.groupIds.size > groupIds.size || expanded.touchesFrozen) {
@@ -1656,6 +1649,13 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 
+  // Reuse per-column heights; undefined distinguishes missing rows from height zero.
+  const origMaxY = Array<number | undefined>(MAP_SIZE);
+  const depthByZ = Array<number | undefined>(MAP_SIZE);
+  const prefTopY = Array<number | undefined>(MAP_SIZE);
+  const minFeas = Array<number | undefined>(MAP_SIZE);
+  const maxFeas = Array<number | undefined>(MAP_SIZE);
+  const assignedTopY = Array<number | undefined>(MAP_SIZE);
   const columns = groupBlocksByColumn(blocks);
   for (let x = 0; x < MAP_SIZE; ++x) {
     const colBlocks = columns[x];
@@ -1687,20 +1687,18 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
     const primaryZs = [...pixelInfo.keys()].sort((a, b) => a - b);
     if (primaryZs.length === 0) continue;
 
-    const origMaxY = new Map<number, number>();
-    const origMinY = new Map<number, number>();
-    const depthByZ = new Map<number, number>();
+    origMaxY.fill(undefined);
+    depthByZ.fill(undefined);
     for (const z of primaryZs) {
       const rowBlocks = zToBlocks.get(z);
       if (!rowBlocks) continue;
       const maxY = Math.max(...rowBlocks.map(block => block.y));
       const minY = Math.min(...rowBlocks.map(block => block.y));
-      origMaxY.set(z, maxY);
-      origMinY.set(z, minY);
-      depthByZ.set(z, maxY - minY + 1);
+      origMaxY[z] = maxY;
+      depthByZ[z] = maxY - minY + 1;
     }
 
-    const lowerBound = (z: number) => (pixelInfo.get(z)?.isWater ? (depthByZ.get(z) ?? 1) - 1 : 0);
+    const lowerBound = (z: number) => (pixelInfo.get(z)?.isWater ? (depthByZ[z] ?? 1) - 1 : 0);
     const upperBound = (_z: number) => MAP_SIZE - 1;
     const hasPrimary = (z: number) => pixelInfo.has(z);
     const edgeRel = (northZ: number): -1 | 0 | 1 | null => {
@@ -1712,17 +1710,17 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
       if (south.shade === Shade.Flat) return 0;
       return -1;
     };
-    const isColumnValid = (topY: Map<number, number>): boolean => {
+    const isColumnValid = (topY: readonly (number | undefined)[]): boolean => {
       for (const z of primaryZs) {
-        const y = topY.get(z);
+        const y = topY[z];
         if (y === undefined || y < lowerBound(z) || y > upperBound(z)) return false;
       }
       for (let northZ = 0; northZ < MAP_SIZE - 1; ++northZ) {
         const rel = edgeRel(northZ);
         if (rel === null) continue;
         const southZ = northZ + 1;
-        const yN = topY.get(northZ);
-        const yS = topY.get(southZ);
+        const yN = topY[northZ];
+        const yS = topY[southZ];
         if (yN === undefined || yS === undefined) continue;
         if (rel === 0 && yS !== yN) return false;
         if (rel === 1 && !(yS > yN)) return false;
@@ -1734,7 +1732,7 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
     interface Segment { start: number; end: number; dir: -1 | 1 }
     const segments: Segment[] = [];
     const endpointHints: { zList: number[]; type: "lower" | "upper" }[] = [];
-    const prefTopY = new Map<number, number>();
+    prefTopY.fill(undefined);
 
     let segStart: number | null = null;
     let segDir: -1 | 1 | null = null;
@@ -1817,31 +1815,31 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
         : Array.from({ length: groups.length }, (_, i) => Math.min(highY, lowY + i));
 
       for (let i = 0; i < groups.length; ++i) {
-        for (const z of groups[i]) prefTopY.set(z, values[i]);
+        for (const z of groups[i]) prefTopY[z] = values[i];
       }
       endpointHints.push({ zList: [...lowGroup], type: "lower" });
       endpointHints.push({ zList: [...highGroup], type: "upper" });
     };
 
     for (const segment of segments) applySegmentPreference(segment);
-    for (const z of primaryZs) if (!prefTopY.has(z)) prefTopY.set(z, randomInt(lowerBound(z), upperBound(z)));
+    for (const z of primaryZs) if (prefTopY[z] === undefined) prefTopY[z] = randomInt(lowerBound(z), upperBound(z));
 
-    const minFeas = new Map<number, number>();
-    const maxFeas = new Map<number, number>();
+    minFeas.fill(undefined);
+    maxFeas.fill(undefined);
     for (const z of primaryZs) {
-      minFeas.set(z, lowerBound(z));
-      maxFeas.set(z, upperBound(z));
+      minFeas[z] = lowerBound(z);
+      maxFeas[z] = upperBound(z);
     }
 
     for (let northZ = MAP_SIZE - 2; northZ >= 0; --northZ) {
       if (!hasPrimary(northZ)) continue;
-      let lo = minFeas.get(northZ) ?? lowerBound(northZ);
-      let hi = maxFeas.get(northZ) ?? upperBound(northZ);
+      let lo = minFeas[northZ] ?? lowerBound(northZ);
+      let hi = maxFeas[northZ] ?? upperBound(northZ);
       const southZ = northZ + 1;
       const rel = edgeRel(northZ);
       if (rel !== null && hasPrimary(southZ)) {
-        const sLo = minFeas.get(southZ) ?? lowerBound(southZ);
-        const sHi = maxFeas.get(southZ) ?? upperBound(southZ);
+        const sLo = minFeas[southZ] ?? lowerBound(southZ);
+        const sHi = maxFeas[southZ] ?? upperBound(southZ);
         if (rel === 0) {
           lo = Math.max(lo, sLo);
           hi = Math.min(hi, sHi);
@@ -1852,25 +1850,25 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
         }
       }
       if (lo > hi) {
-        const p = prefTopY.get(northZ) ?? lowerBound(northZ);
+        const p = prefTopY[northZ] ?? lowerBound(northZ);
         const clamped = Math.min(Math.max(p, lowerBound(northZ)), upperBound(northZ));
         lo = clamped;
         hi = clamped;
       }
-      minFeas.set(northZ, lo);
-      maxFeas.set(northZ, hi);
+      minFeas[northZ] = lo;
+      maxFeas[northZ] = hi;
     }
 
-    const assignedTopY = new Map<number, number>();
+    assignedTopY.fill(undefined);
     for (let z = 0; z < MAP_SIZE; ++z) {
       if (!hasPrimary(z)) continue;
-      let lo = minFeas.get(z) ?? lowerBound(z);
-      let hi = maxFeas.get(z) ?? upperBound(z);
+      let lo = minFeas[z] ?? lowerBound(z);
+      let hi = maxFeas[z] ?? upperBound(z);
       const northZ = z - 1;
-      if (northZ >= 0 && hasPrimary(northZ) && assignedTopY.has(northZ)) {
+      if (northZ >= 0 && hasPrimary(northZ) && assignedTopY[northZ] !== undefined) {
         const rel = edgeRel(northZ);
         if (rel !== null) {
-          const northY = assignedTopY.get(northZ)!;
+          const northY = assignedTopY[northZ]!;
           if (rel === 0) {
             lo = Math.max(lo, northY);
             hi = Math.min(hi, northY);
@@ -1883,12 +1881,12 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
       }
       let y: number;
       if (lo > hi) {
-        y = Math.min(Math.max(prefTopY.get(z) ?? lo, lowerBound(z)), upperBound(z));
+        y = Math.min(Math.max(prefTopY[z] ?? lo, lowerBound(z)), upperBound(z));
       } else {
-        const pref = prefTopY.get(z) ?? randomInt(lo, hi);
+        const pref = prefTopY[z] ?? randomInt(lo, hi);
         y = pref < lo || pref > hi ? Math.min(Math.max(pref, lo), hi) : pref;
       }
-      assignedTopY.set(z, y);
+      assignedTopY[z] = y;
     }
 
     const uniqueEndpoints = new Map<string, { zList: number[]; type: "lower" | "upper" }>();
@@ -1898,69 +1896,68 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
     }
 
     for (const endpoint of uniqueEndpoints.values()) {
-      const zList = endpoint.zList.filter(z => assignedTopY.has(z));
+      const zList = endpoint.zList.filter(z => assignedTopY[z] !== undefined);
       if (zList.length === 0) continue;
       const snapshot = new Map<number, number>();
-      for (const z of zList) snapshot.set(z, assignedTopY.get(z)!);
+      for (const z of zList) snapshot.set(z, assignedTopY[z]!);
       const minY = Math.max(...zList.map(z => lowerBound(z)));
       const maxY = Math.min(...zList.map(z => upperBound(z)));
 
-      if (endpoint.type === "upper") {
-        let maxDown = 0;
-        const currTop = Math.min(...zList.map(z => snapshot.get(z)!));
-        for (let d = 1; currTop - d >= minY; ++d) {
-          for (const z of zList) assignedTopY.set(z, snapshot.get(z)! - d);
-          if (isColumnValid(assignedTopY)) maxDown = d;
-          else break;
+      const direction = endpoint.type === "upper" ? -1 : 1;
+      let limit = Math.floor(direction < 0
+        ? Math.min(...snapshot.values()) - minY
+        : maxY - Math.max(...snapshot.values()));
+      let maxMove = 0;
+      if (limit >= 1) {
+        for (const z of zList) assignedTopY[z] = snapshot.get(z)! + direction;
+        // Rigid translation gives linear bounds: after d=1 passes, valid distances form a prefix.
+        if (isColumnValid(assignedTopY)) {
+          maxMove = 1;
+          while (maxMove < limit) {
+            const distance = Math.ceil((maxMove + limit) / 2);
+            for (const z of zList) assignedTopY[z] = snapshot.get(z)! + direction * distance;
+            if (isColumnValid(assignedTopY)) maxMove = distance;
+            else limit = distance - 1;
+          }
         }
-        const chosen = randomInt(0, maxDown);
-        for (const z of zList) assignedTopY.set(z, snapshot.get(z)! - chosen);
-      } else {
-        let maxUp = 0;
-        const currBottom = Math.max(...zList.map(z => snapshot.get(z)!));
-        for (let d = 1; currBottom + d <= maxY; ++d) {
-          for (const z of zList) assignedTopY.set(z, snapshot.get(z)! + d);
-          if (isColumnValid(assignedTopY)) maxUp = d;
-          else break;
-        }
-        const chosen = randomInt(0, maxUp);
-        for (const z of zList) assignedTopY.set(z, snapshot.get(z)! + chosen);
       }
+      const chosen = randomInt(0, maxMove);
+      for (const z of zList) assignedTopY[z] = snapshot.get(z)! + direction * chosen;
     }
 
     if (!isColumnValid(assignedTopY)) {
-      assignedTopY.clear();
+      assignedTopY.fill(undefined);
       for (let z = 0; z < MAP_SIZE; ++z) {
         if (!hasPrimary(z)) continue;
-        let lo = minFeas.get(z) ?? lowerBound(z);
-        let hi = maxFeas.get(z) ?? upperBound(z);
+        let lo = minFeas[z] ?? lowerBound(z);
+        let hi = maxFeas[z] ?? upperBound(z);
         const northZ = z - 1;
-        if (northZ >= 0 && hasPrimary(northZ) && assignedTopY.has(northZ)) {
+        if (northZ >= 0 && hasPrimary(northZ) && assignedTopY[northZ] !== undefined) {
           const rel = edgeRel(northZ);
           if (rel !== null) {
-            const northY = assignedTopY.get(northZ)!;
+            const northY = assignedTopY[northZ]!;
             if (rel === 0) lo = hi = northY;
             else if (rel === 1) lo = Math.max(lo, northY + 1);
             else hi = Math.min(hi, northY - 1);
           }
         }
-        if (lo > hi) assignedTopY.set(z, Math.min(Math.max(prefTopY.get(z) ?? lo, lowerBound(z)), upperBound(z)));
-        else assignedTopY.set(z, randomInt(lo, hi));
+        if (lo > hi) assignedTopY[z] = Math.min(Math.max(prefTopY[z] ?? lo, lowerBound(z)), upperBound(z));
+        else assignedTopY[z] = randomInt(lo, hi);
       }
     }
 
     if (!isColumnValid(assignedTopY)) {
-      assignedTopY.clear();
+      assignedTopY.fill(undefined);
       for (const z of primaryZs) {
-        const y = origMaxY.get(z);
-        if (y !== undefined) assignedTopY.set(z, y);
+        const y = origMaxY[z];
+        if (y !== undefined) assignedTopY[z] = y;
       }
     }
 
     const deltaApplied = new Map<number, number>();
     for (const z of primaryZs) {
-      const origTop = origMaxY.get(z);
-      const newTop = assignedTopY.get(z);
+      const origTop = origMaxY[z];
+      const newTop = assignedTopY[z];
       if (origTop === undefined || newTop === undefined) continue;
       const delta = newTop - origTop;
       deltaApplied.set(z, delta);
@@ -2625,6 +2622,7 @@ function buildStepPhaseParts(
     if (skipEmptySuppressSteps && isEmptyPart) {
       continue;
     }
+    part.suppressStepIndex = stepIndex;
     steps.push(part);
     outputStepIndex += 1;
   }
@@ -2637,19 +2635,29 @@ function buildStepPhaseParts(
 
 function finalizeShapePart(part: RawShapePart): ShapePart {
   const cells = new Map<ShapeCoordKey, ShapeCell>();
+  // Share repeated palette colors instead of cloning a color object for every block.
+  const colorCells = new Map<ShadedColorRef, ColorRef>();
+  const getColorCell = (color: ShadedColorRef): ColorRef => {
+    let cell = colorCells.get(color);
+    if (!cell) {
+      cell = { id: color.id, isCustom: color.isCustom };
+      colorCells.set(color, cell);
+    }
+    return cell;
+  };
   for (const block of part.blocks) {
     const key = toShapeCoordKey(block.x, block.y, block.z);
     cells.set(
       key,
       block.ref.kind === "color"
-        ? { id: block.ref.color.id, isCustom: block.ref.color.isCustom }
+        ? getColorCell(block.ref.color)
         : [block.ref.role],
     );
   }
   for (const block of part.loweredWaterBlocks) {
     if (block.ref.kind !== "color") continue;
     const key = toShapeCoordKey(block.x, block.y, block.z);
-    cells.set(key, { id: block.ref.color.id, isCustom: block.ref.color.isCustom });
+    cells.set(key, getColorCell(block.ref.color));
   }
   for (const candidate of part.fillerCandidates) {
     const key = toShapeCoordKey(candidate.x, candidate.y, candidate.z);
@@ -2664,6 +2672,7 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
     }
   }
   return {
+    ...(part.suppressStepIndex === undefined ? {} : { suppressStepIndex: part.suppressStepIndex }),
     cells,
     bounds: part.bounds,
     supportFloorYs: part.supportFloorYs,
@@ -2754,7 +2763,8 @@ function getCachedStaircaseVariantBlocks(
   const baseBlocks = buildMode === BuildMode.StaircaseGroup
     ? getCachedStaircaseVariantBlocks(colorGrid, cache, BuildMode.StaircaseValley, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY)
     : getCachedStaircaseBaseBlocks(colorGrid, cache, excludeWater, topAlignedWater, buildAtWorldMinY);
-  const blocks = cloneShapeBlocks(baseBlocks);
+  // Northline leaves the base untouched; per-shape changes operate on a separate clone.
+  const blocks = buildMode === BuildMode.StaircaseNorthline ? baseBlocks : cloneShapeBlocks(baseBlocks);
   switch (buildMode) {
     case BuildMode.InclineUp:
     case BuildMode.InclineDown:
@@ -3074,10 +3084,7 @@ function getGeneratedShape(
       0,
     ),
   };
-  const generatedShape = {
-    shape,
-    signatureId: getGeneratedShapeSignatureId(shape),
-  };
+  const generatedShape = { shape };
   cache.shapes.set(cacheKeyId, generatedShape);
   return generatedShape;
 }
@@ -3121,7 +3128,7 @@ export function generateShapeMap(
   const collapseStaircaseModes = options.collapseStaircaseModes ?? true;
   const includeFlatNorthline = options.includeFlatNorthline ?? false;
   const selectedMode = options.selectedMode ?? null;
-  const staircaseVisibleModes = getRequestedStaircaseModes(
+  const requestedModes: BuildMode[] = getRequestedStaircaseModes(
     selectedMode,
     allSameShade,
     hasWater,
@@ -3132,12 +3139,13 @@ export function generateShapeMap(
   const suppressVisibleModes: BuildMode[] = requiresTwoLayerLateShading
     ? [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]
     : [...BASE_SUPPRESS_BUILD_MODES, BuildMode.Suppress2Layer];
+  if (selectedMode && suppressVisibleModes.includes(selectedMode)) requestedModes.push(selectedMode);
   const seenShapeSignatures = new Set<GeneratedShapeSignatureId>();
   const shapes: Partial<Record<BuildMode, GeneratedShape>> = {};
 
-  for (const buildMode of staircaseVisibleModes) {
+  for (const buildMode of requestedModes) {
     const internalBuildMode = getCanonicalBuildMode(buildMode);
-    const { shape, signatureId } = getGeneratedShape(
+    const generated = getGeneratedShape(
       colorGrid,
       internalBuildMode,
       options.layerGap,
@@ -3154,33 +3162,13 @@ export function generateShapeMap(
       buildMode,
       suppress2LayerLatePairY,
     );
-    if (seenShapeSignatures.has(signatureId)) continue;
-    seenShapeSignatures.add(signatureId);
-    shapes[buildMode] = shape;
-  }
-
-  if (selectedMode && suppressVisibleModes.includes(selectedMode)) {
-    const { shape, signatureId } = getGeneratedShape(
-      colorGrid,
-      getCanonicalBuildMode(selectedMode),
-      options.layerGap,
-      mixSteps,
-      stepDirection,
-      paletteSeed,
-      waterDrops,
-      topAlignedWater,
-      enableWaterConvenience,
-      buildAtWorldMinY,
-      skipEmptySuppressSteps,
-      useCrubTech,
-      includeTransparentBlocks,
-      selectedMode,
-      suppress2LayerLatePairY,
-    );
-    if (!seenShapeSignatures.has(signatureId)) {
+    // Single-mode jobs still generate the full shape, but have nothing to deduplicate.
+    if (requestedModes.length > 1) {
+      const signatureId = generated.signatureId ??= getGeneratedShapeSignatureId(generated.shape);
+      if (seenShapeSignatures.has(signatureId)) continue;
       seenShapeSignatures.add(signatureId);
-      shapes[selectedMode] = shape;
     }
+    shapes[buildMode] = generated.shape;
   }
 
   return shapes;

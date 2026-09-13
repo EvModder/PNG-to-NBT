@@ -271,12 +271,8 @@ function getMarkerY(part: ShapePart): number | null {
   for (const y of part.supportFloorYs) {
     if (y < minSupportFloorY) minSupportFloorY = y;
   }
-  if (!Number.isFinite(minSupportFloorY)) return null;
-  const markerY = minSupportFloorY + 1;
-  if (markerY < part.bounds.minY || markerY > part.bounds.maxY) {
-    throw new Error(`Invalid load spot marker Y ${markerY}; expected within shape bounds [${part.bounds.minY}, ${part.bounds.maxY}]`);
-  }
-  return markerY;
+  // Mixed north/south steps can raise every color block above the phase's base.
+  return Number.isFinite(minSupportFloorY) ? minSupportFloorY + 1 : null;
 }
 
 function getShapeMarkerY(shape: GeneratedShape): number | null {
@@ -323,20 +319,6 @@ function getNonWaterColorCoords(part: ShapePart): NonWaterColorCoord[] {
     coords.push({ x, z });
   }
   return coords;
-}
-
-function findMatchingStepSpecIndex(
-  coords: readonly NonWaterColorCoord[],
-  specs: readonly StepPhaseSpec[],
-  startIndex: number,
-): number {
-  for (let specIndex = startIndex; specIndex < specs.length; ++specIndex) {
-    const spec = specs[specIndex];
-    for (const coord of coords) {
-      if (spec.includeAt(coord.x, coord.z)) return specIndex;
-    }
-  }
-  throw new Error("Unable to match load spot markers to a step phase spec");
 }
 
 function buildSuppressStepPairMarkers(
@@ -412,16 +394,15 @@ function buildSuppressStepLoadSpotMarkers(
 
   const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
   const markers: LoadSpotMarkerEntry[] = [];
-  let nextSpecIndex = 0;
   for (const part of shape.parts) {
+    // Mixed steps contain borrowed colors from adjacent phases, so coordinates cannot identify the phase.
+    if (part.suppressStepIndex === undefined) continue;
+    const spec = specs[part.suppressStepIndex];
+    if (!spec) throw new Error(`Missing suppress step spec for phase ${part.suppressStepIndex}`);
     const coords = getNonWaterColorCoords(part);
     if (coords.length === 0) continue;
     const markerY = getMarkerY(part);
     if (markerY === null) continue;
-    const specIndex = findMatchingStepSpecIndex(coords, specs, nextSpecIndex);
-    const spec = specs[specIndex];
-    if (!spec) throw new Error(`Missing suppress step spec for marker part index ${specIndex}`);
-    nextSpecIndex = specIndex + 1;
     const specCoords = coords.filter(coord => spec.includeAt(coord.x, coord.z));
     markers.push(
       ...(buildMode === BuildMode.SuppressStepPairs

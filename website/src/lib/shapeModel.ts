@@ -81,8 +81,8 @@ function getMappedShapeColorBlockId(
 // Callers:
 // - src/Index.tsx
 export function getSupportedColorAbove(part: ShapePart, coord: number): ColorRef | null {
-  const [x, y, z] = parseShapeCoordKey(coord);
-  const above = part.cells.get(toShapeCoordKey(x, y + 1, z));
+  // One Y step spans the packed Z range; no coordinate decoding is needed.
+  const above = part.cells.get(coord + SHAPE_COORD_Z_SIZE);
   return above && isShapeColorCell(above) ? above : null;
 }
 

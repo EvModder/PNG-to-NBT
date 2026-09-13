@@ -7,6 +7,8 @@
  * - hasBuildAtWorldMinYOpportunity()
  * - analyzeFragileSupportOverrideNeeds()
  * - analyzeMaterialNeeds()
+ * - aggregateMaterialCounts()
+ * - aggregateOverrideCounts()
  *
  * Callers:
  * - src/Index.tsx
@@ -96,7 +98,7 @@ function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): nu
 }
 
 function isRealWaterBlockName(blockName: string): boolean {
-  return blockName.split("[", 1)[0] === "minecraft:water";
+  return blockName.split("[", 1)[0] === "water";
 }
 
 function analyzePartMaterialNeeds(
@@ -113,6 +115,7 @@ function analyzePartMaterialNeeds(
   const fillerRoleCounts = new Map<FillerRole, number>();
   const countedVisibleWaterColumns = new Set<number>();
   const countedRealWaterColumns = new Set<number>();
+  const colorBlockNames = new Map<number, string | null>();
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
@@ -127,14 +130,19 @@ function analyzePartMaterialNeeds(
         if (visibleKey !== null) visibleColorKeys.add(visibleKey);
       }
 
-      const blockName = resolveShapeColorBlockName(cell, options);
+      const colorKey = getColorRefKey(cell);
+      let blockName = colorBlockNames.get(colorKey);
+      if (blockName === undefined) {
+        const resolved = resolveShapeColorBlockName(cell, options);
+        blockName = resolved ? toDisplayName(resolved) : null;
+        colorBlockNames.set(colorKey, blockName);
+      }
       if (!blockName) continue;
       if (isWaterColorCell && isRealWaterBlockName(blockName)) {
         if (countedRealWaterColumns.has(waterColumnKey)) continue;
         countedRealWaterColumns.add(waterColumnKey);
       }
-      const displayName = toDisplayName(blockName);
-      addCount(blockCounts, displayName);
+      addCount(blockCounts, blockName);
       continue;
     }
 
@@ -394,4 +402,52 @@ export function analyzeMaterialNeeds(
     numUniqueColorShadesForPart: visibleColorKeys.size,
     fillerRoleCounts,
   };
+}
+
+type MaterialCountsLike = Pick<MaterialNeedStats, "blockCounts" | "colorCounts" | "fillerRoleCounts">;
+
+// Callers:
+// - src/Index.tsx
+export function aggregateMaterialCounts(
+  stats: readonly MaterialCountsLike[],
+  mode: "sum" | "max",
+): MaterialCountsLike {
+  const blockCounts: Record<string, number> = {};
+  const colorCounts: Record<string, number> = {};
+  const fillerRoleCounts = new Map<FillerRole, number>();
+
+  for (const stat of stats) {
+    for (const [blockName, count] of Object.entries(stat.blockCounts)) {
+      blockCounts[blockName] = mode === "sum"
+        ? (blockCounts[blockName] || 0) + count
+        : Math.max(blockCounts[blockName] || 0, count);
+    }
+    for (const [colorKey, count] of Object.entries(stat.colorCounts)) {
+      colorCounts[colorKey] = mode === "sum"
+        ? (colorCounts[colorKey] || 0) + count
+        : Math.max(colorCounts[colorKey] || 0, count);
+    }
+    for (const [role, count] of stat.fillerRoleCounts) {
+      fillerRoleCounts.set(role, mode === "sum"
+        ? (fillerRoleCounts.get(role) ?? 0) + count
+        : Math.max(fillerRoleCounts.get(role) ?? 0, count),
+      );
+    }
+  }
+
+  return { blockCounts, colorCounts, fillerRoleCounts };
+}
+
+// Callers:
+// - src/Index.tsx
+export function aggregateOverrideCounts(
+  stats: readonly FragileSupportOverrideNeedStats[],
+): Record<string, number> {
+  const overrideCounts: Record<string, number> = {};
+  for (const stat of stats) {
+    for (const [blockId, count] of Object.entries(stat.overrideCounts)) {
+      overrideCounts[blockId] = (overrideCounts[blockId] || 0) + count;
+    }
+  }
+  return overrideCounts;
 }

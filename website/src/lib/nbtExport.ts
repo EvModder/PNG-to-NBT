@@ -143,12 +143,17 @@ function buildStructurePaletteStateEntries(
   for (const paletteRole of EXPORT_PALETTE_ROLE_ORDER) {
     const paletteIndexByBlockName = sharedPaletteIndexByBlockName ?? new Map<string, number>();
     for (const blockIndex of blockIndexesByRole[paletteRole]) {
-      const blockName = getVersionedBlockName(blocks[blockIndex].blockName, version);
-      let state = paletteIndexByBlockName.get(blockName);
+      const sourceName = blocks[blockIndex].blockName;
+      let state = paletteIndexByBlockName.get(sourceName);
       if (state === undefined) {
-        state = paletteBlockIds.length;
-        paletteIndexByBlockName.set(blockName, state);
-        paletteBlockIds.push(blockName);
+        const blockName = getVersionedBlockName(sourceName, version);
+        state = paletteIndexByBlockName.get(blockName);
+        if (state === undefined) {
+          state = paletteBlockIds.length;
+          paletteIndexByBlockName.set(blockName, state);
+          paletteBlockIds.push(blockName);
+        }
+        paletteIndexByBlockName.set(sourceName, state);
       }
       stateByBlockIndex[blockIndex] = state;
     }
@@ -219,13 +224,13 @@ function validateExportHorizontalBounds(
   }
 }
 
-function getWaterColumnTopY(part: ShapePart): Map<string, number> {
-  const topYByColumn = new Map<string, number>();
+function getWaterColumnTopY(part: ShapePart): Map<number, number> {
+  const topYByColumn = new Map<number, number>();
 
   for (const [coord, cell] of part.cells) {
     if (!isShapeColorCell(cell) || cell.isCustom || cell.id !== WATER_BASE_INDEX) continue;
     const [x, y, z] = parseShapeCoordKey(coord);
-    const columnKey = `${x},${z}`;
+    const columnKey = z * MAP_SIZE + x;
     const currentTopY = topYByColumn.get(columnKey);
     if (currentTopY === undefined || y > currentTopY) topYByColumn.set(columnKey, y);
   }
@@ -238,14 +243,14 @@ function resolveExportShapeColorBlockName(
   x: number,
   y: number,
   z: number,
-  waterTopYByColumn: ReadonlyMap<string, number>,
+  waterTopYByColumn: ReadonlyMap<number, number>,
   options: ExportOptions,
 ): string | null {
   const blockName = resolveShapeColorBlockName(color, options);
   if (!blockName) return null;
   if (color.isCustom || color.id !== WATER_BASE_INDEX) return blockName;
 
-  const waterTopY = waterTopYByColumn.get(`${x},${z}`);
+  const waterTopY = waterTopYByColumn.get(z * MAP_SIZE + x);
   if (waterTopY === undefined || y >= waterTopY) return blockName;
 
   const blockBaseName = blockName.split("[", 1)[0];
@@ -412,7 +417,7 @@ function appendCrubTechPlatformBlocks(
     if (platformYs.size === 0) return;
   }
 
-  const blockIndexByCoord = new Map(blocks.map((block, index) => [`${block.x},${block.y},${block.z}`, index] as const));
+  const blockIndexByCoord = new Map<string, number>(blocks.map((block, index) => [`${block.x},${block.y},${block.z}`, index]));
   const upsertBlock = (x: number, y: number, z: number, blockName: string, replace = false) => {
     const key = `${x},${y},${z}`;
     const existingIndex = blockIndexByCoord.get(key);

@@ -1006,7 +1006,7 @@ export function PanelColorBlockTable({
               })}
             </div>
             <div className="border-t border-border mb-[3px]" />
-            <div className="relative">{usedIndices.map(renderColorRow)}</div>
+            <div>{usedIndices.map(renderColorRow)}</div>
           </div>
 
           {imageValid && unusedIndices.length > 0 && (

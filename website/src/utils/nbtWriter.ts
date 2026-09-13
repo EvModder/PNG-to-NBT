@@ -9,6 +9,8 @@
 
 class NbtWriter {
   private data: number[] = [];
+  private encoder = new TextEncoder();
+  private strings = new Map<string, Uint8Array>();
 
   writeByte(v: number) {
     this.data.push(v & 0xFF);
@@ -19,14 +21,15 @@ class NbtWriter {
   }
 
   writeInt(v: number) {
-    const buf = new ArrayBuffer(4);
-    new DataView(buf).setInt32(0, v, false);
-    const bytes = new Uint8Array(buf);
-    for (const b of bytes) this.data.push(b);
+    this.data.push((v >>> 24) & 0xFF, (v >>> 16) & 0xFF, (v >>> 8) & 0xFF, v & 0xFF);
   }
 
   writeString(v: string) {
-    const encoded = new TextEncoder().encode(v);
+    let encoded = this.strings.get(v);
+    if (!encoded) {
+      encoded = this.encoder.encode(v);
+      this.strings.set(v, encoded);
+    }
     this.writeShort(encoded.length);
     for (const b of encoded) this.data.push(b);
   }

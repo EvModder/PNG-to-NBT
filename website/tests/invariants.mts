@@ -1395,8 +1395,63 @@ function assertDefaultLatePairYInvariant(): void {
   if (tooHighCount > 0) throw new Error("Default late-pair cells were placed above layer gap + 1");
 }
 
+function assertMixedStepMarkerInvariants(): void {
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array(MAP_SIZE).fill(TRANSPARENT_COLOR));
+  // Water-only phases borrow the northern color from another phase when mixing is enabled.
+  for (const [x, z] of [[0, 1], [127, 0], [64, 63]]) {
+    grid[x][z] = { id: 1, isCustom: false, shade: Shade.Light };
+    grid[x][z + 1] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Light };
+  }
+  grid[32][20] = { id: 1, isCustom: false, shade: Shade.Dark };
+  grid[32][21] = { id: WATER_BASE_INDEX, isCustom: false, shade: Shade.Dark };
+  for (const mode of [BuildMode.SuppressStepPairs, BuildMode.SuppressStepChecker]) {
+    const width = mode === BuildMode.SuppressStepPairs ? 1 : 2;
+    const distance = width === 1 ? 126 : 124;
+    for (const direction of Object.values(SuppressStepDirection)) {
+      const axisX = direction === SuppressStepDirection.EastToWest || direction === SuppressStepDirection.WestToEast;
+      const ascending = direction === SuppressStepDirection.WestToEast || direction === SuppressStepDirection.NorthToSouth;
+      for (const mixSteps of [false, true]) for (const skipEmptySuppressSteps of [false, true]) {
+        for (const belowWater of [false, true]) {
+          const shape = generateShapeMap(grid, undefined, true, true, true, {
+            layerGap: 1, selectedMode: mode, selectedStepDirection: direction,
+            mixSteps, skipEmptySuppressSteps, collapseStaircaseModes: false,
+            waterSetting: belowWater ? { kind: "below-platform", drops: [24, 14, 7] } : undefined,
+          })[mode];
+          if (!shape) throw new Error("Missing mixed-step test shape");
+          const phaseByY = new Map<number, number>();
+          let expectedPairMarkers = 0;
+          for (const [index, part] of shape.parts.entries()) {
+            if (belowWater && index === 0) {
+              if (part.suppressStepIndex !== undefined) throw new Error("Water preview must not become a suppress step");
+              continue;
+            }
+            if (part.suppressStepIndex === undefined) throw new Error("Missing original suppress phase index");
+            if (!skipEmptySuppressSteps && part.suppressStepIndex !== index - Number(belowWater)) {
+              throw new Error("Incorrect original suppress phase index");
+            }
+            phaseByY.set(Math.min(...part.supportFloorYs) + 1, part.suppressStepIndex);
+            if ([...part.cells.values()].some(cell => !Array.isArray(cell) && cell.id !== WATER_BASE_INDEX)) {
+              expectedPairMarkers += 64;
+            }
+          }
+          const markers = buildSuppressLoadSpotMarkers(shape, mode, direction, { markSuppressLoadSpotsInSchematic: true });
+          if (width === 1 && markers.length !== expectedPairMarkers) throw new Error("Missing step-pair markers");
+          if (markers.length === 0) throw new Error("Expected suppress step markers");
+          for (const marker of markers) {
+            const phase = phaseByY.get(marker.y);
+            if (phase === undefined) throw new Error("Marker has no matching phase Y");
+            const line = ascending ? phase * width + width - 1 + distance : MAP_SIZE - width - phase * width - distance;
+            if ((axisX ? marker.x : marker.z) !== line) throw new Error("Marker shifted to the wrong suppress phase");
+          }
+        }
+      }
+    }
+  }
+}
+
 async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
+  assertMixedStepMarkerInvariants();
   assertCrubTechPresetInvariant();
   assertTwoLayerLatePairEligibilityInvariants();
   await assertCrubTechInvariants();

@@ -194,7 +194,7 @@ export function SecretsSettingsDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-card border border-border rounded-md p-2 shadow-lg"
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto bg-card border border-border rounded-md p-2 shadow-lg"
         role="dialog"
         aria-modal="true"
         aria-label={messages.dialogs.secretSettingsTitle}

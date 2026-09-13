@@ -39,6 +39,7 @@ export function getColorRefKey(color: Pick<ColorRef, "id" | "isCustom">): ColorR
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/colorGridAnalysis.ts
 export function parseColorRefKey(key: ColorRefKey): ColorRef {
   return { isCustom: (key & 1) === 1, id: Math.floor(key / 2) };
 }

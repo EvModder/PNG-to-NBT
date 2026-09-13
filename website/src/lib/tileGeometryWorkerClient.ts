@@ -25,7 +25,11 @@ type WorkerSlot = {
 // repeated-mode caching for exactly the workloads this client exists to accelerate.
 const MAX_CACHE_ENTRIES = 4096;
 const workerSlots: WorkerSlot[] = [];
-const pendingRequests = new Map<number, { resolve: (value: any) => void; reject: (reason?: unknown) => void; slot: WorkerSlot }>();
+const pendingRequests = new Map<number, {
+  resolve: (value: TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult) => void;
+  reject: (reason?: unknown) => void;
+  slot: WorkerSlot;
+}>();
 const baseGeometryCache = new Map<string, TileBaseGeometryWorkerResult>();
 const finalGeometryCache = new Map<string, TileFinalGeometryWorkerResult>();
 const baseGeometryInflight = new Map<string, Promise<TileBaseGeometryWorkerResult>>();
@@ -92,17 +96,18 @@ function getLeastBusyWorkerSlot(): WorkerSlot {
   return best;
 }
 
-function runWorkerRequest<Result>(request: Omit<TileGeometryWorkerRequest, "id">): Promise<Result> {
+function runWorkerRequest(request: { type: "base"; input: TileBaseGeometryWorkerInput }): Promise<TileBaseGeometryWorkerResult>;
+function runWorkerRequest(request: { type: "final"; input: TileFinalGeometryWorkerInput }): Promise<TileFinalGeometryWorkerResult>;
+function runWorkerRequest(request:
+  | { type: "base"; input: TileBaseGeometryWorkerInput }
+  | { type: "final"; input: TileFinalGeometryWorkerInput },
+): Promise<TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult> {
   const slot = getLeastBusyWorkerSlot();
   const id = nextRequestId++;
   slot.inFlightCount += 1;
-  return new Promise<Result>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     pendingRequests.set(id, { resolve, reject, slot });
-    if (request.type === "base") {
-      slot.worker.postMessage({ ...(request as Extract<TileGeometryWorkerRequest, { type: "base" }>), id });
-    } else {
-      slot.worker.postMessage({ ...(request as Extract<TileGeometryWorkerRequest, { type: "final" }>), id });
-    }
+    slot.worker.postMessage({ ...request, id } satisfies TileGeometryWorkerRequest);
   });
 }
 
@@ -161,7 +166,7 @@ export function getTileBaseGeometry(
   }
   const inFlight = baseGeometryInflight.get(cacheKey);
   if (inFlight) return inFlight;
-  const next = runWorkerRequest<TileBaseGeometryWorkerResult>({ type: "base", input })
+  const next = runWorkerRequest({ type: "base", input })
     .then(result => {
       baseGeometryInflight.delete(cacheKey);
       touchBoundedCache(baseGeometryCache, cacheKey, result);
@@ -189,7 +194,7 @@ export function getTileFinalGeometry(
   }
   const inFlight = finalGeometryInflight.get(cacheKey);
   if (inFlight) return inFlight;
-  const next = runWorkerRequest<TileFinalGeometryWorkerResult>({ type: "final", input })
+  const next = runWorkerRequest({ type: "final", input })
     .then(result => {
       finalGeometryInflight.delete(cacheKey);
       touchBoundedCache(finalGeometryCache, cacheKey, result);

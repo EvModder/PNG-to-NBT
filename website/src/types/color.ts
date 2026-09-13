@@ -62,6 +62,7 @@ export enum Shade {
 // - src/lib/colorGridAnalysis.ts
 // - src/components/PanelCustomColors.tsx
 // - src/lib/shapeModel.ts
+// - src/lib/shapeGeneration.ts
 // - src/lib/nbtExport.ts
 // - src/utils/color.ts
 // - src/types/shape.ts

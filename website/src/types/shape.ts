@@ -65,6 +65,8 @@ export type ShapeCoordKey = number;
 // - src/lib/shapeGeneration.ts
 // - src/lib/nbtExport.ts
 export interface ShapePart {
+  // Original phase index, unaffected by skipped empty steps or a water-preview part.
+  suppressStepIndex?: number;
   cells: Map<ShapeCoordKey, ShapeCell>;
   bounds: {
     minY: number;

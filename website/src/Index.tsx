@@ -83,7 +83,8 @@ import {
 } from "@/lib/colorGridParsing";
 import {
   collectShadeCountsByColorRefKey,
-  type ColorFrequencyMap,
+  deriveImageStats,
+  aggregateDerivedImageStats,
   computeColorGridStats,
   FlatModeBehavior,
   requiresTwoLayerLateShading,
@@ -111,6 +112,8 @@ import type { ColorGrid, ColorRgb } from "@/types/color";
 import {
   analyzeFragileSupportOverrideNeeds,
   analyzeMaterialNeeds,
+  aggregateMaterialCounts,
+  aggregateOverrideCounts,
   hasBuildAtWorldMinYOpportunity,
 } from "@/lib/shapeAnalysis";
 import { getCachedShapeFillerNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
@@ -235,22 +238,13 @@ const CRUBTECH_WATER_DROPS = [
   DEFAULT_CRUBTECH_FLAT_WATER_DROP,
   DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
 ] as const satisfies WaterDrops;
-const CRUBTECH_SHAPE_WATER_DROPS = CRUBTECH_WATER_DROPS.map(drop => drop + 1) as WaterDrops;
+const CRUBTECH_SHAPE_WATER_DROPS = CRUBTECH_WATER_DROPS.map(drop => drop + 1) as [...WaterDrops];
 type TileSelectionModifiers = {
   shiftKey: boolean;
   metaKey: boolean;
   ctrlKey: boolean;
 };
-type DerivedImageStats = {
-  allSameShade?: Shade;
-  flatModeBehavior: FlatModeBehavior;
-  hasTransparency: boolean;
-  paletteUsageInfo: {
-    uniqueShadeCount: number;
-    uniqueBaseColorCount: number;
-  };
-  usedShadesByColorKey: Map<ColorRefKey, Set<Shade>>;
-};
+type DerivedImageStats = ReturnType<typeof deriveImageStats>;
 type MaterialCountsLike = Pick<
   ReturnType<typeof analyzeMaterialNeeds>,
   "blockCounts" | "colorCounts" | "fillerRoleCounts"
@@ -403,123 +397,10 @@ function hasCurrentMaterialAnalyses(
   });
 }
 
-function collectUsedShadesByColorKey(colorFrequencyMap: ColorFrequencyMap): Map<ColorRefKey, Set<Shade>> {
-  const usedShadesByColorKey = new Map<ColorRefKey, Set<Shade>>();
-  for (const [colorKey, shadeFrequencyMap] of colorFrequencyMap) {
-    usedShadesByColorKey.set(getColorRefKey(colorKey), new Set(shadeFrequencyMap.keys()));
-  }
-  return usedShadesByColorKey;
-}
-
-function summarizeUsedShadesByColorKey(
-  usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>,
-): Pick<DerivedImageStats, "hasTransparency" | "paletteUsageInfo"> {
-  let hasTransparency = false;
-  let uniqueShadeCount = 0;
-  let uniqueBaseColorCount = 0;
-
-  for (const [colorKey, shades] of usedShadesByColorKey) {
-    const color = parseColorRefKey(colorKey);
-    if (color.isCustom) {
-      uniqueShadeCount += shades.size;
-      continue;
-    }
-
-    if (color.id === TRANSPARENCY_BASE_INDEX) {
-      if (shades.has(Shade.Dark)) {
-        hasTransparency = true;
-      }
-      continue;
-    }
-
-    ++uniqueBaseColorCount;
-    uniqueShadeCount += shades.size;
-  }
-
-  return {
-    hasTransparency,
-    paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
-  };
-}
-
 function getUsedWaterShades(
   usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>,
 ): ReadonlySet<Shade> {
   return usedShadesByColorKey.get(getColorRefKey({ id: WATER_BASE_INDEX, isCustom: false })) ?? EMPTY_USED_WATER_SHADES;
-}
-
-function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
-  const usedShadesByColorKey = collectUsedShadesByColorKey(imageStats.colorFrequencyMap);
-  return {
-    allSameShade: imageStats.allSameShade,
-    flatModeBehavior: imageStats.flatModeBehavior,
-    usedShadesByColorKey,
-    ...summarizeUsedShadesByColorKey(usedShadesByColorKey),
-  };
-}
-
-function aggregateDerivedImageStats(tileImageStats: readonly ColorGridStats[]): DerivedImageStats {
-  const usedShadesByColorKey = new Map<ColorRefKey, Set<Shade>>();
-  for (const imageStats of tileImageStats) {
-    for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
-      const stableKey = getColorRefKey(colorKey);
-      let shades = usedShadesByColorKey.get(stableKey);
-      if (!shades) {
-        shades = new Set<Shade>();
-        usedShadesByColorKey.set(stableKey, shades);
-      }
-      for (const shade of shadeFrequencyMap.keys()) shades.add(shade);
-    }
-  }
-
-  return {
-    allSameShade: undefined,
-    flatModeBehavior: FlatModeBehavior.None,
-    usedShadesByColorKey,
-    ...summarizeUsedShadesByColorKey(usedShadesByColorKey),
-  };
-}
-
-function aggregateMaterialCounts(
-  stats: readonly MaterialCountsLike[],
-  mode: "sum" | "max",
-): MaterialCountsLike {
-  const blockCounts: Record<string, number> = {};
-  const colorCounts: Record<string, number> = {};
-  const fillerRoleCounts = new Map<FillerRole, number>();
-
-  for (const stat of stats) {
-    for (const [blockName, count] of Object.entries(stat.blockCounts)) {
-      blockCounts[blockName] = mode === "sum"
-        ? (blockCounts[blockName] || 0) + count
-        : Math.max(blockCounts[blockName] || 0, count);
-    }
-    for (const [colorKey, count] of Object.entries(stat.colorCounts)) {
-      colorCounts[colorKey] = mode === "sum"
-        ? (colorCounts[colorKey] || 0) + count
-        : Math.max(colorCounts[colorKey] || 0, count);
-    }
-    for (const [role, count] of stat.fillerRoleCounts) {
-      fillerRoleCounts.set(role, mode === "sum"
-        ? (fillerRoleCounts.get(role) ?? 0) + count
-        : Math.max(fillerRoleCounts.get(role) ?? 0, count),
-      );
-    }
-  }
-
-  return { blockCounts, colorCounts, fillerRoleCounts };
-}
-
-function aggregateOverrideCounts(
-  stats: readonly NonNullable<ReturnType<typeof analyzeFragileSupportOverrideNeeds>>[],
-): Record<string, number> {
-  const overrideCounts: Record<string, number> = {};
-  for (const stat of stats) {
-    for (const [blockId, count] of Object.entries(stat.overrideCounts)) {
-      overrideCounts[blockId] = (overrideCounts[blockId] || 0) + count;
-    }
-  }
-  return overrideCounts;
 }
 
 function getAggregatedFlatModeBehavior(tileAnalyses: readonly TileBaseAnalysis[]): FlatModeBehavior {
@@ -1894,7 +1775,7 @@ const Index = () => {
       if (!previousTile?.materialNeedStats || !tile.supportShape) return false;
       if (previousTile.tile.cacheKey !== tile.tile.cacheKey || previousTile.supportShape !== tile.supportShape) return false;
       if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== effectiveApplySupportFloorYs) return false;
-      if (previousMaterialInputs.minecraftVersion !== minecraftVersion) return false;
+      if (getVersionedSupportRules(previousMaterialInputs.minecraftVersion) !== getVersionedSupportRules(minecraftVersion)) return false;
       if (hasAnySharedValue(tile.derivedImageStats.usedShadesByColorKey.keys(), changedColorKeys)) return false;
       if (hasAnySharedValue(tile.fillerNeedStats?.roleCounts.keys() ?? [], changedFillerRoles)) return false;
       return true;

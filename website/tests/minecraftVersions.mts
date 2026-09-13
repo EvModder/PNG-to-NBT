@@ -9,6 +9,7 @@ import { getMinecraftCatalog, getVersionedSelections, getVersionedSupportRules, 
 import { getBlockIconAsset, getBlockIconAtlasEntry } from "@/lib/blockIconAtlas";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
+import { analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { collectVsFillerPreviewReplacements } from "@/lib/previewImageEdits";
 import { Shade, type ColorGrid } from "@/types/color";
 import { toShapeCoordKey } from "@/lib/shapeModel";
@@ -124,6 +125,29 @@ await assert.rejects(exportBytes("1.21.4", { 0: "glass", 6: "waxed_copper_lanter
 const waterGrid: ColorGrid = Array.from({ length: 128 }, () =>
   Array.from({ length: 128 }, () => ({ id: 12, isCustom: false, shade: Shade.Flat })),
 );
+const materialShape: GeneratedShape = {
+  ...shape,
+  parts: [{ ...shape.parts[0], cells: new Map([
+    [toShapeCoordKey(0, 1, 0), { id: 0, isCustom: false }],
+    [toShapeCoordKey(1, 1, 0), { id: 7, isCustom: false }],
+    [toShapeCoordKey(2, 1, 0), { id: 7, isCustom: false }],
+    [toShapeCoordKey(3, 1, 0), { id: 0, isCustom: true }],
+    [toShapeCoordKey(4, 1, 0), { id: 12, isCustom: false }],
+    [toShapeCoordKey(4, 0, 0), { id: 12, isCustom: false }],
+  ]) }],
+};
+const materialOptions = {
+  selectedBlocks: { 0: "", 7: "oak_leaves[waterlogged=true]", 12: "water" },
+  selectedBlocksCustom: { 0: "stone" }, customColors: [{ r: 1, g: 2, b: 3, blocks: ["stone"] }],
+  fillerAssignments: [], applySupportFloorYs: false,
+};
+assert.deepEqual(analyzeMaterialNeeds(waterGrid, materialShape, materialOptions).blockCounts,
+  { "oak_leaves[waterlogged=true]": 2, stone: 1, water: 1 });
+materialOptions.selectedBlocks[0] = "glass";
+materialOptions.selectedBlocks[7] = "moss_block";
+materialOptions.selectedBlocks[12] = "glass_pane[waterlogged=true]";
+assert.deepEqual(analyzeMaterialNeeds(waterGrid, materialShape, materialOptions).blockCounts,
+  { glass: 1, moss_block: 2, stone: 1, "glass_pane[waterlogged=true]": 2 });
 const crubTechShape = generateShapeMap(waterGrid, Shade.Flat, true, false, false, {
   layerGap: 14, suppress2LayerLatePairY: 25, useCrubTech: true,
   waterSetting: { kind: "below-platform", drops: [25, 15, 8] },
