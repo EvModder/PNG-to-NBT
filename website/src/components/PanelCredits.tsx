@@ -46,27 +46,6 @@ export function PanelCredits({
       <h3 className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} mb-1`}>{messages.credits.title}</h3>
       <p>
         <a
-          href={messages.credits.rebaneUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          {messages.credits.rebaneName}
-        </a>
-        {" "}
-        — {rebaneRolePrefix}
-        <a
-          href={messages.credits.mapArtCraftUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          {messages.credits.mapArtCraftName}
-        </a>
-        {rebaneRoleSuffix}
-      </p>
-      <p>
-        <a
           href={messages.credits.evModderUrl}
           target="_blank"
           rel="noopener noreferrer"
@@ -86,6 +65,17 @@ export function PanelCredits({
       </p>
       <p>
         <a
+          href={messages.credits.crubleighUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          {messages.credits.crubleighName}
+        </a>{" "}
+        — {messages.credits.crubleighRole}
+      </p>
+      <p>
+        <a
           href={messages.credits.gu2t4vUrl}
           target="_blank"
           rel="noopener noreferrer"
@@ -97,14 +87,24 @@ export function PanelCredits({
       </p>
       <p>
         <a
-          href={messages.credits.crubleighUrl}
+          href={messages.credits.rebaneUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-foreground"
         >
-          {messages.credits.crubleighName}
-        </a>{" "}
-        — {messages.credits.crubleighRole}
+          {messages.credits.rebaneName}
+        </a>
+        {" "}
+        — {rebaneRolePrefix}
+        <a
+          href={messages.credits.mapArtCraftUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          {messages.credits.mapArtCraftName}
+        </a>
+        {rebaneRoleSuffix}
       </p>
       <p>GPT <OpenAiCreditIcon /> — {messages.credits.gptNote}</p>
     </div>
