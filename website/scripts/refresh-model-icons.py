@@ -129,6 +129,20 @@ class Assets:
             icon = Image.new("RGBA", (16, 16))
             icon.alpha_composite(out, ((16 - out.width) // 2, 16 - out.height))
             return icon
+        if kind == "decorated_pot":
+            base = self.texture("entity/decorated_pot/decorated_pot_base")
+            side = self.texture("entity/decorated_pot/decorated_pot_side")
+            out = Image.new("RGBA", (16, 20))
+            # DecoratedPotRenderer: 14x16 body, 8x3 rim, 6x1 neck; flipped model Y.
+            for src, uv, pos in [
+                (side, (1, 0, 15, 16), (1, 4)),
+                (base, (8, 8, 16, 11), (4, 0)),
+                (base, (6, 11, 12, 12), (5, 3)),
+            ]:
+                out.alpha_composite(src.crop(uv).transpose(Image.Transpose.FLIP_TOP_BOTTOM), pos)
+            icon = Image.new("RGBA", (16, 16))
+            icon.alpha_composite(out.resize((13, 16), NEAREST), (1, 0))
+            return icon
         if kind == "chest":
             src = self.texture("entity/chest/" + model["texture"].removeprefix("minecraft:"))
             out = Image.new("RGBA", (16, 16))
@@ -171,6 +185,16 @@ class Assets:
             return self.render(f"block/{block}")
         if block == "grindstone[face=floor]":
             return self.render("block/grindstone", "east")
+        if block == "anvil":
+            # Remove interior pixels, preserving the base rim and a symmetric stem.
+            source = self.render("block/anvil", "east")
+            icon = Image.new("RGBA", (16, 16))
+            rows = [y for y in range(16) if y not in (2, 8)]
+            columns = [x for x in range(16) if x not in (7, 8)]
+            for y, source_y in enumerate(rows, 1):
+                for x, source_x in enumerate(columns, 1):
+                    icon.putpixel((x, y), source.getpixel((source_x, source_y)))
+            return icon
         if block == "sniffer_egg":
             return self.render("block/sniffer_egg_not_cracked", "north")
         if block == "dried_ghast":

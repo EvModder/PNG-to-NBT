@@ -22,6 +22,14 @@ assert.deepEqual(latest.blocks, BASE_COLORS.map(color => color.blocks));
 assert.deepEqual(latest.excluded, EXCLUDED_BLOCKS);
 for (const version of versions) {
   const catalog = getMinecraftCatalog(version);
+  assert(catalog.blocks.every(row => row.every(block => !block.endsWith("_slab"))), `${version}: visible slab`);
+  for (const row of catalog.excluded) {
+    const paired = row.filter(block => !block.endsWith("_slab") || row.includes(block.replace(/_slab$/, "_stairs")));
+    for (const slab of row.filter(block => block.endsWith("_slab"))) {
+      const stairs = slab.replace(/_slab$/, "_stairs");
+      if (row.includes(stairs)) assert.equal(paired.indexOf(slab) + 1, paired.indexOf(stairs), `${version}: ${slab} ordering`);
+    }
+  }
   for (const row of [...catalog.blocks, ...catalog.excluded]) {
     for (const block of row) {
       assert(isBlockAvailable(block, version), `${version}: ${block}`);

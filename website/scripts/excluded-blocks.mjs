@@ -58,7 +58,9 @@ export const OMITTED_BLOCK_PATTERNS = [
 export const EXCLUDED_BLOCK_PATTERNS = [
   /(^|_)chiseled_/,
   /(^|_)cracked_/,
+  /^bamboo_mosaic($|_)/,
   /_stairs$/,
+  /_slab$/,
   /^(?!purple_shulker_box$).*_shulker_box$/,
   /_button$/,
   /_wall$/,
@@ -71,6 +73,7 @@ export const EXCLUDED_BLOCK_PATTERNS = [
   /copper_bulb$/,
   /copper_chest$/,
   /copper_golem_statue$/,
+  /copper_grate$/,
 ];
 
 // Callers:
