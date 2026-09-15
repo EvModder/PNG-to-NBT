@@ -9,24 +9,16 @@ import type { Dispatch, SetStateAction } from "react";
 import { X } from "lucide-react";
 import {
   INVALID_DIMENSIONS_STRATEGY_OPTIONS,
+  INVALID_COLORS_PALETTE_OPTIONS,
   SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
   type InvalidDimensionsStrategy,
+  type InvalidColorsPalette,
   type SuppressLoadSpotMarkerBlock,
 } from "@/data/defaultSettings";
 import { messages } from "@/lib/messages";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { MUTED_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
-
-// Dropdowns share a width so the column lines up; the widest option wins.
-const SETTINGS_SELECT_WIDTH_CH = Math.max(
-  ...SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.map(block => block.length),
-  ...Object.values(MINECRAFT_VERSIONS).map(version => version.label.length),
-  ...INVALID_DIMENSIONS_STRATEGY_OPTIONS.map(
-    strategy => messages.dialogs.options.invalidDimensionsStrategies[strategy].length,
-  ),
-);
-const SETTINGS_SELECT_WIDTH = `calc(${SETTINGS_SELECT_WIDTH_CH}ch + 2.75rem)`;
 
 type SecretsSettingsDialogProps = {
   open: boolean;
@@ -68,6 +60,11 @@ type SecretsSettingsDialogProps = {
   setAutoFixInvalidDimensions: Dispatch<SetStateAction<boolean>>;
   invalidDimensionsStrategy: InvalidDimensionsStrategy;
   setInvalidDimensionsStrategy: Dispatch<SetStateAction<InvalidDimensionsStrategy>>;
+  autoFixInvalidColors: boolean;
+  setAutoFixInvalidColors: Dispatch<SetStateAction<boolean>>;
+  invalidColorsPalette: InvalidColorsPalette;
+  hasPresetColors: boolean;
+  setInvalidColorsPalette: Dispatch<SetStateAction<InvalidColorsPalette>>;
   minecraftVersion: MinecraftVersion;
   setMinecraftVersion: Dispatch<SetStateAction<MinecraftVersion>>;
 };
@@ -102,6 +99,7 @@ type OptionSelectRowProps<T extends string> = {
   onValueChange: (value: T) => void;
   options: readonly T[];
   optionLabel?: (value: T) => string;
+  optionDisabled?: (value: T) => boolean;
   selectLabel: string;
 };
 
@@ -113,10 +111,11 @@ function OptionSelectRow<T extends string>({
   onValueChange,
   options,
   optionLabel,
+  optionDisabled,
   selectLabel,
 }: OptionSelectRowProps<T>) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="grid grid-cols-subgrid items-center">
       <label className="flex min-w-0 flex-1 items-center gap-1 cursor-pointer">
         <input
           type="checkbox"
@@ -131,10 +130,9 @@ function OptionSelectRow<T extends string>({
         onChange={event => onValueChange(event.target.value as T)}
         aria-label={selectLabel}
         className="h-6 min-w-0 shrink-0 rounded border border-border bg-input px-1.5 text-xs text-foreground"
-        style={{ width: SETTINGS_SELECT_WIDTH }}
       >
         {options.map(option => (
-          <option key={option} value={option}>{optionLabel ? optionLabel(option) : option}</option>
+          <option key={option} value={option} disabled={optionDisabled?.(option)}>{optionLabel ? optionLabel(option) : option}</option>
         ))}
       </select>
     </div>
@@ -183,6 +181,11 @@ export function SecretsSettingsDialog({
   setAutoFixInvalidDimensions,
   invalidDimensionsStrategy,
   setInvalidDimensionsStrategy,
+  autoFixInvalidColors,
+  setAutoFixInvalidColors,
+  invalidColorsPalette,
+  hasPresetColors,
+  setInvalidColorsPalette,
   minecraftVersion,
   setMinecraftVersion,
 }: SecretsSettingsDialogProps) {
@@ -194,7 +197,7 @@ export function SecretsSettingsDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto bg-card border border-border rounded-md p-2 shadow-lg"
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto bg-card border border-border rounded-md p-2 shadow-lg [&_:is(h2,span)]:truncate [&_input]:shrink-0"
         role="dialog"
         aria-modal="true"
         aria-label={messages.dialogs.secretSettingsTitle}
@@ -218,7 +221,7 @@ export function SecretsSettingsDialog({
             <X size={14} strokeWidth={2.1} />
           </button>
         </div>
-        <div className="space-y-0.5 text-xs [&>*]:min-h-6">
+        <div className="grid grid-cols-[minmax(0,1fr)_max-content] gap-x-2 gap-y-0.5 text-xs [&>*]:col-span-2 [&>*]:min-h-6">
           <OptionRow
             checked={showTransparentRow}
             onChange={setShowTransparentRow}
@@ -265,11 +268,6 @@ export function SecretsSettingsDialog({
             label={messages.dialogs.options.skipEmptySuppressSteps}
           />
           <OptionRow
-            checked={showFlatNbtSuppressStepModes}
-            onChange={setShowFlatNbtSuppressStepModes}
-            label={messages.dialogs.options.showFlatNbtSuppressStepModes}
-          />
-          <OptionRow
             checked={showAlignmentReminder}
             onChange={setShowAlignmentReminder}
             label={messages.dialogs.options.showAlignmentReminder}
@@ -283,6 +281,11 @@ export function SecretsSettingsDialog({
             checked={showVsFillerWarnings}
             onChange={setShowVsFillerWarnings}
             label={messages.dialogs.options.showVsFillerWarnings}
+          />
+          <OptionRow
+            checked={showFlatNbtSuppressStepModes}
+            onChange={setShowFlatNbtSuppressStepModes}
+            label={messages.dialogs.options.showFlatNbtSuppressStepModes}
           />
           <OptionSelectRow<SuppressLoadSpotMarkerBlock>
             checked={markSuppressLoadSpotsInSchematic}
@@ -303,14 +306,24 @@ export function SecretsSettingsDialog({
             optionLabel={strategy => messages.dialogs.options.invalidDimensionsStrategies[strategy]}
             selectLabel={messages.dialogs.options.invalidDimensionsStrategy}
           />
-          <label className="flex items-center justify-between gap-2">
+          <OptionSelectRow<InvalidColorsPalette>
+            checked={autoFixInvalidColors}
+            onCheckedChange={setAutoFixInvalidColors}
+            label={messages.dialogs.options.autoFixInvalidColors}
+            value={invalidColorsPalette}
+            onValueChange={setInvalidColorsPalette}
+            options={INVALID_COLORS_PALETTE_OPTIONS}
+            optionLabel={palette => messages.dialogs.options.invalidColorsPalettes[palette]}
+            optionDisabled={palette => palette !== "full" && !hasPresetColors}
+            selectLabel={messages.dialogs.options.invalidColorsPalette}
+          />
+          <label className="grid grid-cols-subgrid items-center">
             <span>{messages.dialogs.options.minecraftVersion}</span>
             <select
               value={minecraftVersion}
               aria-label={messages.dialogs.options.minecraftVersion}
               onChange={event => setMinecraftVersion(event.target.value as MinecraftVersion)}
               className="h-6 min-w-0 shrink-0 rounded border border-border bg-input px-1.5 text-xs text-foreground"
-              style={{ width: SETTINGS_SELECT_WIDTH }}
             >
               {Object.entries(MINECRAFT_VERSIONS).map(([version, { label }]) => (
                 <option key={version} value={version}>{label}</option>

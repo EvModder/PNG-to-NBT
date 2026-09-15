@@ -2,7 +2,7 @@
   "input": "img4.png",
   "output": "img4-northline.nbt",
   "settings": {
-    "convertUnsupported": true,
+    "autoFixInvalidColors": true,
     "preset": "Fullblock",
     "selectedBlocksBaseOverrides": {
       "1": "slime_block",

@@ -18,6 +18,7 @@ import type {
 } from "@/lib/tileParsingWorkerTypes";
 import type { ColorRgb } from "@/types/color";
 import { MAP_SIZE } from "@/utils/color";
+import type { InputColorPalette } from "@/lib/colorGridParsingCore";
 
 type WorkerSlot = {
   worker: Worker;
@@ -207,10 +208,11 @@ function buildTileBatches(tileRows: number, tileCols: number, batchCount: number
 export async function parseColorGridTilesInWorkers(
   imageData: ImageData,
   customColors: ColorRgb[],
-  convertUnsupported: boolean,
+  autoFixInvalidColors: boolean,
   tileRows: number,
   tileCols: number,
   onProgress?: (completed: number, total: number) => void,
+  allowedColors?: InputColorPalette,
 ): Promise<TileParsingWorkerAggregateResult> {
   const totalTiles = tileRows * tileCols;
   const workerCount = Math.min(getWorkerSlots().length, totalTiles);
@@ -224,7 +226,8 @@ export async function parseColorGridTilesInWorkers(
         originX: batch.originX,
         originZ: batch.originZ,
         customColors,
-        convertUnsupported,
+        autoFixInvalidColors,
+        allowedColors,
         tiles: batch.tiles,
       },
       delta => {

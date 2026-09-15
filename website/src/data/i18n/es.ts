@@ -289,8 +289,8 @@ export const esCatalog = {
   },
   preview: {
     missingBlockAssignments: {
-      one: "{count} color de la imagen no tiene bloque asignado en el preset.",
-      other: "{count} colores de la imagen no tienen bloque asignado en el preset.",
+      one: "{count} color de entrada sin bloque asignado en el preset.",
+      other: "{count} colores de entrada sin bloque asignado en el preset.",
     } as PluralForms,
     northRowAlignmentInfo:
       "Nota: Alinea el área de color 128x128 con la cuadrícula del mapa.\nEspera 1 fila norte adicional arriba (el NBT es 128x129).",
@@ -328,8 +328,8 @@ export const esCatalog = {
     fragileSupportOverrideWarning:
       "El soporte para {blockId} debe ser uno de:\n{supports}",
     vsFillerInvalid: {
-      one: "{label} no es válido ({value}).\nHabrá {count} píxel de escalera con sombreado incorrecto.",
-      other: "{label} no es válido ({value}).\nHabrá {count} píxeles de escalera con sombreado incorrecto.",
+      one: "{label} no es válido ({value}).\n{count} píxel tendrá sombreado claro incorrecto.",
+      other: "{label} no es válido ({value}).\n{count} píxeles tendrán sombreado claro incorrecto.",
     } as PluralForms,
     vsFillerRequiredSingularLabel: {
       one: "{label} es obligatorio para esta imagen.\n{count} punto necesitará supresión manual del color.",
@@ -340,9 +340,8 @@ export const esCatalog = {
       other: "{label} son obligatorios para esta imagen.\n{count} puntos necesitarán supresión manual del color.",
     } as PluralForms,
     vsFillersInvalid: {
-      one: "Los VS-Rellenos no son válidos ({first}, {second}). Habrá {count} píxel de escalera con sombreado incorrecto.",
-      other:
-        "Los VS-Rellenos no son válidos ({first}, {second}). Habrá {count} píxeles de escalera con sombreado incorrecto.",
+      one: "Los VS-Rellenos no son válidos ({first}, {second}).\n{count} píxel tendrá sombreado claro incorrecto.",
+      other: "Los VS-Rellenos no son válidos ({first}, {second}).\n{count} píxeles tendrán sombreado claro incorrecto.",
     } as PluralForms,
     vsFillerTransparentSwap: "Sustituye los VS-Rellenos de sombreado plano por {value}.",
     lateFillerInvalid: {
@@ -385,18 +384,21 @@ export const esCatalog = {
       assumeFloor: "Suponer suelo",
       belowPlatformWater: "Agua bajo la plataforma",
       skipEmptySuppressSteps: "Omitir pasos suppress vacíos",
-      showFlatNbtSuppressStepModes: "Mostrar opciones de suppress (steps) para esquemas planos",
       showAlignmentReminder: "Mostrar recordatorio de alineación",
       showNooblineWarnings: "Mostrar advertencias para nooblines",
-      showVsFillerWarnings: "Mostrar advertencias cuando los VS-Rellenos sean necesarios en mapas Staircase",
-      markSuppressLoadSpotsInSchematic: "Marcar puntos de carga de supresión de color en esquemas",
+      showVsFillerWarnings: "Mostrar advertencias de VS-Rellenos en mapas Staircase",
+      showFlatNbtSuppressStepModes: "Mostrar opciones Suppress-step para mapas planos",
+      markSuppressLoadSpotsInSchematic: "Exportar marcas de carga de Suppress-step",
       suppressLoadSpotMarkerBlock: "Bloque marcador",
-      autoFixInvalidDimensions: "Autocorregir dimensiones de entrada no válidas",
+      autoFixInvalidDimensions: "Autocorregir dimensiones inválidas",
       invalidDimensionsStrategy: "Método de corrección",
-      minecraftVersion: "Versión de Minecraft",
+      autoFixInvalidColors: "Autocorregir colores de entrada",
+      invalidColorsPalette: "Paleta de colores",
+      invalidColorsPalettes: { full: "Completa", current: "Preajuste-3D", "current-flat": "Preajuste-2D" },
+      minecraftVersion: "Versión de Minecraft:",
       invalidDimensionsStrategies: {
-        crop: "Recortar",
-        pad: "Rellenar",
+        crop: "Recortar imagen",
+        pad: "Rellenar imagen",
       },
     },
   },
@@ -434,17 +436,23 @@ export const esCatalog = {
     imageSizePadInstead: "Rellenar en su lugar",
     imageSizeCropInstead: "Recortar en su lugar",
     unsupportedPaletteColors: {
-      one: "Se encontró {count} color que no está en la paleta de mapas de Minecraft:\n\n{colors}{ellipsis}",
-      other: "Se encontraron {count} colores que no están en la paleta de mapas de Minecraft:\n\n{colors}{ellipsis}",
+      one: "{count} color fuera de la paleta de mapas de Minecraft.",
+      other: "{count} colores fuera de la paleta de mapas de Minecraft.",
     } as PluralForms,
-    rgbColor: "rgb({r},{g},{b})",
-    conversionSummaryAll: {
-      one: "Se convirtió {convertedCount} color al ID de paleta más cercano.",
-      other: "Se convirtieron {convertedCount} colores al ID de paleta más cercano.",
+    colorsOutsideCurrentPalette: {
+      one: "{count} color no admitido por la paleta actual.",
+      other: "{count} colores no admitidos por la paleta actual.",
     } as PluralForms,
-    conversionSummaryPartial: {
-      one: "Se convirtió {convertedCount} (de {totalInputColorCount}) color al ID de paleta más cercano.",
-      other: "Se convirtieron {convertedCount} (de {totalInputColorCount}) colores al ID de paleta más cercano.",
+    changedValidMapColors: {
+      one: "Se degradó {count} color de 3D a 2D",
+      other: "Se degradaron {count} colores de 3D a 2D",
+    } as PluralForms,
+    conversionPalettes: { full: "Completa", current: "Preajuste", "current-flat": "Preajuste-2D" },
+    convertColorsUsing: "Convertir usando:",
+    flatColorsPalette: "Plana",
+    conversionSummary: {
+      one: "Se convirtió {convertedCount} color a {palette}",
+      other: "Se convirtieron {convertedCount} colores a {palette}",
     } as PluralForms,
     croppedImage: "La imagen se recortó a {width}×{height}",
     cropRemovedSingleSide: "Se eliminaron {count}px del lado {side}.",

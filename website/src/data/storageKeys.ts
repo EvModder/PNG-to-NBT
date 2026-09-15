@@ -66,5 +66,7 @@ export const STORAGE_KEYS = {
   suppressLoadSpotMarkerBlock: "mapart_secret_suppress_load_spot_marker_block",
   autoFixInvalidDimensions: "mapart_secret_auto_fix_invalid_dimensions",
   invalidDimensionsStrategy: "mapart_secret_invalid_dimensions_strategy",
+  autoFixInvalidColors: "mapart_secret_auto_fix_invalid_colors",
+  invalidColorsPalette: "mapart_secret_invalid_colors_palette",
   minecraftVersion: "mapart_secret_minecraft_version",
 } as const;

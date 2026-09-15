@@ -112,7 +112,7 @@ export function ToolbarPresetSettings({
               )}
             </select>
             {presetDirty && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 cursor-help" title={messages.common.unsavedChanges} />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0 cursor-help" title={messages.common.unsavedChanges} />
             )}
           </div>
           {!isBuiltinUnedited && (

@@ -50,9 +50,9 @@ function extractImagePatch(
 }
 
 function parseAssignedTiles(message: TileParsingWorkerRequest): TileParsingWorkerResult {
-  const { imageData, originX, originZ, customColors, convertUnsupported, tiles } = message.input;
-  const baseLookup = getBaseColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
+  const { imageData, originX, originZ, customColors, autoFixInvalidColors, allowedColors, tiles } = message.input;
+  const baseLookup = getBaseColorLookup(allowedColors);
+  const customLookup = buildCustomShadeLookup(customColors, allowedColors);
   const tileResults: TileParsingWorkerTileResult[] = [];
   const paletteNotices = [];
   const imagePatches: TileParsingWorkerImagePatch[] = [];
@@ -65,7 +65,7 @@ function parseAssignedTiles(message: TileParsingWorkerRequest): TileParsingWorke
     let analysis = scanImageRegionToColorGrid(imageData, localStartX, localStartZ, baseLookup, customLookup);
     let tileHasBlockingIssue = analysis.unsupportedColors.length > 0;
 
-    if (analysis.unsupportedColors.length > 0 && convertUnsupported) {
+    if (analysis.unsupportedColors.length > 0 && autoFixInvalidColors) {
       const conversionSummary = convertUnsupportedRegionToNearestPalette(
         imageData,
         localStartX,
@@ -75,20 +75,14 @@ function parseAssignedTiles(message: TileParsingWorkerRequest): TileParsingWorke
       );
       analysis = scanImageRegionToColorGrid(imageData, localStartX, localStartZ, baseLookup, customLookup);
       if (analysis.unsupportedColors.length === 0) {
-        paletteNotices.push(
-          ...buildConversionNotices(
-            conversionSummary.convertedCount,
-            conversionSummary.totalInputColorCount,
-            conversionSummary.fewerOutputColorCount,
-          ),
-        );
+        paletteNotices.push(...buildConversionNotices(conversionSummary));
         imagePatches.push(extractImagePatch(imageData, localStartX, localStartZ, tile.startX, tile.startZ));
         tileHasBlockingIssue = false;
       } else {
-        paletteNotices.push(messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors));
+        paletteNotices.push(messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors, !!allowedColors));
       }
     } else if (analysis.unsupportedColors.length > 0) {
-      paletteNotices.push(messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors));
+      paletteNotices.push(messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors, !!allowedColors));
     }
 
     tileResults.push({

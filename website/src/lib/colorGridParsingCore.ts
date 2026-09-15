@@ -2,6 +2,9 @@
  * Public API:
  * - ColorGridRegionScanResult
  * - PaletteConversionSummary
+ * - InputColorPalette
+ * - buildInputColorPalette()
+ * - presetCoversInputColors()
  * - createEmptyColorGrid()
  * - getBaseColorLookup()
  * - buildCustomShadeLookup()
@@ -12,9 +15,11 @@
  * - buildConversionNotices()
  *
  * Callers:
+ * - src/Index.tsx
  * - src/lib/colorGridParsing.ts
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
+ * - src/lib/tileParsingWorkerTypes.ts
  */
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import { getShadedRgb, packRgb, unpackRgb, MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
@@ -23,6 +28,7 @@ import { type ColorGrid, Shade, type ColorRgb, type ShadedColorRef } from "@/typ
 import { FlatModeBehavior, PixelParity, type ColorFrequencyMap, type ColorGridStats } from "@/lib/colorGridAnalysis";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { findMatchingBaseColorIndex } from "@/utils/customColors";
+import { getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 
 // Callers:
 // - src/lib/colorGridParsing.ts
@@ -41,17 +47,53 @@ export type PaletteConversionSummary = {
   convertedCount: number;
   totalInputColorCount: number;
   fewerOutputColorCount: number;
+  allInputColorsValid: boolean;
 };
 
 let baseColorLookup: Map<number, ShadedColorRef> | null = null;
-let nearestBasePaletteColors: { r: number; g: number; b: number }[] | null = null;
+const nearestBasePaletteColors = new WeakMap<Map<number, ShadedColorRef>, { r: number; g: number; b: number }[]>();
+const STANDARD_SHADES = [Shade.Dark, Shade.Flat, Shade.Light] as const;
+
+// Callers:
+// - src/lib/colorGridParsing.ts
+// - src/lib/tileParsingWorkerClient.ts
+// - src/lib/tileParsingWorkerTypes.ts
+export type InputColorPalette = ReadonlyMap<ColorRefKey, readonly (typeof STANDARD_SHADES)[number][]>;
+
+// Callers:
+// - src/Index.tsx
+export function buildInputColorPalette(colorKeys: readonly ColorRefKey[], flat: boolean, allowDeepWater: boolean): InputColorPalette {
+  const waterKey = getColorRefKey({ id: WATER_BASE_INDEX, isCustom: false });
+  return new Map(colorKeys.map(key => [key, !flat ? STANDARD_SHADES
+    : key === waterKey ? (allowDeepWater ? STANDARD_SHADES : [Shade.Light]) : [Shade.Flat]]));
+}
+
+// Callers:
+// - src/Index.tsx
+export function presetCoversInputColors(imageData: ImageData | null, customColors: ColorRgb[], colorKeys: readonly ColorRefKey[]): boolean {
+  const selected = new Set(colorKeys);
+  if (BASE_COLORS.every((_, id) => id === TRANSPARENCY_BASE_INDEX || selected.has(getColorRefKey({ id, isCustom: false }))) &&
+    customColors.every((_, id) => selected.has(getColorRefKey({ id, isCustom: true })))) return true;
+  if (!imageData) return false;
+
+  const palette = buildInputColorPalette(colorKeys, false, false);
+  const baseLookup = getBaseColorLookup(palette);
+  const customLookup = buildCustomShadeLookup(customColors, palette);
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    if (imageData.data[i + 3] === 0) continue;
+    const key = packRgb(imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]);
+    if (!baseLookup.has(key) && !customLookup.has(key)) return false;
+  }
+  return true;
+}
 
 function addShadedLookupEntries(
   lookup: Map<number, ShadedColorRef>,
   color: Pick<ColorRgb, "r" | "g" | "b">,
   buildRef: (shade: Shade.Dark | Shade.Flat | Shade.Light) => ShadedColorRef,
+  shades: readonly (typeof STANDARD_SHADES)[number][] = STANDARD_SHADES,
 ): void {
-  for (const shade of [Shade.Dark, Shade.Flat, Shade.Light] as const) {
+  for (const shade of shades) {
     const key = packRgb(...getShadedRgb(color, shade));
     if (!lookup.has(key)) lookup.set(key, buildRef(shade));
   }
@@ -60,22 +102,27 @@ function addShadedLookupEntries(
 // Callers:
 // - src/lib/colorGridParsing.ts
 // - src/lib/tileParsing.worker.ts
-export function getBaseColorLookup(): Map<number, ShadedColorRef> {
-  if (baseColorLookup) return baseColorLookup;
-  baseColorLookup = new Map();
+export function getBaseColorLookup(allowedColors?: InputColorPalette): Map<number, ShadedColorRef> {
+  if (!allowedColors && baseColorLookup) return baseColorLookup;
+  const lookup = new Map<number, ShadedColorRef>();
   for (let i = 1; i < BASE_COLORS.length; ++i) {
-    addShadedLookupEntries(baseColorLookup, BASE_COLORS[i], shade => ({ isCustom: false, id: i, shade }));
+    const shades = allowedColors?.get(getColorRefKey({ isCustom: false, id: i }));
+    if (allowedColors && !shades) continue;
+    addShadedLookupEntries(lookup, BASE_COLORS[i], shade => ({ isCustom: false, id: i, shade }), shades);
   }
-  return baseColorLookup;
+  if (!allowedColors) baseColorLookup = lookup;
+  return lookup;
 }
 
 function getNearestBasePaletteColors(baseLookup: Map<number, ShadedColorRef>): { r: number; g: number; b: number }[] {
-  if (nearestBasePaletteColors) return nearestBasePaletteColors;
-  nearestBasePaletteColors = [...baseLookup.keys()].map(key => {
+  const cached = nearestBasePaletteColors.get(baseLookup);
+  if (cached) return cached;
+  const colors = [...baseLookup.keys()].map(key => {
     const [r, g, b] = unpackRgb(key);
     return { r, g, b };
   });
-  return nearestBasePaletteColors;
+  nearestBasePaletteColors.set(baseLookup, colors);
+  return colors;
 }
 
 function getNearestPaletteColors(
@@ -101,11 +148,13 @@ export function createEmptyColorGrid(): ColorGrid {
 // Callers:
 // - src/lib/colorGridParsing.ts
 // - src/lib/tileParsing.worker.ts
-export function buildCustomShadeLookup(customColors: ColorRgb[]): Map<number, ShadedColorRef> {
+export function buildCustomShadeLookup(customColors: ColorRgb[], allowedColors?: InputColorPalette): Map<number, ShadedColorRef> {
   const lookup = new Map<number, ShadedColorRef>();
   for (const [customIndex, color] of customColors.entries()) {
+    const shades = allowedColors?.get(getColorRefKey({ isCustom: true, id: customIndex }));
+    if (allowedColors && !shades) continue;
     if (findMatchingBaseColorIndex(color) !== null) continue;
-    addShadedLookupEntries(lookup, color, shade => ({ isCustom: true, id: customIndex, shade }));
+    addShadedLookupEntries(lookup, color, shade => ({ isCustom: true, id: customIndex, shade }), shades);
   }
   return lookup;
 }
@@ -282,6 +331,7 @@ export function convertUnsupportedToNearestPalette(
   customLookup: Map<number, ShadedColorRef>,
 ): PaletteConversionSummary {
   const availableColors = getNearestPaletteColors(baseLookup, customLookup);
+  if (availableColors.length === 0) return { convertedCount: 0, totalInputColorCount: 0, fewerOutputColorCount: 0, allInputColorsValid: false };
   const inputColors = new Set<number>();
   const outputColors = new Set<number>();
   const convertedColors = new Set<number>();
@@ -322,6 +372,7 @@ export function convertUnsupportedToNearestPalette(
 
   return {
     convertedCount: convertedColors.size,
+    allInputColorsValid: inputColors.values().every(key => getBaseColorLookup().has(key)),
     totalInputColorCount: inputColors.size,
     fewerOutputColorCount: inputColors.size - outputColors.size,
   };
@@ -338,6 +389,7 @@ export function convertUnsupportedRegionToNearestPalette(
   customLookup: Map<number, ShadedColorRef>,
 ): PaletteConversionSummary {
   const availableColors = getNearestPaletteColors(baseLookup, customLookup);
+  if (availableColors.length === 0) return { convertedCount: 0, totalInputColorCount: 0, fewerOutputColorCount: 0, allInputColorsValid: false };
   const inputColors = new Set<number>();
   const outputColors = new Set<number>();
   const convertedColors = new Set<number>();
@@ -381,6 +433,7 @@ export function convertUnsupportedRegionToNearestPalette(
 
   return {
     convertedCount: convertedColors.size,
+    allInputColorsValid: inputColors.values().every(key => getBaseColorLookup().has(key)),
     totalInputColorCount: inputColors.size,
     fewerOutputColorCount: inputColors.size - outputColors.size,
   };
@@ -390,12 +443,10 @@ export function convertUnsupportedRegionToNearestPalette(
 // - src/lib/colorGridParsing.ts
 // - src/lib/tileParsing.worker.ts
 export function buildConversionNotices(
-  convertedCount: number,
-  totalInputColorCount: number,
-  fewerOutputColorCount: number,
+  { convertedCount, totalInputColorCount, fewerOutputColorCount, allInputColorsValid }: PaletteConversionSummary,
 ): PaletteNotice[] {
   const notices: PaletteNotice[] = [
-    messages.parsing.convertedPaletteColorsNotice(convertedCount, totalInputColorCount),
+    messages.parsing.convertedPaletteColorsNotice(convertedCount, totalInputColorCount, allInputColorsValid),
   ];
   if (fewerOutputColorCount > 0) notices.push(messages.parsing.reducedUniqueColorsNotice(fewerOutputColorCount));
   return notices;

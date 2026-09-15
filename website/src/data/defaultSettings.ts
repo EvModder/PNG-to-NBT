@@ -4,15 +4,19 @@
  * - INVALID_DIMENSIONS_STRATEGY_OPTIONS
  * - InvalidDimensionsMode
  * - InvalidDimensionsStrategy
+ * - INVALID_COLORS_PALETTE_OPTIONS
+ * - InvalidColorsPalette
  * - SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS
  * - SuppressLoadSpotMarkerBlock
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/ImageColorNotice.tsx
  * - src/components/PanelImagePreview.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/colorGridParsing.ts
+ * - src/lib/messages.ts
  * - src/lib/minecraftVersion.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
@@ -52,7 +56,7 @@ export const DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP = 1;
 export const DEFAULT_CRUBTECH_LAYER_GAP = 14;
 export const DEFAULT_CRUBTECH_LATE_PAIRS_GAP = 10;
 export const DEFAULT_CRUBTECH = false;
-export const DEFAULT_MIX_STEPS = false;
+export const DEFAULT_MIX_STEPS = true;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;
 export const DEFAULT_DARK_WATER_DROP = 4;
@@ -96,7 +100,6 @@ export const DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK: SuppressLoadSpotMarkerBloc
 
 // Callers:
 // - src/Index.tsx
-export const DEFAULT_CONVERT_UNSUPPORTED_COLORS = true;
 export const DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS = false;
 
 // Callers:
@@ -107,8 +110,17 @@ export const INVALID_DIMENSIONS_STRATEGY_OPTIONS = ["crop", "pad"] as const;
 export type InvalidDimensionsStrategy = typeof INVALID_DIMENSIONS_STRATEGY_OPTIONS[number];
 // What the parser is asked to do: a strategy when auto-fix is on, otherwise reject.
 export type InvalidDimensionsMode = InvalidDimensionsStrategy | "reject";
-export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = true;
+export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = false;
 export const DEFAULT_INVALID_DIMENSIONS_STRATEGY: InvalidDimensionsStrategy = "crop";
+// Callers:
+// - src/Index.tsx
+// - src/components/ImageColorNotice.tsx
+// - src/components/PanelImagePreview.tsx
+// - src/components/SecretsSettingsDialog.tsx
+export const DEFAULT_AUTO_FIX_INVALID_COLORS = false;
+export const INVALID_COLORS_PALETTE_OPTIONS = ["full", "current", "current-flat"] as const;
+export type InvalidColorsPalette = typeof INVALID_COLORS_PALETTE_OPTIONS[number];
+export const DEFAULT_INVALID_COLORS_PALETTE: InvalidColorsPalette = "full";
 // Callers:
 // - src/Index.tsx
 // - src/lib/minecraftVersion.ts

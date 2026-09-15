@@ -12,6 +12,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/ImageColorNotice.tsx
  * - src/components/PackedBlockIcon.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCredits.tsx
@@ -33,7 +34,7 @@
  * - Locale catalogs live under `src/data/i18n/` and are intended to remain pure data only.
  */
 import { STORAGE_KEYS } from "@/data/storageKeys";
-import { unpackRgb } from "@/utils/color";
+import type { InvalidColorsPalette } from "@/data/defaultSettings";
 import { enCatalog, type MessageCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
 import { Shade } from "@/types/color";
@@ -140,15 +141,6 @@ function getLookupValue<T extends string>(lookup: Record<T, string>, key: T | st
   return Object.prototype.hasOwnProperty.call(lookup, key) ? lookup[key as T] : fallback;
 }
 
-function formatRgbList(colors: number[]): string {
-  return colors
-    .map(color => {
-      const [r, g, b] = unpackRgb(color);
-      return formatTemplate(catalog.parsing.rgbColor, { r, g, b });
-    })
-    .join(", ");
-}
-
 function formatBlockIdList(blockIds: readonly string[]): string {
   const formatted = [...blockIds];
   if (formatted.length === 0) return "[]";
@@ -168,8 +160,8 @@ function formatDimensionChangeAxis(
   if (countA <= 0 && countB <= 0) return null;
   if (countA > 0 && countB > 0) {
     return formatTemplate(pairedSidesTemplate, {
-      count: Math.min(countA, countB),
-      sides: pairedSides,
+      count: countA === countB ? countA : `{${countA}|${countB}}`,
+      sides: countA === countB ? pairedSides : `{${sideA}|${sideB}}`,
     });
   }
   return formatTemplate(singleSideTemplate, {
@@ -207,6 +199,7 @@ function formatDimensionChangeLines(
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ImageColorNotice.tsx
 // - src/components/PanelImagePreview.tsx
 // - src/lib/colorGridParsing.ts
 export enum PaletteNoticeKind {
@@ -224,6 +217,7 @@ export enum PaletteNoticeKind {
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ImageColorNotice.tsx
 // - src/components/PanelImagePreview.tsx
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
@@ -232,8 +226,8 @@ export enum PaletteNoticeKind {
 export type PaletteNotice =
   | { kind: PaletteNoticeKind.Freeform; tone: "info" | "warning" | "error"; text: string }
   | { kind: PaletteNoticeKind.SizeError; width: number; height: number }
-  | { kind: PaletteNoticeKind.UnsupportedPaletteColors; colors: number[] }
-  | { kind: PaletteNoticeKind.ConvertedPaletteColors; convertedCount: number; totalInputColorCount: number }
+  | { kind: PaletteNoticeKind.UnsupportedPaletteColors; colors: number[]; restrictedPalette: boolean }
+  | { kind: PaletteNoticeKind.ConvertedPaletteColors; convertedCount: number; totalInputColorCount: number; allInputColorsValid: boolean }
   | { kind: PaletteNoticeKind.CroppedImage; width: number; height: number }
   | { kind: PaletteNoticeKind.CroppedImageRemovedPixels; left: number; right: number; top: number; bottom: number }
   | { kind: PaletteNoticeKind.PaddedImage; width: number; height: number }
@@ -243,6 +237,7 @@ export type PaletteNotice =
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ImageColorNotice.tsx
 // - src/components/PackedBlockIcon.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/PanelCredits.tsx
@@ -598,11 +593,11 @@ export const messages = {
     },
     imageSizePadInstead: catalog.parsing.imageSizePadInstead,
     imageSizeCropInstead: catalog.parsing.imageSizeCropInstead,
-    unsupportedPaletteColorsNotice(colors: number[]): PaletteNotice {
-      return { kind: PaletteNoticeKind.UnsupportedPaletteColors, colors };
+    unsupportedPaletteColorsNotice(colors: number[], restrictedPalette = false): PaletteNotice {
+      return { kind: PaletteNoticeKind.UnsupportedPaletteColors, colors, restrictedPalette };
     },
-    convertedPaletteColorsNotice(convertedCount: number, totalInputColorCount: number): PaletteNotice {
-      return { kind: PaletteNoticeKind.ConvertedPaletteColors, convertedCount, totalInputColorCount };
+    convertedPaletteColorsNotice(convertedCount: number, totalInputColorCount: number, allInputColorsValid = false): PaletteNotice {
+      return { kind: PaletteNoticeKind.ConvertedPaletteColors, convertedCount, totalInputColorCount, allInputColorsValid };
     },
     croppedImageNotice(width: number, height: number): PaletteNotice {
       return { kind: PaletteNoticeKind.CroppedImage, width, height };
@@ -625,28 +620,32 @@ export const messages = {
     errorNotice(text: string): PaletteNotice {
       return { kind: PaletteNoticeKind.Freeform, tone: "error", text };
     },
-    noticeText(notice: PaletteNotice): string {
+    get convertColorsUsing(): string { return catalog.parsing.convertColorsUsing; },
+    colorPaletteName(palette: InvalidColorsPalette | null, fullInputPalette: boolean): string {
+      if (fullInputPalette) return palette === "current-flat"
+        ? catalog.parsing.flatColorsPalette
+        : catalog.dialogs.options.invalidColorsPalettes.full;
+      return catalog.parsing.conversionPalettes[palette ?? "full"];
+    },
+    noticeText(notice: PaletteNotice, palette: InvalidColorsPalette | null = null, fullInputPalette = false): string {
       switch (notice.kind) {
         case PaletteNoticeKind.Freeform:
           return notice.text;
         case PaletteNoticeKind.SizeError:
           return catalog.parsing.imageSizeError;
         case PaletteNoticeKind.UnsupportedPaletteColors: {
-          const shown = notice.colors.slice(0, 10);
-          return formatPlural(catalog.parsing.unsupportedPaletteColors, notice.colors.length, {
-            colors: formatRgbList(shown),
-            ellipsis: notice.colors.length > 10 ? "..." : "",
+          const template = notice.restrictedPalette ? catalog.parsing.colorsOutsideCurrentPalette : catalog.parsing.unsupportedPaletteColors;
+          return formatPlural(template, notice.colors.length);
+        }
+        case PaletteNoticeKind.ConvertedPaletteColors: {
+          if (palette === "current-flat" && notice.allInputColorsValid) {
+            return formatPlural(catalog.parsing.changedValidMapColors, notice.convertedCount);
+          }
+          return formatPlural(catalog.parsing.conversionSummary, notice.convertedCount, {
+            convertedCount: notice.convertedCount,
+            palette: messages.parsing.colorPaletteName(palette, fullInputPalette),
           });
         }
-        case PaletteNoticeKind.ConvertedPaletteColors:
-          return notice.convertedCount === notice.totalInputColorCount || notice.totalInputColorCount >= 1000
-            ? formatPlural(catalog.parsing.conversionSummaryAll, notice.convertedCount, {
-                convertedCount: notice.convertedCount,
-              })
-            : formatPlural(catalog.parsing.conversionSummaryPartial, notice.totalInputColorCount, {
-                convertedCount: notice.convertedCount,
-                totalInputColorCount: notice.totalInputColorCount,
-              });
         case PaletteNoticeKind.CroppedImage:
           return formatTemplate(catalog.parsing.croppedImage, {
             width: notice.width,

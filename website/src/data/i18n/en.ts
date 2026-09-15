@@ -293,8 +293,8 @@ export const enCatalog = {
   },
   preview: {
     missingBlockAssignments: {
-      one: "{count} color in the image has no block assigned in the preset.",
-      other: "{count} colors in the image have no block assigned in the preset.",
+      one: "{count} input color has no preset-assigned block.",
+      other: "{count} input colors have no preset-assigned block.",
     } as PluralForms,
     northRowAlignmentInfo:
       "Note: Align 128x128 color area to the map grid.\nExpect 1 extra top north row (NBT is 128x129).",
@@ -332,8 +332,8 @@ export const enCatalog = {
     fragileSupportOverrideWarning:
       "Support for {blockId} must be one of:\n{supports}",
     vsFillerInvalid: {
-      one: "{label} is invalid ({value}).\nThere will be {count} staircase pixel with incorrect shading.",
-      other: "{label} is invalid ({value}).\nThere will be {count} staircase pixels with incorrect shading.",
+      one: "{label} is invalid ({value}).\n{count} pixel will be incorrectly light-shaded.",
+      other: "{label} is invalid ({value}).\n{count} pixels will be incorrectly light-shaded.",
     } as PluralForms,
     vsFillerRequiredSingularLabel: {
       one: "{label} is required for this image.\n{count} spot will need manual color-suppression.",
@@ -344,9 +344,8 @@ export const enCatalog = {
       other: "{label} are required for this image.\n{count} spots will need manual color-suppression.",
     } as PluralForms,
     vsFillersInvalid: {
-      one: "VS-Fillers are invalid ({first}, {second}). There will be {count} staircase pixel with incorrect shading.",
-      other:
-        "VS-Fillers are invalid ({first}, {second}). There will be {count} staircase pixels with incorrect shading.",
+      one: "VS-Fillers are invalid ({first}, {second}).\n{count} pixel will be incorrectly light-shaded.",
+      other: "VS-Fillers are invalid ({first}, {second}).\n{count} pixels will be incorrectly light-shaded.",
     } as PluralForms,
     vsFillerTransparentSwap: "Swap flat-shade VS-Fillers for {value}.",
     lateFillerInvalid: {
@@ -389,18 +388,21 @@ export const enCatalog = {
       assumeFloor: "Assume floor",
       belowPlatformWater: "Below-platform water",
       skipEmptySuppressSteps: "Skip empty suppress steps",
-      showFlatNbtSuppressStepModes: "Show suppress (steps) options for Flat schematics",
       showAlignmentReminder: "Show alignment reminder",
       showNooblineWarnings: "Show warnings for nooblines",
-      showVsFillerWarnings: "Show warnings when VS-Fillers are required in Staircase maps",
-      markSuppressLoadSpotsInSchematic: "Mark color-suppress load-spots in schematics",
+      showVsFillerWarnings: "Show warnings for VS-Fillers in Staircase maps",
+      showFlatNbtSuppressStepModes: "Show Suppress-step options for Flat maps",
+      markSuppressLoadSpotsInSchematic: "Mark Suppress-step load-spots in exports",
       suppressLoadSpotMarkerBlock: "Marker block",
       autoFixInvalidDimensions: "Auto-fix invalid input dimensions",
       invalidDimensionsStrategy: "Fix method",
-      minecraftVersion: "Minecraft version",
+      autoFixInvalidColors: "Auto-fix invalid input colors",
+      invalidColorsPalette: "Color palette",
+      invalidColorsPalettes: { full: "Fullcolor", current: "Preset-3D", "current-flat": "Preset-2D" },
+      minecraftVersion: "Minecraft version:",
       invalidDimensionsStrategies: {
-        crop: "Crop",
-        pad: "Pad",
+        crop: "Crop image",
+        pad: "Pad image",
       },
     },
   },
@@ -438,17 +440,23 @@ export const enCatalog = {
     imageSizePadInstead: "Pad instead",
     imageSizeCropInstead: "Crop instead",
     unsupportedPaletteColors: {
-      one: "Found {count} color not in Minecraft map palette:\n\n{colors}{ellipsis}",
-      other: "Found {count} colors not in Minecraft map palette:\n\n{colors}{ellipsis}",
+      one: "{count} color outside the Minecraft map palette.",
+      other: "{count} colors outside the Minecraft map palette.",
     } as PluralForms,
-    rgbColor: "rgb({r},{g},{b})",
-    conversionSummaryAll: {
-      one: "Converted {convertedCount} color to nearest palette id.",
-      other: "Converted {convertedCount} colors to nearest palette id.",
+    colorsOutsideCurrentPalette: {
+      one: "{count} color unsupported by the current palette.",
+      other: "{count} colors unsupported by the current palette.",
     } as PluralForms,
-    conversionSummaryPartial: {
-      one: "Converted {convertedCount} (of {totalInputColorCount}) color to nearest palette id.",
-      other: "Converted {convertedCount} (of {totalInputColorCount}) colors to nearest palette id.",
+    changedValidMapColors: {
+      one: "Demoted {count} color from 3D to 2D",
+      other: "Demoted {count} colors from 3D to 2D",
+    } as PluralForms,
+    conversionPalettes: { full: "Full", current: "Preset", "current-flat": "Preset-2D" },
+    convertColorsUsing: "Convert using:",
+    flatColorsPalette: "Flat",
+    conversionSummary: {
+      one: "Mapped {convertedCount} color to {palette}",
+      other: "Mapped {convertedCount} colors to {palette}",
     } as PluralForms,
     croppedImage: "Cropped image to {width}×{height}",
     cropRemovedSingleSide: "Removed {count}px from the {side}.",

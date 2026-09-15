@@ -29,7 +29,7 @@ import {
   DEFAULT_BELOW_PLATFORM_WATER,
   DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
-  DEFAULT_CONVERT_UNSUPPORTED_COLORS,
+  DEFAULT_AUTO_FIX_INVALID_COLORS,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
@@ -108,7 +108,7 @@ type ExportFixtureSettings = {
   forceXZ128: boolean;
   forceZ129: boolean;
   belowPlatformWater: boolean;
-  convertUnsupported: boolean;
+  autoFixInvalidColors: boolean;
   customColors: ColorRgb[];
   selectedBlocksCustom: Record<number, string>;
   selectedBlocksBaseOverrides: Record<string, string>;
@@ -725,7 +725,7 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     forceXZ128: settings.forceXZ128 ?? DEFAULT_FORCE_XZ128,
     forceZ129: settings.forceZ129 ?? DEFAULT_FORCE_Z129,
     belowPlatformWater: settings.belowPlatformWater ?? DEFAULT_BELOW_PLATFORM_WATER,
-    convertUnsupported: settings.convertUnsupported ?? DEFAULT_CONVERT_UNSUPPORTED_COLORS,
+    autoFixInvalidColors: settings.autoFixInvalidColors ?? DEFAULT_AUTO_FIX_INVALID_COLORS,
     customColors,
     selectedBlocksCustom,
     selectedBlocksBaseOverrides: selectedBlocksBaseOverrides as Record<string, string>,
@@ -763,7 +763,7 @@ async function runFixtureCase(
   const analysis = convertImageToColorGrid(
     imageData,
     testCase.settings.customColors,
-    testCase.settings.convertUnsupported,
+    testCase.settings.autoFixInvalidColors,
   );
   if (analysis.hasBlockingIssue) {
     const artifactsDir = await persistFailureArtifacts(testCase.discovered.caseName, {

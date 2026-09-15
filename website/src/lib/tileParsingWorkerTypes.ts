@@ -13,6 +13,7 @@
  * - src/lib/tileParsingWorkerClient.ts
  */
 import type { PaletteNotice } from "@/lib/messages";
+import type { InputColorPalette } from "@/lib/colorGridParsingCore";
 import type { ColorGridStats } from "@/lib/colorGridAnalysis";
 import type { ColorGrid, ColorRgb } from "@/types/color";
 
@@ -57,7 +58,8 @@ export type TileParsingWorkerInput = {
   originX: number;
   originZ: number;
   customColors: ColorRgb[];
-  convertUnsupported: boolean;
+  autoFixInvalidColors: boolean;
+  allowedColors?: InputColorPalette;
   tiles: TileParsingWorkerTile[];
 };
 

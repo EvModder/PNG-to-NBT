@@ -25,12 +25,14 @@
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 65% 50%;
+    --destructive-text: 0 65% 42%;
     --destructive-foreground: 0 0% 98%;
 
     --border: 0 0% 78%;
     --input: 0 0% 84%;
     --ring: 100 45% 35%;
     --warning: 38 92% 50%;
+    --warning-text: var(--accent);
     --warning-foreground: 48 100% 5%;
     --header-bg: 0 0% 89%;
 
@@ -60,12 +62,14 @@
     --accent-foreground: 220 15% 13%;
 
     --destructive: 0 65% 50%;
+    --destructive-text: var(--destructive);
     --destructive-foreground: 0 0% 98%;
 
     --border: 220 10% 25%;
     --input: 220 10% 22%;
     --ring: 100 45% 35%;
     --warning: 45 100% 50%;
+    --warning-text: var(--accent);
     --warning-foreground: 48 100% 5%;
     --header-bg: 220 15% 13%;
   }

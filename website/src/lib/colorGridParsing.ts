@@ -15,10 +15,11 @@
 import * as UTIF from "utif";
 import { type InvalidDimensionsMode } from "@/data/defaultSettings";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
-import { MAP_SIZE } from "@/utils/color";
+import { MAP_SIZE, packRgb } from "@/utils/color";
 import { type ColorGrid, type ColorRgb } from "@/types/color";
 import { type ColorGridStats } from "@/lib/colorGridAnalysis";
 import {
+  type InputColorPalette,
   buildConversionNotices,
   buildCustomShadeLookup,
   cloneImageData,
@@ -161,6 +162,23 @@ function resizeImageToTileMultiples(
   };
 }
 
+function getInvalidDimensionNotices(imageData: ImageData, customColors: ColorRgb[], autoFixInvalidColors: boolean, allowedColors?: InputColorPalette): PaletteNotice[] {
+  const notices = [messages.parsing.imageSizeNotice(imageData.width, imageData.height)];
+  if (autoFixInvalidColors) return notices;
+
+  // Invalid dimensions prevent tile parsing, but not a read-only color check.
+  const baseLookup = getBaseColorLookup(allowedColors);
+  const customLookup = buildCustomShadeLookup(customColors, allowedColors);
+  const unsupported = new Set<number>();
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    if (imageData.data[i + 3] === 0) continue;
+    const key = packRgb(imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]);
+    if (!baseLookup.has(key) && !customLookup.has(key)) unsupported.add(key);
+  }
+  if (unsupported.size > 0) notices.push(messages.parsing.unsupportedPaletteColorsNotice([...unsupported], !!allowedColors));
+  return notices;
+}
+
 function isTiffFile(file: File): boolean {
   const type = file.type.toLowerCase();
   const name = file.name.toLowerCase();
@@ -209,12 +227,11 @@ export async function loadImageDataFromFile(file: File): Promise<ImageData> {
   return loadBrowserImageData(file);
 }
 
-function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[]): PaletteNotice[] {
+function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[], input: ImageData, output: ImageData): PaletteNotice[] {
   let sizeError: PaletteNotice | null = null;
   const unsupportedColors = new Set<number>();
-  let convertedCount = 0;
-  let totalInputColorCount = 0;
-  let fewerOutputColorCount = 0;
+  let restrictedPalette = false;
+  let hasConversion = false;
   const freeformNotices: PaletteNotice[] = [];
   const lossyFormatNotices: PaletteNotice[] = [];
 
@@ -224,14 +241,11 @@ function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[]): Palette
         sizeError ??= notice;
         break;
       case PaletteNoticeKind.UnsupportedPaletteColors:
+        restrictedPalette ||= notice.restrictedPalette;
         for (const color of notice.colors) unsupportedColors.add(color);
         break;
       case PaletteNoticeKind.ConvertedPaletteColors:
-        convertedCount += notice.convertedCount;
-        totalInputColorCount += notice.totalInputColorCount;
-        break;
-      case PaletteNoticeKind.ReducedUniqueColors:
-        fewerOutputColorCount += notice.fewerOutputColorCount;
+        hasConversion = true;
         break;
       case PaletteNoticeKind.LossyFormatHint:
         lossyFormatNotices.push(notice);
@@ -244,10 +258,26 @@ function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[]): Palette
 
   const notices: PaletteNotice[] = [];
   if (sizeError) notices.push(sizeError);
-  if (unsupportedColors.size > 0) notices.push(messages.parsing.unsupportedPaletteColorsNotice([...unsupportedColors]));
-  if (convertedCount > 0) {
-    notices.push(messages.parsing.convertedPaletteColorsNotice(convertedCount, totalInputColorCount));
-    if (fewerOutputColorCount > 0) notices.push(messages.parsing.reducedUniqueColorsNotice(fewerOutputColorCount));
+  if (unsupportedColors.size > 0) notices.push(messages.parsing.unsupportedPaletteColorsNotice([...unsupportedColors], restrictedPalette));
+  if (hasConversion) {
+    // Count distinct colors across the image, including tiles that needed no conversion.
+    const inputColors = new Set<number>();
+    const outputColors = new Set<number>();
+    const convertedColors = new Set<number>();
+    for (let i = 0; i < input.data.length; i += 4) {
+      if (input.data[i + 3] === 0) continue;
+      const before = packRgb(input.data[i], input.data[i + 1], input.data[i + 2]);
+      const after = packRgb(output.data[i], output.data[i + 1], output.data[i + 2]);
+      inputColors.add(before);
+      outputColors.add(after);
+      if (before !== after) convertedColors.add(before);
+    }
+    notices.push(...buildConversionNotices({
+      convertedCount: convertedColors.size,
+      totalInputColorCount: inputColors.size,
+      fewerOutputColorCount: inputColors.size - outputColors.size,
+      allInputColorsValid: inputColors.values().every(key => getBaseColorLookup().has(key)),
+    }));
   }
   notices.push(...lossyFormatNotices, ...freeformNotices);
   return notices;
@@ -256,13 +286,14 @@ function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[]): Palette
 export function convertImageToColorGrid(
   imageData: ImageData,
   customColors: ColorRgb[],
-  convertUnsupported = false,
+  autoFixInvalidColors = false,
   invalidDimensionsMode: InvalidDimensionsMode = "reject",
+  allowedColors?: InputColorPalette,
 ): ColorGridParseResult {
   const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
   const workingImageData = preprocessed.imageData;
-  const baseLookup = getBaseColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
+  const baseLookup = getBaseColorLookup(allowedColors);
+  const customLookup = buildCustomShadeLookup(customColors, allowedColors);
   const hasSizeError = workingImageData.width !== MAP_SIZE || workingImageData.height !== MAP_SIZE;
 
   if (hasSizeError) {
@@ -271,19 +302,19 @@ export function convertImageToColorGrid(
       colorGrid: createEmptyColorGrid(),
       paletteNotices: [
         ...preprocessed.paletteNotices,
-        messages.parsing.imageSizeNotice(workingImageData.width, workingImageData.height),
+        ...getInvalidDimensionNotices(workingImageData, customColors, autoFixInvalidColors, allowedColors),
       ],
       hasBlockingIssue: true,
     };
   }
 
   const initial = scanImageRegionToColorGrid(workingImageData, 0, 0, baseLookup, customLookup);
-  if (initial.unsupportedColors.length === 0 || !convertUnsupported) {
+  if (initial.unsupportedColors.length === 0 || !autoFixInvalidColors) {
     return {
       imageData: workingImageData,
       colorGrid: initial.colorGrid,
       paletteNotices: initial.unsupportedColors.length > 0
-        ? [...preprocessed.paletteNotices, messages.parsing.unsupportedPaletteColorsNotice(initial.unsupportedColors)]
+        ? [...preprocessed.paletteNotices, messages.parsing.unsupportedPaletteColorsNotice(initial.unsupportedColors, !!allowedColors)]
         : preprocessed.paletteNotices,
       hasBlockingIssue: initial.unsupportedColors.length > 0,
     };
@@ -298,12 +329,8 @@ export function convertImageToColorGrid(
     paletteNotices: [
       ...preprocessed.paletteNotices,
       ...(converted.unsupportedColors.length === 0
-        ? buildConversionNotices(
-            conversionSummary.convertedCount,
-            conversionSummary.totalInputColorCount,
-            conversionSummary.fewerOutputColorCount,
-          )
-        : [messages.parsing.unsupportedPaletteColorsNotice(converted.unsupportedColors)]),
+        ? buildConversionNotices(conversionSummary)
+        : [messages.parsing.unsupportedPaletteColorsNotice(converted.unsupportedColors, !!allowedColors)]),
     ],
     hasBlockingIssue: converted.unsupportedColors.length > 0,
   };
@@ -314,8 +341,9 @@ export function convertImageToColorGrid(
 export function convertImageToColorGridSet(
   imageData: ImageData,
   customColors: ColorRgb[],
-  convertUnsupported = false,
+  autoFixInvalidColors = false,
   invalidDimensionsMode: InvalidDimensionsMode = "reject",
+  allowedColors?: InputColorPalette,
 ): ColorGridSetParseResult {
   const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
   const baseImageData = preprocessed.imageData;
@@ -329,7 +357,7 @@ export function convertImageToColorGridSet(
       tileCols: 0,
       paletteNotices: [
         ...preprocessed.paletteNotices,
-        messages.parsing.imageSizeNotice(baseImageData.width, baseImageData.height),
+        ...getInvalidDimensionNotices(baseImageData, customColors, autoFixInvalidColors, allowedColors),
       ],
       hasBlockingIssue: true,
     };
@@ -337,8 +365,8 @@ export function convertImageToColorGridSet(
 
   const tileCols = baseImageData.width / MAP_SIZE;
   const tileRows = baseImageData.height / MAP_SIZE;
-  const baseLookup = getBaseColorLookup();
-  const customLookup = buildCustomShadeLookup(customColors);
+  const baseLookup = getBaseColorLookup(allowedColors);
+  const customLookup = buildCustomShadeLookup(customColors, allowedColors);
   let workingImageData = baseImageData;
   const tiles: ParsedColorGridTile[] = [];
   const tileNotices: PaletteNotice[] = [];
@@ -356,7 +384,7 @@ export function convertImageToColorGridSet(
       let analysis = scanImageRegionToColorGrid(workingImageData, startX, startZ, baseLookup, customLookup);
       let paletteNotices: PaletteNotice[] = [];
       let tileHasBlockingIssue = analysis.unsupportedColors.length > 0;
-      if (analysis.unsupportedColors.length > 0 && convertUnsupported) {
+      if (analysis.unsupportedColors.length > 0 && autoFixInvalidColors) {
         const conversionSummary = convertUnsupportedRegionToNearestPalette(
           ensureWorkingImageData(),
           startX,
@@ -366,17 +394,13 @@ export function convertImageToColorGridSet(
         );
         analysis = scanImageRegionToColorGrid(workingImageData, startX, startZ, baseLookup, customLookup);
         if (analysis.unsupportedColors.length === 0) {
-          paletteNotices = buildConversionNotices(
-            conversionSummary.convertedCount,
-            conversionSummary.totalInputColorCount,
-            conversionSummary.fewerOutputColorCount,
-          );
+          paletteNotices = buildConversionNotices(conversionSummary);
           tileHasBlockingIssue = false;
         } else {
-          paletteNotices = [messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors)];
+          paletteNotices = [messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors, !!allowedColors)];
         }
       } else if (analysis.unsupportedColors.length > 0) {
-        paletteNotices = [messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors)];
+        paletteNotices = [messages.parsing.unsupportedPaletteColorsNotice(analysis.unsupportedColors, !!allowedColors)];
       }
       tiles.push({
         row,
@@ -397,7 +421,7 @@ export function convertImageToColorGridSet(
     tiles,
     tileRows,
     tileCols,
-    paletteNotices: [...preprocessed.paletteNotices, ...aggregatePaletteNotices(tileNotices)],
+    paletteNotices: [...preprocessed.paletteNotices, ...aggregatePaletteNotices(tileNotices, baseImageData, workingImageData)],
     hasBlockingIssue,
   };
 }
@@ -407,9 +431,10 @@ export function convertImageToColorGridSet(
 export async function convertImageToColorGridSetAsync(
   imageData: ImageData,
   customColors: ColorRgb[],
-  convertUnsupported = false,
+  autoFixInvalidColors = false,
   invalidDimensionsMode: InvalidDimensionsMode = "reject",
   onProgress?: (completed: number, total: number) => void,
+  allowedColors?: InputColorPalette,
 ): Promise<ColorGridSetParseResult> {
   const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
   const baseImageData = preprocessed.imageData;
@@ -423,7 +448,7 @@ export async function convertImageToColorGridSetAsync(
       tileCols: 0,
       paletteNotices: [
         ...preprocessed.paletteNotices,
-        messages.parsing.imageSizeNotice(baseImageData.width, baseImageData.height),
+        ...getInvalidDimensionNotices(baseImageData, customColors, autoFixInvalidColors, allowedColors),
       ],
       hasBlockingIssue: true,
     };
@@ -433,7 +458,7 @@ export async function convertImageToColorGridSetAsync(
   const tileRows = baseImageData.height / MAP_SIZE;
   const totalTiles = tileCols * tileRows;
   if (totalTiles <= 1 || typeof Worker === "undefined") {
-    const result = convertImageToColorGridSet(baseImageData, customColors, convertUnsupported);
+    const result = convertImageToColorGridSet(baseImageData, customColors, autoFixInvalidColors, "reject", allowedColors);
     return { ...result, paletteNotices: [...preprocessed.paletteNotices, ...result.paletteNotices] };
   }
 
@@ -441,10 +466,11 @@ export async function convertImageToColorGridSetAsync(
     const workerResult = await parseColorGridTilesInWorkers(
       baseImageData,
       customColors,
-      convertUnsupported,
+      autoFixInvalidColors,
       tileRows,
       tileCols,
       onProgress,
+      allowedColors,
     );
 
     return {
@@ -452,12 +478,12 @@ export async function convertImageToColorGridSetAsync(
       tiles: workerResult.tiles,
       tileRows,
       tileCols,
-      paletteNotices: [...preprocessed.paletteNotices, ...aggregatePaletteNotices(workerResult.paletteNotices)],
+      paletteNotices: [...preprocessed.paletteNotices, ...aggregatePaletteNotices(workerResult.paletteNotices, baseImageData, workerResult.imageData)],
       hasBlockingIssue: workerResult.hasBlockingIssue,
     };
   } catch {
     // baseImageData was already resized above, so re-parsing must leave its dimensions alone.
-    const fallback = convertImageToColorGridSet(baseImageData, customColors, convertUnsupported, "reject");
+    const fallback = convertImageToColorGridSet(baseImageData, customColors, autoFixInvalidColors, "reject", allowedColors);
     return {
       ...fallback,
       paletteNotices: [...preprocessed.paletteNotices, ...fallback.paletteNotices],

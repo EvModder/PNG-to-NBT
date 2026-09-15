@@ -7,7 +7,8 @@
  */
 import { Fragment, type MutableRefObject, type RefObject } from "react";
 import { Trash2 } from "lucide-react";
-import { type InvalidDimensionsStrategy } from "@/data/defaultSettings";
+import type { InvalidColorsPalette, InvalidDimensionsStrategy } from "@/data/defaultSettings";
+import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
 import { getTargetTileDimensions } from "@/lib/colorGridParsing";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
 import { DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
@@ -38,10 +39,15 @@ type PanelImagePreviewProps = {
   setShowVsFillersInPreview: (value: boolean) => void;
   paletteNotices: PaletteNotice[];
   onResolveInvalidDimensions: (strategy: InvalidDimensionsStrategy) => void;
+  onResolveInvalidColors?: (palette: InvalidColorsPalette) => void;
+  inputColorsPalette: InvalidColorsPalette | null;
+  unrestrictedInputPalette: boolean;
+  fullInputPalette: boolean;
+  hasPresetColors: boolean;
   imageValid: boolean;
   missingBlockCount: number;
   usesEyeblossoms: boolean;
-  noFillerWarning: string | null;
+  noFillerWarning: { text: string; blocking: boolean } | null;
   suppressStepNorthSouthWarning: string | null;
   waterSideSupportWarning: PreviewWarning | null;
   fragileSupportOverrideWarning: PreviewWarning | null;
@@ -93,10 +99,12 @@ function WarningBanner({
   text,
   tone,
   invalid = false,
+  warningHeadline = false,
 }: {
   text: string;
   tone: "error" | "warning" | "muted";
   invalid?: boolean;
+  warningHeadline?: boolean;
 }) {
   const className =
     tone === "error"
@@ -106,14 +114,18 @@ function WarningBanner({
         : "mt-2 bg-muted/30 border border-border rounded p-2";
   const textClassName =
     tone === "muted"
-      ? "text-xs text-muted-foreground font-medium whitespace-pre-line"
-      : tone === "error"
-        ? `text-xs whitespace-pre-line ${invalid ? "text-destructive font-bold" : "text-destructive font-medium"}`
-        : `text-xs whitespace-pre-line ${invalid ? "text-destructive font-bold" : "text-warning font-medium"}`;
+      ? "text-muted-foreground"
+      : tone === "error" || invalid ? "text-destructive-text" : "text-warning-text";
+  const headlineEnd = warningHeadline ? text.indexOf("\n") : -1;
 
   return (
     <div className={className}>
-      <p className={textClassName}>{text}</p>
+      <p className={`text-xs font-medium whitespace-pre-line ${textClassName}`}>
+        {headlineEnd < 0 ? text : <>
+          <span className="text-warning-text">{text.slice(0, headlineEnd)}</span>
+          {text.slice(headlineEnd)}
+        </>}
+      </p>
     </div>
   );
 }
@@ -140,14 +152,14 @@ function ImageSizeActions({ width, height, currentMode, onResolveInvalidDimensio
   if (actions.length === 0) return null;
 
   return (
-    <span className={currentMode ? undefined : "block text-xs font-medium"}>
+    <span className={currentMode ? "text-warning-text" : "block text-xs font-medium text-warning-text"}>
       {currentMode && " "}
       {actions.map((action, index) => (
         <Fragment key={action.mode}>
-          {index > 0 && <span className="text-warning/60"> | </span>}
+          {index > 0 && " | "}
           <button
             type="button"
-            className="text-warning underline underline-offset-2 hover:text-foreground"
+            className="underline underline-offset-2 hover:text-foreground"
             onClick={() => onResolveInvalidDimensions(action.mode)}
           >
             {currentMode ? `(${action.text})` : action.text}
@@ -185,6 +197,11 @@ function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteN
 
   for (let index = 0; index < paletteNotices.length; ++index) {
     const notice = paletteNotices[index];
+    if (notice.kind === PaletteNoticeKind.SizeError) {
+      flushCurrentNonResizeGroup();
+      groups.push({ notices: [notice], containerTone: "error" });
+      continue;
+    }
     const detailKind = notice ? RESIZE_NOTICE_DETAIL_KINDS[notice.kind] : undefined;
     if (detailKind !== undefined && paletteNotices[index + 1]?.kind === detailKind) {
       flushCurrentNonResizeGroup();
@@ -221,6 +238,11 @@ export function PanelImagePreview({
   setShowVsFillersInPreview,
   paletteNotices,
   onResolveInvalidDimensions,
+  onResolveInvalidColors,
+  inputColorsPalette,
+  unrestrictedInputPalette,
+  fullInputPalette,
+  hasPresetColors,
   imageValid,
   missingBlockCount,
   usesEyeblossoms,
@@ -273,7 +295,11 @@ export function PanelImagePreview({
 }: PanelImagePreviewProps) {
   const previewAspectRatio = imageData ? `${imageData.width} / ${imageData.height}` : "1 / 1";
   const activePreviewImageUrl = previewImageUrl ?? fallbackPreviewImageUrl;
-  const paletteNoticeGroups = groupPaletteNotices(paletteNotices);
+  // Red detail text (such as cropped pixels) is not itself a blocking error.
+  const visiblePaletteNotices = imageValid
+    ? paletteNotices
+    : paletteNotices.filter(notice => messages.parsing.bannerTone([notice]) === "error");
+  const paletteNoticeGroups = groupPaletteNotices(visiblePaletteNotices.filter(notice => !isColorCorrectionNotice(notice)));
   // Align the visible title glyph center with toolbar labels, not just the CSS line box.
   const titleClassName = `${PANEL_TITLE_TEXT_CLASS} inline-flex h-3.5 items-center`;
   const headerActionInsetClassName = imageData
@@ -442,15 +468,13 @@ export function PanelImagePreview({
               key={`${groupIndex}-${noticeIndex}`}
               className={`text-xs whitespace-pre-wrap ${
                 messages.parsing.noticeTone(notice) === "error"
-                  ? notice.kind === PaletteNoticeKind.ReducedUniqueColors
-                    ? "text-destructive font-bold"
-                    : "text-destructive font-medium"
+                  ? "text-destructive-text font-medium"
                   : messages.parsing.noticeTone(notice) === "warning"
-                    ? "text-warning font-medium"
+                    ? "text-warning-text font-medium"
                     : "text-primary font-medium"
               }`}
             >
-              {messages.parsing.noticeText(notice)}
+              {messages.parsing.noticeText(notice, inputColorsPalette, fullInputPalette)}
               {(notice.kind === PaletteNoticeKind.CroppedImage || notice.kind === PaletteNoticeKind.PaddedImage) && <>
                 {originalImageDimensions && <ImageSizeActions
                   width={originalImageDimensions.width}
@@ -475,21 +499,26 @@ export function PanelImagePreview({
         </div>
       ))}
 
-      {imageValid && missingBlockCount > 0 && (
-        <WarningBanner
-          text={messages.preview.missingBlockAssignments(missingBlockCount)}
-          tone="error"
-        />
-      )}
-      {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
-      {noFillerWarning && <WarningBanner text={noFillerWarning} tone="warning" />}
-      {suppressStepNorthSouthWarning && <WarningBanner text={suppressStepNorthSouthWarning} tone="warning" />}
-      {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
-      {fragileSupportOverrideWarning && <WarningBanner text={fragileSupportOverrideWarning.text} tone="warning" invalid={fragileSupportOverrideWarning.invalid} />}
-      {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} />}
-      {lateFillerWarning && <WarningBanner text={lateFillerWarning.text} tone="warning" invalid={lateFillerWarning.invalid} />}
-      {showNorthRowAlignmentInfo && <WarningBanner text={messages.preview.northRowAlignmentInfo} tone="muted" />}
-      {canGenerate && imageHasWater && usesIceForWater && <WarningBanner text={messages.preview.iceConversionInfo} tone="muted" />}
+      <ImageColorNotice
+        notices={visiblePaletteNotices.filter(isColorCorrectionNotice)}
+        missingBlockCount={imageValid ? missingBlockCount : 0}
+        currentPalette={inputColorsPalette}
+        unrestrictedInputPalette={unrestrictedInputPalette}
+        fullInputPalette={fullInputPalette}
+        hasPresetColors={hasPresetColors}
+        onResolve={onResolveInvalidColors}
+      />
+      {imageValid && <>
+        {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
+        {noFillerWarning && <WarningBanner text={noFillerWarning.text} tone={noFillerWarning.blocking ? "error" : "warning"} />}
+        {suppressStepNorthSouthWarning && <WarningBanner text={suppressStepNorthSouthWarning} tone="warning" />}
+        {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
+        {fragileSupportOverrideWarning && <WarningBanner text={fragileSupportOverrideWarning.text} tone="warning" invalid={fragileSupportOverrideWarning.invalid} />}
+        {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} warningHeadline />}
+        {lateFillerWarning && <WarningBanner text={lateFillerWarning.text} tone="warning" invalid={lateFillerWarning.invalid} />}
+        {showNorthRowAlignmentInfo && <WarningBanner text={messages.preview.northRowAlignmentInfo} tone="muted" />}
+        {canGenerate && imageHasWater && usesIceForWater && <WarningBanner text={messages.preview.iceConversionInfo} tone="muted" />}
+      </>}
 
       {showUsageInfo && (
         <div className="mt-2 space-y-1">

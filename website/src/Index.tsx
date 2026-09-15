@@ -61,13 +61,16 @@ import {
   SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
   type SuppressLoadSpotMarkerBlock,
   DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
-  DEFAULT_CONVERT_UNSUPPORTED_COLORS,
   DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
   INVALID_DIMENSIONS_STRATEGY_OPTIONS,
   type InvalidDimensionsStrategy,
   type InvalidDimensionsMode,
   DEFAULT_AUTO_FIX_INVALID_DIMENSIONS,
   DEFAULT_INVALID_DIMENSIONS_STRATEGY,
+  DEFAULT_AUTO_FIX_INVALID_COLORS,
+  INVALID_COLORS_PALETTE_OPTIONS,
+  type InvalidColorsPalette,
+  DEFAULT_INVALID_COLORS_PALETTE,
   DEFAULT_MINECRAFT_VERSION,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
@@ -146,6 +149,7 @@ import {
   type PaletteNotice,
 } from "@/lib/messages";
 import { decodeFullPreset, encodeFullPreset, loadPresets } from "@/lib/codecPreset";
+import { buildInputColorPalette, presetCoversInputColors } from "@/lib/colorGridParsingCore";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
 import {
@@ -756,13 +760,32 @@ const Index = () => {
       ? stored as InvalidDimensionsStrategy
       : DEFAULT_INVALID_DIMENSIONS_STRATEGY;
   });
+  const [invalidColorsPaletteOverride, setInvalidColorsPaletteOverride] = useState<InvalidColorsPalette | null>(null);
+  const [autoFixInvalidColors, setAutoFixInvalidColors] = useState(() =>
+    loadCached(LS_KEYS.autoFixInvalidColors, DEFAULT_AUTO_FIX_INVALID_COLORS),
+  );
+  const [invalidColorsPalette, setInvalidColorsPalette] = useState<InvalidColorsPalette>(() => {
+    const stored = loadCached(LS_KEYS.invalidColorsPalette, DEFAULT_INVALID_COLORS_PALETTE);
+    return INVALID_COLORS_PALETTE_OPTIONS.includes(stored as InvalidColorsPalette)
+      ? stored as InvalidColorsPalette
+      : DEFAULT_INVALID_COLORS_PALETTE;
+  });
   const [minecraftVersion, setMinecraftVersion] = useState<MinecraftVersion>(() => {
     const stored = loadCached(LS_KEYS.minecraftVersion, DEFAULT_MINECRAFT_VERSION);
     return Object.hasOwn(MINECRAFT_VERSIONS, stored) ? stored as MinecraftVersion : DEFAULT_MINECRAFT_VERSION;
   });
-  // A size-error action retargets just the loaded image; the saved settings are untouched.
+  // Error actions retarget just the loaded image; the saved settings are untouched.
   const effectiveInvalidDimensionsMode = invalidDimensionsStrategyOverride
     ?? (autoFixInvalidDimensions ? invalidDimensionsStrategy : "reject");
+  const effectiveInvalidColorsPalette = invalidColorsPaletteOverride ?? (autoFixInvalidColors ? invalidColorsPalette : null);
+  const handleAutoFixInvalidColorsChange: Dispatch<SetStateAction<boolean>> = value => {
+    setInvalidColorsPaletteOverride(null);
+    setAutoFixInvalidColors(value);
+  };
+  const handleInvalidColorsPaletteChange: Dispatch<SetStateAction<InvalidColorsPalette>> = value => {
+    setInvalidColorsPaletteOverride(null);
+    setInvalidColorsPalette(value);
+  };
   const handleAutoFixInvalidDimensionsChange = useCallback<Dispatch<SetStateAction<boolean>>>(value => {
     setInvalidDimensionsStrategyOverride(null);
     setAutoFixInvalidDimensions(value);
@@ -774,7 +797,6 @@ const Index = () => {
     },
     [],
   );
-  const [convertUnsupported, /* setConvertUnsupported */] = useState(DEFAULT_CONVERT_UNSUPPORTED_COLORS); // always on; checkbox not shown
   const [customColors, setCustomColors] = useState<ColorRgb[]>([]);
   const [selectedBlocksCustom, setSelectedBlocksCustom] = useState<Record<number, string>>({});
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
@@ -850,7 +872,6 @@ const Index = () => {
   );
   const parsedImageSet = decodedImageSet ?? parsedImageSetState;
   const parsedTiles = parsedImageSet?.tiles ?? [];
-  const hasBlockingSizeError = !!parsedImageSetState && parsedImageSetState.hasBlockingIssue && parsedImageSetState.tiles.length === 0;
   const hasRejectedUploadedImage =
     !decodedColorGrid &&
     !isParsingImage &&
@@ -865,7 +886,7 @@ const Index = () => {
   const tileCount = parsedTiles.length > 0 ? parsedTiles.length : expectedTileShape.tileCount;
   const hasMultipleTiles = tileCount > 1;
   const displayImageData =
-    hasBlockingSizeError
+    hasRejectedUploadedImage
       ? null
       : pendingIncomingTileCount !== null
         ? imageData
@@ -921,6 +942,31 @@ const Index = () => {
   const effectiveSelectedBlocks = useMemo(
     () => getVersionedSelections(preset.selectedBlocks, minecraftVersion),
     [preset.selectedBlocks, minecraftVersion],
+  );
+  // Keep parsing stable when swapping blocks with the same allowed colors/shades.
+  const selectedColorKey = JSON.stringify([
+    ...Object.entries(effectiveSelectedBlocks).filter(([, block]) => block).map(([id]) => getColorRefKey({ id: Number(id), isCustom: false })),
+    ...customColors.flatMap((_, id) => getSelectedCustomColorBlock(selectedBlocksCustom, id, customColors) ? [getColorRefKey({ id, isCustom: true })] : []),
+  ]);
+  const allowedColorKey = effectiveInvalidColorsPalette && effectiveInvalidColorsPalette !== "full" ? selectedColorKey : undefined;
+  const hasPresetColors = useMemo(
+    () => (JSON.parse(selectedColorKey) as ColorRefKey[]).some(key => key !== getColorRefKey({ id: TRANSPARENCY_BASE_INDEX, isCustom: false })),
+    [selectedColorKey],
+  );
+  const fullInputPalette = useMemo(
+    () => presetCoversInputColors(null, customColors, JSON.parse(selectedColorKey)),
+    [parseRelevantCustomColorKey, selectedColorKey],
+  );
+  const unrestrictedInputPalette = useMemo(
+    () => presetCoversInputColors(imageData, customColors, JSON.parse(selectedColorKey)),
+    [imageData, parseRelevantCustomColorKey, selectedColorKey],
+  );
+  const flatInputPalette = effectiveInvalidColorsPalette === "current-flat";
+  const allowDeepFlatWater = flatInputPalette && (belowPlatformWater ||
+    (!buildAtWorldMinY && normalizeBlockId(effectiveSelectedBlocks[WATER_BASE_INDEX] ?? "") === "water"));
+  const allowedColors = useMemo(
+    () => allowedColorKey === undefined ? undefined : buildInputColorPalette(JSON.parse(allowedColorKey), flatInputPalette, allowDeepFlatWater),
+    [allowedColorKey, flatInputPalette, allowDeepFlatWater],
   );
   const activePresetBuiltinTooltip = activeIdx < BUILTIN_PRESET_NAMES.length
     ? messages.presets.builtinTooltip(preset.name)
@@ -1056,6 +1102,8 @@ const Index = () => {
       [LS_KEYS.suppressLoadSpotMarkerBlock]: suppressLoadSpotMarkerBlock,
       [LS_KEYS.autoFixInvalidDimensions]: autoFixInvalidDimensions,
       [LS_KEYS.invalidDimensionsStrategy]: invalidDimensionsStrategy,
+      [LS_KEYS.autoFixInvalidColors]: autoFixInvalidColors,
+      [LS_KEYS.invalidColorsPalette]: invalidColorsPalette,
       [LS_KEYS.minecraftVersion]: minecraftVersion,
     }),
     [
@@ -1107,6 +1155,8 @@ const Index = () => {
       suppressLoadSpotMarkerBlock,
       autoFixInvalidDimensions,
       invalidDimensionsStrategy,
+      autoFixInvalidColors,
+      invalidColorsPalette,
       minecraftVersion,
     ],
   );
@@ -1209,7 +1259,6 @@ const Index = () => {
         tileUsedWaterShades.has(Shade.Dark) ||
         tileUsedWaterShades.has(Shade.Flat);
       const targetCrubTechWater = crubTech && isCrubTechBuildMode(targetBuildMode);
-      if (targetBuildMode === BuildMode.Flat) return undefined;
       if (targetBelowPlatformWater && tileHasWater) {
         return { kind: "below-platform", drops: targetCrubTechWater ? CRUBTECH_SHAPE_WATER_DROPS : normalizedDeferredWaterDrops };
       }
@@ -1233,14 +1282,14 @@ const Index = () => {
     [buildMode, imageValid, parsedTiles, tileDerivedImageStats, getTileWaterSetting],
   );
   const twoLayerRequiresLateShading = useMemo(
-    () => parsedTiles.some((tile, index) => {
+    () => imageValid && parsedTiles.some((tile, index) => {
       const waterSetting = getTileWaterSetting(tileDerivedImageStats[index], BuildMode.Suppress2Layer);
       return requiresTwoLayerLateShading(
         tile.colorGrid,
         waterSetting?.kind === "below-platform" ? waterSetting.drops : undefined,
       );
     }),
-    [getTileWaterSetting, parsedTiles, tileDerivedImageStats],
+    [imageValid, getTileWaterSetting, parsedTiles, tileDerivedImageStats],
   );
   const crubTechControlsCurrent2LayerSettings = imageValid && crubTech && isCrubTechBuildMode(buildMode);
   const crubTechControlsLatePairsGap = crubTechControlsCurrent2LayerSettings;
@@ -1712,7 +1761,7 @@ const Index = () => {
   const currentWaterDrops = crubTechControlsActive2LayerSettings
     ? CRUBTECH_WATER_DROPS
     : buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
-  const visibleWaterLevelControls = !imageHasWater || !effectiveBelowPlatformWater || effectiveBuildMode === BuildMode.Flat
+  const visibleWaterLevelControls = !imageHasWater || !effectiveBelowPlatformWater
     ? []
     : WATER_DROP_INPUT_ORDER
       .filter(shade => usedWaterShades.has(shade))
@@ -2181,11 +2230,14 @@ const Index = () => {
       selectionMaterialCountsSum,
     ],
   );
+  // Smooth small-image refreshes only; larger jobs should clear stale requirements.
+  // Use padded dimensions so switching Crop/Pad does not change this policy mid-update.
   const holdResolvedMaterialUi =
     pendingIncomingTileCount === null &&
     !!imageData &&
-    parsedTiles.length === 1 &&
-    (pendingTransparentMaterialRefresh || !hasCurrentMaterialAnalysis);
+    getExpectedTileShape(imageData, "pad").tileCount <= 4 &&
+    imageValid &&
+    (pendingTransparentMaterialRefresh || analysisBusy || !hasCurrentMaterialAnalysis);
   const materialCountsDisplayView = useHeldValueWhilePending(
     hasCurrentMaterialAnalysis ? materialCountsView : EMPTY_MATERIAL_COUNTS,
     holdResolvedMaterialUi,
@@ -2198,11 +2250,7 @@ const Index = () => {
     hasCurrentMaterialAnalysis ? fragileSupportOverrideNeedStats : null,
     holdResolvedMaterialUi,
   );
-  const numUniqueColorShadesForPart =
-    selectedTileMaterialNeedStats?.numUniqueColorShadesForPart ??
-    (paletteUsageInfo?.uniqueShadeCount ?? 0);
   const formatRequiredCount = (count: number) => (showStacks ? formatStacks(count) : count);
-  const numColorBlockTypesForPart = Object.values(materialCountsDisplayView.colorCounts).filter(count => count > 0).length;
 
   const builtinPreset = getBuiltinPreset(preset.name);
   const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.selectedBlocks, preset.selectedBlocks) : false;
@@ -2623,6 +2671,7 @@ const Index = () => {
   }, [presetDirty, markSavedImmediate, buildShareUrl, activeIdx, copyUrlToClipboard]);
 
   const clearImage = () => {
+    setInvalidColorsPaletteOverride(null);
     fileLoadRequestIdRef.current += 1;
     setPendingIncomingTileCount(null);
     setDecodedColorGrid(null);
@@ -2684,23 +2733,6 @@ const Index = () => {
     }
 
     let cancelled = false;
-    const exactTileCount = getTileShapeForDimensions(imageData.width, imageData.height).tileCount;
-    if (effectiveInvalidDimensionsMode === "reject" && exactTileCount === 0) {
-      setParsedImageSetState({
-        imageData,
-        tiles: [],
-        tileRows: 0,
-        tileCols: 0,
-        paletteNotices: [messages.parsing.imageSizeNotice(imageData.width, imageData.height)],
-        hasBlockingIssue: true,
-      });
-      setPaletteNotices([messages.parsing.imageSizeNotice(imageData.width, imageData.height)]);
-      setImageValid(false);
-      setPendingIncomingTileCount(null);
-      setIsParsingImage(false);
-      setParseProgress(null);
-      return;
-    }
     const expectedTileCount = getExpectedTileShape(imageData, effectiveInvalidDimensionsMode).tileCount;
     const singleTileImage = expectedTileCount === 1;
     setIsParsingImage(true);
@@ -2712,12 +2744,12 @@ const Index = () => {
         let lastParseProgressUpdateAt = performance.now();
         if (cancelled) return;
         const analysis = singleTileImage
-          ? convertImageToColorGridSet(imageData, customColors, convertUnsupported, effectiveInvalidDimensionsMode)
+          ? convertImageToColorGridSet(imageData, customColors, effectiveInvalidColorsPalette !== null, effectiveInvalidDimensionsMode, allowedColors)
           : await (async () => {
               return convertImageToColorGridSetAsync(
                 imageData,
                 customColors,
-                convertUnsupported,
+                effectiveInvalidColorsPalette !== null,
                 effectiveInvalidDimensionsMode,
                 (completed, total) => {
                   if (cancelled) return;
@@ -2726,11 +2758,12 @@ const Index = () => {
                   lastParseProgressUpdateAt = now;
                   setParseProgress(current => ({ completed, total: current?.total ?? total }));
                 },
+                allowedColors,
               );
             })();
         if (cancelled) return;
         const paletteNotices =
-          imageLossyFormatLabel && analysis.paletteNotices.some(notice => notice.kind === PaletteNoticeKind.ConvertedPaletteColors)
+          imageLossyFormatLabel && analysis.paletteNotices.some(notice => notice.kind === PaletteNoticeKind.ConvertedPaletteColors && !notice.allInputColorsValid)
             ? [...analysis.paletteNotices, messages.parsing.lossyFormatHintNotice(imageLossyFormatLabel)]
             : analysis.paletteNotices;
         startTransition(() => {
@@ -2756,7 +2789,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [decodedColorGrid, imageData, parseRelevantCustomColorKey, convertUnsupported, effectiveInvalidDimensionsMode, imageLossyFormatLabel]);
+  }, [decodedColorGrid, imageData, parseRelevantCustomColorKey, effectiveInvalidColorsPalette, allowedColors, effectiveInvalidDimensionsMode, imageLossyFormatLabel]);
 
   const handleFile = useCallback(
     (file: File) => {
@@ -2764,6 +2797,7 @@ const Index = () => {
       fileLoadRequestIdRef.current = requestId;
       replaceUploadedPreviewUrl(URL.createObjectURL(file));
       setInvalidDimensionsStrategyOverride(null);
+      setInvalidColorsPaletteOverride(null);
       setPendingIncomingTileCount(null);
       setDecodedColorGrid(null);
       setSelectedTileIndices([]);
@@ -2818,7 +2852,7 @@ const Index = () => {
   }, []);
 
   const runConvertAndDownload = async (layerSplit: boolean) => {
-    if (!imageValid || tileAnalyses.length === 0) return;
+    if (!canGenerate || tileAnalyses.length === 0) return;
     setConverting(true);
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
@@ -2995,7 +3029,6 @@ const Index = () => {
 
   const aggregateNorthRowSingleLine = tileGeometryAnalyses.every(tile => tile.northRowSingleLine);
 
-  const canGenerate = imageValid && missingBlockCount === 0;
   const hasRequiredCol = imageValid && (hasCurrentMaterialAnalysis || holdResolvedMaterialUi);
   const transparentSortColorCount = useMemo(() => {
     const transparentShadeCounts = shadeCountsByColorKey.get(getColorRefKey({ id: TRANSPARENCY_BASE_INDEX, isCustom: false }));
@@ -3018,19 +3051,10 @@ const Index = () => {
         ? parsedTiles.length === 1
         : pendingIncomingTileCount === 1 && parsedTiles.length === 1
     );
-  // Preserve material-analysis layout only for single-tile -> single-tile handoffs.
-  // If the outgoing image is multi-tile, we clear immediately.
-  // If the incoming image resolves to multi-tile, we clear as soon as its dimensions are known.
+  // Keep small-image recalculations intact, including single-tile -> multi-tile padding.
+  // Separate uploads still preserve layout only for single-tile -> single-tile handoffs.
   const colorTableDisplayPending =
-    preserveSingleTileMaterialUi &&
-    (
-      pendingTransparentMaterialRefresh ||
-      isParsingImage ||
-      !imageValid ||
-      parsedTiles.length === 0 ||
-      !hasCurrentTileGeometryAnalysis ||
-      !hasCurrentMaterialAnalysis
-    );
+    holdResolvedMaterialUi || (preserveSingleTileMaterialUi && isParsingImage);
   const colorTableDisplayState = useHeldValueWhilePending(
     useMemo(
       () => ({
@@ -3414,15 +3438,16 @@ const Index = () => {
         );
       }
       const nonEmptyParts = parts.filter(Boolean);
-      return nonEmptyParts.length > 0 ? nonEmptyParts.join("\n\n") : null;
+      return nonEmptyParts.length > 0 ? { text: nonEmptyParts.join("\n\n"), blocking: false } : null;
     }
     if (!showNoFillerWarning) return null;
     const parts: string[] = [];
-    if (northRowFillerCount > 0 && (showNooblineWarnings || !aggregateNorthRowSingleLine)) {
+    const suppressLike = isSuppressBuildMode(effectiveBuildMode) || lateSuppressFillerCount > 0;
+    const blocking = hasInGridFillerNeed && suppressLike;
+    if (!blocking && northRowFillerCount > 0 && (showNooblineWarnings || !aggregateNorthRowSingleLine)) {
       parts.push(messages.preview.noFillerNorthRowLine);
     }
     if (hasInGridFillerNeed) {
-      const suppressLike = isSuppressBuildMode(effectiveBuildMode) || lateSuppressFillerCount > 0;
       parts.push(
         suppressLike
           ? messages.preview.noFillerSuppressLine
@@ -3430,7 +3455,10 @@ const Index = () => {
       );
     }
     if (parts.length === 0) return null;
-    return messages.preview.noFillerWarning(effectiveShadeFillerBlock, parts);
+    return {
+      text: messages.preview.noFillerWarning(effectiveShadeFillerBlock, parts),
+      blocking,
+    };
   }, [
     aggregateCrubTechBreakableRequiredCount,
     aggregateCrubTechPushableRequiredCount,
@@ -3448,6 +3476,7 @@ const Index = () => {
     showNooblineWarnings,
     crubTechControlsActive2LayerSettings,
   ]);
+  const canGenerate = imageValid && missingBlockCount === 0 && !noFillerWarning?.blocking;
   const waterSideSupportWarning = useMemo<ShapeWarning | null>(() => {
     if (!showWaterSideSupportWarning) return null;
     const value = effectiveSupportFillerBlock;
@@ -3565,6 +3594,31 @@ const Index = () => {
     suppress2LayerLateFillerBlock,
     effectiveShadeFillerBlock,
   ]);
+
+  // Keep small-image notices and counts together; larger jobs use their live loading state.
+  const previewAnalysisDisplay = useHeldValueWhilePending(
+    {
+      missingBlockCount,
+      usesEyeblossoms: imageValid && Object.entries(materialCountsDisplayView.blockCounts).some(
+        ([block, count]) => count > 0 && ["open_eyeblossom", "closed_eyeblossom"].includes(normalizeBlockId(block)),
+      ),
+      noFillerWarning,
+      suppressStepNorthSouthWarning,
+      waterSideSupportWarning,
+      fragileSupportOverrideWarning,
+      vsFillerWarning,
+      lateFillerWarning,
+      showNorthRowAlignmentInfo,
+      canGenerate,
+      imageHasWater,
+      showVsFillersInPreviewToggle,
+      showUsageInfo: !!paletteUsageInfo && imageValid,
+      numUniqueColorShadesForPart: selectedTileMaterialNeedStats?.numUniqueColorShadesForPart ?? (paletteUsageInfo?.uniqueShadeCount ?? 0),
+      numColorBlockTypesForPart: Object.values(materialCountsDisplayView.colorCounts).filter(count => count > 0).length,
+      vsFillerSpotCount,
+    },
+    holdResolvedMaterialUi,
+  );
 
   const handleColorTableMinWidthChange = useCallback((nextWidthPx: number) => {
     setColorTableMinWidthPx(prev => (Math.abs(prev - nextWidthPx) > 1 ? nextWidthPx : prev));
@@ -3990,30 +4044,21 @@ const Index = () => {
               imageData={displayImageData}
               originalImageDimensions={imageData}
               previewImageUrl={previewImageUrl}
-              fallbackPreviewImageUrl={hasBlockingSizeError ? null : uploadedPreviewUrl}
+              fallbackPreviewImageUrl={hasRejectedUploadedImage ? null : uploadedPreviewUrl}
               imageName={hasRejectedUploadedImage ? "" : imageName}
               handleFile={handleFile}
               canCopyImageShareUrl={canCopyImageShareUrl}
               copyImageShareUrl={copyImageShareUrl}
-              showVsFillersInPreviewToggle={showVsFillersInPreviewToggle}
               showVsFillersInPreview={showVsFillersInPreview}
               setShowVsFillersInPreview={setShowVsFillersInPreview}
               paletteNotices={paletteNotices}
               onResolveInvalidDimensions={setInvalidDimensionsStrategyOverride}
+              onResolveInvalidColors={imageData && !decodedColorGrid ? setInvalidColorsPaletteOverride : undefined}
+              inputColorsPalette={effectiveInvalidColorsPalette}
+              unrestrictedInputPalette={unrestrictedInputPalette}
+              fullInputPalette={fullInputPalette}
+              hasPresetColors={hasPresetColors}
               imageValid={imageValid}
-              missingBlockCount={missingBlockCount}
-              usesEyeblossoms={imageValid && Object.entries(materialCountsDisplayView.blockCounts).some(
-                ([block, count]) => count > 0 && ["open_eyeblossom", "closed_eyeblossom"].includes(normalizeBlockId(block)),
-              )}
-              noFillerWarning={noFillerWarning}
-              suppressStepNorthSouthWarning={suppressStepNorthSouthWarning}
-              waterSideSupportWarning={waterSideSupportWarning}
-              fragileSupportOverrideWarning={fragileSupportOverrideWarning}
-              vsFillerWarning={vsFillerWarning}
-              lateFillerWarning={lateFillerWarning}
-              showNorthRowAlignmentInfo={showNorthRowAlignmentInfo}
-              canGenerate={canGenerate}
-              imageHasWater={imageHasWater}
               usesIceForWater={usesIceForWater}
               clearImage={clearImage}
               handleConvertAndDownload={handleConvertAndDownload}
@@ -4022,12 +4067,9 @@ const Index = () => {
               layerSplitButtonLabel={layerSplitGenerateButtonLabel}
               converting={converting}
               generateButtonLabel={generateButtonLabel}
-              busy={previewBusy}
+              busy={previewBusy || holdResolvedMaterialUi}
               busyText={previewStatusText}
-              showUsageInfo={!!paletteUsageInfo && imageValid}
-              numUniqueColorShadesForPart={numUniqueColorShadesForPart}
-              numColorBlockTypesForPart={numColorBlockTypesForPart}
-              vsFillerSpotCount={vsFillerSpotCount}
+              {...previewAnalysisDisplay}
               showRangeControls={showPreviewRangeControls}
               showWestEastSlopeControls={showWestEastSlopeControls}
               westEastSlopeEnabled={westEastSlopeEnabled}
@@ -4103,6 +4145,11 @@ const Index = () => {
         setAutoFixInvalidDimensions={handleAutoFixInvalidDimensionsChange}
         invalidDimensionsStrategy={invalidDimensionsStrategy}
         setInvalidDimensionsStrategy={handleInvalidDimensionsStrategyChange}
+        autoFixInvalidColors={autoFixInvalidColors}
+        setAutoFixInvalidColors={handleAutoFixInvalidColorsChange}
+        invalidColorsPalette={invalidColorsPalette}
+        hasPresetColors={hasPresetColors}
+        setInvalidColorsPalette={handleInvalidColorsPaletteChange}
       />
     </div>
   );

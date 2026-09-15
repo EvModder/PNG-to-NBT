@@ -18,7 +18,6 @@
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
- * - src/lib/messages.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -81,7 +80,6 @@ export function packRgb(r: number, g: number, b: number): number {
 
 // Callers:
 // - src/lib/colorGridParsingCore.ts
-// - src/lib/messages.ts
 export function unpackRgb(key: number): [number, number, number] {
   return [(key >> 16) & 255, (key >> 8) & 255, key & 255];
 }
