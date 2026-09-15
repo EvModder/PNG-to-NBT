@@ -3,6 +3,7 @@
  * - EXCLUDED_BLOCKS
  *
  * Callers:
+ * - src/lib/codecPreset.ts
  * - src/lib/minecraftVersion.ts
  */
 import { BASE_COLORS } from "./mapColors";
@@ -54,6 +55,10 @@ import { BASE_COLORS } from "./mapColors";
  */
 
 // Excluded block options grouped by map color ID.
+// Shared preset URLs reference positions within these lists separately from the
+// normal lists, filtered by Minecraft DataVersion. Register future-version blocks
+// in BLOCK_INTRODUCTIONS; insertions then cannot shift older URLs. Otherwise APPEND
+// only: reordering/inserting/removing/moving existing entries WILL break links.
 const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   0: [
     "rail", "powered_rail", "detector_rail", "activator_rail", "lever[face=floor]",
@@ -228,5 +233,6 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
 };
 
 // Callers:
+// - src/lib/codecPreset.ts
 // - src/lib/minecraftVersion.ts
 export const EXCLUDED_BLOCKS: string[][] = BASE_COLORS.map((_, idx) => EXCLUDED_BY_ID[idx] ?? []);

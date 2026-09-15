@@ -2,8 +2,6 @@
  * Public API:
  * - encodeUrlParamBytes()
  * - decodeUrlParamBytes()
- * - encodeUrlParamText()
- * - decodeUrlParamText()
  *
  * Callers:
  * - src/lib/codecColorGrid.ts
@@ -12,8 +10,6 @@
 const RAW_PREFIX = "r";
 const PACKED_PREFIX = "p";
 const COMPRESSED_PREFIX = "z";
-const TEXT_ENCODER = new TextEncoder();
-const TEXT_DECODER = new TextDecoder();
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -152,12 +148,14 @@ async function encodeSingleUrlParamBytes(bytes: Uint8Array): Promise<string> {
 
 // Callers:
 // - src/lib/codecColorGrid.ts
+// - src/lib/codecPreset.ts
 export async function encodeUrlParamBytes(bytes: Uint8Array): Promise<string> {
   return encodeSingleUrlParamBytes(bytes);
 }
 
 // Callers:
 // - src/lib/codecColorGrid.ts
+// - src/lib/codecPreset.ts
 export async function decodeUrlParamBytes(encoded: string): Promise<Uint8Array | null> {
   if (!encoded) return null;
   try {
@@ -173,24 +171,6 @@ export async function decodeUrlParamBytes(encoded: string): Promise<Uint8Array |
       default:
         return null;
     }
-  } catch {
-    return null;
-  }
-}
-
-// Callers:
-// - src/lib/codecPreset.ts
-export async function encodeUrlParamText(text: string): Promise<string> {
-  return encodeUrlParamBytes(TEXT_ENCODER.encode(text));
-}
-
-// Callers:
-// - src/lib/codecPreset.ts
-export async function decodeUrlParamText(encoded: string): Promise<string | null> {
-  const bytes = await decodeUrlParamBytes(encoded);
-  if (!bytes) return null;
-  try {
-    return TEXT_DECODER.decode(bytes);
   } catch {
     return null;
   }

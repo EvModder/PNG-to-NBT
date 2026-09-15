@@ -52,6 +52,7 @@ export const esCatalog = {
     builtInGroupLabel: "Integrados",
     customGroupLabel: "Personalizados",
     copiedUrlAlert: "¡URL compartible copiada al portapapeles!",
+    invalidUrlAlert: "No se pudo cargar el preset compartido. El enlace no es válido o es incompatible. No se ha cambiado tu configuración.",
     namePrompt: "Introduce el nombre del preset:",
     saveTitle: "Guardar las ediciones actuales del preset",
     shareTitle: "Copiar la URL compartible al portapapeles",

@@ -9,6 +9,7 @@
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/lib/nbtExport.ts
+ * - src/lib/codecPreset.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeModel.ts
  */
@@ -33,11 +34,13 @@ export function getVersionedBlockName(block: string, version: MinecraftVersion):
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/nbtExport.ts
-export function isBlockAvailable(block: string, version: MinecraftVersion): boolean {
+// - src/lib/codecPreset.ts
+export function isBlockAvailable(block: string, version: MinecraftVersion | number): boolean {
   const id = blockId(block);
   if (id.includes(":")) return true; // Custom namespaces are outside the vanilla catalog.
+  const dataVersion = typeof version === "number" ? version : MINECRAFT_VERSIONS[version].dataVersion;
   return BLOCK_INTRODUCTIONS.every(([pattern, introduced]) =>
-    !pattern.test(id) || MINECRAFT_VERSIONS[version].dataVersion >= introduced,
+    !pattern.test(id) || dataVersion >= introduced,
   );
 }
 

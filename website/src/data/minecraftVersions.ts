@@ -8,11 +8,13 @@
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/lib/blockId.ts
+ * - src/lib/codecPreset.ts
  * - src/lib/minecraftVersion.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  */
 // Breakpoints reflect default-visible blocks only. Each range targets its newest release.
+// Keep ranges chronological: preset decoding locates the range for a stored DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
 // Callers:
 // - src/Index.tsx
@@ -32,12 +34,15 @@ export const MINECRAFT_VERSIONS = {
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/lib/blockId.ts
+// - src/lib/codecPreset.ts
 // - src/lib/minecraftVersion.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 export type MinecraftVersion = keyof typeof MINECRAFT_VERSIONS;
 
 // Only post-1.21.4 additions need entries; patterns also cover hidden catalog blocks.
+// These exact cutoffs also protect preset URL indices: register new blocks before
+// inserting them into either catalog list. Do not round cutoffs to UI ranges.
 // Callers:
 // - src/lib/minecraftVersion.ts
 export const BLOCK_INTRODUCTIONS: readonly (readonly [RegExp, number])[] = [

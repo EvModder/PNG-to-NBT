@@ -59,6 +59,7 @@ export const enCatalog = {
     builtInGroupLabel: "Built-in",
     customGroupLabel: "Custom",
     copiedUrlAlert: "URL copied to clipboard!",
+    invalidUrlAlert: "Could not load the shared preset. The link is invalid or incompatible. Your settings have not changed.",
     namePrompt: "Enter preset name:",
     saveTitle: "Save current preset edits",
     shareTitle: "Copy URL to clipboard",

@@ -730,6 +730,9 @@ const Index = () => {
     LS_KEYS.showFlatNbtSuppressStepModes,
     DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   ));
+  const [sharedBuildMode, setSharedBuildMode] = useState<BuildMode | null>(null);
+  const flatSuppressStepsEnabled = showFlatNbtSuppressStepModes ||
+    (buildMode === sharedBuildMode && isSuppressStepsBuildMode(buildMode));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
@@ -1405,11 +1408,11 @@ const Index = () => {
         const nextShowFlatNbtSuppressStepOptions =
           nextIsFlatShape &&
           !nextFlatRequiresVsFillers &&
-          showFlatNbtSuppressStepModes;
+          flatSuppressStepsEnabled;
         const nextLockFlatBuildMode =
           nextIsFlatShape &&
           !nextFlatRequiresVsFillers &&
-          !showFlatNbtSuppressStepModes;
+          !flatSuppressStepsEnabled;
         const nextStaircaseModeOptions = getStaircaseModeOptionsForState(
           imageValid,
           nextBaseAnalyses,
@@ -1610,7 +1613,7 @@ const Index = () => {
     applySupportFloorYs,
     buildAtWorldMinY,
     hasMultipleTiles,
-    showFlatNbtSuppressStepModes,
+    flatSuppressStepsEnabled,
   ]);
   const tileGeometryAnalyses = analysisResult?.tileGeometryAnalyses ?? [];
   const tileBaseAnalyses = tileGeometryAnalyses;
@@ -1633,11 +1636,11 @@ const Index = () => {
   const showFlatNbtSuppressStepOptions =
     isFlatShape &&
     !flatRequiresVsFillers &&
-    showFlatNbtSuppressStepModes;
+    flatSuppressStepsEnabled;
   const lockFlatBuildMode =
     isFlatShape &&
     !flatRequiresVsFillers &&
-    !showFlatNbtSuppressStepModes;
+    !flatSuppressStepsEnabled;
   const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
   const crubTechControlsActive2LayerSettings = imageValid && crubTech && isCrubTechBuildMode(effectiveBuildMode);
   const effectiveSupportMode = crubTechControlsActive2LayerSettings && supportMode !== SupportMode.None
@@ -2238,6 +2241,11 @@ const Index = () => {
       const decodedColorGrid = encodedImage ? await decodeColorGrid(encodedImage) : null;
       if (cancelled) return;
 
+      if (encodedPreset !== null && !decodedPreset) {
+        alert(messages.presets.invalidUrlAlert);
+        return;
+      }
+
       if (decodedPreset) {
         setPresets(prev => {
           const decodedBlockPreset: BlockPreset = {
@@ -2264,7 +2272,10 @@ const Index = () => {
           setCrubTechShadePushableFillerBlock(decodedPreset.crubTechShadePushableFillerBlock);
         }
         if (decodedPreset.supportMode !== undefined) setSupportMode(decodedPreset.supportMode);
-        if (decodedPreset.buildMode) setBuildMode(decodedPreset.buildMode);
+        if (decodedPreset.buildMode) {
+          setSharedBuildMode(decodedPreset.buildMode);
+          setBuildMode(decodedPreset.buildMode);
+        }
         setCustomColors(decodedPreset.customColors ?? []);
         setSelectedBlocksCustom(decodedPreset.selectedBlocksCustom ?? {});
         if (decodedPreset.suppress2LayerLateFillerBlock !== undefined) {
@@ -2282,7 +2293,15 @@ const Index = () => {
         }
         if (decodedPreset.dominateVoidFillerBlock !== undefined) setDominateVoidFillerBlock(decodedPreset.dominateVoidFillerBlock);
         if (decodedPreset.recessiveVoidFillerBlock !== undefined) setRecessiveVoidFillerBlock(decodedPreset.recessiveVoidFillerBlock);
-        // if (decodedPreset.convertUnsupported !== undefined) setConvertUnsupported(decodedPreset.convertUnsupported);
+        if (decodedPreset.layerGap !== undefined) setLayerGap(decodedPreset.layerGap);
+        if (decodedPreset.vsFillerLoadSpotDirection !== undefined) setVsFillerLoadSpotDirection(decodedPreset.vsFillerLoadSpotDirection);
+        if (decodedPreset.lightWaterDrop !== undefined) setLightWaterDrop(decodedPreset.lightWaterDrop);
+        if (decodedPreset.flatWaterDrop !== undefined) setFlatWaterDrop(decodedPreset.flatWaterDrop);
+        if (decodedPreset.darkWaterDrop !== undefined) setDarkWaterDrop(decodedPreset.darkWaterDrop);
+        if (decodedPreset.minecraftVersion !== undefined) setMinecraftVersion(decodedPreset.minecraftVersion);
+        if (decodedPreset.westEastSlopeEnabled !== undefined) setWestEastSlopeEnabled(decodedPreset.westEastSlopeEnabled);
+        if (decodedPreset.westEastSlopeRun !== undefined) setWestEastSlopeRun(decodedPreset.westEastSlopeRun);
+        if (decodedPreset.westEastSlopeRise !== undefined) setWestEastSlopeRise(decodedPreset.westEastSlopeRise);
       }
 
       if (decodedColorGrid) {
@@ -2519,15 +2538,14 @@ const Index = () => {
     if (includePresetInUrl) {
       params.set(
         "preset",
-        await encodeFullPreset(
-          preset,
-          supportFillerBlock,
-          shadeFillerBlock,
+        await encodeFullPreset({
+          blockPreset: preset,
+          supportFiller: supportFillerBlock,
+          shadeFiller: shadeFillerBlock,
           supportMode,
-          buildMode,
+          buildMode: effectiveBuildMode,
           customColors,
           selectedBlocksCustom,
-          convertUnsupported,
           suppress2LayerLateFillerBlock,
           suppress2LayerLatePairsGap,
           proPaletteSeed,
@@ -2539,7 +2557,16 @@ const Index = () => {
           crubTechShadePushableFillerBlock,
           dominateVoidFillerBlock,
           recessiveVoidFillerBlock,
-        ),
+          layerGap,
+          vsFillerLoadSpotDirection,
+          lightWaterDrop,
+          flatWaterDrop,
+          darkWaterDrop,
+          minecraftVersion,
+          westEastSlopeEnabled,
+          westEastSlopeRun,
+          westEastSlopeRise,
+        }),
       );
     }
     if (includeImage && imageColorGrid && imageValid) {
@@ -2552,10 +2579,9 @@ const Index = () => {
     supportFillerBlock,
     shadeFillerBlock,
     supportMode,
-    buildMode,
+    effectiveBuildMode,
     customColors,
     selectedBlocksCustom,
-    convertUnsupported,
     suppress2LayerLateFillerBlock,
     suppress2LayerLatePairsGap,
     proPaletteSeed,
@@ -2567,6 +2593,15 @@ const Index = () => {
     crubTechShadePushableFillerBlock,
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
+    layerGap,
+    vsFillerLoadSpotDirection,
+    lightWaterDrop,
+    flatWaterDrop,
+    darkWaterDrop,
+    minecraftVersion,
+    westEastSlopeEnabled,
+    westEastSlopeRun,
+    westEastSlopeRise,
     imageColorGrid,
     imageValid,
     imageUsesCustomColors,

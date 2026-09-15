@@ -19,7 +19,6 @@
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/lib/buildModeShapes.ts
- * - src/lib/codecPreset.ts
  * - src/lib/nbtExport.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
@@ -36,7 +35,6 @@ const SUPPRESS_STEP_DIRECTIONS = [
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/codecPreset.ts
 export function isSuppressStepDirection(raw: unknown): raw is SuppressStepDirection {
   return Object.values(SuppressStepDirection).includes(raw as SuppressStepDirection);
 }
