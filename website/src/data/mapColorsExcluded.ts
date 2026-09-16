@@ -55,10 +55,10 @@ import { BASE_COLORS } from "./mapColors";
  */
 
 // Excluded block options grouped by map color ID.
-// Shared preset URLs reference positions within these lists separately from the
-// normal lists, filtered by Minecraft DataVersion. Register future-version blocks
-// in BLOCK_INTRODUCTIONS; insertions then cannot shift older URLs. Otherwise APPEND
-// only: reordering/inserting/removing/moving existing entries WILL break links.
+// Shared preset URLs use alphabetical indices separately from the normal lists,
+// filtered by Minecraft DataVersion. Register future blocks in BLOCK_INTRODUCTIONS.
+// Display reordering is safe; additions without a version cutoff, removals, renames
+// and moves between color/visibility lists can still break affected links.
 const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   0: [
     "rail", "powered_rail", "detector_rail", "activator_rail", "lever[face=floor]",

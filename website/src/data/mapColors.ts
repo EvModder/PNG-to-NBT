@@ -125,10 +125,10 @@ export const WATER_BASE_INDEX = 12;
 // - src/utils/colorTableLayout.ts
 // - src/utils/customColors.ts
 // Latest catalog (26.2); lib/minecraftVersion.ts derives older catalogs without changing these colors.
-// Shared preset URLs reference positions filtered to their Minecraft DataVersion.
+// Shared preset URLs use alphabetical indices filtered to their Minecraft DataVersion.
 // Register new-version blocks in BLOCK_INTRODUCTIONS before adding them here.
-// For already-available blocks, APPEND only: reordering/inserting/removing/moving
-// entries between normal/hidden lists WILL break affected links.
+// Display reordering is safe. Adding/removing/renaming already-available blocks or
+// moving them between color/visibility lists can still break affected links.
 export const BASE_COLORS: ColorRgbBase[] = [
   { name: "NONE", r: 0, g: 0, b: 0, blocks: ["glass", "glass_pane", "end_rod", "tripwire", "flower_pot", "cake", "iron_bars", "waxed_copper_bars", "waxed_exposed_copper_bars", "waxed_weathered_copper_bars", "waxed_oxidized_copper_bars", "oxidized_copper_bars", "iron_chain", "waxed_copper_chain", "waxed_exposed_copper_chain", "waxed_weathered_copper_chain", "waxed_oxidized_copper_chain", "oxidized_copper_chain"] },
   { name: "GRASS", r: 127, g: 178, b: 56, blocks: ["grass_block", "slime_block"] },

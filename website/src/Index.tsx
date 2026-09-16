@@ -650,6 +650,9 @@ const resolveDarkTheme = () => {
 // ── Component ──
 const Index = () => {
   const [presets, setPresets] = useState<BlockPreset[]>(loadPresets);
+  const [savedPresetNames, setSavedPresetNames] = useState(() =>
+    new Set(presets.slice(BUILTIN_PRESET_NAMES.length).map(preset => preset.name)),
+  );
   const [activeIdx, setActiveIdx] = useState(() => {
     try {
       const name = JSON.parse(localStorage.getItem(LS_KEYS.activePreset) || '""');
@@ -1001,8 +1004,9 @@ const Index = () => {
     );
   }, [preset.selectedBlocks, customColors, selectedBlocksCustom, savedPresetSnapshot]);
   const currentPresetIsUnsavedAuto = useMemo(
-    () => activeIdx >= BUILTIN_PRESET_NAMES.length && isAutoCustomPresetName(preset.name) && presetDirty,
-    [activeIdx, preset.name, presetDirty],
+    () => activeIdx >= BUILTIN_PRESET_NAMES.length && isAutoCustomPresetName(preset.name)
+      && !savedPresetNames.has(preset.name) && presetDirty,
+    [activeIdx, preset.name, presetDirty, savedPresetNames],
   );
 
   const markSavedDeferred = useCallback(() => {
@@ -1011,8 +1015,9 @@ const Index = () => {
   }, []);
 
   const markSavedImmediate = useCallback(() => {
+    setSavedPresetNames(names => new Set(names).add(preset.name));
     setSavedPresetSnapshot(capturePresetSnapshot());
-  }, [capturePresetSnapshot]);
+  }, [capturePresetSnapshot, preset.name]);
 
   const markSavedNextRef = useRef(true);
 
@@ -1038,15 +1043,16 @@ const Index = () => {
 
   // Persist settings to localStorage
   useEffect(() => {
-    const persistedPresets = presets.filter((p, idx) => {
-      if (getBuiltinPreset(p.name)) return false;
-      if (!isAutoCustomPresetName(p.name)) return true;
-      if (idx !== activeIdx) return true;
-      // Reuse yellow-dot logic: active auto-Custom with unsaved changes is discarded.
-      return !presetDirty;
+    const persistedPresets = presets.flatMap((p, idx) => {
+      if (getBuiltinPreset(p.name) || (idx === activeIdx && currentPresetIsUnsavedAuto)) return [];
+      // Keep the last saved version on disk, not the pending edits.
+      if (idx === activeIdx && presetDirty && savedPresetNames.has(p.name) && savedPresetSnapshot) {
+        return [{ ...p, ...savedPresetSnapshot }];
+      }
+      return [p];
     });
     localStorage.setItem(LS_KEYS.presets, JSON.stringify(persistedPresets));
-  }, [presets, activeIdx, presetDirty]);
+  }, [presets, activeIdx, currentPresetIsUnsavedAuto, presetDirty, savedPresetNames, savedPresetSnapshot]);
   const persistedSettings = useMemo(
     () => ({
       [LS_KEYS.activePreset]: preset.name,
@@ -2278,6 +2284,9 @@ const Index = () => {
       if (cancelled) return;
 
       if (encodedPreset !== null && !decodedPreset) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("preset");
+        window.history.replaceState(window.history.state, "", url);
         alert(messages.presets.invalidUrlAlert);
         return;
       }
@@ -2499,6 +2508,9 @@ const Index = () => {
     const nextIdx = currentPresetIsUnsavedAuto && idx > activeIdx ? idx - 1 : idx;
     setPresets(prev => {
       let next = [...prev];
+      if (idx !== activeIdx && presetDirty && savedPresetNames.has(preset.name) && savedPresetSnapshot) {
+        next[activeIdx] = { ...next[activeIdx], ...savedPresetSnapshot };
+      }
       if (builtin) next[idx] = builtin;
       if (currentPresetIsUnsavedAuto && idx !== activeIdx) {
         next = next.filter((_, i) => i !== activeIdx);
@@ -2543,19 +2555,27 @@ const Index = () => {
       });
       setActiveIdx(activeIdx);
     } else {
-      setPresets(prev => [...prev, {
-        name,
-        selectedBlocks: { ...preset.selectedBlocks },
-        customColors: cloneCustomColors(customColors),
-        selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
-      }]);
+      setPresets(prev => {
+        const next = [...prev];
+        if (presetDirty && savedPresetNames.has(preset.name) && savedPresetSnapshot) {
+          next[activeIdx] = { ...next[activeIdx], ...savedPresetSnapshot };
+        }
+        return [...next, {
+          name,
+          selectedBlocks: { ...preset.selectedBlocks },
+          customColors: cloneCustomColors(customColors),
+          selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
+        }];
+      });
       setActiveIdx(presets.length);
     }
+    setSavedPresetNames(names => new Set(names).add(name));
     markSavedDeferred();
   };
 
   const deletePreset = () => {
     if (activeIdx < BUILTIN_PRESET_NAMES.length) return;
+    setSavedPresetNames(names => new Set([...names].filter(name => name !== preset.name)));
     setPresets(prev => prev.filter((_, i) => i !== activeIdx));
     setCustomColors([]);
     setSelectedBlocksCustom({});

@@ -41,8 +41,7 @@ async function roundTrip(preset: FullPreset): Promise<string> {
   return encoded;
 }
 
-// Appending to normal and hidden lists must preserve both sets of references,
-// including fillers in later color rows. Reordering/removal deliberately does not.
+// Display reordering must preserve normal/hidden selections and filler references.
 const originalRows = BASE_COLORS.map(color => color.blocks);
 const originalExcluded = EXCLUDED_BLOCKS.slice();
 const hidden: FullPreset = { ...standard, blockPreset: {
@@ -52,16 +51,13 @@ const standardUrl = await roundTrip(standard);
 const hiddenUrl = await roundTrip(hidden);
 try {
   BASE_COLORS.forEach((color, id) => {
-    color.blocks = [...color.blocks, `future_block_${id}`];
-    EXCLUDED_BLOCKS[id] = [...EXCLUDED_BLOCKS[id], `future_hidden_${id}`];
+    color.blocks = color.blocks.toReversed();
+    EXCLUDED_BLOCKS[id] = EXCLUDED_BLOCKS[id].toReversed();
   });
   assert.equal(await encodeFullPreset(standard), standardUrl);
   assert.equal(await encodeFullPreset(hidden), hiddenUrl);
   assert.deepEqual(await decodeFullPreset(standardUrl), standard);
   assert.deepEqual(await decodeFullPreset(hiddenUrl), hidden);
-  await roundTrip({ ...standard, blockPreset: {
-    ...standard.blockPreset, selectedBlocks: { ...standard.blockPreset.selectedBlocks, 18: "future_block_18", 19: "future_hidden_19" },
-  }, supportFiller: "future_block_20", shadeFiller: "future_hidden_21" });
 } finally {
   BASE_COLORS.forEach((color, id) => { color.blocks = originalRows[id]; EXCLUDED_BLOCKS[id] = originalExcluded[id]; });
 }
@@ -79,37 +75,48 @@ const savedVersions = await Promise.all(versions.flatMap(minecraftVersion => [st
   const expected = { ...preset, minecraftVersion };
   return { expected, url: await roundTrip(expected) };
 })));
+// Cover every indexed block, not just the built-in presets' selections.
+for (const rows of [originalRows, originalExcluded]) {
+  for (let option = 0; option < Math.max(...rows.map(row => row.length)); ++option) {
+    const expected = { ...standard, minecraftVersion: versions.at(-1)!, blockPreset: {
+      name: "Catalog coverage", selectedBlocks: Object.fromEntries(rows.map((row, id) => [id, row[option] ?? ""])),
+    } };
+    savedVersions.push({ expected, url: await roundTrip(expected) });
+  }
+}
 // Simulate a site update inserting a new release's blocks throughout both lists.
-// Test fresh lookups, every existing version and fillers, not a cached old catalog.
+// Also reverse their display order; test fresh lookups, versions and fillers.
 const introductions = BLOCK_INTRODUCTIONS as [RegExp, number][];
 const releases = MINECRAFT_VERSIONS as Record<string, { label: string; dataVersion: number }>;
-const originalDataVersion = releases["26.2"].dataVersion;
+const latestVersion = versions.at(-1)!;
+const originalDataVersion = releases[latestVersion].dataVersion;
+const futureDataVersion = originalDataVersion + 100;
 try {
-  introductions.push([/^future_insert_/, 5000]);
-  releases["26.3"] = { label: "26.3", dataVersion: 5000 };
+  introductions.push([/^future_insert_/, futureDataVersion]);
+  releases.future = { label: "Future", dataVersion: futureDataVersion };
   BASE_COLORS.forEach((color, id) => {
     const middle = Math.floor(color.blocks.length / 2);
-    color.blocks = [`future_insert_normal_${id}`, ...color.blocks.slice(0, middle), `future_insert_middle_${id}`, ...color.blocks.slice(middle)];
+    color.blocks = [`future_insert_normal_${id}`, ...color.blocks.slice(0, middle), `future_insert_middle_${id}`, ...color.blocks.slice(middle)].reverse();
     const hiddenMiddle = Math.floor(EXCLUDED_BLOCKS[id].length / 2);
-    EXCLUDED_BLOCKS[id] = [`future_insert_hidden_${id}`, ...EXCLUDED_BLOCKS[id].slice(0, hiddenMiddle), `future_insert_hidden_middle_${id}`, ...EXCLUDED_BLOCKS[id].slice(hiddenMiddle)];
+    EXCLUDED_BLOCKS[id] = [`future_insert_hidden_${id}`, ...EXCLUDED_BLOCKS[id].slice(0, hiddenMiddle), `future_insert_hidden_middle_${id}`, ...EXCLUDED_BLOCKS[id].slice(hiddenMiddle)].reverse();
   });
   for (const { expected, url } of savedVersions) {
     assert.deepEqual(await decodeFullPreset(url), expected);
     assert.equal(await encodeFullPreset(expected), url);
   }
-  await roundTrip({ ...standard, minecraftVersion: "26.3" as FullPreset["minecraftVersion"], blockPreset: {
+  await roundTrip({ ...standard, minecraftVersion: "future" as FullPreset["minecraftVersion"], blockPreset: {
     ...standard.blockPreset, selectedBlocks: { ...standard.blockPreset.selectedBlocks, 18: "future_insert_normal_18", 19: "future_insert_hidden_19" },
   }, supportFiller: "future_insert_middle_20", shadeFiller: "future_insert_hidden_21" });
 
   // A future release could instead extend the last UI range. Its new endpoint
   // must not change the availability cutoff recorded in an already-shared URL.
-  delete releases["26.3"];
-  releases["26.2"].dataVersion = 5000;
+  delete releases.future;
+  releases[latestVersion].dataVersion = futureDataVersion;
   for (const { expected, url } of savedVersions) assert.deepEqual(await decodeFullPreset(url), expected);
 } finally {
   introductions.pop();
-  delete releases["26.3"];
-  releases["26.2"].dataVersion = originalDataVersion;
+  delete releases.future;
+  releases[latestVersion].dataVersion = originalDataVersion;
   BASE_COLORS.forEach((color, id) => { color.blocks = originalRows[id]; EXCLUDED_BLOCKS[id] = originalExcluded[id]; });
 }
 
@@ -136,7 +143,7 @@ for (const buildMode of Object.values(BuildMode)) {
 // Cover all normal/hidden references, including version-limited states and fillers.
 for (const rows of [BASE_COLORS.map(color => color.blocks), EXCLUDED_BLOCKS]) {
   for (let option = 0; option < Math.max(...rows.map(row => row.length)); ++option) {
-    await roundTrip({ ...standard, blockPreset: {
+    await roundTrip({ ...standard, minecraftVersion: latestVersion, blockPreset: {
       name: "Catalog", selectedBlocks: Object.fromEntries(rows.map((row, id) => [id, row[option] ?? ""])),
     }, supportFiller: rows.flat()[option] ?? "" });
   }
@@ -168,6 +175,15 @@ const extended: FullPreset = { ...custom, blockPreset: {
   r: 112, g: 112, b: 112, blocks: ["example:stone[variant=rough,axis=x]", "example:stone[variant=smooth]"],
 }], selectedBlocksCustom: { ...custom.selectedBlocksCustom, 3: "example:stone[variant=rough,axis=x]" } };
 for (const minecraftVersion of versions) await roundTrip({ ...extended, minecraftVersion });
+const extendedUrl = await encodeFullPreset(extended);
+try {
+  BASE_COLORS.forEach(color => { color.blocks = color.blocks.toReversed(); });
+  EXCLUDED_BLOCKS.forEach((row, id) => { EXCLUDED_BLOCKS[id] = row.toReversed(); });
+  assert.equal(await encodeFullPreset(extended), extendedUrl);
+  assert.deepEqual(await decodeFullPreset(extendedUrl), extended);
+} finally {
+  BASE_COLORS.forEach((color, id) => { color.blocks = originalRows[id]; EXCLUDED_BLOCKS[id] = originalExcluded[id]; });
+}
 const manyCustom: FullPreset = { ...standard,
   customColors: Array.from({ length: 300 }, (_, id) => ({
     r: 1 + Math.floor(id / 256), g: id % 256, b: 149,
@@ -216,7 +232,7 @@ const emptyEncoded = await roundTrip(empty);
 const bytes = (await decodeUrlParamBytes(emptyEncoded.replace(/Z([012])/g, (_, digit) => "Z-_"[Number(digit)])))!;
 // Pin field/enum order, not mutable catalog positions or compressor-specific output.
 assert.equal(Buffer.from(bytes).toString("hex"),
-  "01a726" + "00".repeat(64) + "06000000000000000007000201050002040000");
+  "02a726" + "00".repeat(64) + "06000000000000000007000201050002040000");
 const compression = Object.getOwnPropertyDescriptor(globalThis, "CompressionStream");
 try {
   Object.defineProperty(globalThis, "CompressionStream", { configurable: true, value: undefined });
@@ -275,7 +291,7 @@ for (let length = 0; length < bytes.length; ++length) {
   assert.equal(await decodeFullPreset(raw(bytes.subarray(0, length))), null, `truncated at ${length}`);
 }
 const flagsOffset = 4 + BASE_COLORS.length + 1;
-for (const [offset, value] of [[0, 255], [1, 0], [2, 127], [3, 1], [4, 255], [flagsOffset, 128], [flagsOffset + 8, 255], [flagsOffset + 9, 255]]) {
+for (const [offset, value] of [[0, 1], [0, 255], [1, 0], [2, 127], [3, 1], [4, 255], [flagsOffset, 128], [flagsOffset + 8, 255], [flagsOffset + 9, 255]]) {
   const corrupt = bytes.slice(); corrupt[offset] = value;
   assert.equal(await decodeFullPreset(raw(corrupt)), null, `corrupt offset ${offset}`);
 }
@@ -299,12 +315,19 @@ for (const invalid of [
 // Local saved presets still use JSON and keep their existing custom colors/states.
 const saved = { ...custom.blockPreset, customColors: custom.customColors, selectedBlocksCustom: custom.selectedBlocksCustom };
 const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+let storedPresets: unknown = [saved];
 try {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
-    getItem: (key: string) => key === STORAGE_KEYS.presets ? JSON.stringify([saved]) : null,
+    getItem: (key: string) => key === STORAGE_KEYS.presets ? JSON.stringify(storedPresets) : null,
   } });
   assert.deepEqual(loadPresets().at(-1), saved);
+  storedPresets = [null, { name: 42 }, { name: "Broken", selectedBlocks: [] }, saved];
+  assert.deepEqual(loadPresets().slice(BUILTIN_PRESET_NAMES.length), [saved], "A malformed record must not discard other saved presets");
+  BASE_COLORS.forEach(color => { color.blocks = [...color.blocks].reverse(); });
+  EXCLUDED_BLOCKS.forEach((row, id) => { EXCLUDED_BLOCKS[id] = [...row].reverse(); });
+  assert.deepEqual(loadPresets().at(-1), saved, "Local presets store names, not catalog positions");
 } finally {
+  BASE_COLORS.forEach((color, id) => { color.blocks = originalRows[id]; EXCLUDED_BLOCKS[id] = originalExcluded[id]; });
   if (storage) Object.defineProperty(globalThis, "localStorage", storage);
   else Reflect.deleteProperty(globalThis, "localStorage");
 }

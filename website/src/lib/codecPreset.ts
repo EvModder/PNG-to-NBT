@@ -53,18 +53,18 @@ interface FullPreset extends SharedSettings {
   selectedBlocksCustom: Record<number, string>;
 }
 
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
 // Alphanumeric transport: Z0 = Z, Z1 = -, Z2 = _. Escape Z itself to avoid ambiguity.
 const TRANSPORT_ESCAPES = "Z-_";
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
-// Positions are relative to the URL's exact DataVersion, not today's dropdown
-// range endpoint. Future-version insertions cannot shift older URLs' indices.
-// Reordering/removing existing entries or moving them between lists still breaks
-// affected links. Preserve canonical names/color rows; UI adaptations are separate.
+// Alphabetical indices ignore display order; use code-unit sorting, never localeCompare.
+// Filter by the URL's exact DataVersion, not today's dropdown range endpoint, so
+// future-version additions cannot shift older indices. Renames, removals, same-version
+// additions and moves between color/visibility lists can still break affected links.
 function getPresetCatalog(dataVersion: number) {
-  const filter = (row: readonly string[]) => row.filter(block => isBlockAvailable(block, dataVersion));
+  const filter = (row: readonly string[]) => row.filter(block => isBlockAvailable(block, dataVersion)).sort();
   return { blocks: BASE_COLORS.map(color => filter(color.blocks)), excluded: EXCLUDED_BLOCKS.map(filter) };
 }
 type PresetCatalog = ReturnType<typeof getPresetCatalog>;
@@ -434,11 +434,18 @@ export function loadPresets(): BlockPreset[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.presets);
     if (!raw) return builtins;
-    const parsed = JSON.parse(raw) as BlockPreset[];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return builtins;
     return [
       ...builtins,
       ...parsed
-        .filter(preset => !getBuiltinPreset(preset.name))
+        .filter((preset): preset is BlockPreset =>
+          preset !== null && typeof preset === "object" && typeof preset.name === "string"
+          && !getBuiltinPreset(preset.name)
+          && (preset.selectedBlocks === undefined || (preset.selectedBlocks !== null
+            && typeof preset.selectedBlocks === "object" && !Array.isArray(preset.selectedBlocks)
+            && Object.values(preset.selectedBlocks).every(block => typeof block === "string"))),
+        )
         .map(({ name, selectedBlocks, customColors, selectedBlocksCustom }) => ({
           name,
           selectedBlocks: selectedBlocks ?? {},
