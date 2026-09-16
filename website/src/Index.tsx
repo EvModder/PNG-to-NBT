@@ -803,6 +803,7 @@ const Index = () => {
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
   const [imageData, setImageData] = useState<ImageData | null>(null);
   const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null);
+  const [acceptedUpload, setAcceptedUpload] = useState<ImageData | null>(null);
   const [imageName, setImageName] = useState("");
   const [imageValid, setImageValid] = useState(false);
   const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
@@ -872,21 +873,15 @@ const Index = () => {
   );
   const parsedImageSet = decodedImageSet ?? parsedImageSetState;
   const parsedTiles = parsedImageSet?.tiles ?? [];
-  const hasRejectedUploadedImage =
-    !decodedColorGrid &&
-    !isParsingImage &&
-    !imageValid &&
-    (
-      (parsedImageSetState?.hasBlockingIssue ?? false) ||
-      paletteNotices.length > 0
-    );
+  // Never flash a new raw upload before validation accepts it.
+  const hideUploadedPreview = !decodedColorGrid && imageData !== acceptedUpload;
   const expectedTileShape = getExpectedTileShape(imageData, effectiveInvalidDimensionsMode);
   const tileRows = parsedImageSet?.tileRows ?? expectedTileShape.tileRows;
   const tileCols = parsedImageSet?.tileCols ?? expectedTileShape.tileCols;
   const tileCount = parsedTiles.length > 0 ? parsedTiles.length : expectedTileShape.tileCount;
   const hasMultipleTiles = tileCount > 1;
   const displayImageData =
-    hasRejectedUploadedImage
+    hideUploadedPreview
       ? null
       : pendingIncomingTileCount !== null
         ? imageData
@@ -2159,13 +2154,6 @@ const Index = () => {
     [effectiveSelectedTileIndices, tileAnalyses],
   );
   const activeOutputTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
-  const suppressedTransparentVsCollisionCount = useMemo(
-    () => activeOutputTileAnalyses.reduce(
-      (sum, tile) => sum + (tile.supportShape?.suppressedTransparentVsCollisionCount ?? 0),
-      0,
-    ),
-    [activeOutputTileAnalyses],
-  );
   const selectionMaterialCountsSum = useMemo(
     () => aggregateMaterialCounts(selectedTileAnalyses.flatMap(tile => (tile.materialNeedStats ? [tile.materialNeedStats] : [])), "sum"),
     [selectedTileAnalyses],
@@ -2671,6 +2659,7 @@ const Index = () => {
   }, [presetDirty, markSavedImmediate, buildShareUrl, activeIdx, copyUrlToClipboard]);
 
   const clearImage = () => {
+    setAcceptedUpload(null);
     setInvalidColorsPaletteOverride(null);
     fileLoadRequestIdRef.current += 1;
     setPendingIncomingTileCount(null);
@@ -2770,6 +2759,7 @@ const Index = () => {
           setParsedImageSetState(analysis);
           setPaletteNotices(paletteNotices);
           setImageValid(!analysis.hasBlockingIssue);
+          setAcceptedUpload(analysis.hasBlockingIssue ? null : imageData);
         });
       } catch (err: unknown) {
         if (cancelled) return;
@@ -2777,6 +2767,7 @@ const Index = () => {
           setParsedImageSetState(null);
           setPaletteNotices([messages.parsing.errorNotice((err as Error)?.message || messages.parsing.genericDecodeFailure)]);
           setImageValid(false);
+          setAcceptedUpload(null);
         });
       } finally {
         if (cancelled) return;
@@ -2793,9 +2784,9 @@ const Index = () => {
 
   const handleFile = useCallback(
     (file: File) => {
+      setAcceptedUpload(null);
       const requestId = fileLoadRequestIdRef.current + 1;
       fileLoadRequestIdRef.current = requestId;
-      replaceUploadedPreviewUrl(URL.createObjectURL(file));
       setInvalidDimensionsStrategyOverride(null);
       setInvalidColorsPaletteOverride(null);
       setPendingIncomingTileCount(null);
@@ -2808,6 +2799,7 @@ const Index = () => {
       loadImageDataFromFile(file)
         .then(nextImageData => {
           if (fileLoadRequestIdRef.current !== requestId) return;
+          replaceUploadedPreviewUrl(URL.createObjectURL(file));
           setPendingIncomingTileCount(getExpectedTileShape(nextImageData, autoFixInvalidDimensions ? invalidDimensionsStrategy : "reject").tileCount);
           setImageData(nextImageData);
           setImageName(file.name);
@@ -3525,10 +3517,6 @@ const Index = () => {
     const formatInvalid = (entry: VsEntry) => messages.preview.vsFillerInvalid(entry.label, entry.value, entry.noobPixels);
     const formatRequired = (label: string, pixels: number, isPluralLabel = false) =>
       messages.preview.vsFillerRequired(label, pixels, isPluralLabel);
-    const appendTransparentSwapLine = (text: string) =>
-      activeTransparentBlock && suppressedTransparentVsCollisionCount > 0
-        ? `${text}\n${messages.preview.vsFillerTransparentSwap(activeTransparentBlock)}`
-        : text;
 
     const dominant = makeEntry(
       showDominateVoidFillerInput,
@@ -3547,13 +3535,13 @@ const Index = () => {
     if (!dominant) {
       if (recessive!.invalid) return { text: formatInvalid(recessive!), invalid: true };
       return showVsFillerWarnings
-        ? { text: appendTransparentSwapLine(formatRequired(recessive!.label, recessive!.noobPixels)), invalid: false }
+        ? { text: formatRequired(recessive!.label, recessive!.noobPixels), invalid: false }
         : null;
     }
     if (!recessive) {
       if (dominant.invalid) return { text: formatInvalid(dominant), invalid: true };
       return showVsFillerWarnings
-        ? { text: appendTransparentSwapLine(formatRequired(dominant.label, dominant.noobPixels)), invalid: false }
+        ? { text: formatRequired(dominant.label, dominant.noobPixels), invalid: false }
         : null;
     }
     if (dominant.invalid && recessive.invalid) {
@@ -3568,9 +3556,8 @@ const Index = () => {
     }
     if (!showVsFillerWarnings) return null;
     const pixels = dominant.noobPixels + recessive.noobPixels;
-    return { text: appendTransparentSwapLine(formatRequired(messages.fillers.voidFillersWarningLabel, pixels, true)), invalid: false };
+    return { text: formatRequired(messages.fillers.voidFillersWarningLabel, pixels, true), invalid: false };
   }, [
-    activeTransparentBlock,
     effectiveDominateVoidFillerBlock,
     effectiveRecessiveVoidFillerBlock,
     showDominateVoidFillerInput,
@@ -3578,7 +3565,6 @@ const Index = () => {
     showVsFillerWarnings,
     aggregateDominateVoidFillerRequiredCount,
     aggregateRecessiveVoidFillerRequiredCount,
-    suppressedTransparentVsCollisionCount,
   ]);
   const lateFillerWarning = useMemo<ShapeWarning | null>(() => {
     if (!showLateFillerInput || aggregateLateFillerRequiredCount <= 0 || !lateFillerShadingDisabled) return null;
@@ -4044,8 +4030,8 @@ const Index = () => {
               imageData={displayImageData}
               originalImageDimensions={imageData}
               previewImageUrl={previewImageUrl}
-              fallbackPreviewImageUrl={hasRejectedUploadedImage ? null : uploadedPreviewUrl}
-              imageName={hasRejectedUploadedImage ? "" : imageName}
+              fallbackPreviewImageUrl={hideUploadedPreview ? null : uploadedPreviewUrl}
+              imageName={hideUploadedPreview ? "" : imageName}
               handleFile={handleFile}
               canCopyImageShareUrl={canCopyImageShareUrl}
               copyImageShareUrl={copyImageShareUrl}

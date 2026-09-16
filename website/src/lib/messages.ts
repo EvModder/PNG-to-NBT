@@ -521,9 +521,6 @@ export const messages = {
         second: values[1],
       });
     },
-    vsFillerTransparentSwap(value: string): string {
-      return formatTemplate(catalog.preview.vsFillerTransparentSwap, { value });
-    },
     lateFillerInvalid(value: string, count: number): string {
       return formatPlural(catalog.preview.lateFillerInvalid, count, {
         value,
