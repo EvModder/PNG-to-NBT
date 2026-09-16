@@ -17,7 +17,8 @@
     "test:invariants": "bun run tests/invariants.mts",
     "test:versions": "bun run tests/minecraftVersions.mts",
     "test:presets": "bun run tests/codecPreset.mts",
-    "test:all": "bun run test:invariants && bun run test:versions && bun run test:presets && bun run test:fixtures",
+    "test:pixel-art": "bun run tests/pixelArtScaling.mts",
+    "test:all": "bun run test:invariants && bun run test:versions && bun run test:presets && bun run test:pixel-art && bun run test:fixtures",
     "audit:mapcolors": "node scripts/audit-mapcolors.mjs",
     "audit:mapcolors:strict": "node scripts/audit-mapcolors.mjs --strict-missing",
     "build:block-icons": "python3 scripts/generate-stateful-icon-overrides.py && node scripts/build-block-icon-files.mjs && python3 scripts/postprocess-block-icon-files.py && python3 scripts/render-shulker-icons.py && python3 scripts/build-icon-atlases.py"

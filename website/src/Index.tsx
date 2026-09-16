@@ -53,36 +53,41 @@ import {
   DEFAULT_APPLY_SUPPORT_FLOOR_YS,
   DEFAULT_BELOW_PLATFORM_WATER,
   DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
-  DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   DEFAULT_SHOW_ALIGNMENT_REMINDER,
   DEFAULT_SHOW_NOOBLINE_WARNINGS,
   DEFAULT_SHOW_VS_FILLER_WARNINGS,
+  DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
-  SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
-  type SuppressLoadSpotMarkerBlock,
   DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
+  SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
   DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
-  INVALID_DIMENSIONS_STRATEGY_OPTIONS,
-  type InvalidDimensionsStrategy,
-  type InvalidDimensionsMode,
+  DEFAULT_AUTO_SCALE_PIXEL_ART,
+  DEFAULT_PIXEL_ART_SCALE_MODE,
+  PIXEL_ART_SCALE_MODE_OPTIONS,
   DEFAULT_AUTO_FIX_INVALID_DIMENSIONS,
   DEFAULT_INVALID_DIMENSIONS_STRATEGY,
+  INVALID_DIMENSIONS_STRATEGY_OPTIONS,
   DEFAULT_AUTO_FIX_INVALID_COLORS,
-  INVALID_COLORS_PALETTE_OPTIONS,
-  type InvalidColorsPalette,
   DEFAULT_INVALID_COLORS_PALETTE,
+  INVALID_COLORS_PALETTE_OPTIONS,
   DEFAULT_MINECRAFT_VERSION,
+  type SuppressLoadSpotMarkerBlock,
+  type PixelArtScaleMode,
+  type InvalidDimensionsStrategy,
+  type InvalidDimensionsMode,
+  type InvalidColorsPalette,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
+import { scalePixelArt } from "@/lib/pixelArtScaling";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbtEntries, getCrubTechLayerSplitSectionCount } from "@/lib/nbtExport";
 import {
   convertImageToColorGridSet,
   convertImageToColorGridSetAsync,
   getTargetTileDimensions,
+  loadImageDataFromFile,
   type ColorGridSetParseResult,
   type ParsedColorGridTile,
-  loadImageDataFromFile,
 } from "@/lib/colorGridParsing";
 import {
   collectShadeCountsByColorRefKey,
@@ -121,11 +126,11 @@ import {
 } from "@/lib/shapeAnalysis";
 import { getCachedShapeFillerNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
 import {
-  type ColorBlockSelections,
   hasAssignedColorBlock,
   normalizeBlockId,
   resolveAssignedColorBlock,
   sanitizeUserBlockEntry,
+  type ColorBlockSelections,
 } from "@/lib/blockId";
 import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import {
@@ -139,12 +144,12 @@ import {
 } from "@/lib/fillerRules";
 import {
   LOCALE_BROWSER,
-  messages,
-  PaletteNoticeKind,
+  SUPPORTED_LOCALES,
   getLocaleLabel,
   getLocalePreference,
   setLocalePreference,
-  SUPPORTED_LOCALES,
+  messages,
+  PaletteNoticeKind,
   type LocalePreference,
   type PaletteNotice,
 } from "@/lib/messages";
@@ -161,7 +166,7 @@ import {
 } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { getSupportedColorAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
-import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, SupportMode } from "@/types/ui";
+import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type SortKey } from "@/types/ui";
 import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
 import {
   getBuildModeDownloadSuffix,
@@ -180,7 +185,7 @@ import {
 } from "@/utils/conversion";
 import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
-import { BuildMode, SuppressStepDirection, type FillerAssignment, FillerRole } from "@/types/conversion";
+import { BuildMode, SuppressStepDirection, FillerRole, type FillerAssignment } from "@/types/conversion";
 import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
@@ -733,6 +738,9 @@ const Index = () => {
   const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.applySupportFloorYs, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
   const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, DEFAULT_BELOW_PLATFORM_WATER));
   const [skipEmptySuppressSteps, setSkipEmptySuppressSteps] = useState(() => loadCached(LS_KEYS.skipEmptySuppressSteps, DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS));
+  const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
+  const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
+  const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [showFlatNbtSuppressStepModes, setShowFlatNbtSuppressStepModes] = useState(() => loadCached(
     LS_KEYS.showFlatNbtSuppressStepModes,
     DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
@@ -740,9 +748,6 @@ const Index = () => {
   const [sharedBuildMode, setSharedBuildMode] = useState<BuildMode | null>(null);
   const flatSuppressStepsEnabled = showFlatNbtSuppressStepModes ||
     (buildMode === sharedBuildMode && isSuppressStepsBuildMode(buildMode));
-  const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
-  const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
-  const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
   const [markSuppressLoadSpotsInSchematic, setMarkSuppressLoadSpotsInSchematic] = useState(() =>
     loadCached(LS_KEYS.markSuppressLoadSpotsInSchematic, DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC),
   );
@@ -751,6 +756,14 @@ const Index = () => {
     return SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS.includes(stored as SuppressLoadSpotMarkerBlock)
       ? stored as SuppressLoadSpotMarkerBlock
       : DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK;
+  });
+  const [autoScalePixelArt, setAutoScalePixelArt] = useState(() =>
+    loadCached(LS_KEYS.autoScalePixelArt, DEFAULT_AUTO_SCALE_PIXEL_ART),
+  );
+  const [pixelArtScaleMode, setPixelArtScaleMode] = useState<PixelArtScaleMode>(() => {
+    const stored = loadCached(LS_KEYS.pixelArtScaleMode, DEFAULT_PIXEL_ART_SCALE_MODE);
+    return PIXEL_ART_SCALE_MODE_OPTIONS.includes(stored as PixelArtScaleMode)
+      ? stored as PixelArtScaleMode : DEFAULT_PIXEL_ART_SCALE_MODE;
   });
   const [invalidDimensionsStrategyOverride, setInvalidDimensionsStrategyOverride] =
     useState<InvalidDimensionsStrategy | null>(null);
@@ -781,14 +794,6 @@ const Index = () => {
   const effectiveInvalidDimensionsMode = invalidDimensionsStrategyOverride
     ?? (autoFixInvalidDimensions ? invalidDimensionsStrategy : "reject");
   const effectiveInvalidColorsPalette = invalidColorsPaletteOverride ?? (autoFixInvalidColors ? invalidColorsPalette : null);
-  const handleAutoFixInvalidColorsChange: Dispatch<SetStateAction<boolean>> = value => {
-    setInvalidColorsPaletteOverride(null);
-    setAutoFixInvalidColors(value);
-  };
-  const handleInvalidColorsPaletteChange: Dispatch<SetStateAction<InvalidColorsPalette>> = value => {
-    setInvalidColorsPaletteOverride(null);
-    setInvalidColorsPalette(value);
-  };
   const handleAutoFixInvalidDimensionsChange = useCallback<Dispatch<SetStateAction<boolean>>>(value => {
     setInvalidDimensionsStrategyOverride(null);
     setAutoFixInvalidDimensions(value);
@@ -800,11 +805,23 @@ const Index = () => {
     },
     [],
   );
+  const handleAutoFixInvalidColorsChange: Dispatch<SetStateAction<boolean>> = value => {
+    setInvalidColorsPaletteOverride(null);
+    setAutoFixInvalidColors(value);
+  };
+  const handleInvalidColorsPaletteChange: Dispatch<SetStateAction<InvalidColorsPalette>> = value => {
+    setInvalidColorsPaletteOverride(null);
+    setInvalidColorsPalette(value);
+  };
   const [customColors, setCustomColors] = useState<ColorRgb[]>([]);
   const [selectedBlocksCustom, setSelectedBlocksCustom] = useState<Record<number, string>>({});
   const [customMode, setCustomMode] = useState<"custom" | number>("custom");
   const [newCustom, setNewCustom] = useState({ r: "", g: "", b: "", block: "" });
-  const [imageData, setImageData] = useState<ImageData | null>(null);
+  const [sourceImageData, setSourceImageData] = useState<ImageData | null>(null);
+  const imageData = useMemo(
+    () => sourceImageData && scalePixelArt(sourceImageData, autoScalePixelArt ? pixelArtScaleMode : null),
+    [sourceImageData, autoScalePixelArt, pixelArtScaleMode],
+  );
   const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null);
   const [acceptedUpload, setAcceptedUpload] = useState<ImageData | null>(null);
   const [imageName, setImageName] = useState("");
@@ -840,7 +857,9 @@ const Index = () => {
   const [decodedColorGrid, setDecodedColorGrid] = useState<ColorGrid | null>(null);
   const [parsedImageSetState, setParsedImageSetState] = useState<ColorGridSetParseResult | null>(null);
   const [isParsingImage, setIsParsingImage] = useState(false);
-  const [pendingIncomingTileCount, setPendingIncomingTileCount] = useState<number | null>(null);
+  const [hasPendingIncomingImage, setHasPendingIncomingImage] = useState(false);
+  const pendingIncomingTileCount = hasPendingIncomingImage
+    ? getExpectedTileShape(imageData, effectiveInvalidDimensionsMode).tileCount : null;
   const [parseProgress, setParseProgress] = useState<AnalysisProgress | null>(null);
   const [selectedTileIndices, setSelectedTileIndices] = useState<number[]>([]);
   const [tileSelectionAnchorIndex, setTileSelectionAnchorIndex] = useState<number | null>(null);
@@ -1095,12 +1114,14 @@ const Index = () => {
       [LS_KEYS.applySupportFloorYs]: applySupportFloorYs,
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
       [LS_KEYS.skipEmptySuppressSteps]: skipEmptySuppressSteps,
-      [LS_KEYS.showFlatNbtSuppressStepModes]: showFlatNbtSuppressStepModes,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
+      [LS_KEYS.showFlatNbtSuppressStepModes]: showFlatNbtSuppressStepModes,
       [LS_KEYS.markSuppressLoadSpotsInSchematic]: markSuppressLoadSpotsInSchematic,
       [LS_KEYS.suppressLoadSpotMarkerBlock]: suppressLoadSpotMarkerBlock,
+      [LS_KEYS.autoScalePixelArt]: autoScalePixelArt,
+      [LS_KEYS.pixelArtScaleMode]: pixelArtScaleMode,
       [LS_KEYS.autoFixInvalidDimensions]: autoFixInvalidDimensions,
       [LS_KEYS.invalidDimensionsStrategy]: invalidDimensionsStrategy,
       [LS_KEYS.autoFixInvalidColors]: autoFixInvalidColors,
@@ -1148,12 +1169,14 @@ const Index = () => {
       applySupportFloorYs,
       belowPlatformWater,
       skipEmptySuppressSteps,
-      showFlatNbtSuppressStepModes,
       showAlignmentReminder,
       showNooblineWarnings,
       showVsFillerWarnings,
+      showFlatNbtSuppressStepModes,
       markSuppressLoadSpotsInSchematic,
       suppressLoadSpotMarkerBlock,
+      autoScalePixelArt,
+      pixelArtScaleMode,
       autoFixInvalidDimensions,
       invalidDimensionsStrategy,
       autoFixInvalidColors,
@@ -2351,7 +2374,7 @@ const Index = () => {
 
       if (decodedColorGrid) {
         setDecodedColorGrid(decodedColorGrid);
-        setImageData(createImageDataFromColorGrid(decodedColorGrid, decodedPreset?.customColors ?? []));
+        setSourceImageData(createImageDataFromColorGrid(decodedColorGrid, decodedPreset?.customColors ?? []));
         replaceUploadedPreviewUrl(null);
         setImageName(messages.upload.sharedImageName);
         setImageValid(true);
@@ -2682,10 +2705,10 @@ const Index = () => {
     setAcceptedUpload(null);
     setInvalidColorsPaletteOverride(null);
     fileLoadRequestIdRef.current += 1;
-    setPendingIncomingTileCount(null);
+    setHasPendingIncomingImage(false);
     setDecodedColorGrid(null);
     setParsedImageSetState(null);
-    setImageData(null);
+    setSourceImageData(null);
     replaceUploadedPreviewUrl(null);
     setImageName("");
     setImageValid(false);
@@ -2729,13 +2752,13 @@ const Index = () => {
 
   useEffect(() => {
     if (!imageData) {
-      setPendingIncomingTileCount(null);
+      setHasPendingIncomingImage(false);
       setParseProgress(null);
       if (!decodedColorGrid) setParsedImageSetState(null);
       return;
     }
     if (decodedColorGrid) {
-      setPendingIncomingTileCount(null);
+      setHasPendingIncomingImage(false);
       setIsParsingImage(false);
       setParseProgress(null);
       return;
@@ -2771,10 +2794,14 @@ const Index = () => {
               );
             })();
         if (cancelled) return;
-        const paletteNotices =
-          imageLossyFormatLabel && analysis.paletteNotices.some(notice => notice.kind === PaletteNoticeKind.ConvertedPaletteColors && !notice.allInputColorsValid)
-            ? [...analysis.paletteNotices, messages.parsing.lossyFormatHintNotice(imageLossyFormatLabel)]
-            : analysis.paletteNotices;
+        const paletteNotices = [
+          ...(sourceImageData && imageData !== sourceImageData
+            ? [messages.parsing.scaledImageNotice(sourceImageData.width, sourceImageData.height, imageData.width)] : []),
+          ...analysis.paletteNotices,
+        ];
+        if (imageLossyFormatLabel && analysis.paletteNotices.some(notice => notice.kind === PaletteNoticeKind.ConvertedPaletteColors && !notice.allInputColorsValid)) {
+          paletteNotices.push(messages.parsing.lossyFormatHintNotice(imageLossyFormatLabel));
+        }
         startTransition(() => {
           setParsedImageSetState(analysis);
           setPaletteNotices(paletteNotices);
@@ -2791,7 +2818,7 @@ const Index = () => {
         });
       } finally {
         if (cancelled) return;
-        setPendingIncomingTileCount(null);
+        setHasPendingIncomingImage(false);
         setIsParsingImage(false);
         setParseProgress(null);
       }
@@ -2800,7 +2827,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [decodedColorGrid, imageData, parseRelevantCustomColorKey, effectiveInvalidColorsPalette, allowedColors, effectiveInvalidDimensionsMode, imageLossyFormatLabel]);
+  }, [decodedColorGrid, imageData, sourceImageData, parseRelevantCustomColorKey, effectiveInvalidColorsPalette, allowedColors, effectiveInvalidDimensionsMode, imageLossyFormatLabel]);
 
   const handleFile = useCallback(
     (file: File) => {
@@ -2809,7 +2836,7 @@ const Index = () => {
       fileLoadRequestIdRef.current = requestId;
       setInvalidDimensionsStrategyOverride(null);
       setInvalidColorsPaletteOverride(null);
-      setPendingIncomingTileCount(null);
+      setHasPendingIncomingImage(false);
       setDecodedColorGrid(null);
       setSelectedTileIndices([]);
       setTileSelectionAnchorIndex(null);
@@ -2820,8 +2847,8 @@ const Index = () => {
         .then(nextImageData => {
           if (fileLoadRequestIdRef.current !== requestId) return;
           replaceUploadedPreviewUrl(URL.createObjectURL(file));
-          setPendingIncomingTileCount(getExpectedTileShape(nextImageData, autoFixInvalidDimensions ? invalidDimensionsStrategy : "reject").tileCount);
-          setImageData(nextImageData);
+          setHasPendingIncomingImage(true);
+          setSourceImageData(nextImageData);
           setImageName(file.name);
           setImageLossyFormatLabel(isLikelyLossyImageFile(file) ? getLossyImageFormatLabel(file) : null);
           setShowUnusedColors(false);
@@ -2832,10 +2859,10 @@ const Index = () => {
         })
         .catch((err: unknown) => {
           if (fileLoadRequestIdRef.current !== requestId) return;
-          setPendingIncomingTileCount(null);
+          setHasPendingIncomingImage(false);
           setDecodedColorGrid(null);
           setParsedImageSetState(null);
-          setImageData(null);
+          setSourceImageData(null);
           replaceUploadedPreviewUrl(null);
           setImageName("");
           setImageValid(false);
@@ -2849,7 +2876,7 @@ const Index = () => {
           if (fileRef.current) fileRef.current.value = "";
         });
     },
-    [autoFixInvalidDimensions, invalidDimensionsStrategy, getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
+    [getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
   );
 
   const handlePaste = useEffectEvent((event: ClipboardEvent) => {
@@ -4110,8 +4137,6 @@ const Index = () => {
         </div>
       </div>
       <SecretsSettingsDialog
-        minecraftVersion={minecraftVersion}
-        setMinecraftVersion={setMinecraftVersion}
         open={showSecretsDialog}
         onClose={() => setShowSecretsDialog(false)}
         showTransparentRow={effectiveShowTransparentRow}
@@ -4135,18 +4160,22 @@ const Index = () => {
         belowPlatformWaterDisabled={crubTechControlsActive2LayerSettings}
         skipEmptySuppressSteps={skipEmptySuppressSteps}
         setSkipEmptySuppressSteps={setSkipEmptySuppressSteps}
-        showFlatNbtSuppressStepModes={showFlatNbtSuppressStepModes}
-        setShowFlatNbtSuppressStepModes={setShowFlatNbtSuppressStepModes}
         showAlignmentReminder={showAlignmentReminder}
         setShowAlignmentReminder={setShowAlignmentReminder}
         showNooblineWarnings={showNooblineWarnings}
         setShowNooblineWarnings={setShowNooblineWarnings}
         showVsFillerWarnings={showVsFillerWarnings}
         setShowVsFillerWarnings={setShowVsFillerWarnings}
+        showFlatNbtSuppressStepModes={showFlatNbtSuppressStepModes}
+        setShowFlatNbtSuppressStepModes={setShowFlatNbtSuppressStepModes}
         markSuppressLoadSpotsInSchematic={markSuppressLoadSpotsInSchematic}
         setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
         suppressLoadSpotMarkerBlock={suppressLoadSpotMarkerBlock}
         setSuppressLoadSpotMarkerBlock={setSuppressLoadSpotMarkerBlock}
+        autoScalePixelArt={autoScalePixelArt}
+        setAutoScalePixelArt={setAutoScalePixelArt}
+        pixelArtScaleMode={pixelArtScaleMode}
+        setPixelArtScaleMode={setPixelArtScaleMode}
         autoFixInvalidDimensions={autoFixInvalidDimensions}
         setAutoFixInvalidDimensions={handleAutoFixInvalidDimensionsChange}
         invalidDimensionsStrategy={invalidDimensionsStrategy}
@@ -4154,8 +4183,10 @@ const Index = () => {
         autoFixInvalidColors={autoFixInvalidColors}
         setAutoFixInvalidColors={handleAutoFixInvalidColorsChange}
         invalidColorsPalette={invalidColorsPalette}
-        hasPresetColors={hasPresetColors}
         setInvalidColorsPalette={handleInvalidColorsPaletteChange}
+        hasPresetColors={hasPresetColors}
+        minecraftVersion={minecraftVersion}
+        setMinecraftVersion={setMinecraftVersion}
       />
     </div>
   );

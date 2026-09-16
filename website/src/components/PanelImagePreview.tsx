@@ -7,7 +7,7 @@
  */
 import { Fragment, type MutableRefObject, type RefObject } from "react";
 import { Trash2 } from "lucide-react";
-import type { InvalidColorsPalette, InvalidDimensionsStrategy } from "@/data/defaultSettings";
+import type { InvalidDimensionsStrategy, InvalidColorsPalette } from "@/data/defaultSettings";
 import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
 import { getTargetTileDimensions } from "@/lib/colorGridParsing";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";

@@ -39,7 +39,7 @@ import { enCatalog, type MessageCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
 import { Shade } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
+import { SupportMode, type BlockDisplayMode, type ColumnId } from "@/types/ui";
 
 type TemplateValues = Record<string, string | number>;
 
@@ -207,6 +207,7 @@ export enum PaletteNoticeKind {
   SizeError = "size_error",
   UnsupportedPaletteColors = "unsupported_palette_colors",
   ConvertedPaletteColors = "converted_palette_colors",
+  ScaledImage = "scaled_image",
   CroppedImage = "cropped_image",
   CroppedImageRemovedPixels = "cropped_image_removed_pixels",
   PaddedImage = "padded_image",
@@ -228,6 +229,7 @@ export type PaletteNotice =
   | { kind: PaletteNoticeKind.SizeError; width: number; height: number }
   | { kind: PaletteNoticeKind.UnsupportedPaletteColors; colors: number[]; restrictedPalette: boolean }
   | { kind: PaletteNoticeKind.ConvertedPaletteColors; convertedCount: number; totalInputColorCount: number; allInputColorsValid: boolean }
+  | { kind: PaletteNoticeKind.ScaledImage; width: number; height: number; outputWidth: number; factor: number; upscaled: boolean }
   | { kind: PaletteNoticeKind.CroppedImage; width: number; height: number }
   | { kind: PaletteNoticeKind.CroppedImageRemovedPixels; left: number; right: number; top: number; bottom: number }
   | { kind: PaletteNoticeKind.PaddedImage; width: number; height: number }
@@ -596,6 +598,10 @@ export const messages = {
     convertedPaletteColorsNotice(convertedCount: number, totalInputColorCount: number, allInputColorsValid = false): PaletteNotice {
       return { kind: PaletteNoticeKind.ConvertedPaletteColors, convertedCount, totalInputColorCount, allInputColorsValid };
     },
+    scaledImageNotice(width: number, height: number, outputWidth: number): PaletteNotice {
+      return { kind: PaletteNoticeKind.ScaledImage, width, height, outputWidth,
+        factor: Math.max(width, outputWidth) / Math.min(width, outputWidth), upscaled: outputWidth > width };
+    },
     croppedImageNotice(width: number, height: number): PaletteNotice {
       return { kind: PaletteNoticeKind.CroppedImage, width, height };
     },
@@ -643,6 +649,10 @@ export const messages = {
             palette: messages.parsing.colorPaletteName(palette, fullInputPalette),
           });
         }
+        case PaletteNoticeKind.ScaledImage:
+          return formatTemplate(notice.upscaled ? catalog.parsing.upscaledImage : catalog.parsing.downscaledImage,
+            { width: notice.width, height: notice.height, factor: notice.factor,
+              outputWidth: notice.outputWidth, outputHeight: Math.round(notice.height * notice.outputWidth / notice.width) });
         case PaletteNoticeKind.CroppedImage:
           return formatTemplate(catalog.parsing.croppedImage, {
             width: notice.width,
@@ -675,6 +685,8 @@ export const messages = {
     },
     noticeTone(notice: PaletteNotice): "info" | "warning" | "error" {
       switch (notice.kind) {
+        case PaletteNoticeKind.ScaledImage:
+          return notice.upscaled ? "error" : "warning";
         case PaletteNoticeKind.Freeform:
           return notice.tone;
         case PaletteNoticeKind.SizeError:

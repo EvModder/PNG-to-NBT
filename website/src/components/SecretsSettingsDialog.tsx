@@ -8,15 +8,17 @@
 import type { Dispatch, SetStateAction } from "react";
 import { X } from "lucide-react";
 import {
+  SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
+  PIXEL_ART_SCALE_MODE_OPTIONS,
   INVALID_DIMENSIONS_STRATEGY_OPTIONS,
   INVALID_COLORS_PALETTE_OPTIONS,
-  SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
+  type SuppressLoadSpotMarkerBlock,
+  type PixelArtScaleMode,
   type InvalidDimensionsStrategy,
   type InvalidColorsPalette,
-  type SuppressLoadSpotMarkerBlock,
 } from "@/data/defaultSettings";
-import { messages } from "@/lib/messages";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
+import { messages } from "@/lib/messages";
 import { MUTED_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
 
@@ -44,18 +46,22 @@ type SecretsSettingsDialogProps = {
   belowPlatformWaterDisabled?: boolean;
   skipEmptySuppressSteps: boolean;
   setSkipEmptySuppressSteps: Dispatch<SetStateAction<boolean>>;
-  showFlatNbtSuppressStepModes: boolean;
-  setShowFlatNbtSuppressStepModes: Dispatch<SetStateAction<boolean>>;
   showAlignmentReminder: boolean;
   setShowAlignmentReminder: Dispatch<SetStateAction<boolean>>;
   showNooblineWarnings: boolean;
   setShowNooblineWarnings: Dispatch<SetStateAction<boolean>>;
   showVsFillerWarnings: boolean;
   setShowVsFillerWarnings: Dispatch<SetStateAction<boolean>>;
+  showFlatNbtSuppressStepModes: boolean;
+  setShowFlatNbtSuppressStepModes: Dispatch<SetStateAction<boolean>>;
   markSuppressLoadSpotsInSchematic: boolean;
   setMarkSuppressLoadSpotsInSchematic: Dispatch<SetStateAction<boolean>>;
   suppressLoadSpotMarkerBlock: SuppressLoadSpotMarkerBlock;
   setSuppressLoadSpotMarkerBlock: Dispatch<SetStateAction<SuppressLoadSpotMarkerBlock>>;
+  autoScalePixelArt: boolean;
+  setAutoScalePixelArt: Dispatch<SetStateAction<boolean>>;
+  pixelArtScaleMode: PixelArtScaleMode;
+  setPixelArtScaleMode: Dispatch<SetStateAction<PixelArtScaleMode>>;
   autoFixInvalidDimensions: boolean;
   setAutoFixInvalidDimensions: Dispatch<SetStateAction<boolean>>;
   invalidDimensionsStrategy: InvalidDimensionsStrategy;
@@ -63,8 +69,8 @@ type SecretsSettingsDialogProps = {
   autoFixInvalidColors: boolean;
   setAutoFixInvalidColors: Dispatch<SetStateAction<boolean>>;
   invalidColorsPalette: InvalidColorsPalette;
-  hasPresetColors: boolean;
   setInvalidColorsPalette: Dispatch<SetStateAction<InvalidColorsPalette>>;
+  hasPresetColors: boolean;
   minecraftVersion: MinecraftVersion;
   setMinecraftVersion: Dispatch<SetStateAction<MinecraftVersion>>;
 };
@@ -165,18 +171,22 @@ export function SecretsSettingsDialog({
   belowPlatformWaterDisabled = false,
   skipEmptySuppressSteps,
   setSkipEmptySuppressSteps,
-  showFlatNbtSuppressStepModes,
-  setShowFlatNbtSuppressStepModes,
   showAlignmentReminder,
   setShowAlignmentReminder,
   showNooblineWarnings,
   setShowNooblineWarnings,
   showVsFillerWarnings,
   setShowVsFillerWarnings,
+  showFlatNbtSuppressStepModes,
+  setShowFlatNbtSuppressStepModes,
   markSuppressLoadSpotsInSchematic,
   setMarkSuppressLoadSpotsInSchematic,
   suppressLoadSpotMarkerBlock,
   setSuppressLoadSpotMarkerBlock,
+  autoScalePixelArt,
+  setAutoScalePixelArt,
+  pixelArtScaleMode,
+  setPixelArtScaleMode,
   autoFixInvalidDimensions,
   setAutoFixInvalidDimensions,
   invalidDimensionsStrategy,
@@ -184,8 +194,8 @@ export function SecretsSettingsDialog({
   autoFixInvalidColors,
   setAutoFixInvalidColors,
   invalidColorsPalette,
-  hasPresetColors,
   setInvalidColorsPalette,
+  hasPresetColors,
   minecraftVersion,
   setMinecraftVersion,
 }: SecretsSettingsDialogProps) {
@@ -197,7 +207,7 @@ export function SecretsSettingsDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto bg-card border border-border rounded-md p-2 shadow-lg [&_:is(h2,span)]:truncate [&_input]:shrink-0"
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto bg-card border border-border rounded-md p-2 shadow-lg [&_:is(h2,span)]:truncate [&_h2]:leading-normal [&_input]:shrink-0"
         role="dialog"
         aria-modal="true"
         aria-label={messages.dialogs.secretSettingsTitle}
@@ -295,6 +305,16 @@ export function SecretsSettingsDialog({
             onValueChange={setSuppressLoadSpotMarkerBlock}
             options={SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS}
             selectLabel={messages.dialogs.options.suppressLoadSpotMarkerBlock}
+          />
+          <OptionSelectRow<PixelArtScaleMode>
+            checked={autoScalePixelArt}
+            onCheckedChange={setAutoScalePixelArt}
+            label={messages.dialogs.options.autoScalePixelArt}
+            value={pixelArtScaleMode}
+            onValueChange={setPixelArtScaleMode}
+            options={PIXEL_ART_SCALE_MODE_OPTIONS}
+            optionLabel={mode => messages.dialogs.options.pixelArtScaleModes[mode]}
+            selectLabel={messages.dialogs.options.pixelArtScaleMode}
           />
           <OptionSelectRow<InvalidDimensionsStrategy>
             checked={autoFixInvalidDimensions}

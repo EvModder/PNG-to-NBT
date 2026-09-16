@@ -13,13 +13,12 @@
  * - src/components/PanelImagePreview.tsx
  */
 import * as UTIF from "utif";
-import { type InvalidDimensionsMode } from "@/data/defaultSettings";
+import type { InvalidDimensionsMode } from "@/data/defaultSettings";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { MAP_SIZE, packRgb } from "@/utils/color";
-import { type ColorGrid, type ColorRgb } from "@/types/color";
-import { type ColorGridStats } from "@/lib/colorGridAnalysis";
+import type { ColorGrid, ColorRgb } from "@/types/color";
+import type { ColorGridStats } from "@/lib/colorGridAnalysis";
 import {
-  type InputColorPalette,
   buildConversionNotices,
   buildCustomShadeLookup,
   cloneImageData,
@@ -28,6 +27,7 @@ import {
   createEmptyColorGrid,
   getBaseColorLookup,
   scanImageRegionToColorGrid,
+  type InputColorPalette,
 } from "@/lib/colorGridParsingCore";
 import { parseColorGridTilesInWorkers } from "@/lib/tileParsingWorkerClient";
 

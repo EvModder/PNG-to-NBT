@@ -19,6 +19,7 @@
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/pixelArtScaling.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
@@ -38,6 +39,7 @@ import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRe
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/nbtExport.ts
+// - src/lib/pixelArtScaling.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts

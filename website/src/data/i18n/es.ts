@@ -7,8 +7,8 @@
  */
 import { Shade } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
-import { type MessageCatalog } from "@/data/i18n/en";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
+import type { MessageCatalog } from "@/data/i18n/en";
+import { SupportMode, type BlockDisplayMode, type ColumnId } from "@/types/ui";
 
 type PluralForms = {
   zero?: string;
@@ -389,16 +389,16 @@ export const esCatalog = {
       showFlatNbtSuppressStepModes: "Mostrar opciones Suppress-step para mapas planos",
       markSuppressLoadSpotsInSchematic: "Exportar marcas de carga de Suppress-step",
       suppressLoadSpotMarkerBlock: "Bloque marcador",
+      autoScalePixelArt: "Autoescalar pixel art",
+      pixelArtScaleMode: "Dirección de escalado",
+      pixelArtScaleModes: { upscale: "Ampliar", downscale: "Reducir", both: "Ambas" },
       autoFixInvalidDimensions: "Autocorregir dimensiones inválidas",
       invalidDimensionsStrategy: "Método de corrección",
+      invalidDimensionsStrategies: { crop: "Recortar imagen", pad: "Rellenar imagen" },
       autoFixInvalidColors: "Autocorregir colores de entrada",
       invalidColorsPalette: "Paleta de colores",
       invalidColorsPalettes: { full: "Completa", current: "Preajuste-3D", "current-flat": "Preajuste-2D" },
       minecraftVersion: "Versión de Minecraft:",
-      invalidDimensionsStrategies: {
-        crop: "Recortar imagen",
-        pad: "Rellenar imagen",
-      },
     },
   },
   credits: {
@@ -453,6 +453,8 @@ export const esCatalog = {
       one: "Se convirtió {convertedCount} color a {palette}",
       other: "Se convirtieron {convertedCount} colores a {palette}",
     } as PluralForms,
+    upscaledImage: "Ampliada por {factor}× ({width}×{height} → {outputWidth}×{outputHeight}).",
+    downscaledImage: "Reducida por {factor}× ({width}×{height} → {outputWidth}×{outputHeight}).",
     croppedImage: "La imagen se recortó a {width}×{height}",
     cropRemovedSingleSide: "Se eliminaron {count}px del lado {side}.",
     cropRemovedPairedSides: "Se eliminaron {count}px de la {sides}.",

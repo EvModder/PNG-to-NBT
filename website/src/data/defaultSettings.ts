@@ -1,9 +1,11 @@
 /**
  * Public API:
  * - DEFAULT_*
+ * - PIXEL_ART_SCALE_MODE_OPTIONS
+ * - PixelArtScaleMode
  * - INVALID_DIMENSIONS_STRATEGY_OPTIONS
- * - InvalidDimensionsMode
  * - InvalidDimensionsStrategy
+ * - InvalidDimensionsMode
  * - INVALID_COLORS_PALETTE_OPTIONS
  * - InvalidColorsPalette
  * - SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS
@@ -19,13 +21,14 @@
  * - src/lib/messages.ts
  * - src/lib/minecraftVersion.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/pixelArtScaling.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/utils/colorTableLayout.ts
  */
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
-import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, SupportMode } from "@/types/ui";
+import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type SortKey } from "@/types/ui";
 
 // Callers:
 // - src/Index.tsx
@@ -90,10 +93,10 @@ export const DEFAULT_FORCE_Z129 = false;
 export const DEFAULT_APPLY_SUPPORT_FLOOR_YS = true;
 export const DEFAULT_BELOW_PLATFORM_WATER = false;
 export const DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS = true;
-export const DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES = false;
 export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
 export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;
 export const DEFAULT_SHOW_VS_FILLER_WARNINGS = true;
+export const DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES = false;
 export const DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC = false;
 export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "barrier"] as const;
 export type SuppressLoadSpotMarkerBlock = typeof SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS[number];
@@ -106,12 +109,21 @@ export const DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS = false
 // Callers:
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
+// - src/lib/pixelArtScaling.ts
+export const DEFAULT_AUTO_SCALE_PIXEL_ART = true;
+export const PIXEL_ART_SCALE_MODE_OPTIONS = ["upscale", "downscale", "both"] as const;
+export type PixelArtScaleMode = typeof PIXEL_ART_SCALE_MODE_OPTIONS[number];
+export const DEFAULT_PIXEL_ART_SCALE_MODE: PixelArtScaleMode = "downscale";
+
+// Callers:
+// - src/Index.tsx
+// - src/components/SecretsSettingsDialog.tsx
 // - src/lib/colorGridParsing.ts
+export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = false;
 export const INVALID_DIMENSIONS_STRATEGY_OPTIONS = ["crop", "pad"] as const;
 export type InvalidDimensionsStrategy = typeof INVALID_DIMENSIONS_STRATEGY_OPTIONS[number];
 // What the parser is asked to do: a strategy when auto-fix is on, otherwise reject.
 export type InvalidDimensionsMode = InvalidDimensionsStrategy | "reject";
-export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = false;
 export const DEFAULT_INVALID_DIMENSIONS_STRATEGY: InvalidDimensionsStrategy = "crop";
 // Callers:
 // - src/Index.tsx

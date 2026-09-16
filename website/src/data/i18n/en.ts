@@ -9,7 +9,7 @@
  */
 import { Shade } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
-import { type BlockDisplayMode, type ColumnId, SupportMode } from "@/types/ui";
+import { SupportMode, type BlockDisplayMode, type ColumnId } from "@/types/ui";
 
 type PluralForms = {
   zero?: string;
@@ -393,16 +393,16 @@ export const enCatalog = {
       showFlatNbtSuppressStepModes: "Show Suppress-step options for Flat maps",
       markSuppressLoadSpotsInSchematic: "Mark Suppress-step load-spots in exports",
       suppressLoadSpotMarkerBlock: "Marker block",
+      autoScalePixelArt: "Auto-scale pixel art",
+      pixelArtScaleMode: "Scaling direction",
+      pixelArtScaleModes: { upscale: "Upscale", downscale: "Downscale", both: "Both" },
       autoFixInvalidDimensions: "Auto-fix invalid input dimensions",
       invalidDimensionsStrategy: "Fix method",
+      invalidDimensionsStrategies: { crop: "Crop image", pad: "Pad image" },
       autoFixInvalidColors: "Auto-fix invalid input colors",
       invalidColorsPalette: "Color palette",
       invalidColorsPalettes: { full: "Fullcolor", current: "Preset-3D", "current-flat": "Preset-2D" },
       minecraftVersion: "Minecraft version:",
-      invalidDimensionsStrategies: {
-        crop: "Crop image",
-        pad: "Pad image",
-      },
     },
   },
   credits: {
@@ -457,6 +457,8 @@ export const enCatalog = {
       one: "Mapped {convertedCount} color to {palette}",
       other: "Mapped {convertedCount} colors to {palette}",
     } as PluralForms,
+    upscaledImage: "Upscaled by {factor}× ({width}×{height} → {outputWidth}×{outputHeight}).",
+    downscaledImage: "Downscaled by {factor}× ({width}×{height} → {outputWidth}×{outputHeight}).",
     croppedImage: "Cropped image to {width}×{height}",
     cropRemovedSingleSide: "Removed {count}px from the {side}.",
     cropRemovedPairedSides: "Removed {count}px from the {sides}.",
