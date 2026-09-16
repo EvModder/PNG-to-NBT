@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NEAREST = Image.Resampling.NEAREST
 # Match the Mushroom Fields grass tint used by the legacy icon postprocessor.
 GRASS_TINT = (0x55, 0xC9, 0x3F, 255)
+WATER_TINT = (0x3F, 0x76, 0xE4)
 
 
 class Assets:
@@ -59,7 +60,7 @@ class Assets:
             img = img.crop((0, 0, img.width, img.width)).resize((16, 16), NEAREST)
             return ImageChops.multiply(img, Image.new("RGBA", img.size, tint)) if tint else img
         out = Image.new("RGBA", (16, height))
-        horizontal, depth = (2, 0) if side == "east" else (0, 2)
+        horizontal, vertical, depth = (0, 2, 1) if side == "up" else (2, 1, 0) if side == "east" else (0, 1, 2)
         for element in sorted(model["elements"], key=lambda e: e["to"][depth], reverse=side == "north"):
             face = element["faces"].get(side)
             if not face:
@@ -74,7 +75,7 @@ class Assets:
                 center = rotation["origin"][horizontal]
                 scale = 1 if rotation.get("rescale") else math.cos(math.radians(rotation["angle"]))
                 left, right = (center + (x - center) * scale for x in (left, right))
-            box = tuple(round(v) for v in (left, height - end[1], right, height - start[1]))
+            box = tuple(round(v) for v in (left, height - end[vertical], right, height - start[vertical]))
             width, face_height = box[2] - box[0], box[3] - box[1]
             if width <= 0 or face_height <= 0:
                 continue
@@ -127,7 +128,8 @@ class Assets:
             scale = min(size / out.width, size / out.height)
             out = out.resize((round(out.width * scale), round(out.height * scale)), NEAREST)
             icon = Image.new("RGBA", (16, 16))
-            icon.alpha_composite(out, ((16 - out.width) // 2, 16 - out.height))
+            # Raise heads one pixel, except the full-height dragon whose horns would clip.
+            icon.alpha_composite(out, ((16 - out.width) // 2, max(0, 15 - out.height)))
             return icon
         if kind == "decorated_pot":
             base = self.texture("entity/decorated_pot/decorated_pot_base")
@@ -183,6 +185,10 @@ class Assets:
             return icon
         if block in {"hopper", "cauldron"}:
             return self.render(f"block/{block}")
+        if block == "heavy_core":
+            icon = Image.new("RGBA", (16, 16))
+            icon.alpha_composite(self.render("block/heavy_core"), (0, -1))
+            return icon
         if block == "grindstone[face=floor]":
             return self.render("block/grindstone", "east")
         if block == "anvil":
@@ -199,6 +205,16 @@ class Assets:
             return self.render("block/sniffer_egg_not_cracked", "north")
         if block == "dried_ghast":
             return self.render("block/dried_ghast_hydration_0", "north")
+        if block == "shelf_mushroom":
+            # Show the cap above its front edge; edge-on it is only three pixels tall.
+            top = self.render("block/shelf_mushroom_stage0", "up")
+            edge = self.render("block/shelf_mushroom_stage0", "north")
+            top, edge = top.crop(top.getbbox()), edge.crop(edge.getbbox())
+            icon = Image.new("RGBA", (16, 16))
+            y = (16 - top.height - edge.height) // 2
+            icon.alpha_composite(top, ((16 - top.width) // 2, y))
+            icon.alpha_composite(edge, ((16 - edge.width) // 2, y + top.height))
+            return icon.transpose(Image.Transpose.ROTATE_90)
         if block == "end_gateway":
             # Shader-rendered block with no item model; use its vanilla portal texture.
             return self.texture("entity/end_portal/end_portal")
@@ -208,6 +224,24 @@ class Assets:
             suffix = "_sticky" if block.startswith("sticky_") else ""
             return self.texture(f"block/piston_top{suffix}")
         block, _, properties = block.partition("[")
+        if block.endswith("_poplar_leaves"):
+            # Poplar foliage is already colored, unlike biome-tinted ordinary leaves.
+            icon = self.texture(f"block/{block}").copy()
+            if "waterlogged=true" in properties:
+                water = self.texture("block/water_still")
+                for y in range(16):
+                    for x in range(16):
+                        if icon.getpixel((x, y))[3] == 0:
+                            r, g, b, a = water.getpixel((x, y))
+                            intensity = (r + g + b) / (3 * 255)
+                            icon.putpixel((x, y), (*[int(c * intensity) for c in WATER_TINT], max(170, a)))
+            return icon
+        if block.endswith("_button"):
+            # Match the existing buttons' enlarged, readable 10x5 facade.
+            texture = self.model(f"block/{block}_inventory")["textures"]["texture"]
+            icon = Image.new("RGBA", (16, 16))
+            icon.alpha_composite(self.texture(texture).resize((10, 5), NEAREST), (3, 10))
+            return icon
         if block.endswith("_log") or block in {"bamboo_block", "stripped_bamboo_block"}:
             suffix = "" if "axis=x" in properties or "axis=z" in properties else "_top"
             return self.texture(f"block/{block}{suffix}")

@@ -32,6 +32,7 @@ import {
   DEFAULT_AUTO_FIX_INVALID_COLORS,
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
 import { normalizeBlockId, sanitizeUserBlockEntry } from "@/lib/blockId";
 import { computeColorGridStats, hasStepMixOpportunity, requiresTwoLayerLateShading } from "@/lib/colorGridAnalysis";
@@ -85,6 +86,7 @@ if (typeof globalThis.ImageData === "undefined") {
 type FixtureWaterDropOverrides = Partial<Record<"dark" | "flat" | "light", number>>;
 
 type ExportFixtureSettings = {
+  minecraftVersion?: MinecraftVersion;
   preset: string;
   buildMode: BuildMode;
   supportMode: SupportMode;
@@ -654,6 +656,9 @@ function buildPreset(presetName: string, selectedBlocksBaseOverrides: Record<str
 
 function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): ExportFixtureSettings {
   const settings = rawSettings ?? {};
+  if (settings.minecraftVersion !== undefined && !Object.hasOwn(MINECRAFT_VERSIONS, settings.minecraftVersion)) {
+    throw new Error(`Invalid minecraftVersion: ${settings.minecraftVersion}`);
+  }
   const preset = settings.preset ?? DEFAULT_ACTIVE_PRESET_NAME;
   if (typeof preset !== "string" || preset.length === 0) {
     throw new Error(`preset must be a non-empty string`);
@@ -726,6 +731,7 @@ function resolveFixtureSettings(rawSettings: FixtureCaseFile["settings"]): Expor
     forceZ129: settings.forceZ129 ?? DEFAULT_FORCE_Z129,
     belowPlatformWater: settings.belowPlatformWater ?? DEFAULT_BELOW_PLATFORM_WATER,
     autoFixInvalidColors: settings.autoFixInvalidColors ?? DEFAULT_AUTO_FIX_INVALID_COLORS,
+    minecraftVersion: settings.minecraftVersion,
     customColors,
     selectedBlocksCustom,
     selectedBlocksBaseOverrides: selectedBlocksBaseOverrides as Record<string, string>,
@@ -921,6 +927,7 @@ async function runFixtureCase(
   );
 
   const generated = await convertToNbt(effectiveShape, {
+    minecraftVersion: testCase.settings.minecraftVersion,
     selectedBlocks: testCase.preset.selectedBlocks,
     fillerAssignments,
     applySupportFloorYs: testCase.settings.applySupportFloorYs,

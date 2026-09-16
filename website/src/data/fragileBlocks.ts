@@ -30,24 +30,24 @@ const FRAGILE_BLOCKS = new Set([
   "stone_pressure_plate", "oak_pressure_plate", "birch_pressure_plate",
   "spruce_pressure_plate", "jungle_pressure_plate", "acacia_pressure_plate",
   "dark_oak_pressure_plate", "crimson_pressure_plate", "warped_pressure_plate",
-  "cherry_pressure_plate", "pale_oak_pressure_plate", "bamboo_pressure_plate",
+  "cherry_pressure_plate", "pale_oak_pressure_plate", "poplar_pressure_plate", "bamboo_pressure_plate",
   "light_weighted_pressure_plate", "heavy_weighted_pressure_plate",
   "mangrove_pressure_plate", "polished_blackstone_pressure_plate",
 
     // Signs (standing)
   "oak_sign", "birch_sign", "spruce_sign", "jungle_sign", "acacia_sign",
   "dark_oak_sign", "crimson_sign", "warped_sign", "cherry_sign",
-  "pale_oak_sign", "mangrove_sign", "bamboo_sign",
+  "pale_oak_sign", "poplar_sign", "mangrove_sign", "bamboo_sign",
 
     // Floor-mounted controls
   "lever", "stone_button", "oak_button", "birch_button", "spruce_button",
   "jungle_button", "acacia_button", "dark_oak_button", "mangrove_button",
-  "cherry_button", "pale_oak_button", "bamboo_button", "crimson_button", "warped_button", "polished_blackstone_button",
+  "cherry_button", "pale_oak_button", "poplar_button", "bamboo_button", "crimson_button", "warped_button", "polished_blackstone_button",
 
     // Trapdoors
   "oak_trapdoor", "birch_trapdoor", "spruce_trapdoor", "jungle_trapdoor",
   "acacia_trapdoor", "dark_oak_trapdoor", "crimson_trapdoor", "warped_trapdoor",
-  "cherry_trapdoor", "pale_oak_trapdoor", "mangrove_trapdoor", "iron_trapdoor",
+  "cherry_trapdoor", "pale_oak_trapdoor", "poplar_trapdoor", "mangrove_trapdoor", "iron_trapdoor",
 
     // Candles
   "candle", "white_candle", "orange_candle", "magenta_candle",
@@ -58,7 +58,7 @@ const FRAGILE_BLOCKS = new Set([
     // Plants / vegetation with placement conditions
   "pink_petals", "wildflowers", "fern", "short_grass", "short_dry_grass", "tall_dry_grass", "dead_bush", "wheat",
   "lily_pad",
-  "bush", "firefly_bush", "big_dripleaf",
+  "bush", "firefly_bush", "red_shrub", "big_dripleaf",
   "crimson_roots", "warped_roots", "nether_sprouts",
   "twisting_vines",
   "crimson_fungus", "warped_fungus",
@@ -139,6 +139,7 @@ export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ["short_dry_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["tall_dry_grass", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["bush", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
+  ["red_shrub", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["firefly_bush", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["big_dripleaf", { validSupportBlocks: ["clay", "moss_block", "dirt", "grass_block", "podzol", "coarse_dirt", "mycelium", "rooted_dirt", "mud", "muddy_mangrove_roots", "farmland", "big_dripleaf", "big_dripleaf_stem"], replacementBlock: "dirt" }],
   ["open_eyeblossom", { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }],

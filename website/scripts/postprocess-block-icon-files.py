@@ -85,6 +85,9 @@ FOLIAGE_TINT_IDS = {
     "lily_pad",
 }
 WATERLOGGED_SKIP_TINT_IDS = {
+    "red_poplar_leaves",
+    "orange_poplar_leaves",
+    "yellow_poplar_leaves",
     "cherry_leaves",
     "pale_oak_leaves",
     "azalea_leaves",
@@ -450,7 +453,7 @@ def main() -> None:
         if bid.endswith("_head") or bid.endswith("_skull"):
             head = img.resize((12, 12), resample=Image.Resampling.NEAREST)
             out = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-            out.paste(head, (2, 4), head)
+            out.paste(head, (2, 3), head)
             out.save(png)
             heads += 1
             continue

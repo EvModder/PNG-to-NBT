@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import { BASE_COLORS } from "@/data/mapColors";
+import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
+import { isFragileBlock } from "@/data/fragileBlocks";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { BUILTIN_PRESET_NAMES, getBuiltinPreset } from "@/data/presets";
@@ -17,11 +19,62 @@ import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 
 const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
-const latest = getMinecraftCatalog("26.2");
+const latest = getMinecraftCatalog();
+assert.equal(DEFAULT_MINECRAFT_VERSION, versions.at(-1));
 assert.deepEqual(latest.blocks, BASE_COLORS.map(color => color.blocks));
 assert.deepEqual(latest.excluded, EXCLUDED_BLOCKS);
+const previous = getMinecraftCatalog("26.2");
+const added = latest.blocks.flat().filter(block => !previous.blocks.flat().includes(block));
+const addedHidden = latest.excluded.flat().filter(block => !previous.excluded.flat().includes(block));
+assert.equal(added.length, 14);
+assert.equal(addedHidden.length, 72);
+for (const block of [...added, ...addedHidden]) {
+  assert(!isBlockAvailable(block, 5022), block);
+  assert(isBlockAvailable(block, 5023), block);
+  for (const version of versions.slice(0, -1)) assert(!isBlockAvailable(block, version), `${version}: ${block}`);
+}
+for (const [id, color] of Object.entries({ 8: "white", 15: "orange", 16: "magenta", 17: "light_blue", 18: "yellow", 19: "lime", 20: "pink", 21: "gray", 22: "light_gray", 23: "cyan", 24: "purple", 25: "blue", 26: "brown", 27: "green", 28: "red", 29: "black" })) {
+  const row = latest.excluded[Number(id)];
+  const start = row.indexOf(`${color}_wool_slab`);
+  assert(start >= 0);
+  assert.deepEqual(row.slice(start, start + 5), [
+    `${color}_wool_slab`, `${color}_wool_stairs`, `${color}_concrete_slab`, `${color}_concrete_stairs`,
+    color === "purple" ? "shulker_box" : `${color}_shulker_box`,
+  ]);
+}
+assert.deepEqual(latest.blocks[22].slice(-5), ["poplar_log", "stripped_poplar_log", "stripped_poplar_wood", "poplar_planks", "poplar_pressure_plate"]);
+assert.deepEqual(latest.blocks[34].filter(block => block.includes("axis=x")), ["oak_log[axis=x]", "jungle_log[axis=x]", "poplar_log[axis=x]"]);
+assert(latest.blocks[34].includes("poplar_wood"));
+assert(latest.blocks[52].includes("red_shrub"));
+assert.deepEqual(latest.excluded[40], ["shelf_mushroom"]);
+const catalogIds = new Set([...latest.blocks, ...latest.excluded].flat().map(block => block.split("[")[0]));
+for (const block of ["poplar_door", "poplar_hanging_sign", "poplar_wall_hanging_sign", "poplar_wall_sign", "poplar_shelf", "poplar_sapling", "potted_poplar_sapling", "straw_bed"]) {
+  assert(!catalogIds.has(block), `Fully omitted: ${block}`);
+}
+for (const block of ["red_shrub", "poplar_pressure_plate", "poplar_sign", "poplar_button[face=floor]", "poplar_trapdoor"]) assert(isFragileBlock(block), block);
+assert.deepEqual(getVersionedSupportRules().get("red_shrub"), getVersionedSupportRules().get("bush"));
+// A below-block rule cannot implement shelf mushroom's side attachment.
+assert(!getVersionedSupportRules().has("shelf_mushroom"));
 for (const version of versions) {
   const catalog = getMinecraftCatalog(version);
+  assert.equal(catalog.blocks[7][0], "bamboo_block[axis=x]");
+  const plantLeaves = ["oak_leaves", "spruce_leaves", "birch_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "mangrove_leaves", "azalea_leaves", "flowering_azalea_leaves"];
+  assert.deepEqual(catalog.blocks[7].filter(block => block.endsWith("_leaves")), plantLeaves);
+  const otherLeaves = { cherry_leaves: 20, pale_oak_leaves: version === "1.21.4" ? 49 : 6, red_poplar_leaves: 28, orange_poplar_leaves: 15, yellow_poplar_leaves: 18 };
+  for (const [block, id] of Object.entries(otherLeaves)) {
+    assert.equal(catalog.blocks[id].includes(block), isBlockAvailable(block, version));
+  }
+  assert.deepEqual(catalog.blocks[12].filter(block => block.includes("_leaves[")),
+    [...plantLeaves, ...Object.keys(otherLeaves)].filter(block => isBlockAvailable(block, version))
+      .map(block => `${block}[waterlogged=true]`));
+  const stone = catalog.excluded[11];
+  assert.equal(stone.indexOf("cauldron") + 1, stone.indexOf("hopper"));
+  assert.deepEqual(stone.slice(-5), ["suspicious_gravel", "bedrock", "spawner", "trial_spawner", "vault"]);
+  assert.deepEqual(stone.filter(block => block.endsWith("_slab")), [
+    "cobblestone_slab", "mossy_cobblestone_slab", "stone_slab", "smooth_stone_slab",
+    "stone_brick_slab", "mossy_stone_brick_slab", "andesite_slab", "polished_andesite_slab",
+  ]);
+  assert.equal(stone.indexOf("stonecutter") + 1, stone.indexOf("cobblestone_slab"));
   assert(catalog.blocks.every(row => row.every(block => !block.endsWith("_slab"))), `${version}: visible slab`);
   for (const row of catalog.excluded) {
     const paired = row.filter(block => !block.endsWith("_slab") || row.includes(block.replace(/_slab$/, "_stairs")));
@@ -128,6 +181,16 @@ const newer = await exportBytes("26.2", { 0: "glass", 6: "iron_block" }, "stone"
 older.writeInt32BE(newer.readInt32BE(17), 17);
 assert.deepEqual(older, newer, "Unchanged blocks must produce identical geometry/palette bytes");
 await assert.rejects(exportBytes("1.21.4", { 0: "glass", 6: "waxed_copper_lantern" }), /unavailable/);
+await assert.rejects(exportBytes("26.2", { 0: "glass", 6: "red_shrub" }), /unavailable/);
+const shrub = await exportBytes("26.3", { 0: "glass", 6: "red_shrub" }, "stone");
+assert(shrub.includes(Buffer.from("minecraft:red_shrub")));
+assert(shrub.includes(Buffer.from("minecraft:dirt")), "Red shrub needs a soil support replacement");
+for (const color of ["red", "orange", "yellow"]) {
+  const leaves = await exportBytes("26.3", { 0: "glass", 6: `${color}_poplar_leaves[waterlogged=true]` });
+  assert(leaves.includes(Buffer.from(`minecraft:${color}_poplar_leaves`)));
+  assert(leaves.includes(Buffer.from("persistent")));
+  assert(leaves.includes(Buffer.from("waterlogged")));
+}
 
 // The platform's chains are hardcoded, not taken from the selected palette.
 const waterGrid: ColorGrid = Array.from({ length: 128 }, () =>

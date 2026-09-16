@@ -7,6 +7,7 @@
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/SecretsSettingsDialog.tsx
+ * - src/data/defaultSettings.ts
  * - src/lib/blockId.ts
  * - src/lib/codecPreset.ts
  * - src/lib/minecraftVersion.ts
@@ -14,11 +15,12 @@
  * - src/lib/previewImageEdits.ts
  */
 // Breakpoints reflect default-visible blocks only. Each range targets its newest release.
-// Keep ranges chronological: preset decoding locates the range for a stored DataVersion.
+// Keep ranges chronological: the last is the default; preset decoding locates ranges by DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
 // Callers:
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
+// - src/data/defaultSettings.ts
 // - src/lib/minecraftVersion.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
@@ -27,12 +29,14 @@ export const MINECRAFT_VERSIONS = {
   "1.21.5": { label: "1.21.5–1.21.8", dataVersion: 4440 },
   "1.21.9": { label: "1.21.9–26.1.2", dataVersion: 4790 },
   "26.2": { label: "26.2", dataVersion: 4903 },
+  "26.3": { label: "26.3", dataVersion: 5023 },
 } as const;
 
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/SecretsSettingsDialog.tsx
+// - src/data/defaultSettings.ts
 // - src/lib/blockId.ts
 // - src/lib/codecPreset.ts
 // - src/lib/minecraftVersion.ts
@@ -53,4 +57,7 @@ export const BLOCK_INTRODUCTIONS: readonly (readonly [RegExp, number])[] = [
   [/_(lightning_rod|shelf)$/, 4554],
   [/^(potted_)?golden_dandelion$/, 4786],
   [/(^|_)(cinnabar|sulfur)(_|$)/, 4903],
+  [/(^|_)poplar(_|$)/, 5023],
+  [/_(wool|concrete)_(slab|stairs)$/, 5023],
+  [/^(red_shrub|shelf_mushroom|straw_bed)$/, 5023],
 ];

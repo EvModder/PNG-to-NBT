@@ -23,6 +23,7 @@
  * - src/lib/suppressLoadMarkers.ts
  * - src/utils/colorTableLayout.ts
  */
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { type BlockDisplayMode, type ColumnId, type SortDir, type SortKey, SupportMode } from "@/types/ui";
 
@@ -126,4 +127,4 @@ export const DEFAULT_INVALID_COLORS_PALETTE: InvalidColorsPalette = "full";
 // - src/lib/minecraftVersion.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
-export const DEFAULT_MINECRAFT_VERSION = "26.2";
+export const DEFAULT_MINECRAFT_VERSION = Object.keys(MINECRAFT_VERSIONS).at(-1) as MinecraftVersion;

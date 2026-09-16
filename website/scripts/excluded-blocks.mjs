@@ -12,7 +12,7 @@
  * - scripts/build-block-icon-files.mjs
  */
 // These blocks are absent even from the excluded-block UI and icon atlas.
-// Audited against Java 26.2 Blocks/BlockIds and the blocks' survival/update rules.
+// Audited against Java 26.3 Blocks/BlockIds and the blocks' survival/update rules.
 // Callers:
 // - scripts/audit-mapcolors.mjs
 // - scripts/build-block-icon-files.mjs
@@ -130,6 +130,7 @@ export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "dried_ghast",
   "chorus_plant",
   "chorus_flower", // Exported at age=5; survival placement starts at age=0.
+  "shelf_mushroom", // Placeholder: requires side support, which is not generated yet.
   // Poppy is the default representative for plant-color, one-block flowers.
   "dandelion", "golden_dandelion", "blue_orchid", "allium", "azure_bluet",
   "red_tulip", "orange_tulip", "white_tulip", "pink_tulip", "oxeye_daisy",
