@@ -271,13 +271,40 @@ export function PanelColorBlockTable({
     return longest;
   }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks, catalog]);
 
+  const getBlockGroups = useCallback((idx: number) => {
+    const excluded = showExcludedBlocks ? catalog.excluded[idx] : [];
+    const extra = (customBlocksByBase[idx] || []).filter(block => isBlockAvailable(block, minecraftVersion))
+      .map(block => getVersionedBlockName(block, minecraftVersion));
+    const selected = selectedBlocks[idx] || "";
+    const regular = [
+      ...catalog.blocks[idx],
+      ...excluded.filter(block => !catalog.blocks[idx].includes(block)),
+    ];
+    const withBelowPlatformWater = [
+      ...regular,
+      ...getConditionalBaseBlocks(idx, belowPlatformWater).filter(block => !regular.includes(block)),
+    ];
+    const custom = extra.filter(block => !withBelowPlatformWater.includes(block));
+    if (selected && !withBelowPlatformWater.includes(selected) && !custom.includes(selected)) {
+      withBelowPlatformWater.push(selected);
+    }
+    return {
+      regular: withBelowPlatformWater,
+      custom,
+      all: [...withBelowPlatformWater, ...custom],
+    };
+  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks, catalog, minecraftVersion]);
+
   const sortedIndices = useMemo(() => {
     const base = showTransparentRow ? [TRANSPARENCY_BASE_INDEX, ...DEFAULT_COLOR_ROW_ORDER] : [...DEFAULT_COLOR_ROW_ORDER];
     if (sortKey === "default") return base;
     const dir = sortDir === "asc" ? 1 : -1;
+    if (sortKey === "options") {
+      const counts = BASE_COLORS.map((_, idx) => getBlockGroups(idx).all.length);
+      return base.toSorted((a, b) => dir * (counts[a] - counts[b]));
+    }
     const sorters: Record<string, (a: number, b: number) => number> = {
       name: (a, b) => dir * BASE_COLORS[a].name.localeCompare(BASE_COLORS[b].name),
-      options: (a, b) => dir * (catalog.blocks[a].length - catalog.blocks[b].length),
       color: (a, b) =>
         dir *
         (getHue(BASE_COLORS[a].r, BASE_COLORS[a].g, BASE_COLORS[a].b) -
@@ -286,7 +313,7 @@ export function PanelColorBlockTable({
       required: (a, b) => dir * (getBaseSortRequiredCount(a) - getBaseSortRequiredCount(b)),
     };
     return sorters[sortKey] ? base.toSorted(sorters[sortKey]) : base;
-  }, [sortKey, sortDir, getBaseSortRequiredCount, showTransparentRow, catalog]);
+  }, [sortKey, sortDir, getBaseSortRequiredCount, showTransparentRow, getBlockGroups]);
 
   const { usedIndices, unusedIndices } = useMemo(() => {
     if (!imageValid || usedShadesByColorKey.size === 0) return { usedIndices: sortedIndices, unusedIndices: [] as number[] };
@@ -462,30 +489,6 @@ export function PanelColorBlockTable({
         : prev,
     );
   }, [setColumnOrder]);
-
-  const getBlockGroups = useCallback((idx: number) => {
-    const excluded = showExcludedBlocks ? catalog.excluded[idx] : [];
-    const extra = (customBlocksByBase[idx] || []).filter(block => isBlockAvailable(block, minecraftVersion))
-      .map(block => getVersionedBlockName(block, minecraftVersion));
-    const selected = selectedBlocks[idx] || "";
-    const regular = [
-      ...catalog.blocks[idx],
-      ...excluded.filter(block => !catalog.blocks[idx].includes(block)),
-    ];
-    const withBelowPlatformWater = [
-      ...regular,
-      ...getConditionalBaseBlocks(idx, belowPlatformWater).filter(block => !regular.includes(block)),
-    ];
-    const custom = extra.filter(block => !withBelowPlatformWater.includes(block));
-    if (selected && !withBelowPlatformWater.includes(selected) && !custom.includes(selected)) {
-      withBelowPlatformWater.push(selected);
-    }
-    return {
-      regular: withBelowPlatformWater,
-      custom,
-      all: [...withBelowPlatformWater, ...custom],
-    };
-  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks, catalog, minecraftVersion]);
 
   const getColorSwatchShades = useCallback((idx: number): Shade[] => {
     return [...getOrderedSwatchShades(imageValid, usedShadesByColorKey.get(getBaseColorKey(idx)))] as Shade[];
