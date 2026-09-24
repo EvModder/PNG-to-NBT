@@ -10,6 +10,7 @@ import { Trash2 } from "lucide-react";
 import type { InvalidDimensionsStrategy, InvalidColorsPalette } from "@/data/defaultSettings";
 import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
 import { getTargetTileDimensions } from "@/lib/colorGridParsing";
+import type { InputPaletteEquivalence } from "@/lib/colorGridParsingCore";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
 import { DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { MUTED_INLINE_TOGGLE_CONTROL_CLASS, PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
@@ -41,7 +42,7 @@ type PanelImagePreviewProps = {
   onResolveInvalidDimensions: (strategy: InvalidDimensionsStrategy) => void;
   onResolveInvalidColors?: (palette: InvalidColorsPalette) => void;
   inputColorsPalette: InvalidColorsPalette | null;
-  unrestrictedInputPalette: boolean;
+  inputPaletteEquivalence: InputPaletteEquivalence;
   fullInputPalette: boolean;
   hasPresetColors: boolean;
   imageValid: boolean;
@@ -240,7 +241,7 @@ export function PanelImagePreview({
   onResolveInvalidDimensions,
   onResolveInvalidColors,
   inputColorsPalette,
-  unrestrictedInputPalette,
+  inputPaletteEquivalence,
   fullInputPalette,
   hasPresetColors,
   imageValid,
@@ -503,7 +504,7 @@ export function PanelImagePreview({
         notices={visiblePaletteNotices.filter(isColorCorrectionNotice)}
         missingBlockCount={imageValid ? missingBlockCount : 0}
         currentPalette={inputColorsPalette}
-        unrestrictedInputPalette={unrestrictedInputPalette}
+        inputPaletteEquivalence={inputPaletteEquivalence}
         fullInputPalette={fullInputPalette}
         hasPresetColors={hasPresetColors}
         onResolve={onResolveInvalidColors}

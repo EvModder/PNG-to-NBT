@@ -624,13 +624,17 @@ export const messages = {
       return { kind: PaletteNoticeKind.Freeform, tone: "error", text };
     },
     get convertColorsUsing(): string { return catalog.parsing.convertColorsUsing; },
+    get convertColors(): string { return catalog.parsing.convertColors; },
+    mappedToMapPalette(count: number): string {
+      return formatPlural(catalog.parsing.conversionSummary, count, { convertedCount: count, palette: catalog.parsing.minecraftMapPalette });
+    },
     colorPaletteName(palette: InvalidColorsPalette | null, fullInputPalette: boolean): string {
       if (fullInputPalette) return palette === "current-flat"
         ? catalog.parsing.flatColorsPalette
         : catalog.dialogs.options.invalidColorsPalettes.full;
       return catalog.parsing.conversionPalettes[palette ?? "full"];
     },
-    noticeText(notice: PaletteNotice, palette: InvalidColorsPalette | null = null, fullInputPalette = false): string {
+    noticeText(notice: PaletteNotice, palette: InvalidColorsPalette | null = null, fullInputPalette = false, displayPalette = palette): string {
       switch (notice.kind) {
         case PaletteNoticeKind.Freeform:
           return notice.text;
@@ -646,7 +650,7 @@ export const messages = {
           }
           return formatPlural(catalog.parsing.conversionSummary, notice.convertedCount, {
             convertedCount: notice.convertedCount,
-            palette: messages.parsing.colorPaletteName(palette, fullInputPalette),
+            palette: messages.parsing.colorPaletteName(displayPalette, fullInputPalette),
           });
         }
         case PaletteNoticeKind.ScaledImage:

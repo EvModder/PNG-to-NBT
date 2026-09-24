@@ -448,6 +448,8 @@ export const esCatalog = {
     } as PluralForms,
     conversionPalettes: { full: "Completa", current: "Preajuste", "current-flat": "Preajuste-2D" },
     convertColorsUsing: "Convertir usando:",
+    convertColors: "Convertir",
+    minecraftMapPalette: "la paleta de mapas de Minecraft",
     flatColorsPalette: "Plana",
     conversionSummary: {
       one: "Se convirtió {convertedCount} color a {palette}",

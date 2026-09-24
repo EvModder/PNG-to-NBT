@@ -452,6 +452,8 @@ export const enCatalog = {
     } as PluralForms,
     conversionPalettes: { full: "Full", current: "Preset", "current-flat": "Preset-2D" },
     convertColorsUsing: "Convert using:",
+    convertColors: "Convert",
+    minecraftMapPalette: "the Minecraft map palette",
     flatColorsPalette: "Flat",
     conversionSummary: {
       one: "Mapped {convertedCount} color to {palette}",

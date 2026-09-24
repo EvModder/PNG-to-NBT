@@ -9,6 +9,7 @@
 import { Fragment } from "react";
 import { INVALID_COLORS_PALETTE_OPTIONS, type InvalidColorsPalette } from "@/data/defaultSettings";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
+import type { InputPaletteEquivalence } from "@/lib/colorGridParsingCore";
 
 export function isColorCorrectionNotice(notice: PaletteNotice): boolean {
   return notice.kind === PaletteNoticeKind.UnsupportedPaletteColors ||
@@ -21,7 +22,7 @@ type ImageColorNoticeProps = {
   notices: readonly PaletteNotice[];
   missingBlockCount: number;
   currentPalette: InvalidColorsPalette | null;
-  unrestrictedInputPalette: boolean;
+  inputPaletteEquivalence: InputPaletteEquivalence;
   fullInputPalette: boolean;
   hasPresetColors: boolean;
   onResolve?: (palette: InvalidColorsPalette) => void;
@@ -31,7 +32,7 @@ export function ImageColorNotice({
   notices,
   missingBlockCount,
   currentPalette,
-  unrestrictedInputPalette,
+  inputPaletteEquivalence,
   fullInputPalette,
   hasPresetColors,
   onResolve,
@@ -42,18 +43,30 @@ export function ImageColorNotice({
   if (!headline && missingBlockCount === 0) return null;
 
   const blocking = !!unsupported || missingBlockCount > 0;
-  const activePalette = unrestrictedInputPalette && currentPalette === "current" ? "full" : currentPalette;
-  const options = INVALID_COLORS_PALETTE_OPTIONS.filter(palette => (palette === "full" || hasPresetColors) && (missingBlockCount > 0
-    ? palette !== "full"
-    : palette !== activePalette && (!unrestrictedInputPalette || palette !== "current")));
+  const { fullPreset, fullFlat, presetFlat } = inputPaletteEquivalence;
+  const canonical = (palette: InvalidColorsPalette): InvalidColorsPalette => {
+    if (!hasPresetColors) return palette;
+    if (palette === "full") return fullFlat ? "current-flat" : "full";
+    if (palette === "current") return presetFlat ? "current-flat" : fullPreset ? "full" : "current";
+    return palette;
+  };
+  const activePalette = currentPalette ? canonical(currentPalette) : null;
+  const flatLabel = fullInputPalette || (hasPresetColors && fullFlat);
+  const palettes = [...new Set(INVALID_COLORS_PALETTE_OPTIONS
+    .filter(palette => (palette === "full" || hasPresetColors) && (missingBlockCount === 0 || palette !== "full"))
+    .map(canonical))];
+  const singlePalette = palettes.length === 1;
+  const options = palettes.filter(palette => !!unsupported || palette !== activePalette);
   const headlineText = headline
-    ? messages.parsing.noticeText(headline, currentPalette, fullInputPalette)
+    ? headline.kind === PaletteNoticeKind.ConvertedPaletteColors && singlePalette
+      ? messages.parsing.mappedToMapPalette(headline.convertedCount)
+      : messages.parsing.noticeText(headline, currentPalette, flatLabel, activePalette)
     : messages.preview.missingBlockAssignments(missingBlockCount);
   const actions = onResolve && options.length > 0 && options.map((palette, index) => (
     <Fragment key={palette}>
       {index > 0 && " | "}
       <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => onResolve(palette)}>
-        {messages.parsing.colorPaletteName(palette, fullInputPalette)}
+        {singlePalette ? messages.parsing.convertColors : messages.parsing.colorPaletteName(palette, flatLabel)}
       </button>
     </Fragment>
   ));
@@ -71,7 +84,7 @@ export function ImageColorNotice({
       </p>
       {unsupported && actions && (
         <p className="text-xs text-warning-text font-medium">
-          {messages.parsing.convertColorsUsing} {actions}
+          {!singlePalette && `${messages.parsing.convertColorsUsing} `}{actions}
         </p>
       )}
       {!unsupported && converted && notices.map((notice, index) =>

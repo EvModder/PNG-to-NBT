@@ -154,7 +154,7 @@ import {
   type PaletteNotice,
 } from "@/lib/messages";
 import { decodeFullPreset, encodeFullPreset, loadPresets } from "@/lib/codecPreset";
-import { buildInputColorPalette, presetCoversInputColors } from "@/lib/colorGridParsingCore";
+import { buildInputColorPalette, compareInputColorPalettes, presetCoversAllColors } from "@/lib/colorGridParsingCore";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
 import {
@@ -971,16 +971,18 @@ const Index = () => {
     [selectedColorKey],
   );
   const fullInputPalette = useMemo(
-    () => presetCoversInputColors(null, customColors, JSON.parse(selectedColorKey)),
+    () => presetCoversAllColors(customColors, JSON.parse(selectedColorKey)),
     [parseRelevantCustomColorKey, selectedColorKey],
   );
-  const unrestrictedInputPalette = useMemo(
-    () => presetCoversInputColors(imageData, customColors, JSON.parse(selectedColorKey)),
-    [imageData, parseRelevantCustomColorKey, selectedColorKey],
-  );
   const flatInputPalette = effectiveInvalidColorsPalette === "current-flat";
-  const allowDeepFlatWater = flatInputPalette && (belowPlatformWater ||
-    (!buildAtWorldMinY && normalizeBlockId(effectiveSelectedBlocks[WATER_BASE_INDEX] ?? "") === "water"));
+  // Allow dropped water, or top-aligned water columns with room below the surface.
+  const allowDeepFlatWater = belowPlatformWater ||
+    (!buildAtWorldMinY && normalizeBlockId(effectiveSelectedBlocks[WATER_BASE_INDEX] ?? "") === "water");
+  const inputPaletteEquivalence = useMemo(
+    () => compareInputColorPalettes(imageData, customColors, JSON.parse(selectedColorKey), allowDeepFlatWater,
+      imageData ? getTargetTileDimensions(imageData.width, imageData.height, effectiveInvalidDimensionsMode) : undefined),
+    [imageData, parseRelevantCustomColorKey, selectedColorKey, allowDeepFlatWater, effectiveInvalidDimensionsMode],
+  );
   const allowedColors = useMemo(
     () => allowedColorKey === undefined ? undefined : buildInputColorPalette(JSON.parse(allowedColorKey), flatInputPalette, allowDeepFlatWater),
     [allowedColorKey, flatInputPalette, allowDeepFlatWater],
@@ -4088,7 +4090,7 @@ const Index = () => {
               onResolveInvalidDimensions={setInvalidDimensionsStrategyOverride}
               onResolveInvalidColors={imageData && !decodedColorGrid ? setInvalidColorsPaletteOverride : undefined}
               inputColorsPalette={effectiveInvalidColorsPalette}
-              unrestrictedInputPalette={unrestrictedInputPalette}
+              inputPaletteEquivalence={inputPaletteEquivalence}
               fullInputPalette={fullInputPalette}
               hasPresetColors={hasPresetColors}
               imageValid={imageValid}
