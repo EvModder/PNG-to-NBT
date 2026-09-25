@@ -24,7 +24,7 @@
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/lib/tileParsingWorkerTypes.ts
  */
-import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
+import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { type ColorGrid, Shade, type ColorRef } from "@/types/color";
@@ -307,6 +307,7 @@ export function summarizeVoidShadows(tileImageStats: readonly ColorGridStats[]):
 type DerivedImageStats = {
   allSameShade?: Shade;
   flatModeBehavior: FlatModeBehavior;
+  hasOnlyFlatLand: boolean;
   hasTransparency: boolean;
   paletteUsageInfo: {
     uniqueShadeCount: number;
@@ -325,13 +326,18 @@ function collectUsedShadesByColorKey(colorFrequencyMap: ColorFrequencyMap): Map<
 
 function summarizeUsedShadesByColorKey(
   usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>,
-): Pick<DerivedImageStats, "hasTransparency" | "paletteUsageInfo"> {
+): Pick<DerivedImageStats, "hasOnlyFlatLand" | "hasTransparency" | "paletteUsageInfo"> {
+  let hasOnlyFlatLand = true;
   let hasTransparency = false;
   let uniqueShadeCount = 0;
   let uniqueBaseColorCount = 0;
 
   for (const [colorKey, shades] of usedShadesByColorKey) {
     const color = parseColorRefKey(colorKey);
+    // Custom colors need flat shading too; only vanilla water/transparency are exempt.
+    if (color.isCustom || (color.id !== WATER_BASE_INDEX && color.id !== TRANSPARENCY_BASE_INDEX)) {
+      hasOnlyFlatLand &&= shades.size === 1 && shades.has(Shade.Flat);
+    }
     if (color.isCustom) {
       uniqueShadeCount += shades.size;
       continue;
@@ -349,6 +355,7 @@ function summarizeUsedShadesByColorKey(
   }
 
   return {
+    hasOnlyFlatLand,
     hasTransparency,
     paletteUsageInfo: { uniqueShadeCount, uniqueBaseColorCount },
   };

@@ -976,8 +976,7 @@ const Index = () => {
   );
   const flatInputPalette = effectiveInvalidColorsPalette === "current-flat";
   // Allow dropped water, or top-aligned water columns with room below the surface.
-  const allowDeepFlatWater = belowPlatformWater ||
-    (!buildAtWorldMinY && normalizeBlockId(effectiveSelectedBlocks[WATER_BASE_INDEX] ?? "") === "water");
+  const allowDeepFlatWater = belowPlatformWater || !buildAtWorldMinY;
   const inputPaletteEquivalence = useMemo(
     () => compareInputColorPalettes(imageData, customColors, JSON.parse(selectedColorKey), allowDeepFlatWater,
       imageData ? getTargetTileDimensions(imageData.width, imageData.height, effectiveInvalidDimensionsMode) : undefined),
@@ -1281,14 +1280,13 @@ const Index = () => {
       const targetBelowPlatformWater = usesBelowPlatformWaterForBuildMode(targetBuildMode);
       const tileUsedWaterShades = getUsedWaterShades(tileDerivedImageStats.usedShadesByColorKey);
       const tileHasWater = tileUsedWaterShades.size > 0;
-      const tileHasNonLightWater =
-        tileUsedWaterShades.has(Shade.Dark) ||
-        tileUsedWaterShades.has(Shade.Flat);
+      const tileHasNonLightWater = tileUsedWaterShades.has(Shade.Dark) || tileUsedWaterShades.has(Shade.Flat);
       const targetCrubTechWater = crubTech && isCrubTechBuildMode(targetBuildMode);
       if (targetBelowPlatformWater && tileHasWater) {
         return { kind: "below-platform", drops: targetCrubTechWater ? CRUBTECH_SHAPE_WATER_DROPS : normalizedDeferredWaterDrops };
       }
-      if (!targetBelowPlatformWater && usesWaterForWater && tileHasNonLightWater) {
+      // Extend top alignment to flat land; preserve leaf/ice staircase convenience placement.
+      if (tileHasNonLightWater && (usesWaterForWater || tileDerivedImageStats.hasOnlyFlatLand)) {
         return { kind: "top-aligned" };
       }
       return undefined;

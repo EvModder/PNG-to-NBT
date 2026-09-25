@@ -718,7 +718,6 @@ function buildStaircaseBlocks(
     y: number;
     transparent: boolean;
     waterBottom?: number;
-    waterDepth?: number;
   }
 
   const addBlock = (x: number, y: number, z: number, ref: ShapeRef) => {
@@ -749,7 +748,7 @@ function buildStaircaseBlocks(
         const bottom = topAlignedWater ? anchorY - depth + 1 : anchorY;
         const top = bottom + depth - 1;
         for (let d = 0; d < depth; ++d) addBlock(x, bottom + d, z, colorRef);
-        north = { y: top, transparent: false, waterBottom: bottom, waterDepth: depth };
+        north = { y: top, transparent: false, waterBottom: bottom };
         continue;
       }
 
@@ -779,12 +778,10 @@ function buildStaircaseBlocks(
       switch (color.shade) {
         case Shade.Dark:
           {
-            const northWaterY = north.waterBottom !== undefined
-              ? topAlignedWater
-                ? north.waterBottom + (north.waterDepth ?? 1) - 2
-                : north.waterBottom
-              : undefined;
-            const useY = northWaterY ?? (north.y - 1);
+            // Preserve bottom alignment for deep water, but always drop below its top.
+            const useY = !topAlignedWater && north.waterBottom !== undefined
+              ? Math.min(north.waterBottom, north.y - 1)
+              : north.y - 1;
             addBlock(x, useY, z, colorRef);
             north = { y: useY, transparent: false };
           }
