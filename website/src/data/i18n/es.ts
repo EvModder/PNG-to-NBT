@@ -296,7 +296,7 @@ export const esCatalog = {
       "Nota: Alinea el área de color 128x128 con la cuadrícula del mapa.\nEspera 1 fila norte adicional arriba (el NBT es 128x129).",
     iceConversionInfo:
       "Nota: Se ha seleccionado hielo para el color del agua.\nConviértelo en agua dentro del juego para que los colores sean correctos.",
-    eyeblossomWarning: "Flores de ojo: el color cambia entre día y noche.",
+    eyeblossomWarning: "Overworld: flores de ojo cambian de color día/noche.",
     iceConversionWarning:
       "Advertencia: Se ha seleccionado hielo para el color del agua.\nEsta construcción contiene pilares de hielo flotantes.\nEl hielo no puede convertirse en agua si el pilar no tiene soporte debajo.",
     noFillerNorthRowLine: "El sombreado de la fila norte requiere colocaciones de relleno.",
