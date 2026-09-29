@@ -5,7 +5,7 @@
  * Callers:
  * - src/Index.tsx
  */
-import { Fragment, type MutableRefObject, type RefObject } from "react";
+import { Fragment, useRef, type MouseEvent, type MutableRefObject, type RefObject } from "react";
 import { Trash2 } from "lucide-react";
 import type { InvalidDimensionsStrategy, InvalidColorsPalette } from "@/data/defaultSettings";
 import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
@@ -294,6 +294,8 @@ export function PanelImagePreview({
   westEastSlopeRise,
   setWestEastSlopeRise,
 }: PanelImagePreviewProps) {
+  const tileGridRef = useRef<HTMLDivElement>(null);
+  const hoveredTileRef = useRef<Element | null>(null);
   const previewAspectRatio = imageData ? `${imageData.width} / ${imageData.height}` : "1 / 1";
   const activePreviewImageUrl = previewImageUrl ?? fallbackPreviewImageUrl;
   // Red detail text (such as cropped pixels) is not itself a blocking error.
@@ -306,6 +308,21 @@ export function PanelImagePreview({
   const headerActionInsetClassName = imageData
     ? showVsFillersInPreviewToggle ? "pr-36" : "pr-8"
     : showVsFillersInPreviewToggle ? "pr-28" : "";
+
+  function getPreviewTileIndex(e: MouseEvent<HTMLImageElement>): number {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const col = Math.min(tileCols - 1, Math.max(0, Math.floor((e.clientX - rect.left) * tileCols / rect.width)));
+    const row = Math.min(tileRows - 1, Math.max(0, Math.floor((e.clientY - rect.top) * tileRows / rect.height)));
+    return row * tileCols + col;
+  }
+
+  // Update only the two affected tiles, without rerendering the panel on mouse movement.
+  function setHoveredTile(tile: Element | null) {
+    if (hoveredTileRef.current === tile) return;
+    hoveredTileRef.current?.removeAttribute("data-hovered");
+    tile?.setAttribute("data-hovered", "");
+    hoveredTileRef.current = tile;
+  }
 
   return (
     <section className="bg-card border border-border rounded-md p-2">
@@ -397,6 +414,20 @@ export function PanelImagePreview({
                 aria-hidden="true"
                 className="absolute inset-0 w-full h-full"
                 style={{ imageRendering: "pixelated" }}
+                onMouseMove={e => {
+                  if (!tileGridRef.current) return;
+                  setHoveredTile(tileGridRef.current.children.item(getPreviewTileIndex(e)));
+                }}
+                onMouseLeave={() => setHoveredTile(null)}
+                onClick={e => {
+                  if (!showTileSelection || tileRows <= 0 || tileCols <= 0) return;
+                  e.stopPropagation();
+                  onTileSelection(getPreviewTileIndex(e), {
+                    shiftKey: e.shiftKey,
+                    metaKey: e.metaKey,
+                    ctrlKey: e.ctrlKey,
+                  });
+                }}
               />
               {busy && busyText && (
                 <div className="absolute inset-0 bg-card/35 backdrop-blur-[1px] pointer-events-none flex items-center justify-center">
@@ -407,8 +438,10 @@ export function PanelImagePreview({
                 </div>
               )}
               {showTileSelection && tileRows > 0 && tileCols > 0 && (
+                // Keep native image mouse actions; buttons remain available for keyboard selection.
                 <div
-                  className="absolute inset-0 grid"
+                  ref={tileGridRef}
+                  className="absolute inset-0 grid pointer-events-none"
                   style={{
                     gridTemplateColumns: `repeat(${tileCols}, minmax(0, 1fr))`,
                     gridTemplateRows: `repeat(${tileRows}, minmax(0, 1fr))`,
@@ -421,7 +454,7 @@ export function PanelImagePreview({
                       className={`border border-black/15 transition-colors ${
                         selectedTileIndices.has(index)
                           ? "bg-primary/10 shadow-[inset_0_0_0_2px_hsl(var(--primary))]"
-                          : "hover:bg-primary/5"
+                          : "data-[hovered]:bg-primary/5 focus-visible:bg-primary/5"
                       }`}
                       aria-label={`Tile ${index + 1}`}
                       aria-pressed={selectedTileIndices.has(index)}
