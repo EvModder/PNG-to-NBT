@@ -25,9 +25,10 @@
  * - src/lib/tileParsingWorkerTypes.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
+import { MAX_MIXED_STEP_HEIGHT } from "@/data/defaultSettings";
 import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
-import { type ColorGrid, Shade, type ColorRef } from "@/types/color";
+import { Shade, type ColorGrid, type ColorRef } from "@/types/color";
 
 // Callers:
 // - src/lib/colorGridParsingCore.ts
@@ -130,7 +131,9 @@ export function hasStepMixOpportunity(
         if (!belowPlatformWater) return true;
         continue;
       }
-      if (color.shade === Shade.Flat && !isWaterColor(north)) return true;
+      if (!isWaterColor(north) && color.shade === Shade.Flat) return true;
+      if (MAX_MIXED_STEP_HEIGHT > 0 && !isWaterColor(north) && color.shade === Shade.Dark
+        && (MAX_MIXED_STEP_HEIGHT > 1 || north.shade !== Shade.Dark)) return true;
       if (!isWaterColor(north)) continue;
       if (belowPlatformWater) {
         const northWaterDrop = options.waterDrops[north.shade as Shade.Dark | Shade.Flat | Shade.Light];

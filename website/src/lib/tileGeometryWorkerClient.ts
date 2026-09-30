@@ -143,6 +143,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     input.suppress2LayerLatePairY,
     input.useCrubTech ? 1 : 0,
     input.mixSteps ? 1 : 0,
+    input.mixedStepMaxHeight,
     input.paletteSeed,
     input.enableWaterConvenience ? 1 : 0,
     input.skipEmptySuppressSteps ? 1 : 0,

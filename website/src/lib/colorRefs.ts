@@ -12,6 +12,7 @@
  * - src/components/PanelCustomColors.tsx
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsingCore.ts
+ * - src/lib/fillerRules.ts
  * - src/lib/shapeAnalysis.ts
  */
 import type { ColorRef } from "@/types/color";
@@ -27,6 +28,7 @@ import type { ColorRef } from "@/types/color";
 // - src/components/PanelCustomColors.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/fillerRules.ts
 export type ColorRefKey = number;
 
 // Callers:
@@ -43,6 +45,7 @@ export function getColorRefKey(color: Pick<ColorRef, "id" | "isCustom">): ColorR
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridAnalysis.ts
+// - src/lib/fillerRules.ts
 export function parseColorRefKey(key: ColorRefKey): ColorRef {
   return { isCustom: (key & 1) === 1, id: Math.floor(key / 2) };
 }

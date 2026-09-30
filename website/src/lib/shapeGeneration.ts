@@ -12,12 +12,10 @@ import {
   isStaircaseBuildMode,
 } from "@/utils/conversion";
 import { FillerRole, BuildMode, SuppressStepDirection } from "@/types/conversion";
-import { type ColorGrid, Shade } from "@/types/color";
-import type { ColorRef, ShadedColorRef } from "@/types/color";
-import type { GeneratedShape, ShapeCell, ShapeCoordKey, ShapePart } from "@/types/shape";
+import { Shade, type ColorGrid, type ColorRef, type ShadedColorRef } from "@/types/color";
+import { ShapePartType, type GeneratedShape, type ShapeCell, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { PixelParity, getPixelParity, type WaterDrops } from "./colorGridAnalysis";
-import { ShapePartType } from "@/types/shape";
 import { parseShapeCoordKey, toShapeCoordKey } from "./shapeModel";
 
 type PositionedEntry = { x: number; y: number; z: number };
@@ -179,6 +177,7 @@ interface GridShapeCache {
   staircaseVariantBlocks: Map<string, ShapeBlock[]>;
   // Cached vertical spacing between suppress step phases for this image.
   stepPhaseYOffsets: Map<string, number>;
+  mixedStepColumnHeights?: Map<number, Map<number, Uint8Array>>;
 }
 
 const SHAPE_CACHE = new WeakMap<ColorGrid, GridShapeCache>();
@@ -2311,6 +2310,79 @@ function buildBelowPlatformWaterPreviewBlocks(
   return blocks;
 }
 
+// Minimize shared-height reuse cost for dry east/west columns, counting entry and exit.
+// Count initial construction and final cleanup, not just transitions between phases.
+function getMixedStepColumnHeights(colorGrid: ColorGrid, maxHeight: number, cache?: GridShapeCache): Map<number, Uint8Array> {
+  const cached = cache?.mixedStepColumnHeights?.get(maxHeight);
+  if (cached) return cached;
+  const result = new Map<number, Uint8Array>();
+  const states = maxHeight + 1;
+  let previous = new Float64Array(states);
+  let next = new Float64Array(states);
+  const previousHeights = new Uint8Array(MAP_SIZE * states);
+  const higherMinima = new Uint8Array(states);
+  const operationWeight = MAP_SIZE * maxHeight + 1;
+  for (let x = 0; x < MAP_SIZE; ++x) {
+    const column = colorGrid[x];
+    if (column.some(isWaterColor)) continue;
+    if (!column.some(color => !isTransparentColor(color) && color.shade === Shade.Dark)) continue;
+    // A matching color retained as a shader costs two operations over both phases;
+    // replacing it with a filler costs four. Prefer fewer raised blocks on ties.
+    previous.fill(Infinity);
+    let baseline = 0;
+    for (let z = 0; z < MAP_SIZE; ++z) {
+      const color = column[z];
+      const transparent = isTransparentColor(color);
+      const canShare = z > 0 && !transparent && color.shade !== Shade.Light && !isTransparentColor(column[z - 1]);
+      if (canShare && color.shade === Shade.Dark) baseline += 2 * operationWeight;
+      next.fill(Infinity);
+      // Suffix minima find a compatible higher north block in O(1), keeping the
+      // full search O(pixels * states). Reuse these buffers for every column.
+      let bestNorthHeight = maxHeight;
+      for (let height = maxHeight; height >= 0; --height) {
+        if (previous[height] <= previous[bestNorthHeight]) bestNorthHeight = height;
+        higherMinima[height] = bestNorthHeight;
+      }
+      // Leave room above dark colors for their north shader, within the same cap.
+      const limit = transparent ? 0 : maxHeight - (color.shade === Shade.Dark ? 1 : 0);
+      for (let height = 0; height <= limit; ++height) {
+        const index = z * states + height;
+        if (z === 0) {
+          next[height] = height;
+          continue;
+        }
+        let northHeight = bestNorthHeight;
+        let cost = previous[northHeight];
+        if (canShare) {
+          const matches = color.shade === Shade.Flat ? northHeight === height : northHeight > height;
+          if (!matches) cost += 2 * operationWeight;
+          const matchingHeight = color.shade === Shade.Flat ? height : higherMinima[height + 1];
+          if (previous[matchingHeight] < cost || (previous[matchingHeight] === cost && matchingHeight < northHeight)) {
+            northHeight = matchingHeight;
+            cost = previous[matchingHeight];
+          }
+        }
+        next[height] = cost + height;
+        previousHeights[index] = northHeight;
+      }
+      const swap = previous;
+      previous = next;
+      next = swap;
+    }
+    let height = 0;
+    for (let h = 1; h <= maxHeight; ++h) if (previous[h] < previous[height]) height = h;
+    if (previous[height] >= baseline) continue;
+    const heights = new Uint8Array(MAP_SIZE);
+    for (let z = MAP_SIZE - 1; z >= 0; --z) {
+      heights[z] = height;
+      height = previousHeights[z * states + height];
+    }
+    result.set(x, heights);
+  }
+  if (cache) (cache.mixedStepColumnHeights ??= new Map()).set(maxHeight, result);
+  return result;
+}
+
 function buildStepPhaseBlocks(
   colorGrid: ColorGrid,
   currentSpec: StepPhaseSpec,
@@ -2319,6 +2391,7 @@ function buildStepPhaseBlocks(
   nextSpec?: StepPhaseSpec,
   allowMixStepReuse = false,
   waterDrops?: WaterDrops,
+  mixedColumnHeights?: ReadonlyMap<number, Uint8Array>,
 ): ShapeBlockSet {
   const belowPlatformWater = waterDrops !== undefined;
   const stepBlocks: ShapeBlock[] = [];
@@ -2383,6 +2456,7 @@ function buildStepPhaseBlocks(
     const scanX = currentSpec.axis === "x" ? currentSpec.lines : Array.from({ length: MAP_SIZE }, (_, index) => index);
     for (const x of scanX) {
       if (x < 0 || x >= MAP_SIZE) continue;
+      if (mixedColumnHeights?.has(x)) continue;
       for (let z = 1; z < MAP_SIZE; ++z) {
         if (!currentSpec.includeAt(x, z) || getPixelParity(x, z) !== shadedParity) continue;
         const color = colorGrid[x][z];
@@ -2512,6 +2586,25 @@ function buildStepPhaseBlocks(
   if (currentSpec.axis === "x") {
     for (const x of currentSpec.lines) {
       if (x < 0 || x >= MAP_SIZE) continue;
+      const heights = mixedColumnHeights?.get(x);
+      if (heights) {
+        for (let z = 0; z < MAP_SIZE; ++z) {
+          const color = colorGrid[x][z];
+          if (!currentSpec.includeAt(x, z) || isTransparentColor(color)) continue;
+          const y = currentBaseY + heights[z];
+          pushUnique({ x, y, z, ref: { kind: "color", color } });
+          const north = z > 0 ? colorGrid[x][z - 1] : TRANSPARENT_COLOR;
+          const northHeight = heights[z - 1];
+          const canReuseNorth = !isTransparentColor(north) && (color.shade === Shade.Flat
+            ? northHeight === heights[z] : color.shade === Shade.Dark ? northHeight > heights[z] : northHeight < heights[z]);
+          if (canReuseNorth) {
+            pushUnique({ x, y: currentBaseY + northHeight, z: z - 1, ref: { kind: "color", color: north } });
+          } else if (color.shade !== Shade.Light) {
+            pushUnique(makeFillerBlock(x, y + (color.shade === Shade.Dark ? 1 : 0), z - 1, getShadeFillerRole(z - 1)));
+          }
+        }
+        continue;
+      }
       for (let z = 0; z < MAP_SIZE; ++z) {
         if (!currentSpec.includeAt(x, z)) continue;
         const color = colorGrid[x][z];
@@ -2583,6 +2676,7 @@ function buildStepPhaseParts(
   buildMode: StepwiseBuildMode,
   stepDirection: SuppressStepDirection,
   mixSteps: boolean,
+  mixedStepMaxHeight: number,
   waterDrops: WaterDrops | undefined,
   skipEmptySuppressSteps: boolean,
   cache?: GridShapeCache,
@@ -2591,7 +2685,17 @@ function buildStepPhaseParts(
   const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
   const steps: RawShapePart[] = [];
   let hasAnyEmptyPhase = false;
-  const yOffset = getStepPhaseYOffset(colorGrid, stepDirection, cache, waterDrops);
+  const mixedColumnHeights = mixSteps && mixedStepMaxHeight && getSuppressStepAxis(stepDirection) === "x"
+    ? getMixedStepColumnHeights(colorGrid, mixedStepMaxHeight, cache)
+    : undefined;
+  let yOffset = getStepPhaseYOffset(colorGrid, stepDirection, cache, waterDrops);
+  if (mixedColumnHeights) {
+    for (const [x, heights] of mixedColumnHeights) {
+      for (let z = 0; z < MAP_SIZE; ++z) {
+        yOffset = Math.max(yOffset, heights[z] + (colorGrid[x][z].shade === Shade.Dark ? 2 : 1));
+      }
+    }
+  }
   const previewWaterBlocks = belowPlatformWater
     ? buildBelowPlatformWaterPreviewBlocks(colorGrid, 0, waterDrops)
     : [];
@@ -2612,6 +2716,7 @@ function buildStepPhaseParts(
       mixSteps ? specs[stepIndex + 1] : undefined,
       mixSteps,
       waterDrops,
+      mixedColumnHeights,
     );
     const part = buildShapePart(blocks, [], true, new Set<number>([baseY - 1]), loweredWaterBlocks);
     const isEmptyPart = part.blocks.length === 0 && part.loweredWaterBlocks.length === 0 && part.fillerCandidates.length === 0;
@@ -2680,6 +2785,7 @@ function getShapeCacheKeyId(
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
+  mixedStepMaxHeight: number,
   stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterDrops?: WaterDrops,
@@ -2696,6 +2802,7 @@ function getShapeCacheKeyId(
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|dir:${stepDirection}`;
   if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
+  if (isSuppressStepsBuildMode(buildMode) && mixSteps && mixedStepMaxHeight) id += `|stepheight:${mixedStepMaxHeight}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|skipempty:${skipEmptySuppressSteps ? 1 : 0}`;
   if (useCrubTech && buildModeUsesLayerGap(buildMode)) id += "|crubtech:1";
   if (buildMode === BuildMode.Suppress2LayerLatePairs) id += `|latepairy:${suppress2LayerLatePairY}`;
@@ -2810,6 +2917,7 @@ function getCachedStaircaseParts(
     buildMode,
     0,
     false,
+    0,
     SuppressStepDirection.EastToWest,
     paletteSeed,
     waterDrops,
@@ -2875,7 +2983,7 @@ function getCachedSuppressSplitParts(
   buildMode: BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, SuppressStepDirection.EastToWest, 0, waterDrops);
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, SuppressStepDirection.EastToWest, 0, waterDrops);
   return getCachedRawParts(cache, keyId, () =>
       buildMode === BuildMode.SuppressSplitRow
         ? buildSuppressSplitRowBlockSets(colorGrid, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks))
@@ -2889,17 +2997,18 @@ function getCachedSuppressStepParts(
   buildMode: StepwiseBuildMode,
   stepDirection: SuppressStepDirection,
   mixSteps: boolean,
+  mixedStepMaxHeight: number,
   skipEmptySuppressSteps: boolean,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, stepDirection, 0, waterDrops, false, true, false, skipEmptySuppressSteps);
+  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, mixedStepMaxHeight, stepDirection, 0, waterDrops, false, true, false, skipEmptySuppressSteps);
   const cached = cache.rawParts.get(keyId);
   if (cached) return cached;
 
-  const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, mixSteps, waterDrops, skipEmptySuppressSteps, cache);
+  const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, mixSteps, mixedStepMaxHeight, waterDrops, skipEmptySuppressSteps, cache);
   cache.rawParts.set(keyId, rawPartsBuild.parts);
   if (!rawPartsBuild.hasAnyEmptyPhase) {
-    const alternateKeyId = getShapeCacheKeyId(buildMode, 0, mixSteps, stepDirection, 0, waterDrops, false, true, false, !skipEmptySuppressSteps);
+    const alternateKeyId = getShapeCacheKeyId(buildMode, 0, mixSteps, mixedStepMaxHeight, stepDirection, 0, waterDrops, false, true, false, !skipEmptySuppressSteps);
     cache.rawParts.set(alternateKeyId, rawPartsBuild.parts);
   }
   return rawPartsBuild.parts;
@@ -2918,6 +3027,7 @@ function getCachedSuppress2LayerParts(
     buildMode,
     layerGap,
     false,
+    0,
     SuppressStepDirection.EastToWest,
     0,
     waterDrops,
@@ -2949,6 +3059,7 @@ function buildRawShapeParts(
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
+  mixedStepMaxHeight: number,
   stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterDrops?: WaterDrops,
@@ -2967,9 +3078,9 @@ function buildRawShapeParts(
     case BuildMode.SuppressSplitChecker:
       return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker, waterDrops);
     case BuildMode.SuppressStepPairs:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, mixSteps, skipEmptySuppressSteps, waterDrops);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops);
     case BuildMode.SuppressStepChecker:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, mixSteps, skipEmptySuppressSteps, waterDrops);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops);
     case BuildMode.Suppress2LayerLateFillers:
       return getCachedSuppress2LayerParts(
         colorGrid,
@@ -3012,6 +3123,7 @@ function getGeneratedShape(
   buildMode: InternalBuildMode,
   layerGap: number,
   mixSteps: boolean,
+  mixedStepMaxHeight: number,
   stepDirection: SuppressStepDirection,
   paletteSeed: number,
   waterDrops?: WaterDrops,
@@ -3029,6 +3141,7 @@ function getGeneratedShape(
     buildMode,
     layerGap,
     mixSteps,
+    mixedStepMaxHeight,
     stepDirection,
     paletteSeed,
     waterDrops,
@@ -3050,6 +3163,7 @@ function getGeneratedShape(
     buildMode,
     layerGap,
     mixSteps,
+    mixedStepMaxHeight,
     stepDirection,
     paletteSeed,
     waterDrops,
@@ -3097,6 +3211,7 @@ export function generateShapeMap(
   options: {
     layerGap: number;
     mixSteps?: boolean;
+    mixedStepMaxHeight?: number;
     paletteSeed?: number;
     waterSetting?: StaircaseWaterSetting;
     enableWaterConvenience?: boolean;
@@ -3112,6 +3227,10 @@ export function generateShapeMap(
   },
 ): Partial<Record<BuildMode, GeneratedShape>> {
   const mixSteps = options.mixSteps ?? false;
+  const mixedStepMaxHeight = options.mixedStepMaxHeight ?? 0;
+  if (!Number.isInteger(mixedStepMaxHeight) || mixedStepMaxHeight < 0 || mixedStepMaxHeight > 10) {
+    throw new RangeError("Mixed-step height must be an integer from 0 to 10");
+  }
   const stepDirection = options.selectedStepDirection;
   const paletteSeed = options.paletteSeed ?? 0;
   const waterDrops = options.waterSetting?.kind === "below-platform" ? options.waterSetting.drops : undefined;
@@ -3147,6 +3266,7 @@ export function generateShapeMap(
       internalBuildMode,
       options.layerGap,
       mixSteps,
+      mixedStepMaxHeight,
       stepDirection,
       paletteSeed,
       waterDrops,

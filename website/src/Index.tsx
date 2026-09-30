@@ -27,6 +27,7 @@ import {
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH,
   DEFAULT_MIX_STEPS,
+  MAX_MIXED_STEP_HEIGHT,
   DEFAULT_LIGHT_WATER_DROP,
   DEFAULT_FLAT_WATER_DROP,
   DEFAULT_DARK_WATER_DROP,
@@ -141,6 +142,7 @@ import {
   isFillerDisabled,
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
+  canRaiseStepBlocks,
 } from "@/lib/fillerRules";
 import {
   LOCALE_BROWSER,
@@ -1400,6 +1402,16 @@ const Index = () => {
     () => ({ [TRANSPARENCY_BASE_INDEX]: activeTransparentBlock }),
     [activeTransparentBlock],
   );
+  const colorBlockSelections = useMemo<ColorBlockSelections>(
+    () => ({ selectedBlocks: effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion }),
+    [effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion],
+  );
+  const mixedStepMaxHeight = useMemo(
+    () => MAX_MIXED_STEP_HEIGHT > 0 && supportMode === SupportMode.None
+      && canRaiseStepBlocks(usedColorKeys, colorBlockSelections, effectiveShadeFillerBlock)
+      ? MAX_MIXED_STEP_HEIGHT : 0,
+    [supportMode, usedColorKeys, colorBlockSelections, effectiveShadeFillerBlock],
+  );
   useEffect(() => {
     if (!imageValid || parsedTiles.length === 0) {
       if (!isParsingImage) {
@@ -1613,6 +1625,7 @@ const Index = () => {
               suppress2LayerLatePairY: calcEffectiveSuppress2LayerLatePairY,
               useCrubTech: nextUseCrubTechShadeFillers,
               mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
+              mixedStepMaxHeight,
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
               skipEmptySuppressSteps,
@@ -1680,6 +1693,7 @@ const Index = () => {
     calcMixSteps,
     paletteSeedOffset,
     supportMode,
+    mixedStepMaxHeight,
     skipEmptySuppressSteps,
     crubTech,
     suppressStepDirection,
@@ -1751,10 +1765,6 @@ const Index = () => {
       usesWaterForWater,
       usesIceForWater,
     ],
-  );
-  const colorBlockSelections = useMemo<ColorBlockSelections>(
-    () => ({ selectedBlocks: effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion }),
-    [effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion],
   );
   const usedMaterialColorAssignments = useMemo(
     () => [...usedColorKeys]

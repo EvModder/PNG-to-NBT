@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - DEFAULT_*
+ * - MAX_MIXED_STEP_HEIGHT
  * - PIXEL_ART_SCALE_MODE_OPTIONS
  * - PixelArtScaleMode
  * - INVALID_DIMENSIONS_STRATEGY_OPTIONS
@@ -17,6 +18,7 @@
  * - src/components/PanelImagePreview.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/messages.ts
  * - src/lib/minecraftVersion.ts
@@ -61,6 +63,9 @@ export const DEFAULT_CRUBTECH_LAYER_GAP = 14;
 export const DEFAULT_CRUBTECH_LATE_PAIRS_GAP = 10;
 export const DEFAULT_CRUBTECH = false;
 export const DEFAULT_MIX_STEPS = true;
+// Experimental E/W land-height cap (0-10). At 0, colors stay on the floor and
+// shaders may reach +1. Positive caps apply to both; water is unchanged.
+export const MAX_MIXED_STEP_HEIGHT = 0;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;
 export const DEFAULT_DARK_WATER_DROP = 4;

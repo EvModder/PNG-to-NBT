@@ -70,6 +70,7 @@ export type TileFinalGeometryWorkerInput = {
   suppress2LayerLatePairY: number;
   useCrubTech: boolean;
   mixSteps: boolean;
+  mixedStepMaxHeight: number;
   paletteSeed: number;
   enableWaterConvenience: boolean;
   skipEmptySuppressSteps: boolean;
