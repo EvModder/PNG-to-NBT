@@ -12,6 +12,7 @@
  * - src/lib/codecPreset.ts
  * - src/lib/minecraftVersion.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
  */
 // Breakpoints reflect default-visible blocks only. Each range targets its newest release.
@@ -41,6 +42,7 @@ export const MINECRAFT_VERSIONS = {
 // - src/lib/codecPreset.ts
 // - src/lib/minecraftVersion.ts
 // - src/lib/nbtExport.ts
+// - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts
 export type MinecraftVersion = keyof typeof MINECRAFT_VERSIONS;
 
@@ -49,15 +51,15 @@ export type MinecraftVersion = keyof typeof MINECRAFT_VERSIONS;
 // inserting them into either catalog list. Do not round cutoffs to UI ranges.
 // Callers:
 // - src/lib/minecraftVersion.ts
-export const BLOCK_INTRODUCTIONS: readonly (readonly [RegExp, number])[] = [
-  [/^(bush|cactus_flower|firefly_bush|leaf_litter|short_dry_grass|tall_dry_grass|wildflowers|test_block|test_instance_block)$/, 4325],
-  [/^dried_ghast$/, 4435],
-  [/copper_(bars|chain|chest|golem_statue|lantern)$/, 4554],
-  [/^(copper_torch|copper_wall_torch)$/, 4554],
-  [/_(lightning_rod|shelf)$/, 4554],
-  [/^(potted_)?golden_dandelion$/, 4786],
-  [/(^|_)(cinnabar|sulfur)(_|$)/, 4903],
-  [/(^|_)poplar(_|$)/, 5023],
-  [/_(wool|concrete)_(slab|stairs)$/, 5023],
-  [/^(red_shrub|shelf_mushroom|straw_bed)$/, 5023],
+export const BLOCK_INTRODUCTIONS: readonly (readonly [pattern: RegExp, dataVersion: number, release: string])[] = [
+  [/^(bush|cactus_flower|firefly_bush|leaf_litter|short_dry_grass|tall_dry_grass|wildflowers|test_block|test_instance_block)$/, 4325, "1.21.5"],
+  [/^dried_ghast$/, 4435, "1.21.6"],
+  [/copper_(bars|chain|chest|golem_statue|lantern)$/, 4554, "1.21.9"],
+  [/^(copper_torch|copper_wall_torch)$/, 4554, "1.21.9"],
+  [/_(lightning_rod|shelf)$/, 4554, "1.21.9"],
+  [/^(potted_)?golden_dandelion$/, 4786, "26.1"],
+  [/(^|_)(cinnabar|sulfur)(_|$)/, 4903, "26.2"],
+  [/(^|_)poplar(_|$)/, 5023, "26.3"],
+  [/_(wool|concrete)_(slab|stairs)$/, 5023, "26.3"],
+  [/^(red_shrub|shelf_mushroom|straw_bed)$/, 5023, "26.3"],
 ];

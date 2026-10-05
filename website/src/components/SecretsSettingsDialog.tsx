@@ -72,7 +72,7 @@ type SecretsSettingsDialogProps = {
   setInvalidColorsPalette: Dispatch<SetStateAction<InvalidColorsPalette>>;
   hasPresetColors: boolean;
   minecraftVersion: MinecraftVersion;
-  setMinecraftVersion: Dispatch<SetStateAction<MinecraftVersion>>;
+  setMinecraftVersion: (version: MinecraftVersion) => void;
 };
 
 type OptionRowProps = {

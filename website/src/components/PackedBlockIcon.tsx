@@ -5,6 +5,7 @@
  * Callers:
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
+ * - src/components/PresetFallbackDialog.tsx
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { messages } from "@/lib/messages";
@@ -21,6 +22,7 @@ type PackedBlockIconProps = {
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/PanelCustomColors.tsx
+// - src/components/PresetFallbackDialog.tsx
 export function PackedBlockIcon({
   atlasKey,
   atlasName,

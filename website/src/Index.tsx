@@ -193,6 +193,7 @@ import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getVersionedSelections, getVersionedSupportRules } from "@/lib/minecraftVersion";
+import { areBlockFallbacksEqual, normalizeBlockFallbacks, updatePresetBlockSelection } from "@/lib/presetFallbacks";
 import {
   arePresetBlocksEqual,
   BUILTIN_PRESET_NAMES,
@@ -209,6 +210,7 @@ import { PanelCustomColors } from "@/components/PanelCustomColors";
 import { PanelCredits } from "@/components/PanelCredits";
 import { PanelImagePreview } from "@/components/PanelImagePreview";
 import { SecretsSettingsDialog } from "@/components/SecretsSettingsDialog";
+import { PresetFallbackDialog } from "@/components/PresetFallbackDialog";
 import { createZip } from "@/utils/zip";
 import type { GeneratedShape } from "@/types/shape";
 import { yieldToMainThread } from "@/utils/asyncWork";
@@ -835,6 +837,9 @@ const Index = () => {
   const [isDark, setIsDark] = useState(resolveDarkTheme);
   const [localePreference, setLocalePreferenceState] = useState<LocalePreference>(getLocalePreference);
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
+  const [pendingBlockSelection, setPendingBlockSelection] = useState<{
+    id: number; block: string; preset: BlockPreset; version: MinecraftVersion;
+  } | null>(null);
   useEffect(() => {
     const openSecrets = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.repeat || event.defaultPrevented) return;
@@ -960,8 +965,8 @@ const Index = () => {
 
   const preset = presets[activeIdx] || getBuiltinPreset(DEFAULT_ACTIVE_PRESET_NAME)!;
   const effectiveSelectedBlocks = useMemo(
-    () => getVersionedSelections(preset.selectedBlocks, minecraftVersion),
-    [preset.selectedBlocks, minecraftVersion],
+    () => getVersionedSelections(preset.selectedBlocks, minecraftVersion, preset.blockFallbacks),
+    [preset.selectedBlocks, preset.blockFallbacks, minecraftVersion],
   );
   // Keep parsing stable when swapping blocks with the same allowed colors/shades.
   const selectedColorKey = JSON.stringify([
@@ -995,6 +1000,7 @@ const Index = () => {
 
   const [savedPresetSnapshot, setSavedPresetSnapshot] = useState<{
     selectedBlocks: Record<number, string>;
+    blockFallbacks?: BlockPreset["blockFallbacks"];
     customColors: ColorRgb[];
     selectedBlocksCustom: Record<number, string>;
   } | null>(null);
@@ -1007,10 +1013,11 @@ const Index = () => {
   const capturePresetSnapshot = useCallback(
     () => ({
       selectedBlocks: { ...preset.selectedBlocks },
+      blockFallbacks: normalizeBlockFallbacks(preset.blockFallbacks, preset.selectedBlocks),
       customColors: cloneCustomColors(customColors),
       selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
     }),
-    [preset.selectedBlocks, customColors, selectedBlocksCustom],
+    [preset.selectedBlocks, preset.blockFallbacks, customColors, selectedBlocksCustom],
   );
 
   // Compute dirty by comparing current preset-owned state to saved snapshot
@@ -1022,10 +1029,11 @@ const Index = () => {
       if ((savedPresetSnapshot.selectedBlocks[Number(k)] ?? "") !== (current[Number(k)] ?? "")) return true;
     }
     return (
+      !areBlockFallbacksEqual(preset.blockFallbacks, savedPresetSnapshot.blockFallbacks) ||
       !areCustomColorsEqual(customColors, savedPresetSnapshot.customColors) ||
       !areCustomSelectedBlocksEqual(selectedBlocksCustom, savedPresetSnapshot.selectedBlocksCustom, customColors)
     );
-  }, [preset.selectedBlocks, customColors, selectedBlocksCustom, savedPresetSnapshot]);
+  }, [preset.selectedBlocks, preset.blockFallbacks, customColors, selectedBlocksCustom, savedPresetSnapshot]);
   const currentPresetIsUnsavedAuto = useMemo(
     () => activeIdx >= BUILTIN_PRESET_NAMES.length && isAutoCustomPresetName(preset.name)
       && !savedPresetNames.has(preset.name) && presetDirty,
@@ -2282,7 +2290,8 @@ const Index = () => {
   const formatRequiredCount = (count: number) => (showStacks ? formatStacks(count) : count);
 
   const builtinPreset = getBuiltinPreset(preset.name);
-  const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.selectedBlocks, preset.selectedBlocks) : false;
+  const isBuiltinUnedited = builtinPreset ? arePresetBlocksEqual(builtinPreset.selectedBlocks, preset.selectedBlocks)
+    && areBlockFallbacksEqual(builtinPreset.blockFallbacks, preset.blockFallbacks) : false;
 
   useEffect(() => {
     const clampedStart = Math.max(0, Math.min(colStart, maxRangeIndex));
@@ -2445,17 +2454,20 @@ const Index = () => {
     nextBlocks: Record<number, string>,
     nextCustomColors: readonly ColorRgb[],
     nextCustomSelectedBlocks: Record<number, string>,
+    nextFallbacks = preset.blockFallbacks,
   ) => {
+    const blockFallbacks = normalizeBlockFallbacks(nextFallbacks, nextBlocks);
     const normalizedCustomColors = cloneCustomColors(nextCustomColors);
     const normalizedCustomSelectedBlocks = normalizeCustomSelectedBlocks(normalizedCustomColors, nextCustomSelectedBlocks);
     if (
       arePresetBlocksEqual(nextBlocks, preset.selectedBlocks) &&
+      areBlockFallbacksEqual(blockFallbacks, preset.blockFallbacks) &&
       areCustomColorsEqual(normalizedCustomColors, customColors) &&
       areCustomSelectedBlocksEqual(normalizedCustomSelectedBlocks, selectedBlocksCustom, normalizedCustomColors)
     ) return;
 
     const isBuiltin = activeIdx < BUILTIN_PRESET_NAMES.length;
-    const matchingBuiltinName = findMatchingBuiltinPresetName(nextBlocks);
+    const matchingBuiltinName = blockFallbacks ? null : findMatchingBuiltinPresetName(nextBlocks);
 
     if (isBuiltin) {
       setSavedPresetSnapshot(capturePresetSnapshot());
@@ -2464,6 +2476,7 @@ const Index = () => {
         {
           name: getNextCustomPresetName(prev),
           selectedBlocks: nextBlocks,
+          blockFallbacks,
           customColors: normalizedCustomColors.length > 0 ? normalizedCustomColors : undefined,
           selectedBlocksCustom: normalizedCustomColors.length > 0 ? normalizedCustomSelectedBlocks : undefined,
         },
@@ -2490,6 +2503,7 @@ const Index = () => {
       next[activeIdx] = {
         ...next[activeIdx],
         selectedBlocks: nextBlocks,
+        blockFallbacks,
         customColors: normalizedCustomColors.length > 0 ? normalizedCustomColors : undefined,
         selectedBlocksCustom: normalizedCustomColors.length > 0 ? normalizedCustomSelectedBlocks : undefined,
       };
@@ -2503,6 +2517,7 @@ const Index = () => {
     getNextCustomPresetName,
     markSavedDeferred,
     preset.selectedBlocks,
+    preset.blockFallbacks,
     presets.length,
   ]);
 
@@ -2526,19 +2541,28 @@ const Index = () => {
     }
   }, [pendingTransparentMaterialRefresh, imageData, imageValid, hasCurrentMaterialAnalysis, previewBusy]);
 
-  const updateBlock = (baseIndex: number, block: string) => {
+  const updateBlock = (baseIndex: number, block: string, choice?: "replace" | "fallback") => {
     const nextBlock = sanitizeUserBlockEntry(block);
-    const currentBlock = effectiveSelectedBlocks[baseIndex] ?? "";
-    if (nextBlock === currentBlock) return;
-    if (baseIndex === TRANSPARENCY_BASE_INDEX) setPendingTransparentMaterialRefresh(true);
+    if (!choice && nextBlock === effectiveSelectedBlocks[baseIndex] && (nextBlock || !preset.selectedBlocks[baseIndex])) return;
+    const next = updatePresetBlockSelection(preset, baseIndex, nextBlock, minecraftVersion, choice);
+    if (!next) {
+      setPendingBlockSelection({ id: baseIndex, block: nextBlock, preset, version: minecraftVersion });
+      return;
+    }
+    if (baseIndex === TRANSPARENCY_BASE_INDEX && nextBlock !== effectiveSelectedBlocks[baseIndex]) setPendingTransparentMaterialRefresh(true);
     applyPresetAndCustomColorUpdate(
-      { ...preset.selectedBlocks, [baseIndex]: nextBlock },
-      customColors,
-      selectedBlocksCustom,
+      next.selectedBlocks, customColors, selectedBlocksCustom, next.blockFallbacks ?? {},
     );
   };
 
+  const changeMinecraftVersion = (version: MinecraftVersion) => {
+    if (version === minecraftVersion) return;
+    setMinecraftVersion(version);
+    setPendingBlockSelection(null);
+  };
+
   const selectPreset = (idx: number) => {
+    setPendingBlockSelection(null);
     const builtin = getBuiltinPreset(presets[idx].name);
     const nextIdx = currentPresetIsUnsavedAuto && idx > activeIdx ? idx - 1 : idx;
     setPresets(prev => {
@@ -2582,9 +2606,7 @@ const Index = () => {
         const next = [...prev];
         next[activeIdx] = {
           name,
-          selectedBlocks: { ...preset.selectedBlocks },
-          customColors: cloneCustomColors(customColors),
-          selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
+          ...capturePresetSnapshot(),
         };
         return next;
       });
@@ -2597,9 +2619,7 @@ const Index = () => {
         }
         return [...next, {
           name,
-          selectedBlocks: { ...preset.selectedBlocks },
-          customColors: cloneCustomColors(customColors),
-          selectedBlocksCustom: normalizeCustomSelectedBlocks(customColors, selectedBlocksCustom),
+          ...capturePresetSnapshot(),
         }];
       });
       setActiveIdx(presets.length);
@@ -3032,8 +3052,12 @@ const Index = () => {
         ? { ...preset.selectedBlocks, [baseIndex]: "" }
         : { ...preset.selectedBlocks };
 
-    applyPresetAndCustomColorUpdate(nextPresetBlocks, nextCustomState.customColors, nextCustomState.selectedBlocksCustom);
-  }, [applyPresetAndCustomColorUpdate, customColors, selectedBlocksCustom, preset.selectedBlocks]);
+    const nextFallbacks = baseIndex === null ? preset.blockFallbacks : {
+      ...preset.blockFallbacks,
+      [baseIndex]: (preset.blockFallbacks?.[baseIndex] ?? []).filter(candidate => candidate !== block),
+    };
+    applyPresetAndCustomColorUpdate(nextPresetBlocks, nextCustomState.customColors, nextCustomState.selectedBlocksCustom, nextFallbacks);
+  }, [applyPresetAndCustomColorUpdate, customColors, selectedBlocksCustom, preset.selectedBlocks, preset.blockFallbacks]);
 
   const copyColorToClipboard = (r: number, g: number, b: number, position: { x: number; y: number }) => {
     const hex = `#${[r, g, b].map(c => c.toString(16).padStart(2, "0")).join("")}`;
@@ -4148,6 +4172,18 @@ const Index = () => {
           />
         </div>
       </div>
+      {pendingBlockSelection?.preset === preset && pendingBlockSelection.version === minecraftVersion && (
+        <PresetFallbackDialog
+          preferred={preset.selectedBlocks[pendingBlockSelection.id]}
+          block={pendingBlockSelection.block}
+          colorId={pendingBlockSelection.id}
+          onClose={() => setPendingBlockSelection(null)}
+          onSelect={action => {
+            updateBlock(pendingBlockSelection.id, pendingBlockSelection.block, action);
+            setPendingBlockSelection(null);
+          }}
+        />
+      )}
       <SecretsSettingsDialog
         open={showSecretsDialog}
         onClose={() => setShowSecretsDialog(false)}
@@ -4198,7 +4234,7 @@ const Index = () => {
         setInvalidColorsPalette={handleInvalidColorsPaletteChange}
         hasPresetColors={hasPresetColors}
         minecraftVersion={minecraftVersion}
-        setMinecraftVersion={setMinecraftVersion}
+        setMinecraftVersion={changeMinecraftVersion}
       />
     </div>
   );

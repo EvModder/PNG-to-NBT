@@ -7,7 +7,8 @@ import { isFragileBlock } from "@/data/fragileBlocks";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { BUILTIN_PRESET_NAMES, getBuiltinPreset } from "@/data/presets";
-import { getMinecraftCatalog, getVersionedSelections, getVersionedSupportRules, isBlockAvailable } from "@/lib/minecraftVersion";
+import { getBlockFallbackVersion, getMinecraftCatalog, getVersionedSelections, getVersionedSupportRules, isBlockAvailable } from "@/lib/minecraftVersion";
+import { areBlockFallbacksEqual, normalizeBlockFallbacks, updatePresetBlockSelection } from "@/lib/presetFallbacks";
 import { getBlockIconAsset, getBlockIconAtlasEntry } from "@/lib/blockIconAtlas";
 import { convertToNbt } from "@/lib/nbtExport";
 import { generateShapeMap } from "@/lib/shapeGeneration";
@@ -21,6 +22,11 @@ import { ShapePartType, type GeneratedShape } from "@/types/shape";
 const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
 const latest = getMinecraftCatalog();
 assert.equal(DEFAULT_MINECRAFT_VERSION, versions.at(-1));
+assert.deepEqual(getBlockFallbackVersion("poplar_pressure_plate", 22), { operator: "<", version: "26.3" });
+assert.deepEqual(getBlockFallbackVersion("dried_ghast", 8), { operator: "<", version: "1.21.6" });
+assert.deepEqual(getBlockFallbackVersion("golden_dandelion", 30), { operator: "<", version: "26.1" });
+assert.deepEqual(getBlockFallbackVersion("closed_eyeblossom", 6), { operator: "<", version: "1.21.5" });
+assert.deepEqual(getBlockFallbackVersion("closed_eyeblossom", 49), { operator: ">", version: "1.21.4" });
 assert.deepEqual(latest.blocks, BASE_COLORS.map(color => color.blocks));
 assert.deepEqual(latest.excluded, EXCLUDED_BLOCKS);
 const previous = getMinecraftCatalog("26.2");
@@ -116,13 +122,61 @@ assert(isBlockAvailable("golden_dandelion", "1.21.9"));
 assert(isBlockAvailable("lightning_rod", "1.21.4"));
 assert(isBlockAvailable("some_mod:custom_block", "1.21.4"));
 const selected = { 0: "iron_chain", 6: "pale_oak_leaves", 12: "pale_oak_leaves[waterlogged=true]", 18: "sulfur" };
+const stored = structuredClone(selected);
 const old = getVersionedSelections(selected, "1.21.4");
 assert.equal(old[0], "chain");
-assert.equal(old[6], latest.blocks[6][0]);
+assert.equal(old[6], "");
 assert.equal(old[12], selected[12]);
-assert.notEqual(old[18], "sulfur");
+assert.equal(old[18], "");
+assert.equal(old[1], "", "An unassigned color must not select a catalog default");
+assert.deepEqual(selected, stored, "Unavailable selections must remain saved");
+assert.equal(getVersionedSelections(selected, "26.2")[6], "pale_oak_leaves");
 assert.equal(getVersionedSelections(selected, "26.2")[18], "sulfur");
 assert.equal(getVersionedSelections({ 6: "" }, "1.21.4")[6], "");
+assert.equal(getVersionedSelections({ 49: "closed_eyeblossom" }, "1.21.4")[49], "closed_eyeblossom");
+assert.equal(getVersionedSelections({ 49: "closed_eyeblossom" }, "26.2")[49], "");
+assert.equal(getVersionedSelections({ 22: "poplar_planks" }, "26.2")[22], "");
+assert.equal(getVersionedSelections({ 22: "poplar_planks" }, "26.3")[22], "poplar_planks");
+assert.equal(getVersionedSelections({ 22: "some_mod:custom_block" }, "1.21.4")[22], "some_mod:custom_block");
+
+// Fallback chains require explicit confirmation; ordinary selections replace everywhere.
+const preferences = { name: "Fallbacks", selectedBlocks: { 18: "yellow_carpet" } };
+assert.deepEqual(updatePresetBlockSelection(preferences, 18, "sulfur", "26.2"), {
+  selectedBlocks: { 18: "sulfur" }, blockFallbacks: undefined,
+});
+const newerPreset = { name: "Fallbacks", selectedBlocks: { 18: "yellow_wool_slab" } };
+assert.equal(updatePresetBlockSelection(newerPreset, 18, "sulfur", "26.2"), null);
+const intermediate = { ...newerPreset, ...updatePresetBlockSelection(newerPreset, 18, "sulfur", "26.2", "fallback")! };
+assert.equal(updatePresetBlockSelection(intermediate, 18, "yellow_carpet", "1.21.4"), null);
+const chained = { ...intermediate, ...updatePresetBlockSelection(intermediate, 18, "yellow_carpet", "1.21.4", "fallback")! };
+assert.deepEqual(chained.blockFallbacks, { 18: ["sulfur", "yellow_carpet"] });
+assert.equal(updatePresetBlockSelection(chained, 18, "yellow_concrete_slab", "26.3")!.blockFallbacks,
+  undefined, "An ordinary replacement must not inherit a fallback chain");
+assert.equal(updatePresetBlockSelection(chained, 18, "yellow_concrete", "26.3")!.blockFallbacks, undefined);
+for (const [version, block] of [["1.21.4", "yellow_carpet"], ["26.2", "sulfur"], ["26.3", "yellow_wool_slab"]] as const) {
+  assert.equal(getVersionedSelections(chained.selectedBlocks, version, chained.blockFallbacks)[18], block);
+}
+const beforeFallbackEdit = structuredClone(chained);
+assert.equal(updatePresetBlockSelection(chained, 18, "yellow_concrete", "1.21.4"), null);
+const kept = updatePresetBlockSelection(chained, 18, "yellow_concrete", "1.21.4", "fallback")!;
+assert.equal(kept.selectedBlocks[18], "yellow_wool_slab");
+assert.deepEqual(kept.blockFallbacks, { 18: ["sulfur", "yellow_concrete"] });
+assert.deepEqual(updatePresetBlockSelection(chained, 18, "yellow_concrete", "26.2", "fallback")!.blockFallbacks,
+  { 18: ["yellow_concrete"] }, "Updating a fallback must discard superseded lower-priority choices");
+const mixedOrder = { ...chained, blockFallbacks: { 18: ["yellow_carpet", "sulfur", "yellow_wool"] } };
+assert.deepEqual(updatePresetBlockSelection(mixedOrder, 18, "yellow_concrete", "1.21.4", "fallback")!.blockFallbacks,
+  { 18: ["sulfur", "yellow_concrete"] }, "Collapse every available alternative while preserving unavailable choices regardless of order");
+assert.deepEqual(chained, beforeFallbackEdit);
+assert(!areBlockFallbacksEqual(chained.blockFallbacks, kept.blockFallbacks));
+const replaced = updatePresetBlockSelection(chained, 18, "yellow_concrete", "1.21.4", "replace")!;
+assert.equal(replaced.selectedBlocks[18], "yellow_concrete");
+assert.equal(replaced.blockFallbacks, undefined);
+const cleared = updatePresetBlockSelection(chained, 18, "", "1.21.4")!;
+assert.equal(cleared.blockFallbacks, undefined);
+assert.equal(getVersionedSelections(cleared.selectedBlocks, "26.3")[18], "");
+assert.deepEqual(normalizeBlockFallbacks({ 18: ["yellow_wool_slab", "yellow_carpet", "yellow_carpet", "", 3], 999: ["stone"] }, chained.selectedBlocks), { 18: ["yellow_carpet"] });
+assert.equal(getVersionedSelections({ 6: "pale_oak_leaves" }, "1.21.4", { 6: ["closed_eyeblossom", "iron_block"] })[6], "iron_block");
+assert.equal(getVersionedSelections({ 0: "poplar_button[face=floor]" }, "1.21.4", { 0: ["iron_chain"] })[0], "chain");
 assert(getVersionedSupportRules("1.21.4").get("big_dripleaf")!.validSupportBlocks.includes("pale_moss_block"));
 assert(!getVersionedSupportRules("1.21.5").get("big_dripleaf")!.validSupportBlocks.includes("pale_moss_block"));
 assert(!getVersionedSupportRules("1.21.4").get("dead_bush")!.validSupportBlocks.includes("farmland"));

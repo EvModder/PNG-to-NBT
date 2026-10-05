@@ -48,6 +48,23 @@ const hidden: FullPreset = { ...standard, blockPreset: {
   name: "Hidden", selectedBlocks: Object.fromEntries(EXCLUDED_BLOCKS.map((row, id) => [id, row.at(-1) ?? ""])),
 }, supportFiller: "barrier", shadeFiller: "reinforced_deepslate" };
 const standardUrl = await roundTrip(standard);
+const withFallbacks: FullPreset = { ...standard, blockPreset: {
+  ...standard.blockPreset,
+  selectedBlocks: { ...standard.blockPreset.selectedBlocks, 18: "yellow_wool_slab" },
+  blockFallbacks: { 0: ["iron_chain"], 18: ["sulfur", "yellow_carpet", "example:yellow[custom=true]"] },
+} };
+// None explicitly disables the chain, so use a real preferred block for color 0.
+withFallbacks.blockPreset.selectedBlocks[0] = "poplar_button[face=floor]";
+const fallbackUrl = await roundTrip(withFallbacks);
+console.log(`Fallback example: ${fallbackUrl.length} URL characters (including newer/custom literal blocks)`);
+await roundTrip({ ...standard, blockPreset: {
+  ...standard.blockPreset,
+  blockFallbacks: Object.fromEntries(BASE_COLORS.flatMap((color, id) => {
+    const preferred = standard.blockPreset.selectedBlocks[id];
+    const choices = [...new Set([...color.blocks, ...EXCLUDED_BLOCKS[id]])].filter(block => block !== preferred);
+    return preferred && choices.length ? [[id, choices]] : [];
+  })),
+} });
 const hiddenUrl = await roundTrip(hidden);
 try {
   BASE_COLORS.forEach((color, id) => {
@@ -58,6 +75,8 @@ try {
   assert.equal(await encodeFullPreset(hidden), hiddenUrl);
   assert.deepEqual(await decodeFullPreset(standardUrl), standard);
   assert.deepEqual(await decodeFullPreset(hiddenUrl), hidden);
+  assert.deepEqual(await decodeFullPreset(fallbackUrl), withFallbacks);
+  assert.equal(await encodeFullPreset(withFallbacks), fallbackUrl);
 } finally {
   BASE_COLORS.forEach((color, id) => { color.blocks = originalRows[id]; EXCLUDED_BLOCKS[id] = originalExcluded[id]; });
 }
@@ -75,6 +94,10 @@ const savedVersions = await Promise.all(versions.flatMap(minecraftVersion => [st
   const expected = { ...preset, minecraftVersion };
   return { expected, url: await roundTrip(expected) };
 })));
+for (const minecraftVersion of versions) {
+  const expected = { ...withFallbacks, minecraftVersion };
+  savedVersions.push({ expected, url: await roundTrip(expected) });
+}
 // Cover every indexed block, not just the built-in presets' selections.
 for (const rows of [originalRows, originalExcluded]) {
   for (let option = 0; option < Math.max(...rows.map(row => row.length)); ++option) {
@@ -86,13 +109,13 @@ for (const rows of [originalRows, originalExcluded]) {
 }
 // Simulate a site update inserting a new release's blocks throughout both lists.
 // Also reverse their display order; test fresh lookups, versions and fillers.
-const introductions = BLOCK_INTRODUCTIONS as [RegExp, number][];
+const introductions = BLOCK_INTRODUCTIONS as [RegExp, number, string][];
 const releases = MINECRAFT_VERSIONS as Record<string, { label: string; dataVersion: number }>;
 const latestVersion = versions.at(-1)!;
 const originalDataVersion = releases[latestVersion].dataVersion;
 const futureDataVersion = originalDataVersion + 100;
 try {
-  introductions.push([/^future_insert_/, futureDataVersion]);
+  introductions.push([/^future_insert_/, futureDataVersion, "Future"]);
   releases.future = { label: "Future", dataVersion: futureDataVersion };
   BASE_COLORS.forEach((color, id) => {
     const middle = Math.floor(color.blocks.length / 2);
@@ -296,6 +319,16 @@ for (const [offset, value] of [[0, 1], [0, 255], [1, 0], [2, 127], [3, 1], [4, 2
   assert.equal(await decodeFullPreset(raw(corrupt)), null, `corrupt offset ${offset}`);
 }
 assert.equal(await decodeFullPreset(raw(Uint8Array.from([...bytes, 0]))), null);
+const fallbackBytes = (await decodeUrlParamBytes(fallbackUrl.replace(/Z([012])/g, (_, digit) => "Z-_"[Number(digit)])))!;
+for (let length = 0; length < fallbackBytes.length; ++length) {
+  assert.equal(await decodeFullPreset(raw(fallbackBytes.subarray(0, length))), null, `truncated fallback at ${length}`);
+}
+// Version 3 requires a nonempty, valid sparse fallback section.
+for (const suffix of [[], [0], [63], [1, 62, 1, 2], [1, 18, 0], [1, 18, 1, 0]]) {
+  const corrupt = Uint8Array.from([...bytes, ...suffix]);
+  corrupt[0] = 3;
+  assert.equal(await decodeFullPreset(raw(corrupt)), null);
+}
 // Invalid lengths, UTF-8, overlong and overflowing varints.
 for (const nameBytes of [[255, 255, 255, 255, 127], [128, 0], [1, 255], Array(9).fill(255)]) {
   assert.equal(await decodeFullPreset(raw(Uint8Array.from([...bytes.subarray(0, 3), ...nameBytes, ...bytes.subarray(4)]))), null);
@@ -321,6 +354,9 @@ try {
     getItem: (key: string) => key === STORAGE_KEYS.presets ? JSON.stringify(storedPresets) : null,
   } });
   assert.deepEqual(loadPresets().at(-1), saved);
+  const savedFallbacks = { ...saved, selectedBlocks: withFallbacks.blockPreset.selectedBlocks, blockFallbacks: withFallbacks.blockPreset.blockFallbacks };
+  storedPresets = [savedFallbacks];
+  assert.deepEqual(loadPresets().at(-1), savedFallbacks);
   storedPresets = [null, { name: 42 }, { name: "Broken", selectedBlocks: [] }, saved];
   assert.deepEqual(loadPresets().slice(BUILTIN_PRESET_NAMES.length), [saved], "A malformed record must not discard other saved presets");
   BASE_COLORS.forEach(color => { color.blocks = [...color.blocks].reverse(); });

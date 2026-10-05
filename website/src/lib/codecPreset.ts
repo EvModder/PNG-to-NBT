@@ -18,6 +18,7 @@ import { SupportMode } from "@/types/ui";
 import { decodeUrlParamBytes, encodeUrlParamBytes } from "@/lib/codecUrlParam";
 import { getSelectedCustomColorBlock } from "@/utils/customColors";
 import { isBlockAvailable } from "@/lib/minecraftVersion";
+import { normalizeBlockFallbacks } from "@/lib/presetFallbacks";
 
 interface SharedSettings {
   supportFiller: string;
@@ -54,6 +55,7 @@ interface FullPreset extends SharedSettings {
 }
 
 const FORMAT_VERSION = 2;
+const FALLBACK_FORMAT_VERSION = 3;
 // Alphanumeric transport: Z0 = Z, Z1 = -, Z2 = _. Escape Z itself to avoid ambiguity.
 const TRANSPORT_ESCAPES = "Z-_";
 const TEXT_ENCODER = new TextEncoder();
@@ -250,8 +252,9 @@ export async function encodeFullPreset(preset: FullPreset): Promise<string> {
   const dataVersion = MINECRAFT_VERSIONS[preset.minecraftVersion]?.dataVersion;
   if (dataVersion === undefined) throw new Error("Invalid preset Minecraft version");
   const catalog = getPresetCatalog(dataVersion);
+  const fallbacks = Object.entries(normalizeBlockFallbacks(preset.blockPreset.blockFallbacks, preset.blockPreset.selectedBlocks) ?? {});
   const writer = new PresetWriter();
-  writer.byte(FORMAT_VERSION);
+  writer.byte(fallbacks.length ? FALLBACK_FORMAT_VERSION : FORMAT_VERSION);
   writer.uint(dataVersion);
   writer.text(preset.blockPreset.name);
   catalog.blocks.forEach((row, id) => writer.block(preset.blockPreset.selectedBlocks[id] ?? "", row, catalog.excluded[id]));
@@ -271,6 +274,15 @@ export async function encodeFullPreset(preset: FullPreset): Promise<string> {
   }
   writer.byte(flags);
   for (const key of VALUE_KEYS) writeSetting(writer, preset, key, catalog);
+  if (fallbacks.length) {
+    writer.uint(fallbacks.length);
+    for (const [key, blocks] of fallbacks) {
+      const id = Number(key);
+      writer.uint(id);
+      writer.uint(blocks.length);
+      for (const block of blocks) writer.block(block, catalog.blocks[id], catalog.excluded[id]);
+    }
+  }
   const encoded = await encodeUrlParamBytes(Uint8Array.from(writer.bytes));
   return encoded.replace(/[Z_-]/g, char => `Z${TRANSPORT_ESCAPES.indexOf(char)}`);
 }
@@ -286,7 +298,8 @@ async function decodeBinaryPreset(encoded: string): Promise<FullPreset | null> {
     const bytes = await decodeUrlParamBytes(unescaped);
     if (!bytes) return null;
     const reader = new PresetReader(bytes);
-    if (reader.byte() !== FORMAT_VERSION) return null;
+    const format = reader.byte();
+    if (format !== FORMAT_VERSION && format !== FALLBACK_FORMAT_VERSION) return null;
     const dataVersion = reader.uint();
     const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
     if (dataVersion < MINECRAFT_VERSIONS[versions[0]].dataVersion) return null;
@@ -313,8 +326,20 @@ async function decodeBinaryPreset(encoded: string): Promise<FullPreset | null> {
     const settings = { minecraftVersion } as SharedSettings;
     for (const key of BOOLEAN_KEYS) settings[key] = !!(flags & BOOLEAN_BITS[key]);
     for (const key of VALUE_KEYS) readSetting(reader, settings, key, catalog);
+    const blockFallbacks: Record<number, string[]> = {};
+    if (format === FALLBACK_FORMAT_VERSION) {
+      const count = reader.count();
+      if (!count || count > catalog.blocks.length) return null;
+      for (let i = 0; i < count; ++i) {
+        const id = reader.uint();
+        if (!catalog.blocks[id] || !selectedBlocks[id] || blockFallbacks[id]) return null;
+        const choices = Array.from({ length: reader.count() }, () => reader.block(catalog.blocks[id], catalog.excluded[id]));
+        if (!choices.length || choices.some(block => !block || block === selectedBlocks[id]) || new Set(choices).size !== choices.length) return null;
+        blockFallbacks[id] = choices;
+      }
+    }
     if (reader.remaining !== 0) return null;
-    return { blockPreset: { name, selectedBlocks }, customColors, selectedBlocksCustom, ...settings };
+    return { blockPreset: { name, selectedBlocks, ...(format === FALLBACK_FORMAT_VERSION ? { blockFallbacks } : {}) }, customColors, selectedBlocksCustom, ...settings };
   } catch {
     return null;
   }
@@ -446,12 +471,16 @@ export function loadPresets(): BlockPreset[] {
             && typeof preset.selectedBlocks === "object" && !Array.isArray(preset.selectedBlocks)
             && Object.values(preset.selectedBlocks).every(block => typeof block === "string"))),
         )
-        .map(({ name, selectedBlocks, customColors, selectedBlocksCustom }) => ({
-          name,
-          selectedBlocks: selectedBlocks ?? {},
-          customColors,
-          selectedBlocksCustom,
-        })),
+        .map(({ name, selectedBlocks, blockFallbacks, customColors, selectedBlocksCustom }) => {
+          const fallbacks = normalizeBlockFallbacks(blockFallbacks, selectedBlocks ?? {});
+          return {
+            name,
+            selectedBlocks: selectedBlocks ?? {},
+            ...(fallbacks ? { blockFallbacks: fallbacks } : {}),
+            customColors,
+            selectedBlocksCustom,
+          };
+        }),
     ];
   } catch {
     /* ignore */

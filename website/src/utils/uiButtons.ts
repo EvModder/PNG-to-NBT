@@ -12,6 +12,7 @@
  * - src/components/PanelImagePreview.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/SecretsSettingsDialog.tsx
+ * - src/components/PresetFallbackDialog.tsx
  */
 
 const SWATCH_SIZED_ICON_BUTTON_BASE_CLASS =
@@ -30,6 +31,7 @@ const SQUARE_ICON_BUTTON_BASE_CLASS =
 // Callers:
 // - src/components/ToolbarPresetSettings.tsx
 // - src/components/SecretsSettingsDialog.tsx
+// - src/components/PresetFallbackDialog.tsx
 export const MUTED_SQUARE_ICON_BUTTON_CLASS =
   `${SQUARE_ICON_BUTTON_BASE_CLASS} border-border text-muted-foreground hover:text-foreground hover:border-primary/60`;
 

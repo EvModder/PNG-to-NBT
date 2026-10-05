@@ -3,6 +3,8 @@
  * - getMinecraftCatalog()
  * - getVersionedBlockName()
  * - isBlockAvailable()
+ * - isBlockCompatible()
+ * - getBlockFallbackVersion()
  * - getVersionedSelections()
  * - getVersionedSupportRules()
  * Callers:
@@ -12,6 +14,8 @@
  * - src/lib/codecPreset.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeModel.ts
+ * - src/lib/presetFallbacks.ts
+ * - src/components/PresetFallbackDialog.tsx
  */
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { FRAGILE_SUPPORT_RULES } from "@/data/fragileBlocks";
@@ -26,6 +30,7 @@ function blockId(block: string): string {
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/nbtExport.ts
+// - src/lib/presetFallbacks.ts
 export function getVersionedBlockName(block: string, version: MinecraftVersion): string {
   const name = MINECRAFT_VERSIONS[version].dataVersion < 4554 ? "chain" : "iron_chain";
   return block.replace(/^(minecraft:)?(iron_chain|chain)(?=\[|$)/, (_, namespace = "") => namespace + name);
@@ -69,19 +74,51 @@ export function getMinecraftCatalog(version: MinecraftVersion = DEFAULT_MINECRAF
   return catalogs.get(version)!;
 }
 
-// Keep stored presets untouched: incompatible selections temporarily use a same-color default.
 // Custom states/colors remain user-controlled; waterlogged leaves are deliberately color 12.
 // Callers:
+// - src/lib/presetFallbacks.ts
+export function isBlockCompatible(block: string, id: number, version: MinecraftVersion): boolean {
+  const changedColor = /^(pale_oak_leaves|closed_eyeblossom)$/.test(blockId(block))
+    && !block.includes("waterlogged=true");
+  return isBlockAvailable(block, version) && (!changedColor || id === (version === "1.21.4" ? 49 : 6));
+}
+
+// Callers:
+// - src/components/PresetFallbackDialog.tsx
+export function getBlockFallbackVersion(block: string, id: number): { operator: "<" | ">"; version: string } | undefined {
+  const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
+  const compatible = versions.filter(version => isBlockCompatible(block, id, version));
+  if (!compatible.length) return undefined;
+  // Historical map-color changes can require a fallback in newer versions instead.
+  if (compatible.at(-1) !== versions.at(-1)) {
+    return { operator: ">", version: MINECRAFT_VERSIONS[compatible.at(-1)!].label.split("–").at(-1)! };
+  }
+  let release: string = compatible[0];
+  const previous = versions[versions.indexOf(compatible[0]) - 1];
+  let cutoff = previous ? MINECRAFT_VERSIONS[previous].dataVersion : 0;
+  const name = blockId(block);
+  for (const [pattern, introduced, label] of BLOCK_INTRODUCTIONS) {
+    if (pattern.test(name) && introduced > cutoff) {
+      cutoff = introduced;
+      release = label;
+    }
+  }
+  return { operator: "<", version: release };
+}
+
+// Keep stored preferences untouched; use the first compatible choice, otherwise none.
+// Callers:
 // - src/Index.tsx
-export function getVersionedSelections(selected: Record<number, string>, version: MinecraftVersion) {
-  const catalog = getMinecraftCatalog(version);
+export function getVersionedSelections(
+  selected: Record<number, string>,
+  version: MinecraftVersion,
+  fallbacks: Record<number, string[]> = {},
+) {
   return Object.fromEntries(BASE_COLORS.map((_, id) => {
-    const block = getVersionedBlockName(selected[id] ?? catalog.blocks[id][0] ?? "", version);
-    const baseId = blockId(block);
-    const changedColor = /^(pale_oak_leaves|closed_eyeblossom)$/.test(baseId)
-      && !block.includes("waterlogged=true");
-    const wrongColor = changedColor && id !== (version === "1.21.4" ? 49 : 6);
-    return [id, isBlockAvailable(block, version) && !wrongColor ? block : catalog.blocks[id][0] ?? ""];
+    const preferred = selected[id] ?? "";
+    const block = !preferred || isBlockCompatible(preferred, id, version) ? preferred
+      : fallbacks[id]?.find(candidate => isBlockCompatible(candidate, id, version)) ?? "";
+    return [id, getVersionedBlockName(block, version)];
   }));
 }
 

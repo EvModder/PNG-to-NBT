@@ -5,6 +5,7 @@
  * - PANEL_TITLE_TEXT_CLASS
  *
  * Callers:
+ * - src/components/PresetFallbackDialog.tsx
  * - src/components/ToolbarPresetSettings.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/components/ToolbarFillerSettings.tsx
@@ -35,4 +36,5 @@ export const MUTED_INLINE_TOGGLE_CONTROL_CLASS =
 // - src/components/PanelImagePreview.tsx
 // - src/components/PanelCustomColors.tsx
 // - src/components/SecretsSettingsDialog.tsx
+// - src/components/PresetFallbackDialog.tsx
 export const PANEL_TITLE_TEXT_CLASS = "text-sm font-semibold leading-none text-accent";

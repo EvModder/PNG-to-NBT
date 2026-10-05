@@ -18,6 +18,7 @@
  * - src/components/PanelCredits.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/PanelImagePreview.tsx
+ * - src/components/PresetFallbackDialog.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/components/ToolbarFillerSettings.tsx
@@ -268,6 +269,7 @@ export const messages = {
   },
   presets: {
     ...catalog.presets,
+    fallbackKeep: (operator: "<" | ">", version: string) => formatTemplate(catalog.presets.fallbackKeep, { operator, version }),
     builtinTooltip(name: string): string | undefined {
       return Object.prototype.hasOwnProperty.call(catalog.presets.builtinTooltips, name)
         ? catalog.presets.builtinTooltips[name as keyof typeof catalog.presets.builtinTooltips]

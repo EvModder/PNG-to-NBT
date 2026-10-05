@@ -12,6 +12,7 @@
  * - src/Index.tsx
  * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/codecPreset.ts
+ * - src/lib/presetFallbacks.ts
  */
 import { BASE_COLORS } from "@/data/mapColors";
 import type { ColorRgb } from "@/types/color";
@@ -20,10 +21,12 @@ import type { ColorRgb } from "@/types/color";
 // - src/Index.tsx
 // - src/components/ToolbarPresetSettings.tsx
 // - src/lib/codecPreset.ts
+// - src/lib/presetFallbacks.ts
 export interface BlockPreset {
   name: string;
   customColors?: ColorRgb[];
   selectedBlocks: Record<number, string>;
+  blockFallbacks?: Record<number, string[]>;
   selectedBlocksCustom?: Record<number, string>;
 }
 
