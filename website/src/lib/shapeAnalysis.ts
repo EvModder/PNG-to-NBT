@@ -147,7 +147,7 @@ function analyzePartMaterialNeeds(
     }
 
     const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
-    if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options)) continue;
+    if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options, fillerAssignments)) continue;
     if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
     if (
       assignedRole &&
@@ -159,7 +159,7 @@ function analyzePartMaterialNeeds(
       addRoleCount(fillerRoleCounts, assignedRole);
     }
     const assignedSupportBlock = assignedRole ? (fillerAssignments.get(assignedRole) ?? null) : null;
-    const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options);
+    const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options, fillerAssignments);
     const fillerName = override
       ? resolveExportBlockName(override.replacementBlockId)
       : resolveCellFillerName(cell, options.fillerAssignments, fillerAssignments);
@@ -315,10 +315,10 @@ export function analyzeFragileSupportOverrideNeeds(
       if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
       const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
       if (!assignedRole) continue;
-      if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options)) continue;
+      if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options, fillerAssignments)) continue;
       if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
       const assignedSupportBlock = fillerAssignments.get(assignedRole) ?? null;
-      const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options);
+      const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options, fillerAssignments);
       if (!override) continue;
       addCount(overrideCounts, override.blockId);
     }

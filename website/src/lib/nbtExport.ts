@@ -289,11 +289,11 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
     for (const [coord, cell] of part.cells) {
       if (!isShapeFillerCell(cell) || !cell.includes(assignment.role)) continue;
       const [x, y, z] = parseShapeCoordKey(coord);
-      if (!shouldIncludeFragileSupportCell(part, coord, cell, assignment.role, options)) continue;
+      if (!shouldIncludeFragileSupportCell(part, coord, cell, assignment.role, options, fillerAssignments)) continue;
       if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
       if (occupied.has(coord)) continue;
       const assignedSupportBlock = fillerAssignments.get(assignment.role) ?? null;
-      const override = getFragileSupportOverride(part, coord, assignment.role, assignedSupportBlock, options);
+      const override = getFragileSupportOverride(part, coord, assignment.role, assignedSupportBlock, options, fillerAssignments);
       const blockName = override ? resolveExportBlockName(override.replacementBlockId) : fillerName;
       if (!blockName) continue;
       resolved.push({ x, y, z, blockName, paletteRole: getExportPaletteRoleForFiller(assignment.role) });

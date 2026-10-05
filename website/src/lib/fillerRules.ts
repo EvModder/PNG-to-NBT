@@ -19,6 +19,7 @@
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeModel.ts
  */
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "../data/mapColors";
 import { isFragileBlock } from "@/data/fragileBlocks";
@@ -238,6 +239,7 @@ export function canRaiseStepBlocks(
 }
 
 // Callers:
+// - src/Index.tsx
 // - src/lib/shapeAnalysis.ts
 // - src/lib/nbtExport.ts
 export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[]): Map<FillerRole, string> {
@@ -251,6 +253,7 @@ export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[
 // Callers:
 // - src/lib/shapeAnalysis.ts
 // - src/lib/nbtExport.ts
+// - src/lib/shapeModel.ts
 export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, role: FillerRole): string | null {
   const block = assignments.get(role) ?? "";
   if (!block) return null;

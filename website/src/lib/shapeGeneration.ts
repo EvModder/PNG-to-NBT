@@ -450,7 +450,7 @@ function buildFillerCandidates(blocks: ShapeBlock[], occupiedExtraBlocks: ShapeB
   }
 
   for (const block of blocks) {
-    if (block.ref.kind === "color" && !isWaterColor(block.ref.color)) {
+    if (!isWaterBlock(block)) {
       const candidate = ensureCandidate(block.x, block.y - 1, block.z);
       if (candidate) {
         if (!candidate.roles.includes(FillerRole.SupportFragile)) candidate.roles.push(FillerRole.SupportFragile);
@@ -580,6 +580,7 @@ function getCrubTechSupportRole(
 ): FillerRole.SupportBreakable | FillerRole.SupportPushable {
   if (y < upperY) return FillerRole.SupportBreakable;
   if (y !== upperY) return FillerRole.SupportPushable;
+  // Isolated moss below the sweep is ignored; a paired block must push into it.
   const pairX = (x & 1) === 0 ? x + 1 : x - 1;
   return occupied.has(toShapeCoordKey(pairX, y, z))
     ? FillerRole.SupportBreakable

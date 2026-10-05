@@ -4,7 +4,7 @@
  * - isShapeFillerCell()
  * - toShapeCoordKey()
  * - parseShapeCoordKey()
- * - getSupportedColorAbove()
+ * - getSupportedBlockIdAbove()
  * - NO_SUPPORT_FLOORS
  * - isWithinShapeBounds()
  * - shouldIncludeFragileSupportCell()
@@ -21,6 +21,7 @@
  */
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { getVersionedSupportRules } from "@/lib/minecraftVersion";
+import { resolveAssignedFillerName } from "@/lib/fillerRules";
 import type { ColorRef } from "@/types/color";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeCoordKey, type ShapePart } from "@/types/shape";
@@ -70,20 +71,28 @@ export function parseShapeCoordKey(key: ShapeCoordKey): [number, number, number]
   return [x, y, z];
 }
 
-function getMappedShapeColorBlockId(
-  color: ColorRef,
-  options: ColorBlockSelections,
-): string | null {
-  const block = resolveAssignedColorBlock(color, options);
-  return block ? normalizeBlockId(block) : null;
-}
-
 // Callers:
 // - src/Index.tsx
-export function getSupportedColorAbove(part: ShapePart, coord: number): ColorRef | null {
+export function getSupportedBlockIdAbove(
+  part: ShapePart,
+  coord: number,
+  options: ColorBlockSelections,
+  fillerAssignments: Map<FillerRole, string>,
+): string | null {
   // One Y step spans the packed Z range; no coordinate decoding is needed.
   const above = part.cells.get(coord + SHAPE_COORD_Z_SIZE);
-  return above && isShapeColorCell(above) ? above : null;
+  if (!above) return null;
+  if (isShapeColorCell(above)) {
+    const block = resolveAssignedColorBlock(above, options);
+    return block ? normalizeBlockId(block) : null;
+  }
+  // Assignment order also determines which filler wins during export.
+  for (const role of fillerAssignments.keys()) {
+    if (!above.includes(role)) continue;
+    const block = resolveAssignedFillerName(fillerAssignments, role);
+    if (block) return normalizeBlockId(block);
+  }
+  return null;
 }
 
 // Callers:
@@ -116,11 +125,10 @@ export function shouldIncludeFragileSupportCell(
   roles: readonly FillerRole[],
   activeRole: FillerRole | null,
   options: ColorBlockSelections,
+  fillerAssignments: Map<FillerRole, string>,
 ): boolean {
   if (activeRole !== FillerRole.SupportFragile || !roles.includes(FillerRole.SupportFragile)) return true;
-  const fragileColor = getSupportedColorAbove(part, coord);
-  if (!fragileColor) return false;
-  const blockId = getMappedShapeColorBlockId(fragileColor, options);
+  const blockId = getSupportedBlockIdAbove(part, coord, options, fillerAssignments);
   return !!blockId && isFragileBlock(blockId);
 }
 
@@ -141,16 +149,16 @@ export function getFragileSupportOverride(
   activeRole: FillerRole | null,
   assignedSupportBlockName: string | null,
   options: ColorBlockSelections,
+  fillerAssignments: Map<FillerRole, string>,
 ): FragileSupportOverride | null {
+  // CrubTech supports must retain their piston-specific block assignments.
   if (
     activeRole !== FillerRole.SupportAll &&
     activeRole !== FillerRole.SupportFragile &&
     activeRole !== FillerRole.StairStep &&
     activeRole !== FillerRole.SupportWaterSidesCovered
   ) return null;
-  const fragileColor = getSupportedColorAbove(part, coord);
-  if (!fragileColor) return null;
-  const fragileBlockId = getMappedShapeColorBlockId(fragileColor, options);
+  const fragileBlockId = getSupportedBlockIdAbove(part, coord, options, fillerAssignments);
   if (!fragileBlockId) return null;
   const fragileSupportRule = getVersionedSupportRules(options.minecraftVersion).get(fragileBlockId);
   if (!fragileSupportRule) return null;

@@ -135,6 +135,7 @@ import {
 } from "@/lib/blockId";
 import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import {
+  buildFillerAssignmentMap,
   createFillerAssignments,
   getSupportModeFillerRoles,
   isCrubTechBreakableValid,
@@ -167,7 +168,7 @@ import {
   type PreviewPixelReplacement,
 } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
-import { getSupportedColorAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
+import { getSupportedBlockIdAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
 import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type SortKey } from "@/types/ui";
 import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
 import {
@@ -2077,12 +2078,14 @@ const Index = () => {
     if (crubTechControlsActive2LayerSettings) return false;
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
-      return Object.values(effectiveSelectedBlocks).some(hasFragileMappedBlock) ||
+      return uiFillerAssignments.some(({ block }) => !isShadeFillerDisabled(block) && hasFragileMappedBlock(block)) ||
+        Object.values(effectiveSelectedBlocks).some(hasFragileMappedBlock) ||
         customColors.some((_, customIndex) =>
           hasFragileMappedBlock(getSelectedCustomColorBlock(selectedBlocksCustom, customIndex, customColors))
         );
     }
     if (supportModeVisibilityPending) return true;
+    const fillerAssignments = buildFillerAssignmentMap(uiFillerAssignments);
     return tileAnalyses.some(tile =>
       !!tile.supportShape?.parts.some(part =>
         part.cells.entries().some(([coord, cell]) => {
@@ -2091,10 +2094,8 @@ const Index = () => {
           const supportFloorYs = effectiveApplySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
           if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) return false;
           if (!cell.includes(FillerRole.SupportFragile)) return false;
-          const color = getSupportedColorAbove(part, coord);
-          if (!color) return false;
-          const mapped = resolveAssignedColorBlock(color, colorBlockSelections);
-          return hasFragileMappedBlock(mapped);
+          const blockId = getSupportedBlockIdAbove(part, coord, colorBlockSelections, fillerAssignments);
+          return !!blockId && isFragileBlock(blockId);
         }),
       ),
     );
@@ -2104,6 +2105,7 @@ const Index = () => {
     supportModeVisibilityPending,
     tileAnalyses,
     colorBlockSelections,
+    uiFillerAssignments,
     effectiveApplySupportFloorYs,
   ]);
   const staircaseModeOptions = useMemo(
