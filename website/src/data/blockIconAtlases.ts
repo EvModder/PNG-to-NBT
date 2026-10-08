@@ -118,7 +118,7 @@ export const BLOCK_ICON_ATLASES = {
       "cobblestone": 84,
       "cobweb": 85,
       "composter": 86,
-      "conduit": 87,
+      "conduit__lb__waterlogged__eq__false__rb__": 87,
       "copper_ore": 88,
       "crafter": 89,
       "creaking_heart": 90,
@@ -433,7 +433,7 @@ export const BLOCK_ICON_ATLASES = {
       "sculk_shrieker": 399,
       "sculk_vein__lb__down__eq__true__rb__": 400,
       "sea_lantern": 401,
-      "sea_pickle": 402,
+      "sea_pickle__lb__waterlogged__eq__false__rb__": 402,
       "short_dry_grass": 403,
       "short_grass": 404,
       "shroomlight": 405,
@@ -556,7 +556,7 @@ export const BLOCK_ICON_ATLASES = {
     },
     "height": 368,
     "rows": 23,
-    "src": "block-icons/packed/primary.292ae466d005.png",
+    "src": "block-icons/packed/primary.083c997f39ad.png",
     "width": 368
   },
   "unused": {

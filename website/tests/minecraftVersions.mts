@@ -223,12 +223,22 @@ async function exportBytes(version: MinecraftVersion, blocks: Record<number, str
 }
 for (const version of versions) {
   const bytes = await exportBytes(version, { 0: "chain", 6: "iron_block" });
+  assert(bytes.includes(Buffer.from(version === "26.3" ? "\x08\x00\x02id" : "\x08\x00\x04Name")), "Palette field names must match the export version");
   const chain = version === "1.21.4" || version === "1.21.5" ? "minecraft:chain" : "minecraft:iron_chain";
   assert.equal(bytes.toString().split(chain).length - 1, 1, "Chain spellings must collapse to one palette state");
   const split = await exportBytes(version, { 0: "chain", 6: "iron_block" }, "iron_chain", false);
   assert.equal(split.toString().split(chain).length - 1, 2, "Uncollapsed chain states must remain separate by role");
   const support = await exportBytes(version, { 0: "", 6: "big_dripleaf" }, "pale_moss_block");
   assert(support.includes(Buffer.from(version === "1.21.4" ? "minecraft:pale_moss_block" : "minecraft:dirt")));
+  const catalog = getMinecraftCatalog(version);
+  for (const block of [...catalog.blocks, ...catalog.excluded].flat()) {
+    if (!/^(sea_pickle|conduit|dead_\w+_coral(_fan|_wall_fan)?)(\[|$)/.test(block)) continue;
+    assert(block.includes("waterlogged=false"), `${block} must specify its dry state`);
+    const dry = await exportBytes(version, { 6: block });
+    assert(dry.includes(Buffer.from("waterlogged\x00\x05false")));
+    const wet = await exportBytes(version, { 6: block.replace("waterlogged=false", "waterlogged=true") });
+    assert(wet.includes(Buffer.from("waterlogged\x00\x04true")), "Explicit waterlogging must remain supported");
+  }
 }
 const older = await exportBytes("1.21.4", { 0: "glass", 6: "iron_block" }, "stone");
 const newer = await exportBytes("26.2", { 0: "glass", 6: "iron_block" }, "stone");

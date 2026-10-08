@@ -126,8 +126,8 @@ function parseStructureBlocks(bytes: Uint8Array): ParsedStructureBlock[] {
           return `${blockName}[${properties.map(([name, value]) => `${name}=${value}`).join(",")}]`;
         }
         const tagName = readString();
-        if (tagName === "Name" && tagType === 8) blockName = readString();
-        else if (tagName === "Properties" && tagType === 10) {
+        if (tagName === (dataVersion >= 5006 ? "id" : "Name") && tagType === 8) blockName = readString();
+        else if (tagName === (dataVersion >= 5006 ? "properties" : "Properties") && tagType === 10) {
           while (true) {
             const propertyType = readByte();
             if (propertyType === 0) break;
@@ -162,7 +162,7 @@ function parseStructureBlocks(bytes: Uint8Array): ParsedStructureBlock[] {
   if (readByte() !== 10) throw new Error("Expected root compound NBT tag");
   readString();
   expectTag("DataVersion", 3);
-  readInt();
+  const dataVersion = readInt();
   expectTag("size", 9);
   readIntList();
   let nextTag = readTag();

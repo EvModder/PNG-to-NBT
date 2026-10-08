@@ -87,6 +87,8 @@ export function writeStructureNbt(
   author?: string,
 ): Uint8Array {
   const palette = paletteBlockIds.map(parseBlockId);
+  // 26.3 renamed block-state fields at DataVersion 5006.
+  const lowercaseBlockStateFields = dataVersion >= 5006;
 
   const w = new NbtWriter();
 
@@ -101,10 +103,10 @@ export function writeStructureNbt(
 
   w.beginList("palette", TAG.Compound, palette.length);
   for (const entry of palette) {
-    w.stringTag("Name", entry.name);
+    w.stringTag(lowercaseBlockStateFields ? "id" : "Name", entry.name);
     const propKeys = Object.keys(entry.props);
     if (propKeys.length > 0) {
-      w.beginCompound("Properties");
+      w.beginCompound(lowercaseBlockStateFields ? "properties" : "Properties");
       for (const k of propKeys) {
         w.stringTag(k, entry.props[k]);
       }
