@@ -40,9 +40,9 @@ export const DEFAULT_SUPPORT_FILLER_BLOCK = "cobblestone";
 export const DEFAULT_SHADE_FILLER_BLOCK = "resin_block";
 export const DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK = "moss_block";
 export const DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK = "resin_block";
-export const DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK = "slime_block";
+export const DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK = "resin_block";
 export const DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK = "slime_block";
-export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "honey_block";
+export const DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK = "resin_block";
 
 // Callers:
 // - src/lib/nbtExport.ts
