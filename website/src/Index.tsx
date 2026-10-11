@@ -158,6 +158,7 @@ import {
 import { decodeFullPreset, encodeFullPreset, loadPresets } from "@/lib/codecPreset";
 import { buildInputColorPalette, compareInputColorPalettes, presetCoversAllColors } from "@/lib/colorGridParsingCore";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
+import { measureToolbarWidths } from "@/utils/toolbarLayout";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
 import {
   collectVsFillerPreviewReplacements,
@@ -3702,26 +3703,12 @@ const Index = () => {
   }, []);
 
   const measureToolbarMinWidths = useCallback(() => {
-    const presetEl = presetToolbarSectionRef.current;
-    const fillerEl = fillerToolbarSectionRef.current;
-    const measureNoWrapSectionWidth = (el: HTMLElement): number => {
-      const { width, minWidth, maxWidth, flexWrap } = el.style;
-      el.style.width = "max-content";
-      el.style.minWidth = "max-content";
-      el.style.maxWidth = "none";
-      el.style.flexWrap = "nowrap";
-      const measured = Math.ceil(el.getBoundingClientRect().width);
-      el.style.width = width;
-      el.style.minWidth = minWidth;
-      el.style.maxWidth = maxWidth;
-      el.style.flexWrap = flexWrap;
-      return measured;
-    };
-    const presetMeasured = presetEl ? measureNoWrapSectionWidth(presetEl) : 0;
-    const fillerMeasured = fillerEl ? measureNoWrapSectionWidth(fillerEl) : 0;
-    setPresetToolbarMinWidthPx(prev => (Math.abs(prev - presetMeasured) > 1 ? presetMeasured : prev));
-    setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerMeasured) > 1 ? fillerMeasured : prev));
-  }, []);
+    const { presetWidth, fillerWidth } = measureToolbarWidths(
+      presetToolbarSectionRef.current, fillerToolbarSectionRef.current, colorTableMinWidthPx,
+    );
+    setPresetToolbarMinWidthPx(prev => (Math.abs(prev - presetWidth) > 1 ? presetWidth : prev));
+    setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerWidth) > 1 ? fillerWidth : prev));
+  }, [colorTableMinWidthPx]);
 
   const recalcCreditsFloatGap = useCallback(() => {
     // Keep simple flow order for stacked/mobile layouts.
@@ -3764,13 +3751,19 @@ const Index = () => {
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
     if (presetToolbarSectionRef.current) ro?.observe(presetToolbarSectionRef.current);
     if (fillerToolbarSectionRef.current) ro?.observe(fillerToolbarSectionRef.current);
+    // Counts and controls can change intrinsic width without resizing the section.
+    const mo = new MutationObserver(scheduleMeasure);
+    for (const el of [presetToolbarSectionRef.current, fillerToolbarSectionRef.current]) {
+      if (el) mo.observe(el, { childList: true, subtree: true, characterData: true });
+    }
     window.addEventListener("resize", scheduleMeasure);
     return () => {
       window.removeEventListener("resize", scheduleMeasure);
       ro?.disconnect();
+      mo.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [measureToolbarMinWidths, isStackedLayout]);
+  }, [measureToolbarMinWidths, isStackedLayout, fillerUiVisibilityState]);
 
   useLayoutEffect(() => {
     recalcCreditsFloatGap();

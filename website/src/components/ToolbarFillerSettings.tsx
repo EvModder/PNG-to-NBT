@@ -131,7 +131,7 @@ function FillerField({
           }}
           placeholder={placeholder}
           title={tooltip}
-          className="max-w-[101px] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+          className="w-[var(--filler-input-width,101px)] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
         />
         {showRequiredBadge && (
           <>
