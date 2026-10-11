@@ -188,7 +188,7 @@ import {
 } from "@/utils/conversion";
 import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
-import { BuildMode, SuppressStepDirection, FillerRole, type FillerAssignment } from "@/types/conversion";
+import { BuildMode, SuppressStepDirection, FillerRole } from "@/types/conversion";
 import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
@@ -1405,7 +1405,7 @@ const Index = () => {
   const dominateVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveDominateVoidFillerBlock);
   const recessiveVoidFillerShadingDisabled = isShadeFillerDisabled(effectiveRecessiveVoidFillerBlock);
   const activeTransparentBlock = derivedImageStats?.hasTransparency
-    ? (effectiveSelectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "")
+    ? normalizeBlockId(effectiveSelectedBlocks[TRANSPARENCY_BASE_INDEX] ?? "")
     : "";
   const transparentBlockMapping = useMemo(
     () => ({ [TRANSPARENCY_BASE_INDEX]: activeTransparentBlock }),
@@ -1778,7 +1778,7 @@ const Index = () => {
   const usedMaterialColorAssignments = useMemo(
     () => [...usedColorKeys]
       .toSorted((a, b) => a - b)
-      .map(key => `${key}=${resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections)}`)
+      .map(key => `${key}=${normalizeBlockId(resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections))}`)
       .join("|"),
     [usedColorKeys, colorBlockSelections],
   );
@@ -1787,7 +1787,7 @@ const Index = () => {
     const assignmentByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, assignment.block]));
     return [...aggregateFillerRoleCounts.keys()]
       .toSorted()
-      .map(role => `${role}=${assignmentByRole.get(role) ?? ""}`)
+      .map(role => `${role}=${normalizeBlockId(assignmentByRole.get(role) ?? "")}`)
       .join("|");
   }, [aggregateFillerRoleCounts, uiFillerAssignments]);
   const currentMaterialInputSignature = useMemo(
@@ -1845,9 +1845,9 @@ const Index = () => {
       customColors,
     };
     const currentColorAssignmentsByKey = new Map(
-      [...usedColorKeys].map(key => [key, resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections)] as const),
+      [...usedColorKeys].map(key => [key, normalizeBlockId(resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections))] as const),
     );
-    const currentFillerAssignmentsByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, assignment.block]));
+    const currentFillerAssignmentsByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, normalizeBlockId(assignment.block)]));
     const currentSupportModeEnabled = effectiveSupportMode !== SupportMode.None;
     const changedColorKeys = previousMaterialInputs
       ? new Set(
@@ -2167,30 +2167,21 @@ const Index = () => {
       isNorthSouthSuppressStepDirection,
     ],
   );
-  const buildMaterialAnalysisOptions = useCallback(
-    (fillerAssignments: FillerAssignment[], includeRange: boolean) => ({
-      selectedBlocks: effectiveSelectedBlocks,
-      minecraftVersion,
-      fillerAssignments,
-      applySupportFloorYs: effectiveApplySupportFloorYs,
-      customColors,
-      selectedBlocksCustom,
-      ...(includeRange && colRangeEnabled
-        ? (isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] })
-        : {}),
-    }),
-    [effectiveSelectedBlocks, minecraftVersion, effectiveApplySupportFloorYs, customColors, selectedBlocksCustom, colRangeEnabled, isStepRangeMode, colStart, colEnd],
-  );
-
+  // Material counts depend on block IDs, not state tags; export retains the full assignments.
   const selectedTileMaterialNeedStats = useMemo(() => {
     if (!selectedTileAnalysis?.supportShape || !imageValid) return null;
     if (!colRangeEnabled) return selectedTileAnalysis.materialNeedStats;
     return analyzeMaterialNeeds(
       selectedTileAnalysis.tile.colorGrid,
       selectedTileAnalysis.supportShape,
-      buildMaterialAnalysisOptions(uiFillerAssignments, true),
+      {
+        ...colorBlockSelections,
+        fillerAssignments: uiFillerAssignments,
+        applySupportFloorYs: effectiveApplySupportFloorYs,
+        ...(isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] }),
+      },
     );
-  }, [selectedTileAnalysis, imageValid, colRangeEnabled, buildMaterialAnalysisOptions, uiFillerAssignments]);
+  }, [selectedTileAnalysis, imageValid, colRangeEnabled, currentMaterialInputSignature, isStepRangeMode, colStart, colEnd]);
   const allTileMaterialCountsSum = useMemo(
     () => aggregateMaterialCounts(tileAnalyses.flatMap(tile => (tile.materialNeedStats ? [tile.materialNeedStats] : [])), "sum"),
     [tileAnalyses],

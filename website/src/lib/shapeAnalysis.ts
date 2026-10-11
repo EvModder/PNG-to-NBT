@@ -23,7 +23,7 @@ import type { ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
-import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName, toDisplayName } from "./blockId";
+import { normalizeBlockId, resolveExportBlockName, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
 import { addColorRefCount, getColorRefKey } from "./colorRefs";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import {
@@ -97,10 +97,6 @@ function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): nu
   return getColorRefKey(color) * 4 + color.shade;
 }
 
-function isRealWaterBlockName(blockName: string): boolean {
-  return blockName.split("[", 1)[0] === "water";
-}
-
 function analyzePartMaterialNeeds(
   colorGrid: ColorGrid,
   part: ShapePart,
@@ -134,11 +130,11 @@ function analyzePartMaterialNeeds(
       let blockName = colorBlockNames.get(colorKey);
       if (blockName === undefined) {
         const resolved = resolveShapeColorBlockName(cell, options);
-        blockName = resolved ? toDisplayName(resolved) : null;
+        blockName = resolved ? normalizeBlockId(resolved) : null;
         colorBlockNames.set(colorKey, blockName);
       }
       if (!blockName) continue;
-      if (isWaterColorCell && isRealWaterBlockName(blockName)) {
+      if (isWaterColorCell && blockName === "water") {
         if (countedRealWaterColumns.has(waterColumnKey)) continue;
         countedRealWaterColumns.add(waterColumnKey);
       }
@@ -164,8 +160,7 @@ function analyzePartMaterialNeeds(
       ? resolveExportBlockName(override.replacementBlockId)
       : resolveCellFillerName(cell, options.fillerAssignments, fillerAssignments);
     if (!fillerName) continue;
-    const displayName = toDisplayName(fillerName);
-    addCount(blockCounts, displayName);
+    addCount(blockCounts, normalizeBlockId(fillerName));
   }
 
   return { blockCounts, colorCounts, visibleColorKeys, fillerRoleCounts };

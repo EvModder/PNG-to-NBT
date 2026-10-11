@@ -41,6 +41,7 @@ export function stripDefaultBlockNamespace(raw: string): string {
 // - src/components/ToolbarFillerSettings.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
 export function normalizeBlockId(raw: string): string {
   return stripDefaultBlockNamespace(raw).toLowerCase().split("[")[0];
@@ -142,7 +143,6 @@ export function hasAssignedColorBlock(
 
 // Callers:
 // - src/lib/previewImageEdits.ts
-// - src/lib/shapeAnalysis.ts
 export function toDisplayName(blockName: string): string {
   const stripped = stripDefaultBlockNamespace(blockName);
   if (!stripped.includes("[")) return stripped;

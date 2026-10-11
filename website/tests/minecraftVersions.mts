@@ -277,12 +277,12 @@ const materialOptions = {
   fillerAssignments: [], applySupportFloorYs: false,
 };
 assert.deepEqual(analyzeMaterialNeeds(waterGrid, materialShape, materialOptions).blockCounts,
-  { "oak_leaves[waterlogged=true]": 2, stone: 1, water: 1 });
+  { oak_leaves: 2, stone: 1, water: 1 });
 materialOptions.selectedBlocks[0] = "glass";
 materialOptions.selectedBlocks[7] = "moss_block";
 materialOptions.selectedBlocks[12] = "glass_pane[waterlogged=true]";
 assert.deepEqual(analyzeMaterialNeeds(waterGrid, materialShape, materialOptions).blockCounts,
-  { glass: 1, moss_block: 2, stone: 1, "glass_pane[waterlogged=true]": 2 });
+  { glass: 1, moss_block: 2, stone: 1, glass_pane: 2 });
 const crubTechShape = generateShapeMap(waterGrid, Shade.Flat, true, false, false, {
   layerGap: 14, suppress2LayerLatePairY: 25, useCrubTech: true,
   waterSetting: { kind: "below-platform", drops: [25, 15, 8] },
