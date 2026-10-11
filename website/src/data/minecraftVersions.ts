@@ -16,7 +16,7 @@
  * - src/lib/previewImageEdits.ts
  */
 // Breakpoints reflect default-visible blocks only. Each range targets its newest release.
-// Keep ranges chronological: the last is the default; preset decoding locates ranges by DataVersion.
+// Keep ranges chronological; preset decoding locates ranges by DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
 // Callers:
 // - src/Index.tsx

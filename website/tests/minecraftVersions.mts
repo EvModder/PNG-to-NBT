@@ -20,8 +20,8 @@ import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 
 const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
-const latest = getMinecraftCatalog();
-assert.equal(DEFAULT_MINECRAFT_VERSION, versions.at(-1));
+const latest = getMinecraftCatalog(versions.at(-1)!);
+assert.equal(DEFAULT_MINECRAFT_VERSION, "26.2");
 assert.deepEqual(getBlockFallbackVersion("poplar_pressure_plate", 22), { operator: "<", version: "26.3" });
 assert.deepEqual(getBlockFallbackVersion("dried_ghast", 8), { operator: "<", version: "1.21.6" });
 assert.deepEqual(getBlockFallbackVersion("golden_dandelion", 30), { operator: "<", version: "26.1" });
