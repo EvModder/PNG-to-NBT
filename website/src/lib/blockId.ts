@@ -13,6 +13,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
+ * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/blockIconAtlas.ts
  * - src/lib/fillerRules.ts
  * - src/lib/nbtExport.ts
@@ -37,6 +38,7 @@ export function stripDefaultBlockNamespace(raw: string): string {
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
+// - src/components/ToolbarFillerSettings.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeModel.ts

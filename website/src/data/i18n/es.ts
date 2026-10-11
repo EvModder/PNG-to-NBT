@@ -172,6 +172,9 @@ export const esCatalog = {
   },
   fillers: {
     heading: "Rellenos",
+    floorAttachmentWarning: "Solo se admite el soporte desde abajo.",
+    supportRequiresSupportWarning: "Necesita soporte.",
+    fixFloorAttachment: "Usar down=true",
     headingTooltip: "Asignaciones de bloques de relleno para soporte, sombreado y colocaciones de casos especiales.",
     supportLabel: "Soporte:",
     supportTooltip:

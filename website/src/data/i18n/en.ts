@@ -177,6 +177,9 @@ export const enCatalog = {
   },
   fillers: {
     heading: "Fillers",
+    floorAttachmentWarning: "Only attachment from below is supported.",
+    supportRequiresSupportWarning: "Needs support itself.",
+    fixFloorAttachment: "Use down=true",
     headingTooltip: "Filler block assignments for support, shading, and special-case placements.",
     supportLabel: "Support:",
     supportTooltip:

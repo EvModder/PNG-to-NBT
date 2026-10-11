@@ -5,6 +5,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/fillerRules.ts
  * - src/lib/minecraftVersion.ts
  * - src/lib/shapeModel.ts
@@ -159,6 +160,7 @@ function getBaseBlockId(blockId: string): string {
  */
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarFillerSettings.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/shapeModel.ts
 export function isFragileBlock(blockId: string): boolean {

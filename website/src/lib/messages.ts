@@ -334,6 +334,9 @@ export const messages = {
   },
   fillers: {
     heading: catalog.fillers.heading,
+    floorAttachmentWarning: catalog.fillers.floorAttachmentWarning,
+    supportRequiresSupportWarning: catalog.fillers.supportRequiresSupportWarning,
+    fixFloorAttachment: catalog.fillers.fixFloorAttachment,
     headingTooltip: catalog.fillers.headingTooltip,
     supportLabel: catalog.fillers.supportLabel,
     supportTooltip: catalog.fillers.supportTooltip,
