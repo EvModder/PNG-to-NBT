@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2025",
-    "useDefineForClassFields": true,
     "lib": ["ES2025", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
     "module": "ESNext",
     "skipLibCheck": true,
 
@@ -15,15 +15,12 @@
     "jsx": "react-jsx",
 
     /* Linting */
-    "strict": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noImplicitAny": false,
-    "noFallthroughCasesInSwitch": false,
-    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
 
     "paths": {
-      "*": ["./*"],
       "@/*": ["./src/*"]
     }
   },

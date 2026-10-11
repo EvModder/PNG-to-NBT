@@ -121,7 +121,8 @@ export function hasStepMixOpportunity(
   colorGrid: ColorGrid,
   options: { waterDrops?: WaterDrops },
 ): boolean {
-  const belowPlatformWater = options.waterDrops !== undefined;
+  const waterDrops = options.waterDrops;
+  const belowPlatformWater = waterDrops !== undefined;
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 1; z < MAP_SIZE; ++z) {
       const color = colorGrid[x][z];
@@ -136,7 +137,7 @@ export function hasStepMixOpportunity(
         && (MAX_MIXED_STEP_HEIGHT > 1 || north.shade !== Shade.Dark)) return true;
       if (!isWaterColor(north)) continue;
       if (belowPlatformWater) {
-        const northWaterDrop = options.waterDrops[north.shade as Shade.Dark | Shade.Flat | Shade.Light];
+        const northWaterDrop = waterDrops[north.shade as Shade.Dark | Shade.Flat | Shade.Light];
         if (northWaterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${north.shade}`);
         if (color.shade === Shade.Flat && northWaterDrop === 0) return true;
         continue;

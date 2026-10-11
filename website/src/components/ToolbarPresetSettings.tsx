@@ -26,7 +26,7 @@ type ToolbarPresetSettingsProps = {
   showCrubTechPreset: boolean;
   activeIdx: number;
   selectPreset: (idx: number) => void;
-  activePresetBuiltinTooltip: string;
+  activePresetBuiltinTooltip?: string;
   presetDirty: boolean;
   isBuiltinUnedited: boolean;
   sharePreset: () => Promise<void>;

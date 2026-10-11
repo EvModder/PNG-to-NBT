@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { blockIdOnly } from "./block-entry-utils.mjs";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(import.meta.dirname, "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
 const OUT_ROOT = path.join(ROOT, "assets", "block-icons-source");
 const RAW_ROOT = path.join(OUT_ROOT, "raw");

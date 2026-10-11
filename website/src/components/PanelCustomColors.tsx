@@ -331,20 +331,21 @@ export function PanelCustomColors({
   }, [formatRequiredCount, getShadeCount, hasRequiredCol, imageValid, onCopyColorToClipboard, setTooltipFromShade]);
 
   const renderRow = useCallback((row: CustomColorRow, showRequired: boolean) => {
-    const isBaseRow = row.baseIndex !== null;
+    const baseIndex = row.baseIndex;
+    const isBaseRow = baseIndex !== null;
     const selectedBlock = isBaseRow
-      ? (selectedBlocks[row.baseIndex] ?? "")
+      ? (selectedBlocks[baseIndex] ?? "")
       : getSelectedCustomColorBlock(selectedBlocksCustom, row.customIndex, customColors);
     const swatchShades = getOrderedSwatchShades(imageValid, usedShadesByColorKey.get(getRowColorKey(row)));
 
-    const swatch = row.baseIndex === null
+    const swatch = baseIndex === null
       ? renderSwatch(
           row,
           swatchShades,
           shade => getShadedRgb(row.color, shade as Shade.Dark | Shade.Flat | Shade.Light),
           selectedBlock || undefined,
         )
-      : renderSwatch(row, swatchShades, shade => getShadedRgb({ id: row.baseIndex, shade }), selectedBlock || undefined);
+      : renderSwatch(row, swatchShades, shade => getShadedRgb({ id: baseIndex, shade }), selectedBlock || undefined);
 
     const requiredCount = getRowDisplayRequiredCount(row);
     const requiredText =

@@ -44,7 +44,6 @@ import {
   shouldIncludeTransparentBlocks,
 } from "@/utils/conversion";
 import { normalizeCustomSelectedBlocks } from "@/utils/customColors";
-import { MAP_SIZE } from "@/utils/color";
 import type { ColorRgb } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { createFillerAssignments, isFillerDisabled } from "@/lib/fillerRules";
@@ -53,7 +52,7 @@ import { hasNonWaterColorHeightVariance } from "@/lib/shapeAnalysis";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { SupportMode } from "@/types/ui";
 
-const TEST_ROOT = import.meta.dir;
+const TEST_ROOT = import.meta.dirname;
 const CASES_ROOT = path.join(TEST_ROOT, "cases");
 const FAILURE_ROOT = path.join(TEST_ROOT, "failures");
 const REPO_ROOT = path.resolve(TEST_ROOT, "../..");
@@ -222,7 +221,7 @@ function firstDiffOffset(a: Uint8Array, b: Uint8Array): number {
 
 async function gunzipIfPossible(data: Uint8Array): Promise<Uint8Array | null> {
   if (data.length < 2 || data[0] !== 0x1f || data[1] !== 0x8b) return null;
-  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("gzip"));
+  const stream = new Blob([new Uint8Array(data)]).stream().pipeThrough(new DecompressionStream("gzip"));
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   while (true) {
@@ -272,7 +271,6 @@ function readPngChunks(bytes: Uint8Array): Array<{ type: string; data: Uint8Arra
 
 function unfilterPngScanlines(
   data: Uint8Array,
-  width: number,
   height: number,
   bytesPerPixel: number,
   bytesPerRow: number,
@@ -374,7 +372,6 @@ async function loadImageData(inputPath: string): Promise<ImageData> {
 
   const raw = unfilterPngScanlines(
     inflateSync(idat),
-    width,
     height,
     channels,
     width * channels,

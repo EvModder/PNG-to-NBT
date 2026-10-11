@@ -2569,7 +2569,7 @@ function buildStepPhaseBlocks(
           south.shade === Shade.Flat &&
           northWaterDrop === 0;
         if (currentSouthNeedsFlatWater) shadedByRepeatedNorth.add(cellKey(x, southZ));
-        const shouldRepeat = currentSouthNeedsFlatWater || (repeatSouthWater && isWaterColor(south));
+        const shouldRepeat: boolean = currentSouthNeedsFlatWater || (repeatSouthWater && isWaterColor(south));
         if (shouldRepeat) repeatedBelowPlatformWaterColumns.add(cellKey(x, z));
         repeatSouthWater = shouldRepeat;
       }
@@ -2661,12 +2661,14 @@ function buildStepPhaseBlocks(
     pushUnique({ x, y: getRepeatedPhaseBaseY(x, z), z, ref: { kind: "color", color } });
   }
 
-  for (const key of repeatedBelowPlatformWaterColumns) {
-    const [x, z] = parseColumnCoordKey(key);
-    const color = colorGrid[x][z];
-    if (!isWaterColor(color)) continue;
-    const waterDrop = getWaterDrop(waterDrops, color.shade);
-    pushUniqueDroppedWater({ x, y: getRepeatedPhaseBaseY(x, z) - waterDrop, z, ref: { kind: "color", color } });
+  if (belowPlatformWater) {
+    for (const key of repeatedBelowPlatformWaterColumns) {
+      const [x, z] = parseColumnCoordKey(key);
+      const color = colorGrid[x][z];
+      if (!isWaterColor(color)) continue;
+      const waterDrop = getWaterDrop(waterDrops, color.shade);
+      pushUniqueDroppedWater({ x, y: getRepeatedPhaseBaseY(x, z) - waterDrop, z, ref: { kind: "color", color } });
+    }
   }
 
   return { blocks: stepBlocks, loweredWaterBlocks };

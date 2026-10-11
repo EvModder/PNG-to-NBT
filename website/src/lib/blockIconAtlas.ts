@@ -60,7 +60,8 @@ export function getBlockIconAtlasEntry(
   iconKey: string,
 ): BlockIconAtlasEntry | null {
   const atlas = BLOCK_ICON_ATLASES[atlasName];
-  const index = atlas.entries[iconKey];
+  const entries: Readonly<Record<string, number | undefined>> = atlas.entries;
+  const index = entries[iconKey];
   if (index === undefined) return null;
 
   const col = index % atlas.columns;

@@ -24,10 +24,13 @@ jobs:
         working-directory: website
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: website/package.json
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: website/package.json
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - run: bun run build
       - uses: actions/upload-pages-artifact@v5
         with:

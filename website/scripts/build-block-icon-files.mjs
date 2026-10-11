@@ -4,7 +4,7 @@ import path from "node:path";
 import { blockIdOnly, normalizeBlockEntry } from "./block-entry-utils.mjs";
 import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, OMITTED_BLOCK_PATTERNS } from "./excluded-blocks.mjs";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(import.meta.dirname, "..");
 const MAP_COLORS_PATH = path.join(ROOT, "src", "data", "mapColors.ts");
 const EXCLUDED_COLORS_PATH = path.join(ROOT, "src", "data", "mapColorsExcluded.ts");
 const PUBLIC_ICON_ROOT = path.join(ROOT, "public", "block-icons");

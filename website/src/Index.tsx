@@ -99,7 +99,6 @@ import {
   requiresTwoLayerLateShading,
   hasStepMixOpportunity,
   summarizeVoidShadows,
-  type ColorGridStats,
   type WaterDrops,
 } from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";

@@ -15,7 +15,7 @@ UNUSED_ROOT = ROOT / "public" / "block-icons" / "unused"
 ATLAS_CELL_SIZE = 16
 BLOCK_TEXTURE_HOST = "https://assets.mcasset.cloud/latest/assets/minecraft/textures/block"
 ENTITY_SHULKER_HOST = "https://assets.mcasset.cloud/latest/assets/minecraft/textures/entity/shulker"
-SSL_CONTEXT = ssl._create_unverified_context()
+SSL_CONTEXT = ssl.create_default_context()
 
 SHULKER_BLOCK_IDS = [
     "shulker_box",
