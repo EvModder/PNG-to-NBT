@@ -1,40 +1,38 @@
 # My crap
-website/tests/failures/
-reports/
-website/.tmp*
-work_files/
-sample_imgs/
-minecraft-wiki/
-upstream-compare-*/
+/website/tests/failures/
+/work_files/
+/sample_imgs/
+/minecraft-wiki/
+/website/.tmp*
 
 # Log crap
-logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+*.log.*
 
 # Build crap
 /block-icons/
+/website/dist/
+/website/node_modules/
 *.tsbuildinfo
-node_modules
-dist
-dist-ssr
+# Meh, maybe should publish it
 bun.lock
 package-lock.json
-website/.bun-version
+
+# Environment crap
+__pycache__/
+.venv/
+*.py[cod]
+.env
+.env.*
+!.env.example
 
 # Apple crap
 .DS_Store
 
 # Editor crap
+.idea/
 .vscode/*
 !.vscode/extensions.json
-.idea
 *.suo
 *.ntvs*
-*.njsproj
-*.sln
 *.sw?
