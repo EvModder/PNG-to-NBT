@@ -556,7 +556,7 @@ export const BLOCK_ICON_ATLASES = {
     },
     "height": 368,
     "rows": 23,
-    "src": "block-icons/packed/primary.083c997f39ad.png",
+    "src": "block-icons.primary.083c997f39ad.png",
     "width": 368
   },
   "unused": {
@@ -1034,7 +1034,7 @@ export const BLOCK_ICON_ATLASES = {
     },
     "height": 352,
     "rows": 22,
-    "src": "block-icons/packed/unused.ca332058eacf.png",
+    "src": "block-icons.unused.ca332058eacf.png",
     "width": 352
   }
 } as const satisfies Record<BlockIconAtlasName, BlockIconAtlasManifest>;

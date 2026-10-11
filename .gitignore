@@ -1,6 +1,6 @@
 # My crap
 website/tests/failures/
-website/reports/
+reports/
 website/.tmp*
 work_files/
 sample_imgs/
@@ -17,6 +17,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Build crap
+/block-icons/
 *.tsbuildinfo
 node_modules
 dist
