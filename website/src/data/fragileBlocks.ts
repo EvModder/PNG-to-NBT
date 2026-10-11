@@ -76,6 +76,7 @@ const FRAGILE_BLOCKS = new Set([
     // Other blocks with placement conditions
   "fire", "soul_fire", "snow", "pointed_dripstone", "lantern", "soul_lantern",
   "amethyst_cluster", "large_amethyst_bud", "medium_amethyst_bud", "small_amethyst_bud",
+  "ice_crystal", "icicle",
   "sulfur_spike", "torch", "soul_torch", "copper_torch", "redstone_torch",
   "waxed_copper_lantern", "waxed_exposed_copper_lantern", "waxed_weathered_copper_lantern", "waxed_oxidized_copper_lantern",
   "oxidized_copper_lantern",

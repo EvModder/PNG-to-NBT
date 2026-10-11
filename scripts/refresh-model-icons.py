@@ -248,6 +248,8 @@ class Assets:
         if block in {"sulfur_spike", "pointed_dripstone"}:
             # Inventory sprites hang downward; map-art placements use the default upright tip.
             return self.texture(f"block/{block}_up_tip")
+        if block == "icicle":
+            return self.render("block/icicle_down_tip_base").transpose(Image.Transpose.ROTATE_180)
         if block.endswith(("_wall", "_fence")):
             return self.render(f"block/{block}_post")
         item = self.json("items", block)["model"]

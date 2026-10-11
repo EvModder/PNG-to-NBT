@@ -30,14 +30,25 @@ assert.deepEqual(getBlockFallbackVersion("closed_eyeblossom", 49), { operator: "
 assert.deepEqual(latest.blocks, BASE_COLORS.map(color => color.blocks));
 assert.deepEqual(latest.excluded, EXCLUDED_BLOCKS);
 const previous = getMinecraftCatalog("26.2");
-const added = latest.blocks.flat().filter(block => !previous.blocks.flat().includes(block));
-const addedHidden = latest.excluded.flat().filter(block => !previous.excluded.flat().includes(block));
+const wilderness = getMinecraftCatalog("26.3");
+const added = wilderness.blocks.flat().filter(block => !previous.blocks.flat().includes(block));
+const addedHidden = wilderness.excluded.flat().filter(block => !previous.excluded.flat().includes(block));
 assert.equal(added.length, 14);
 assert.equal(addedHidden.length, 72);
 for (const block of [...added, ...addedHidden]) {
   assert(!isBlockAvailable(block, 5022), block);
   assert(isBlockAvailable(block, 5023), block);
-  for (const version of versions.slice(0, -1)) assert(!isBlockAvailable(block, version), `${version}: ${block}`);
+  for (const version of versions.filter(version => MINECRAFT_VERSIONS[version].dataVersion < 5023)) assert(!isBlockAvailable(block, version), `${version}: ${block}`);
+}
+assert.deepEqual(latest.blocks.flat().filter(block => !wilderness.blocks.flat().includes(block)), ["ice_crystal", "icicle[attached=true]"]);
+assert.deepEqual(latest.excluded, wilderness.excluded);
+for (const [id, block] of [[5, "ice_crystal"], [17, "icicle[attached=true]"]] as const) {
+  assert.equal(latest.blocks[id].at(-1), block);
+  assert(isFragileBlock(block));
+  assert(!isBlockAvailable(block, 5121));
+  assert(isBlockAvailable(block, 5122));
+  assert.equal(getVersionedSelections({ [id]: block }, "26.3")[id], "");
+  assert.equal(getVersionedSelections({ [id]: block }, "26.4")[id], block);
 }
 for (const [id, color] of Object.entries({ 8: "white", 15: "orange", 16: "magenta", 17: "light_blue", 18: "yellow", 19: "lime", 20: "pink", 21: "gray", 22: "light_gray", 23: "cyan", 24: "purple", 25: "blue", 26: "brown", 27: "green", 28: "red", 29: "black" })) {
   const row = latest.excluded[Number(id)];
@@ -223,7 +234,7 @@ async function exportBytes(version: MinecraftVersion, blocks: Record<number, str
 }
 for (const version of versions) {
   const bytes = await exportBytes(version, { 0: "chain", 6: "iron_block" });
-  assert(bytes.includes(Buffer.from(version === "26.3" ? "\x08\x00\x02id" : "\x08\x00\x04Name")), "Palette field names must match the export version");
+  assert(bytes.includes(Buffer.from(MINECRAFT_VERSIONS[version].dataVersion >= 5006 ? "\x08\x00\x02id" : "\x08\x00\x04Name")), "Palette field names must match the export version");
   const chain = version === "1.21.4" || version === "1.21.5" ? "minecraft:chain" : "minecraft:iron_chain";
   assert.equal(bytes.toString().split(chain).length - 1, 1, "Chain spellings must collapse to one palette state");
   const split = await exportBytes(version, { 0: "chain", 6: "iron_block" }, "iron_chain", false);
@@ -249,6 +260,12 @@ await assert.rejects(exportBytes("26.2", { 0: "glass", 6: "red_shrub" }), /unava
 const shrub = await exportBytes("26.3", { 0: "glass", 6: "red_shrub" }, "stone");
 assert(shrub.includes(Buffer.from("minecraft:red_shrub")));
 assert(shrub.includes(Buffer.from("minecraft:dirt")), "Red shrub needs a soil support replacement");
+for (const block of ["ice_crystal", "icicle[attached=true]"]) {
+  await assert.rejects(exportBytes("26.3", { 6: block }), /unavailable/);
+  const bytes = await exportBytes("26.4", { 6: block }, "glass");
+  assert(bytes.includes(Buffer.from(`minecraft:${block.split("[")[0]}`)));
+  if (block.startsWith("icicle")) assert(bytes.includes(Buffer.from("attached\x00\x04true")));
+}
 for (const color of ["red", "orange", "yellow"]) {
   const leaves = await exportBytes("26.3", { 0: "glass", 6: `${color}_poplar_leaves[waterlogged=true]` });
   assert(leaves.includes(Buffer.from(`minecraft:${color}_poplar_leaves`)));

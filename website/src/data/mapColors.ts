@@ -78,6 +78,7 @@ import type { ColorRgbBase } from "@/types/color";
  * - Twisting vines use `age=25` (sheared) to prevent natural growth from changing shading.
  * - Chorus blocks are hidden; flowers use `age=5` (dead) to prevent growth in pasted schematics.
  * - Bamboo, cactus and sugar cane are omitted entirely because their growth can change shading.
+ * - Upright icicles use `attached=true` to match floor placement; a single supported icicle neither grows nor melts.
  */
 // Callers:
 // - src/utils/color.ts
@@ -126,7 +127,7 @@ export const WATER_BASE_INDEX = 12;
 // - src/utils/color.ts
 // - src/utils/colorTableLayout.ts
 // - src/utils/customColors.ts
-// Latest catalog (26.3); lib/minecraftVersion.ts derives older catalogs without changing these colors.
+// Latest catalog (26.4 Snapshot 3); lib/minecraftVersion.ts derives older catalogs without changing these colors.
 // Shared preset URLs use alphabetical indices filtered to their Minecraft DataVersion.
 // Register new-version blocks in BLOCK_INTRODUCTIONS before adding them here.
 // Display reordering is safe. Adding/removing/renaming already-available blocks or
@@ -137,7 +138,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "SAND", r: 247, g: 233, b: 163, blocks: ["sand", "sandstone", "cut_sandstone", "smooth_sandstone", "candle", "ochre_froglight", "glowstone", "end_stone", "end_stone_bricks", "bone_block", "scaffolding", "birch_log", "stripped_birch_log", "birch_wood", "stripped_birch_wood", "birch_planks", "birch_pressure_plate", "turtle_egg"] },
   { name: "WOOL", r: 199, g: 199, b: 199, blocks: ["mushroom_stem", "cobweb", "white_candle"] },
   { name: "FIRE", r: 255, g: 0, b: 0, blocks: ["redstone_block", "tnt", "lava", "fire"] },
-  { name: "ICE", r: 160, g: 160, b: 255, blocks: ["ice", "packed_ice", "blue_ice", "frosted_ice"] },
+  { name: "ICE", r: 160, g: 160, b: 255, blocks: ["ice", "packed_ice", "blue_ice", "frosted_ice", "ice_crystal"] },
   { name: "METAL", r: 167, g: 167, b: 167, blocks: ["iron_block", "heavy_weighted_pressure_plate", "lodestone", "pale_oak_leaves", "anvil", "closed_eyeblossom", "lantern", "soul_lantern", "waxed_copper_lantern", "waxed_exposed_copper_lantern", "waxed_weathered_copper_lantern", "waxed_oxidized_copper_lantern", "oxidized_copper_lantern"] },
   { name: "PLANT", r: 0, g: 124, b: 0, blocks: ["bamboo_block[axis=x]", "oak_leaves", "spruce_leaves", "birch_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "mangrove_leaves", "azalea_leaves", "flowering_azalea_leaves", "big_dripleaf", "fern", "short_grass", "bush", "firefly_bush", "pink_petals", "wildflowers", "poppy"] },
   { name: "SNOW", r: 255, g: 255, b: 255, blocks: ["white_wool", "white_carpet", "white_concrete", "white_concrete_powder", "white_glazed_terracotta", "white_stained_glass", "powder_snow", "snow_block", "snow"] },
@@ -149,7 +150,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "QUARTZ", r: 255, g: 252, b: 245, blocks: ["quartz_block", "quartz_bricks", "smooth_quartz", "quartz_pillar", "diorite", "polished_diorite", "pale_oak_log", "stripped_pale_oak_log", "pale_oak_planks", "pale_oak_pressure_plate", "stripped_pale_oak_wood", "sea_lantern", "target"] },
   { name: "COLOR_ORANGE", r: 216, g: 127, b: 51, blocks: ["orange_wool", "orange_carpet", "orange_concrete", "orange_concrete_powder", "orange_glazed_terracotta", "orange_stained_glass", "orange_candle", "orange_poplar_leaves", "acacia_log", "stripped_acacia_log", "stripped_acacia_wood", "acacia_planks", "acacia_pressure_plate", "terracotta", "pumpkin", "carved_pumpkin", "jack_o_lantern", "red_sand", "red_sandstone", "cut_red_sandstone", "smooth_red_sandstone", "honey_block", "honeycomb_block", "raw_copper_block", "waxed_copper_block", "waxed_cut_copper", "open_eyeblossom"] },
   { name: "COLOR_MAGENTA", r: 178, g: 76, b: 216, blocks: ["magenta_wool", "magenta_carpet", "magenta_concrete", "magenta_concrete_powder", "magenta_glazed_terracotta", "magenta_stained_glass", "magenta_candle", "purpur_block", "purpur_pillar"] },
-  { name: "COLOR_LIGHT_BLUE", r: 102, g: 153, b: 216, blocks: ["light_blue_wool", "light_blue_carpet", "light_blue_concrete", "light_blue_concrete_powder", "light_blue_glazed_terracotta", "light_blue_stained_glass", "light_blue_candle", "soul_fire"] },
+  { name: "COLOR_LIGHT_BLUE", r: 102, g: 153, b: 216, blocks: ["light_blue_wool", "light_blue_carpet", "light_blue_concrete", "light_blue_concrete_powder", "light_blue_glazed_terracotta", "light_blue_stained_glass", "light_blue_candle", "soul_fire", "icicle[attached=true]"] },
   { name: "COLOR_YELLOW", r: 229, g: 229, b: 51, blocks: ["yellow_wool", "yellow_carpet", "yellow_concrete", "yellow_concrete_powder", "yellow_glazed_terracotta", "yellow_stained_glass", "yellow_candle", "yellow_poplar_leaves", "bamboo_block", "stripped_bamboo_block", "bamboo_planks", "bamboo_pressure_plate", "sponge", "wet_sponge", "hay_block", "bee_nest", "sulfur", "polished_sulfur", "sulfur_bricks", "sulfur_spike", "tall_dry_grass", "short_dry_grass"] },
   { name: "COLOR_LIGHT_GREEN", r: 127, g: 204, b: 25, blocks: ["lime_wool", "lime_carpet", "lime_concrete", "lime_concrete_powder", "lime_glazed_terracotta", "lime_stained_glass", "lime_candle", "melon"] },
   { name: "COLOR_PINK", r: 242, g: 127, b: 165, blocks: ["pink_wool", "pink_carpet", "pink_concrete", "pink_concrete_powder", "pink_glazed_terracotta", "pink_stained_glass", "pink_candle", "pearlescent_froglight", "cherry_leaves", "cactus_flower"] },

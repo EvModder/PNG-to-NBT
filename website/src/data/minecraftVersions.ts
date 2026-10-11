@@ -15,7 +15,7 @@
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
  */
-// Breakpoints reflect default-visible blocks only. Each range targets its newest release.
+// Breakpoints reflect default-visible blocks only. Each range targets its newest listed build.
 // Keep ranges chronological; preset decoding locates ranges by DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
 // Callers:
@@ -31,6 +31,7 @@ export const MINECRAFT_VERSIONS = {
   "1.21.9": { label: "1.21.9–26.1.2", dataVersion: 4790 },
   "26.2": { label: "26.2", dataVersion: 4903 },
   "26.3": { label: "26.3", dataVersion: 5023 },
+  "26.4": { label: "26.4 Snapshot 3", dataVersion: 5122 },
 } as const;
 
 // Callers:
@@ -62,4 +63,5 @@ export const BLOCK_INTRODUCTIONS: readonly (readonly [pattern: RegExp, dataVersi
   [/(^|_)poplar(_|$)/, 5023, "26.3"],
   [/_(wool|concrete)_(slab|stairs)$/, 5023, "26.3"],
   [/^(red_shrub|shelf_mushroom|straw_bed)$/, 5023, "26.3"],
+  [/^(ice_crystal|icicle)$/, 5122, "26.4 Snapshot 3"],
 ];
