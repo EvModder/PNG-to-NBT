@@ -32,7 +32,7 @@ export function measureToolbarWidths(
   const fillerWidth = measureNoWrapSectionWidth(fillerEl);
   const availableWidth = Math.min(Math.max(presetWidth, colorTableWidth), fillerEl.getBoundingClientRect().width);
   if (fillerWidth < availableWidth) {
-    fillerEl.style.setProperty("--filler-input-width", "181px");
+    fillerEl.style.setProperty("--filler-input-width", "160px");
     if (measureNoWrapSectionWidth(fillerEl) > availableWidth) {
       fillerEl.style.removeProperty("--filler-input-width");
     }

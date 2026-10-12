@@ -131,7 +131,7 @@ function FillerField({
           }}
           placeholder={placeholder}
           title={tooltip}
-          className="w-[var(--filler-input-width,101px)] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
+          className="w-[var(--filler-input-width,100px)] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
         />
         {showRequiredBadge && (
           <>
@@ -359,7 +359,7 @@ export function ToolbarFillerSettings({
     >
       {groups.map((group, index) => (
         <Fragment key={group.key}>
-          {index > 0 && <span className="mt-1 h-4 border-l border-border/70" />}
+          {index > 0 && <span aria-hidden="true" className="vertical-separator mt-1" />}
           {group.node}
         </Fragment>
       ))}

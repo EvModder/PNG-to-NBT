@@ -368,7 +368,7 @@ export function PanelImagePreview({
               />
             </label>
           )}
-          {showVsFillersInPreviewToggle && imageData && <span className="h-4 border-l border-border/70" />}
+          {showVsFillersInPreviewToggle && imageData && <span aria-hidden="true" className="vertical-separator" />}
           {imageData && (
             <button
               type="button"
@@ -690,6 +690,7 @@ export function PanelImagePreview({
             <button
               type="button"
               onClick={handleLayerSplitConvertAndDownload}
+              title={messages.upload.convertButtonLayerSplitTitle}
               disabled={converting || busy}
               className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >

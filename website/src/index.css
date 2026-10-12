@@ -92,6 +92,14 @@
   code, .font-mono {
     font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
   }
+
+  input[type="checkbox"] {
+    @apply accent-primary;
+  }
+}
+
+.vertical-separator {
+  @apply h-4 shrink-0 border-l border-muted-foreground/80;
 }
 
 .block-options-scroll {

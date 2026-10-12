@@ -99,7 +99,7 @@ export const enCatalog = {
     label: "Shading:",
     staircaseGroupLabel: "Staircase",
     suppressGroupLabel: "Suppress",
-    crubTechLabel: "CrubTech",
+    crubTechLabel: "CrubTech:",
     crubTechTooltip:
       "For 2-layer suppress builds, split upper shading fillers into breakable and pushable variants so east-west adjacent shade fillers do not all use the same CrubTech behavior.",
     latePairsGapLabel: "Late-pairs gap:",
@@ -108,7 +108,7 @@ export const enCatalog = {
     layerGapTooltip: "Layer gap controls the vertical spacing between lower and upper 2-layer suppress sections.",
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
-      "Adjacent suppress steps can reuse prior-step recessive color blocks as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
+      "Keep reusable blocks between phases to provide shading, reducing placement and manual mining. Disable for platforms with built-in clearing.",
     centerOutLabel: "Center-out:",
     centerOutTooltip: "Build in one direction; load from one side.\nOr build outward from the center; load from both sides.",
     centerOutEastWest: "W←Center→E",
@@ -124,7 +124,7 @@ export const enCatalog = {
     waterLevelTooltip:
       "{shadeName} water shade: 0 places this shade's water block at the non-water floor Y. Each increment lowers it by 1 block. Used water shades must have distinct values.",
     waterLevelAriaLabel: "{shadeName} water shade level",
-    paletteSeedLabel: "Palette Seed:",
+    paletteSeedLabel: "Palette seed:",
     stepDirectionLabels: {
       [SuppressStepDirection.EastToWest]: "E→W",
       [SuppressStepDirection.WestToEast]: "W→E",
@@ -306,6 +306,7 @@ export const enCatalog = {
     convertButtonZipCount: "Generate .zip ({count} ids)",
     convertButtonLayerSplit: "Layer-split ({count})",
     convertButtonLayerSplitZip: "Layer-split .zip ({count})",
+    convertButtonLayerSplitTitle: "Download separate schematics for each build layer.",
   },
   preview: {
     missingBlockAssignments: {
@@ -317,8 +318,6 @@ export const enCatalog = {
     iceConversionInfo:
       "Note: Ice has been selected for water-color.\nConvert it to water in-game for colors to be accurate.",
     eyeblossomWarning: "Overworld: eyeblossom colors cycle day/night.",
-    iceConversionWarning:
-      "Warning: Ice has been selected for water-color.\nThis build contains floating ice pillars.\nIce cannot convert to water unless the pillar has support beneath it.",
     noFillerNorthRowLine: "North-row shading requires filler placements.",
     noFillerSuppressLine: "Suppress-shading requires filler placements.",
     noFillerInGridLine: "Some shading-critical fillers are required inside the 128x128 grid.",

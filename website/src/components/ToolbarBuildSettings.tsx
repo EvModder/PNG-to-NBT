@@ -7,7 +7,7 @@
  * - src/components/ToolbarPresetSettings.tsx
  */
 import { Fragment, type ReactNode } from "react";
-import { Droplets, ArrowDownToLine } from "lucide-react";
+import { Droplets, ArrowDownToLine, Printer, Pickaxe } from "lucide-react";
 import { Shade } from "@/data/mapColors";
 import { messages } from "@/lib/messages";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -191,7 +191,7 @@ export function ToolbarBuildSettings({
                 >
                   <Droplets className="h-3 w-3" />
                   <span>{shade}</span>
-                  <ArrowDownToLine className="h-3 w-3" />
+                  <span className="inline-flex items-center"><ArrowDownToLine className="h-3 w-3" />:</span>
                 </span>
                 <span className="sr-only">{ariaLabel}</span>
                 <input
@@ -278,7 +278,7 @@ export function ToolbarBuildSettings({
             checked={crubTech}
             onChange={e => setCrubTech(e.target.checked)}
             title={messages.buildMode.crubTechTooltip}
-            className="h-3.5 w-3.5 accent-primary"
+            className="h-3.5 w-3.5"
           />
         </label>
       ),
@@ -293,13 +293,27 @@ export function ToolbarBuildSettings({
           className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
           title={messages.buildMode.mixStepsTooltip}
         >
-          <span title={messages.buildMode.mixStepsTooltip}>{messages.buildMode.mixStepsLabel}</span>
+          <span aria-hidden="true" className="inline-flex items-center">
+            <svg viewBox="5 0 9 16" className="h-4 w-[9px] fill-current">
+              <path d="M7 0h4v4H7z M8 4h2v6H8z M8 10h2l-3 6H5z M8 10h2l3 6h-2z" />
+              <path d="m8 4 6 3-1 2-6-3z" />
+            </svg>
+            <span>[</span>
+            <span className="inline-flex items-center gap-px">
+              <Printer className="h-4 w-4" />
+              <span className="-mr-px">+</span>
+              <Pickaxe className="h-4 w-4" />
+            </span>
+            <span className="-mr-[0.05em]">]</span>
+            <span>:</span>
+          </span>
+          <span className="sr-only">{messages.buildMode.mixStepsLabel}</span>
           <input
             type="checkbox"
             checked={mixSteps}
             onChange={e => setMixSteps(e.target.checked)}
             title={messages.buildMode.mixStepsTooltip}
-            className="h-3.5 w-3.5 accent-primary"
+            className="h-3.5 w-3.5"
           />
         </label>
       ),
@@ -316,7 +330,7 @@ export function ToolbarBuildSettings({
             type="checkbox"
             checked={proPaletteSeed}
             onChange={e => setProPaletteSeed(e.target.checked)}
-            className="h-3.5 w-3.5 accent-primary"
+            className="h-3.5 w-3.5"
           />
         </label>
       ),
@@ -337,7 +351,7 @@ export function ToolbarBuildSettings({
             checked={buildAtWorldMinY}
             onChange={e => setBuildAtWorldMinY(e.target.checked)}
             title={messages.buildMode.buildAtWorldMinYTooltip}
-            className="h-3.5 w-3.5 accent-primary"
+            className="h-3.5 w-3.5"
           />
         </label>
       ),
@@ -422,7 +436,7 @@ export function ToolbarBuildSettings({
                   value={opt.value}
                   disabled={opt.disabled}
                   data-muted={opt.muted ? "true" : undefined}
-                  style={opt.muted ? { color: "var(--muted-foreground)", fontStyle: "italic" } : undefined}
+                  style={opt.muted ? { fontStyle: "italic" } : undefined}
                   title={messages.buildMode.tooltip(opt.value)}
                 >
                   {opt.label}
@@ -441,7 +455,7 @@ export function ToolbarBuildSettings({
     <div className="ml-auto flex items-center gap-1">
       {groups.map((group, index) => (
         <Fragment key={group.key}>
-          {index > 0 && <span className="h-4 border-l border-border/70" />}
+          {index > 0 && <span aria-hidden="true" className="vertical-separator mx-0.5" />}
           {group.node}
         </Fragment>
       ))}

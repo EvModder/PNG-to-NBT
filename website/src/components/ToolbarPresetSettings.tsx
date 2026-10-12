@@ -80,7 +80,7 @@ export function ToolbarPresetSettings({
       <div
         className={`flex gap-1.5 items-center ${isStackedLayout ? "flex-wrap" : "flex-nowrap"}`}
       >
-        <div className="inline-flex items-center gap-1.5 shrink-0">
+        <div className="inline-flex items-center gap-1 shrink-0">
           <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>{messages.presets.label}</span>
           <div className="inline-flex items-center gap-1">
             <select
@@ -146,7 +146,7 @@ export function ToolbarPresetSettings({
         </div>
         {showSupportModeSelector && (
           <>
-            <span className="h-4 border-l border-border/70" />
+            <span aria-hidden="true" className="vertical-separator" />
             <div className="inline-flex items-center gap-1 shrink-0">
               <span className={ACCENT_SMALL_LABEL_TEXT_CLASS}>{messages.supportMode.label}</span>
               <select

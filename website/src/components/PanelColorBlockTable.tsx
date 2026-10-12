@@ -801,37 +801,37 @@ export function PanelColorBlockTable({
             <h2 className={`${PANEL_TITLE_TEXT_CLASS} cursor-help whitespace-nowrap`} title={messages.table.titleTooltip}>
               {messages.table.title}
             </h2>
-            <span className="h-3 border-l border-border/70" />
+            <span aria-hidden="true" className="vertical-separator" />
             <button
               className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowIds(value => !value)}
             >
-              {showIds ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
+              {showIds ? <Minus size={10} className="-mx-[1.5px] text-destructive" /> : <Plus size={10} className="-mx-[1.5px] text-primary" />}
               {messages.table.toggleIds}
             </button>
-            <span className="h-3 border-l border-border/70" />
+            <span aria-hidden="true" className="vertical-separator" />
             <button
               className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowNames(value => !value)}
             >
-              {showNames ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
+              {showNames ? <Minus size={10} className="-mx-[1.5px] text-destructive" /> : <Plus size={10} className="-mx-[1.5px] text-primary" />}
               {messages.table.toggleNames}
             </button>
-            <span className="h-3 border-l border-border/70" />
+            <span aria-hidden="true" className="vertical-separator" />
             <button
               className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowOptions(value => !value)}
             >
-              {showOptions ? <Minus size={10} className="text-destructive" /> : <Plus size={10} className="text-green-500" />}
+              {showOptions ? <Minus size={10} className="-mx-[1.5px] text-destructive" /> : <Plus size={10} className="-mx-[1.5px] text-primary" />}
               {messages.table.toggleOptions}
             </button>
-            <span className="h-3 border-l border-border/70" />
+            <span aria-hidden="true" className="vertical-separator" />
             <button
               className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setBlockDisplayMode(value => (value === "names" ? "textures" : "names"))}
               title={messages.table.toggleBlockDisplayTitle}
             >
-              <Glasses aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={1.9} />
+              <Glasses aria-hidden="true" className="-mx-[0.5px] h-3.5 w-3.5 shrink-0" strokeWidth={1.9} />
               {messages.table.blockDisplayMode(blockDisplayMode)}
             </button>
           </div>
@@ -851,7 +851,7 @@ export function PanelColorBlockTable({
                   />
                 </label>
               )}
-              {showMaxPerSplitOption && <span className="h-3 border-l border-border/70" />}
+              {showMaxPerSplitOption && <span aria-hidden="true" className="vertical-separator" />}
               <label
                 className={MUTED_INLINE_TOGGLE_CONTROL_CLASS}
                 title={messages.table.mcUnitsTooltip}

@@ -475,6 +475,7 @@ export const messages = {
     convertButtonLayerSplitZip(count: number): string {
       return formatTemplate(catalog.upload.convertButtonLayerSplitZip, { count });
     },
+    convertButtonLayerSplitTitle: catalog.upload.convertButtonLayerSplitTitle,
   },
   preview: {
     missingBlockAssignments(count: number): string {
@@ -483,7 +484,6 @@ export const messages = {
     northRowAlignmentInfo: catalog.preview.northRowAlignmentInfo,
     iceConversionInfo: catalog.preview.iceConversionInfo,
     eyeblossomWarning: catalog.preview.eyeblossomWarning,
-    iceConversionWarning: catalog.preview.iceConversionWarning,
     noFillerNorthRowLine: catalog.preview.noFillerNorthRowLine,
     noFillerSuppressLine: catalog.preview.noFillerSuppressLine,
     noFillerInGridLine: catalog.preview.noFillerInGridLine,

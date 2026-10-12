@@ -92,7 +92,7 @@ export const esCatalog = {
     label: "Sombreado:",
     staircaseGroupLabel: "Escalera",
     suppressGroupLabel: "Supresión",
-    crubTechLabel: "CrubTech",
+    crubTechLabel: "CrubTech:",
     crubTechTooltip:
       "Para los esquemas suppress de 2 capas, divide los rellenos de sombreado superiores entre variantes rompibles y empujables para que los rellenos adyacentes este-oeste no usen todos el mismo comportamiento de CrubTech.",
     latePairsGapLabel: "Separación de pares tardios:",
@@ -102,7 +102,7 @@ export const esCatalog = {
       "La separación de capas controla el espacio vertical entre las secciones inferior y superior de la supresión de 2 capas.",
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
-      "Permite que pasos adyacentes de supresión compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
+      "Conserva bloques reutilizables entre fases para dar sombra, reduciendo la colocación y el minado manual. Desactívalo en plataformas con limpieza integrada.",
     centerOutLabel: "Desde el centro:",
     centerOutTooltip: "Construye en una dirección; actualiza desde un lado.\nO construye del centro hacia fuera; actualiza desde ambos lados.",
     centerOutEastWest: "O←Centro→E",
@@ -302,6 +302,7 @@ export const esCatalog = {
     convertButtonZipCount: "Generar .zip ({count} ids)",
     convertButtonLayerSplit: "Por capas ({count})",
     convertButtonLayerSplitZip: "Por capas .zip ({count})",
+    convertButtonLayerSplitTitle: "Descarga esquemas separados para cada capa de construcción.",
   },
   preview: {
     missingBlockAssignments: {
@@ -313,8 +314,6 @@ export const esCatalog = {
     iceConversionInfo:
       "Nota: Se ha seleccionado hielo para el color del agua.\nConviértelo en agua dentro del juego para que los colores sean correctos.",
     eyeblossomWarning: "Overworld: flores de ojo cambian de color día/noche.",
-    iceConversionWarning:
-      "Advertencia: Se ha seleccionado hielo para el color del agua.\nEsta construcción contiene pilares de hielo flotantes.\nEl hielo no puede convertirse en agua si el pilar no tiene soporte debajo.",
     noFillerNorthRowLine: "El sombreado de la fila norte requiere colocaciones de relleno.",
     noFillerSuppressLine: "El sombreado de supresión requiere colocaciones de relleno.",
     noFillerInGridLine: "Se requieren algunos rellenos críticos de sombreado dentro de la cuadrícula de 128x128.",
