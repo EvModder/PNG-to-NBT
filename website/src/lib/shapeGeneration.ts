@@ -17,6 +17,7 @@ import { ShapePartType, type GeneratedShape, type ShapeCell, type ShapeCoordKey,
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { PixelParity, getPixelParity, type WaterDrops } from "./colorGridAnalysis";
 import { parseShapeCoordKey, toShapeCoordKey } from "./shapeModel";
+import { buildSuppressStepPhases, type SuppressStepPhase } from "./suppressSteps";
 
 type PositionedEntry = { x: number; y: number; z: number };
 type ShapeRef =
@@ -28,11 +29,6 @@ type ShapeBounds = ShapePart["bounds"];
 type RecessivePlacementOverride = {
   colorY: number;
   fillerY?: number;
-};
-type StepPhaseSpec = {
-  axis: "x" | "z";
-  lines: readonly number[];
-  includeAt: (x: number, z: number) => boolean;
 };
 type ShapeBlockSet = {
   blocks: ShapeBlock[];
@@ -2212,87 +2208,11 @@ function buildSuppressDualLayerBlocks(
   return { blocks, loweredWaterBlocks, supportFloorYs };
 }
 
-function getOrderedStepLines(
-  direction: SuppressStepDirection,
-): { axis: "x" | "z"; lines: number[] } {
-  const axis = getSuppressStepAxis(direction);
-  const ascending = (
-    direction === SuppressStepDirection.WestToEast ||
-    direction === SuppressStepDirection.NorthToSouth
-  );
-  const lines = Array.from({ length: MAP_SIZE }, (_, index) => ascending ? index : MAP_SIZE - 1 - index);
-  return { axis, lines };
-}
-
 function getSuppressStepAxis(direction: SuppressStepDirection): "x" | "z" {
   return (
     direction === SuppressStepDirection.NorthToSouth ||
     direction === SuppressStepDirection.SouthToNorth
   ) ? "z" : "x";
-}
-
-function makeStepPhaseSpec(
-  axis: "x" | "z",
-  lines: readonly number[],
-  includeAt: (x: number, z: number) => boolean,
-): StepPhaseSpec {
-  return { axis, lines, includeAt };
-}
-
-function buildStepPhaseSpecsForDirection(
-  buildMode: StepwiseBuildMode,
-  direction: SuppressStepDirection,
-): StepPhaseSpec[] {
-  const specs: StepPhaseSpec[] = [];
-  const { axis, lines } = getOrderedStepLines(direction);
-  const getLine = (x: number, z: number) => axis === "x" ? x : z;
-  const makeSingleLineParitySpec = (line: number, parity: PixelParity) =>
-    makeStepPhaseSpec(axis, [line], (x, z) => getLine(x, z) === line && getPixelParity(x, z) === parity);
-  const makeDualParitySpec = (
-    dominantLines: readonly number[],
-    recessiveLines: readonly number[],
-  ) => {
-    const dominantSet = new Set(dominantLines);
-    const recessiveSet = new Set(recessiveLines);
-    return makeStepPhaseSpec(axis, [...dominantLines, ...recessiveLines], (x, z) => {
-      const line = getLine(x, z);
-      const parity = getPixelParity(x, z);
-      return (
-        (dominantSet.has(line) && parity === PixelParity.Dominant) ||
-        (recessiveSet.has(line) && parity === PixelParity.Recessive)
-      );
-    });
-  };
-
-  if (buildMode === BuildMode.SuppressStepPairs) {
-    specs.push(makeSingleLineParitySpec(lines[0], PixelParity.Recessive));
-    for (let i = 1; i < lines.length; ++i) {
-      specs.push(makeDualParitySpec([lines[i - 1]], [lines[i]]));
-    }
-    specs.push(makeSingleLineParitySpec(lines[lines.length - 1], PixelParity.Dominant));
-    return specs;
-  }
-
-  const linePairs: number[][] = [];
-  for (let i = 0; i < lines.length; i += 2) {
-    const first = lines[i];
-    const second = lines[i + 1];
-    if (second === undefined) break;
-    linePairs.push([first, second]);
-  }
-  specs.push(makeStepPhaseSpec(axis, linePairs[0] ?? [], (x, z) => {
-    const line = getLine(x, z);
-    return (linePairs[0]?.includes(line) ?? false) && getPixelParity(x, z) === PixelParity.Recessive;
-  }));
-  for (let i = 1; i < linePairs.length; ++i) {
-    specs.push(makeDualParitySpec(linePairs[i - 1], linePairs[i]));
-  }
-  const lastPair = linePairs[linePairs.length - 1] ?? [];
-  specs.push(makeStepPhaseSpec(axis, lastPair, (x, z) => {
-    const line = getLine(x, z);
-    return lastPair.includes(line) && getPixelParity(x, z) === PixelParity.Dominant;
-  }));
-  return specs;
 }
 
 function buildBelowPlatformWaterPreviewBlocks(
@@ -2387,10 +2307,10 @@ function getMixedStepColumnHeights(colorGrid: ColorGrid, maxHeight: number, cach
 
 function buildStepPhaseBlocks(
   colorGrid: ColorGrid,
-  currentSpec: StepPhaseSpec,
+  currentSpec: SuppressStepPhase,
   currentBaseY: number,
-  previousSpec?: StepPhaseSpec,
-  nextSpec?: StepPhaseSpec,
+  previousSpec?: SuppressStepPhase,
+  nextSpec?: SuppressStepPhase,
   allowMixStepReuse = false,
   waterDrops?: WaterDrops,
   mixedColumnHeights?: ReadonlyMap<number, Uint8Array>,
@@ -2452,7 +2372,7 @@ function buildStepPhaseBlocks(
   const collectRepeatedNorthBlocks = (
     shadedParity: PixelParity,
     northParity: PixelParity,
-    adjacentSpec: StepPhaseSpec | undefined,
+    adjacentSpec: SuppressStepPhase | undefined,
   ) => {
     if (!adjacentSpec) return;
     const scanX = currentSpec.axis === "x" ? currentSpec.lines : Array.from({ length: MAP_SIZE }, (_, index) => index);
@@ -2475,7 +2395,7 @@ function buildStepPhaseBlocks(
   const collectSharedNorthColumnsForWater = (
     waterParity: PixelParity,
     northParity: PixelParity,
-    adjacentSpec: StepPhaseSpec | undefined,
+    adjacentSpec: SuppressStepPhase | undefined,
   ) => {
     if (belowPlatformWater) return;
     if (!adjacentSpec) return;
@@ -2679,6 +2599,7 @@ function buildStepPhaseParts(
   colorGrid: ColorGrid,
   buildMode: StepwiseBuildMode,
   stepDirection: SuppressStepDirection,
+  centerOut: boolean,
   mixSteps: boolean,
   mixedStepMaxHeight: number,
   waterDrops: WaterDrops | undefined,
@@ -2686,7 +2607,7 @@ function buildStepPhaseParts(
   cache?: GridShapeCache,
 ): StepPhasePartsBuildResult {
   const belowPlatformWater = waterDrops !== undefined;
-  const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
+  const specs = buildSuppressStepPhases(buildMode, stepDirection, centerOut);
   const steps: RawShapePart[] = [];
   let hasAnyEmptyPhase = false;
   const mixedColumnHeights = mixSteps && mixedStepMaxHeight && getSuppressStepAxis(stepDirection) === "x"
@@ -2724,8 +2645,12 @@ function buildStepPhaseParts(
     );
     const part = buildShapePart(blocks, [], true, new Set<number>([baseY - 1]), loweredWaterBlocks);
     const isEmptyPart = part.blocks.length === 0 && part.loweredWaterBlocks.length === 0 && part.fillerCandidates.length === 0;
+    // An empty strip may still need a map update after removing the previous phase's shaders.
+    const needsClearUpdate = centerOut && isEmptyPart && steps.at(-1)?.blocks.some(block =>
+      block.z >= 0 && block.z < MAP_SIZE && specs[stepIndex].includeAt(block.x, block.z),
+    );
     if (isEmptyPart) hasAnyEmptyPhase = true;
-    if (skipEmptySuppressSteps && isEmptyPart) {
+    if (skipEmptySuppressSteps && isEmptyPart && !needsClearUpdate) {
       continue;
     }
     part.suppressStepIndex = stepIndex;
@@ -2791,6 +2716,7 @@ function getShapeCacheKeyId(
   mixSteps: boolean,
   mixedStepMaxHeight: number,
   stepDirection: SuppressStepDirection,
+  centerOut: boolean,
   paletteSeed: number,
   waterDrops?: WaterDrops,
   topAlignedWater = false,
@@ -2805,6 +2731,7 @@ function getShapeCacheKeyId(
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|dir:${stepDirection}`;
+  if (isSuppressStepsBuildMode(buildMode) && centerOut) id += "|center:1";
   if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
   if (isSuppressStepsBuildMode(buildMode) && mixSteps && mixedStepMaxHeight) id += `|stepheight:${mixedStepMaxHeight}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|skipempty:${skipEmptySuppressSteps ? 1 : 0}`;
@@ -2923,6 +2850,7 @@ function getCachedStaircaseParts(
     false,
     0,
     SuppressStepDirection.EastToWest,
+    false,
     paletteSeed,
     waterDrops,
     topAlignedWater,
@@ -2987,7 +2915,7 @@ function getCachedSuppressSplitParts(
   buildMode: BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, SuppressStepDirection.EastToWest, 0, waterDrops);
+  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, SuppressStepDirection.EastToWest, false, 0, waterDrops);
   return getCachedRawParts(cache, keyId, () =>
       buildMode === BuildMode.SuppressSplitRow
         ? buildSuppressSplitRowBlockSets(colorGrid, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks))
@@ -3000,19 +2928,20 @@ function getCachedSuppressStepParts(
   cache: GridShapeCache,
   buildMode: StepwiseBuildMode,
   stepDirection: SuppressStepDirection,
+  centerOut: boolean,
   mixSteps: boolean,
   mixedStepMaxHeight: number,
   skipEmptySuppressSteps: boolean,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, mixedStepMaxHeight, stepDirection, 0, waterDrops, false, true, false, skipEmptySuppressSteps);
+  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, mixedStepMaxHeight, stepDirection, centerOut, 0, waterDrops, false, true, false, skipEmptySuppressSteps);
   const cached = cache.rawParts.get(keyId);
   if (cached) return cached;
 
-  const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, mixSteps, mixedStepMaxHeight, waterDrops, skipEmptySuppressSteps, cache);
+  const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, waterDrops, skipEmptySuppressSteps, cache);
   cache.rawParts.set(keyId, rawPartsBuild.parts);
   if (!rawPartsBuild.hasAnyEmptyPhase) {
-    const alternateKeyId = getShapeCacheKeyId(buildMode, 0, mixSteps, mixedStepMaxHeight, stepDirection, 0, waterDrops, false, true, false, !skipEmptySuppressSteps);
+    const alternateKeyId = getShapeCacheKeyId(buildMode, 0, mixSteps, mixedStepMaxHeight, stepDirection, centerOut, 0, waterDrops, false, true, false, !skipEmptySuppressSteps);
     cache.rawParts.set(alternateKeyId, rawPartsBuild.parts);
   }
   return rawPartsBuild.parts;
@@ -3033,6 +2962,7 @@ function getCachedSuppress2LayerParts(
     false,
     0,
     SuppressStepDirection.EastToWest,
+    false,
     0,
     waterDrops,
     false,
@@ -3065,6 +2995,7 @@ function buildRawShapeParts(
   mixSteps: boolean,
   mixedStepMaxHeight: number,
   stepDirection: SuppressStepDirection,
+  centerOut: boolean,
   paletteSeed: number,
   waterDrops?: WaterDrops,
   topAlignedWater = false,
@@ -3082,9 +3013,9 @@ function buildRawShapeParts(
     case BuildMode.SuppressSplitChecker:
       return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker, waterDrops);
     case BuildMode.SuppressStepPairs:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops);
     case BuildMode.SuppressStepChecker:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops);
     case BuildMode.Suppress2LayerLateFillers:
       return getCachedSuppress2LayerParts(
         colorGrid,
@@ -3129,6 +3060,7 @@ function getGeneratedShape(
   mixSteps: boolean,
   mixedStepMaxHeight: number,
   stepDirection: SuppressStepDirection,
+  centerOut: boolean,
   paletteSeed: number,
   waterDrops?: WaterDrops,
   topAlignedWater = false,
@@ -3147,6 +3079,7 @@ function getGeneratedShape(
     mixSteps,
     mixedStepMaxHeight,
     stepDirection,
+    centerOut,
     paletteSeed,
     waterDrops,
     topAlignedWater,
@@ -3169,6 +3102,7 @@ function getGeneratedShape(
     mixSteps,
     mixedStepMaxHeight,
     stepDirection,
+    centerOut,
     paletteSeed,
     waterDrops,
     topAlignedWater,
@@ -3215,6 +3149,7 @@ export function generateShapeMap(
   options: {
     layerGap: number;
     mixSteps?: boolean;
+    suppressCenterOut?: boolean;
     mixedStepMaxHeight?: number;
     paletteSeed?: number;
     waterSetting?: StaircaseWaterSetting;
@@ -3272,6 +3207,7 @@ export function generateShapeMap(
       mixSteps,
       mixedStepMaxHeight,
       stepDirection,
+      options.suppressCenterOut === true && isSuppressStepsBuildMode(buildMode),
       paletteSeed,
       waterDrops,
       topAlignedWater,

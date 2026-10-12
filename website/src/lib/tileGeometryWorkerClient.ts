@@ -128,7 +128,7 @@ function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeomet
 }
 
 function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeometryWorkerInput): string {
-  // 2-layer direction changes the loading route, not the block geometry.
+  // 2-layer direction and center-out change the loading route, not the block geometry.
   const twoLayer = buildModeUsesLayerGap(input.buildMode);
   return [
     tileCacheKey,
@@ -153,6 +153,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     input.collapseStaircaseModes ? 1 : 0,
     input.includeFlatNorthline ? 1 : 0,
     twoLayer ? "" : input.selectedStepDirection,
+    !twoLayer && input.suppressCenterOut ? 1 : 0,
   ].join("|");
 }
 

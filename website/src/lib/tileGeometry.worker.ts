@@ -81,6 +81,7 @@ function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileFinalGeo
       includeFlatNorthline: input.includeFlatNorthline,
       selectedMode: input.buildMode,
       selectedStepDirection: input.selectedStepDirection,
+      suppressCenterOut: input.suppressCenterOut,
     },
   );
   const northlineShape = shapeMap[BuildMode.StaircaseNorthline] ?? null;

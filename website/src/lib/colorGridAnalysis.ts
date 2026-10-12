@@ -11,6 +11,7 @@
  * - computeColorGridStats()
  * - collectShadeCountsByColorRefKey()
  * - summarizeVoidShadows()
+ * - canUseSuppressDirection()
  * - deriveImageStats()
  * - aggregateDerivedImageStats()
  *
@@ -20,6 +21,7 @@
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/suppressSteps.ts
  * - src/lib/tileGeometry.worker.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/lib/tileParsingWorkerTypes.ts
@@ -29,11 +31,14 @@ import { MAX_MIXED_STEP_HEIGHT } from "@/data/defaultSettings";
 import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { Shade, type ColorGrid, type ColorRef } from "@/types/color";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { isSuppressStepsBuildMode } from "@/utils/conversion";
 
 // Callers:
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressSteps.ts
 export enum PixelParity {
   Recessive = "recessive",
   Dominant = "dominant",
@@ -86,8 +91,33 @@ export enum FlatModeBehavior {
 // Callers:
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/suppressSteps.ts
 export function getPixelParity(x: number, z: number): PixelParity {
   return ((x + z) & 1) === 0 ? PixelParity.Recessive : PixelParity.Dominant;
+}
+
+// Callers:
+// - src/Index.tsx
+export function canUseSuppressDirection(
+  buildMode: BuildMode,
+  direction: SuppressStepDirection,
+  voidShadowSummary: VoidShadowSummary,
+  hasWater: boolean,
+  centerOut: boolean,
+): boolean {
+  if (centerOut && isSuppressStepsBuildMode(buildMode) &&
+    (voidShadowSummary.hasAnyVoidShadow || hasWater) &&
+    (direction === SuppressStepDirection.NorthToSouth || direction === SuppressStepDirection.SouthToNorth)) return false;
+  if (buildMode !== BuildMode.SuppressStepChecker) return true;
+  switch (direction) {
+    case SuppressStepDirection.EastToWest:
+    case SuppressStepDirection.WestToEast:
+      return true;
+    case SuppressStepDirection.NorthToSouth:
+      return voidShadowSummary.northToSouthSelectable;
+    case SuppressStepDirection.SouthToNorth:
+      return voidShadowSummary.southToNorthSelectable;
+  }
 }
 
 // Callers:

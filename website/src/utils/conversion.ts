@@ -5,6 +5,7 @@
  * - isSuppressStepsBuildMode()
  * - buildModeUsesLayerGap()
  * - isCrubTechBuildMode()
+ * - buildModeSupportsCenterOut()
  * - buildModeUsesPaletteSeed()
  * - shouldIncludeTransparentBlocks()
  * - getBuildModeRangeMax()
@@ -19,8 +20,10 @@
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/lib/buildModeShapes.ts
+ * - src/lib/colorGridAnalysis.ts
  * - src/lib/messages.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/previewImageEdits.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
  */
@@ -59,7 +62,13 @@ export function getBuildModeDownloadSuffix(
   buildMode: BuildMode,
   direction: SuppressStepDirection,
   crubTech = false,
+  centerOut = false,
 ): string {
+  if (centerOut && buildModeSupportsCenterOut(buildMode, crubTech)) {
+    const axis = direction === SuppressStepDirection.EastToWest || direction === SuppressStepDirection.WestToEast ? "EW" : "NS";
+    const mode = buildMode === BuildMode.SuppressStepPairs ? "step_pairs" : buildMode === BuildMode.SuppressStepChecker ? "step_checker" : "2layer";
+    return `-suppress_${mode}_center_out_${axis}`;
+  }
   switch (buildMode) {
     case BuildMode.Flat:
       return "";
@@ -141,6 +150,8 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/colorGridAnalysis.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeGeneration.ts
 export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
@@ -184,6 +195,15 @@ export function isCrubTechBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/nbtExport.ts
+// - src/lib/suppressLoadMarkers.ts
+export function buildModeSupportsCenterOut(buildMode: BuildMode, crubTech = false): boolean {
+  return isSuppressStepsBuildMode(buildMode) ||
+    (buildModeUsesLayerGap(buildMode) && !(crubTech && isCrubTechBuildMode(buildMode)));
+}
+
+// Callers:
+// - src/Index.tsx
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
   return buildMode === BuildMode.StaircaseParty;
@@ -202,13 +222,13 @@ export function shouldIncludeTransparentBlocks(
 }
 
 // Callers:
-// - src/Index.tsx
-export function getBuildModeRangeMax(buildMode: BuildMode): number {
+// - src/lib/previewImageEdits.ts
+export function getBuildModeRangeMax(buildMode: BuildMode, centerOut = false): number {
   switch (buildMode) {
     case BuildMode.SuppressStepPairs:
-      return 128;
+      return centerOut ? 64 : 128;
     case BuildMode.SuppressStepChecker:
-      return 64;
+      return centerOut ? 32 : 64;
     default:
       return 127;
   }

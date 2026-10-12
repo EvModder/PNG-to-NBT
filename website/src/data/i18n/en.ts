@@ -109,6 +109,10 @@ export const enCatalog = {
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
       "Adjacent suppress steps can reuse prior-step recessive color blocks as flat-shade providers, reducing block churn between steps but slightly complicating the process (by expecting you to keep these blocks between phases).",
+    centerOutLabel: "Center-out:",
+    centerOutTooltip: "Build in one direction; load from one side.\nOr build outward from the center; load from both sides.",
+    centerOutEastWest: "W←Center→E",
+    centerOutNorthSouth: "N←Center→S",
     buildAtWorldMinYLabel: "Build at Y=0:",
     buildAtWorldMinYTooltip:
       "Flat-map optimization: build the map at world minimum Y so flat-shade pixels directly south of transparent pixels do not require color suppression fillers.",
@@ -128,8 +132,9 @@ export const enCatalog = {
       [SuppressStepDirection.SouthToNorth]: "S→N",
     } as const satisfies Record<SuppressStepDirection, string>,
     stepDirectionTooltip: "Suppression direction: {directionLabel}. Click to cycle.",
-    twoLayerDirectionTooltip: "Load the full map first. Clear two upper-layer columns per step, then add late blocks only in the cleared area. Load 126 blocks beyond the last cleared column. Initial load lines inside the build are unmarked.",
-    twoLayerNorthSouthTooltip: "Load the full map first. Clear one upper-layer row per step, then add late blocks only in the cleared area. Load 127 blocks south of the last cleared row for N→S, or 126 north for S→N. Clear the upper north border with row 0. Initial load lines inside the build are unmarked.",
+    twoLayerClearScope: { oneWay: "per step", centerOut: "per side" },
+    twoLayerDirectionTooltip: "Load the full map first. Clear two upper-layer columns {clearScope}, then add late blocks only in the cleared area. Load 126 blocks beyond the last cleared column. Initial load lines inside the build are unmarked.",
+    twoLayerNorthSouthTooltip: "Load the full map first. Clear one upper-layer row {clearScope}, then add late blocks only in the cleared area. Load 127 blocks south of the last cleared row for N→S, or 126 north for S→N. Clear the upper north border with row 0. Initial load lines inside the build are unmarked.",
     stepDirectionAriaLabel: "Suppression direction {directionLabel}",
     optionLabels: {
       [BuildMode.Flat]: "Flat",
@@ -364,7 +369,10 @@ export const enCatalog = {
     } as PluralForms,
     suppressStepNorthSouthWarning:
       "{modeLabel} {directionLabel} places north/south blocks in the same phase.\nTo preserve shading, this raises some color blocks, increasing build complexity.",
-    suppressTwoLayerNorthSouthWarning: "2-Layer {directionLabel} clears one row per step.\nThis requires twice as many steps as E/W.",
+    suppressTwoLayerNorthSouthWarning: {
+      oneWay: "2-Layer {directionLabel} clears one row per step.\nThis requires twice as many steps as E/W.",
+      centerOut: "2-Layer {directionLabel} clears one row per side.\nThis requires twice as many steps as E/W.",
+    },
     uniqueColorCount: {
       one: "{count} unique color",
       other: "{count} unique colors",

@@ -19,6 +19,7 @@ import {
   DEFAULT_BUILD_MODE,
   DEFAULT_SUPPORT_MODE,
   DEFAULT_SUPPRESS_STEP_DIRECTION,
+  DEFAULT_SUPPRESS_CENTER_OUT,
   DEFAULT_VS_FILLER_LOAD_DIRECTION,
   DEFAULT_PALETTE_SEED,
   DEFAULT_LAYER_GAP,
@@ -99,6 +100,7 @@ import {
   requiresTwoLayerLateShading,
   hasStepMixOpportunity,
   summarizeVoidShadows,
+  canUseSuppressDirection,
   type WaterDrops,
 } from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
@@ -164,6 +166,7 @@ import { getShapeForBuildMode } from "@/lib/buildModeShapes";
 import {
   offsetPreviewPixelReplacements,
   buildSelectedTileVisibleMask,
+  getPreviewRangeMax,
   collectVsFillerPreviewReplacements,
   usePreviewVisiblePixelMask,
   useVsFillerPreviewReplacements,
@@ -178,7 +181,7 @@ import {
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
   cycleSuppressStepDirection,
-  getBuildModeRangeMax,
+  buildModeSupportsCenterOut,
   isSuppressStepDirection,
   isStaircaseBuildMode,
   isSuppressBuildMode,
@@ -675,6 +678,8 @@ const Index = () => {
     const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
     return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
   });
+  const [suppressCenterOut, setSuppressCenterOut] = useState(() => loadCached(LS_KEYS.suppressCenterOut, DEFAULT_SUPPRESS_CENTER_OUT));
+  const calcSuppressCenterOut = useDeferredValue(suppressCenterOut && isSuppressStepsBuildMode(buildMode));
   const [vsFillerLoadSpotDirection, setVsFillerLoadSpotDirection] = useState<SuppressStepDirection>(() => {
     const storedDirection = loadCached(LS_KEYS.vsFillerLoadSpotDirection, DEFAULT_VS_FILLER_LOAD_DIRECTION);
     return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_VS_FILLER_LOAD_DIRECTION;
@@ -1080,6 +1085,7 @@ const Index = () => {
       [LS_KEYS.buildMode]: preferredBuildMode,
       [LS_KEYS.supportMode]: preferredSupportMode,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
+      [LS_KEYS.suppressCenterOut]: suppressCenterOut,
       [LS_KEYS.vsFillerLoadSpotDirection]: vsFillerLoadSpotDirection,
       [LS_KEYS.paletteSeed]: proPaletteSeed,
       [LS_KEYS.layerGap]: layerGap,
@@ -1135,6 +1141,7 @@ const Index = () => {
       preferredBuildMode,
       preferredSupportMode,
       suppressStepDirection,
+      suppressCenterOut,
       vsFillerLoadSpotDirection,
       proPaletteSeed,
       layerGap,
@@ -1327,19 +1334,9 @@ const Index = () => {
   const effectiveSuppress2LayerLatePairY = suppress2LayerUpperY + effectiveSuppress2LayerLatePairsGap;
   const calcEffectiveSuppress2LayerLatePairY = calcSuppress2LayerUpperY + calcEffectiveSuppress2LayerLatePairsGap;
   const isSuppressDirectionSelectable = useCallback(
-    (direction: SuppressStepDirection) => {
-      if (buildMode !== BuildMode.SuppressStepChecker) return true;
-      switch (direction) {
-        case SuppressStepDirection.EastToWest:
-        case SuppressStepDirection.WestToEast:
-          return true;
-        case SuppressStepDirection.NorthToSouth:
-          return voidShadowSummary.northToSouthSelectable;
-        case SuppressStepDirection.SouthToNorth:
-          return voidShadowSummary.southToNorthSelectable;
-      }
-    },
-    [buildMode, voidShadowSummary],
+    (direction: SuppressStepDirection, centerOut = suppressCenterOut) =>
+      canUseSuppressDirection(buildMode, direction, voidShadowSummary, imageHasWater, centerOut),
+    [buildMode, suppressCenterOut, imageHasWater, voidShadowSummary],
   );
   const effectiveSuppressStepDirection = crubTechControlsCurrent2LayerSettings ? SuppressStepDirection.EastToWest
     : isSuppressDirectionSelectable(suppressStepDirection) ? suppressStepDirection
@@ -1614,6 +1611,7 @@ const Index = () => {
               suppress2LayerLatePairY: calcEffectiveSuppress2LayerLatePairY,
               useCrubTech: nextUseCrubTechShadeFillers,
               mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
+              suppressCenterOut: calcSuppressCenterOut,
               mixedStepMaxHeight,
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
@@ -1682,6 +1680,7 @@ const Index = () => {
     calcEffectiveSuppress2LayerLatePairY,
     showMixStepsToggle,
     calcMixSteps,
+    calcSuppressCenterOut,
     paletteSeedOffset,
     supportMode,
     mixedStepMaxHeight,
@@ -2026,14 +2025,8 @@ const Index = () => {
     effectiveSuppressStepDirection === SuppressStepDirection.SouthToNorth;
   const isRowRangeMode = buildModeUsesLayerGap(effectiveBuildMode) && isNorthSouthSuppressStepDirection;
   const supportShape = selectedTileAnalysis?.supportShape ?? null;
-  const maxRangeIndex = useMemo(
-    () => {
-      if (!selectedTileAnalysis) return getBuildModeRangeMax(effectiveBuildMode);
-      return isStepRangeMode
-        ? Math.max(0, (supportShape?.parts.length ?? (getBuildModeRangeMax(effectiveBuildMode) + (effectiveBelowPlatformWater && selectedTileAnalysis.hasWater ? 1 : 0))) - 1)
-        : getBuildModeRangeMax(effectiveBuildMode);
-    },
-    [effectiveBuildMode, isStepRangeMode, supportShape, effectiveBelowPlatformWater, selectedTileAnalysis],
+  const maxRangeIndex = getPreviewRangeMax(
+    effectiveBuildMode, supportShape, suppressCenterOut, effectiveBelowPlatformWater && selectedTileAnalysis?.hasWater === true,
   );
   const supportModeVisibilityPending =
     !!imageData &&
@@ -2124,6 +2117,7 @@ const Index = () => {
         ? messages.preview.suppressNorthSouthWarning(
             buildMode,
             effectiveSuppressStepDirection,
+            suppressCenterOut,
           )
         : null,
     [
@@ -2133,6 +2127,7 @@ const Index = () => {
       lockFlatBuildMode,
       effectiveSuppressStepDirection,
       isNorthSouthSuppressStepDirection,
+      suppressCenterOut,
     ],
   );
   // Material counts depend on block IDs, not state tags; export retains the full assignments.
@@ -2334,6 +2329,7 @@ const Index = () => {
         }
         if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
         if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
+        if (decodedPreset.suppressCenterOut !== undefined) setSuppressCenterOut(decodedPreset.suppressCenterOut);
         if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
         if (decodedPreset.crubTech !== undefined) setCrubTech(decodedPreset.crubTech);
         if (decodedPreset.suppressStepDirection !== undefined && isSuppressStepDirection(decodedPreset.suppressStepDirection)) {
@@ -2643,6 +2639,7 @@ const Index = () => {
           buildAtWorldMinY,
           crubTech,
           suppressStepDirection,
+          suppressCenterOut,
           crubTechShadeBreakableFillerBlock,
           crubTechShadePushableFillerBlock,
           dominateVoidFillerBlock,
@@ -2679,6 +2676,7 @@ const Index = () => {
     buildAtWorldMinY,
     crubTech,
     suppressStepDirection,
+    suppressCenterOut,
     crubTechShadeBreakableFillerBlock,
     crubTechShadePushableFillerBlock,
     dominateVoidFillerBlock,
@@ -2906,7 +2904,7 @@ const Index = () => {
     setConverting(true);
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
-      const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, effectiveSuppressStepDirection, crubTechControlsActive2LayerSettings);
+      const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, effectiveSuppressStepDirection, crubTechControlsActive2LayerSettings, suppressCenterOut);
       const exportTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
       const exportEntries: { name: string; data: Uint8Array }[] = [];
       const westEastSlope = westEastSlopeEnabled && westEastSlopeRise !== 0 && !isSuppressBuildMode(effectiveBuildMode)
@@ -2929,6 +2927,7 @@ const Index = () => {
           baseName,
           buildMode: effectiveBuildMode,
           suppressStepDirection: activeSuppressDirection,
+          suppressCenterOut,
           westEastSlope,
           suppress2LayerLatePairY: effectiveSuppress2LayerLatePairY,
           crubTech: crubTechControlsActive2LayerSettings,
@@ -3229,6 +3228,9 @@ const Index = () => {
     showMixStepsToggle,
     mixSteps,
     setMixSteps,
+    showSuppressCenterOutToggle: buildModeSupportsCenterOut(effectiveBuildMode),
+    suppressCenterOut: suppressCenterOut && buildModeSupportsCenterOut(effectiveBuildMode, crubTech),
+    setSuppressCenterOut,
     showPaletteSeedToggle,
     proPaletteSeed,
     setProPaletteSeed,

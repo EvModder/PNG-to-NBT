@@ -21,6 +21,7 @@
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
  * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/suppressSteps.ts
  * - src/lib/tileGeometry.worker.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/types/shape.ts
@@ -39,6 +40,7 @@
 // - src/lib/nbtExport.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/suppressSteps.ts
 // - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/utils/conversion.ts
@@ -72,6 +74,7 @@ export enum BuildMode {
 // - src/lib/nbtExport.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/suppressSteps.ts
 // - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/utils/conversion.ts

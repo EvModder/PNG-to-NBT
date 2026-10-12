@@ -55,6 +55,7 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
 export const DEFAULT_SUPPORT_MODE = SupportMode.None;
 export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
+export const DEFAULT_SUPPRESS_CENTER_OUT = false;
 export const DEFAULT_VS_FILLER_LOAD_DIRECTION = SuppressStepDirection.NorthToSouth;
 export const DEFAULT_PALETTE_SEED = false;
 export const DEFAULT_LAYER_GAP = 5;

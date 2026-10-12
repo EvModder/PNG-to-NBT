@@ -77,6 +77,7 @@ export type TileFinalGeometryWorkerInput = {
   collapseStaircaseModes: boolean;
   includeFlatNorthline: boolean;
   selectedStepDirection: SuppressStepDirection;
+  suppressCenterOut: boolean;
 };
 
 // Callers:

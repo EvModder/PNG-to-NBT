@@ -25,6 +25,7 @@
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
  * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/suppressSteps.ts
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/utils/colorGridKey.ts
@@ -45,6 +46,7 @@ import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRe
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/suppressSteps.ts
 // - src/lib/tileParsing.worker.ts
 // - src/lib/tileParsingWorkerClient.ts
 // - src/utils/colorGridKey.ts

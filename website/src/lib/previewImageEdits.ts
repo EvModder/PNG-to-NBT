@@ -4,6 +4,7 @@
  * - PreviewPixelMask
  * - offsetPreviewPixelReplacements()
  * - buildSelectedTileVisibleMask()
+ * - getPreviewRangeMax()
  * - collectVsFillerPreviewReplacements()
  * - usePreviewVisiblePixelMask()
  * - useVsFillerPreviewReplacements()
@@ -18,12 +19,13 @@ import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getMinecraftCatalog } from "@/lib/minecraftVersion";
 import { normalizeBlockId, toDisplayName } from "@/lib/blockId";
-import { FillerRole } from "@/types/conversion";
+import { FillerRole, type BuildMode } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import { isShadeFillerDisabled } from "@/lib/fillerRules";
 import { collectFillerRolePixels } from "@/lib/shapeAnalysis";
 import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { MAP_SIZE } from "@/utils/color";
+import { getBuildModeRangeMax, isSuppressStepsBuildMode } from "@/utils/conversion";
 import type { ParsedColorGridTile } from "@/lib/colorGridParsing";
 
 // Callers:
@@ -146,6 +148,20 @@ export function buildSelectedTileVisibleMask(
   }
 
   return mask;
+}
+
+// Callers:
+// - src/Index.tsx
+export function getPreviewRangeMax(
+  buildMode: BuildMode,
+  shape: GeneratedShape | null,
+  centerOut: boolean,
+  belowPlatformWater: boolean,
+): number {
+  if (!isSuppressStepsBuildMode(buildMode)) return getBuildModeRangeMax(buildMode);
+  // Do not clamp the step range to a previous single-part shape while geometry updates.
+  if (shape?.partType === ShapePartType.SuppressStepPhases) return Math.max(0, shape.parts.length - 1);
+  return getBuildModeRangeMax(buildMode, centerOut) + Number(belowPlatformWater);
 }
 
 function getPreviewPixelParts(shape: GeneratedShape, phaseRange?: [number, number]) {

@@ -100,6 +100,12 @@ function getActiveCatalog(): ActiveCatalog {
 const catalog = getActiveCatalog();
 const pluralRules = new Intl.PluralRules(catalog.locale);
 
+function getStepDirectionLabel(direction: SuppressStepDirection, centerOut: boolean): string {
+  if (!centerOut) return catalog.buildMode.stepDirectionLabels[direction];
+  return direction === SuppressStepDirection.EastToWest || direction === SuppressStepDirection.WestToEast
+    ? catalog.buildMode.centerOutEastWest : catalog.buildMode.centerOutNorthSouth;
+}
+
 // Callers:
 // - src/Index.tsx
 export function getLocalePreference(): LocalePreference {
@@ -298,6 +304,8 @@ export const messages = {
     layerGapTooltip: catalog.buildMode.layerGapTooltip,
     mixStepsLabel: catalog.buildMode.mixStepsLabel,
     mixStepsTooltip: catalog.buildMode.mixStepsTooltip,
+    centerOutLabel: catalog.buildMode.centerOutLabel,
+    centerOutTooltip: catalog.buildMode.centerOutTooltip,
     buildAtWorldMinYLabel: catalog.buildMode.buildAtWorldMinYLabel,
     buildAtWorldMinYTooltip: catalog.buildMode.buildAtWorldMinYTooltip,
     waterLevelTooltip(shade: Shade.Dark | Shade.Flat | Shade.Light): string {
@@ -313,21 +321,24 @@ export const messages = {
       });
     },
     paletteSeedLabel: catalog.buildMode.paletteSeedLabel,
-    twoLayerDirectionTooltip(direction: SuppressStepDirection): string {
-      return direction === SuppressStepDirection.NorthToSouth || direction === SuppressStepDirection.SouthToNorth
+    twoLayerDirectionTooltip(direction: SuppressStepDirection, centerOut = false): string {
+      const template = direction === SuppressStepDirection.NorthToSouth || direction === SuppressStepDirection.SouthToNorth
         ? catalog.buildMode.twoLayerNorthSouthTooltip : catalog.buildMode.twoLayerDirectionTooltip;
-    },
-    stepDirectionLabel(direction: SuppressStepDirection): string {
-      return catalog.buildMode.stepDirectionLabels[direction];
-    },
-    stepDirectionTooltip(direction: SuppressStepDirection): string {
-      return formatTemplate(catalog.buildMode.stepDirectionTooltip, {
-        directionLabel: catalog.buildMode.stepDirectionLabels[direction],
+      return formatTemplate(template, {
+        clearScope: catalog.buildMode.twoLayerClearScope[centerOut ? "centerOut" : "oneWay"],
       });
     },
-    stepDirectionAriaLabel(direction: SuppressStepDirection): string {
+    stepDirectionLabel(direction: SuppressStepDirection, centerOut = false): string {
+      return getStepDirectionLabel(direction, centerOut);
+    },
+    stepDirectionTooltip(direction: SuppressStepDirection, centerOut = false): string {
+      return formatTemplate(catalog.buildMode.stepDirectionTooltip, {
+        directionLabel: getStepDirectionLabel(direction, centerOut),
+      });
+    },
+    stepDirectionAriaLabel(direction: SuppressStepDirection, centerOut = false): string {
       return formatTemplate(catalog.buildMode.stepDirectionAriaLabel, {
-        directionLabel: catalog.buildMode.stepDirectionLabels[direction],
+        directionLabel: getStepDirectionLabel(direction, centerOut),
       });
     },
     optionLabel(mode: BuildMode | string): string {
@@ -538,13 +549,13 @@ export const messages = {
         value,
       });
     },
-    suppressNorthSouthWarning(mode: BuildMode, direction: SuppressStepDirection): string {
+    suppressNorthSouthWarning(mode: BuildMode, direction: SuppressStepDirection, centerOut = false): string {
       const template = buildModeUsesLayerGap(mode)
-        ? catalog.preview.suppressTwoLayerNorthSouthWarning
+        ? catalog.preview.suppressTwoLayerNorthSouthWarning[centerOut ? "centerOut" : "oneWay"]
         : catalog.preview.suppressStepNorthSouthWarning;
       return formatTemplate(template, {
         modeLabel: getLookupValue(catalog.buildMode.optionLabels, mode, mode),
-        directionLabel: catalog.buildMode.stepDirectionLabels[direction],
+        directionLabel: centerOut ? "N↔S" : getStepDirectionLabel(direction, false),
       });
     },
     uniqueColorCount(count: number): string {

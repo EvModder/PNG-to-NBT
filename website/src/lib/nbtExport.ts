@@ -51,6 +51,7 @@ interface ExportOptions extends ColorBlockSelections {
   baseName: string;
   buildMode: BuildMode;
   suppressStepDirection: SuppressStepDirection;
+  suppressCenterOut?: boolean;
   suppress2LayerLatePairY?: number;
   crubTech?: boolean;
   markSuppressLoadSpotsInSchematic?: boolean;
@@ -523,6 +524,7 @@ function assembleCombinedExportBlocks(
       markSuppressLoadSpotsInSchematic: options.markSuppressLoadSpotsInSchematic,
       suppressLoadSpotMarkerBlock: options.suppressLoadSpotMarkerBlock,
       crubTech: options.crubTech,
+      suppressCenterOut: options.suppressCenterOut,
       suppress2LayerLatePairY: options.suppress2LayerLatePairY,
     },
   )) {

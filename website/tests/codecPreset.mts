@@ -23,7 +23,7 @@ const standard: FullPreset = {
   crubTechShadeBreakableFillerBlock: "moss_block", crubTechShadePushableFillerBlock: "resin_block",
   suppress2LayerLateFillerBlock: "slime_block", dominateVoidFillerBlock: "slime_block", recessiveVoidFillerBlock: "honey_block",
   supportMode: SupportMode.None, buildMode: BuildMode.StaircaseGroup,
-  proPaletteSeed: false, mixSteps: true, buildAtWorldMinY: true, crubTech: false, westEastSlopeEnabled: false,
+  proPaletteSeed: false, mixSteps: true, buildAtWorldMinY: true, crubTech: false, westEastSlopeEnabled: false, suppressCenterOut: false,
   suppressStepDirection: SuppressStepDirection.EastToWest, vsFillerLoadSpotDirection: SuppressStepDirection.NorthToSouth,
   minecraftVersion: "26.2", suppress2LayerLatePairsGap: 1, layerGap: 5,
   lightWaterDrop: 0, flatWaterDrop: 2, darkWaterDrop: 4, westEastSlopeRun: 0, westEastSlopeRise: 0,
@@ -149,11 +149,11 @@ let index = 0;
 for (const buildMode of Object.values(BuildMode)) {
   for (const supportMode of Object.values(SupportMode)) {
     for (const minecraftVersion of versions) {
-      const flags = index % 32;
+      const flags = index % 64;
       await roundTrip({
         ...standard, buildMode, supportMode, minecraftVersion,
         proPaletteSeed: !!(flags & 1), mixSteps: !!(flags & 2), buildAtWorldMinY: !!(flags & 4),
-        crubTech: !!(flags & 8), westEastSlopeEnabled: !!(flags & 16),
+        crubTech: !!(flags & 8), westEastSlopeEnabled: !!(flags & 16), suppressCenterOut: !!(flags & 32),
         suppressStepDirection: directions[index % 4], vsFillerLoadSpotDirection: directions[Math.floor(index / 4) % 4],
         layerGap: integers[index % integers.length], lightWaterDrop: 7, flatWaterDrop: 14, darkWaterDrop: 24,
         suppress2LayerLatePairsGap: 10, westEastSlopeRun: 128, westEastSlopeRise: index % 2 ? -16384 : 16384,

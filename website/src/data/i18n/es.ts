@@ -103,6 +103,10 @@ export const esCatalog = {
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
       "Permite que pasos adyacentes de supresión compartan bloques de color recesivos reutilizables, reduciendo los bloques colocados o minados entre pasos pero haciendo menos uniforme la transición entre fases.",
+    centerOutLabel: "Desde el centro:",
+    centerOutTooltip: "Construye en una dirección; actualiza desde un lado.\nO construye del centro hacia fuera; actualiza desde ambos lados.",
+    centerOutEastWest: "O←Centro→E",
+    centerOutNorthSouth: "N←Centro→S",
     buildAtWorldMinYLabel: "Construir en minY mundial:",
     buildAtWorldMinYTooltip:
       "Optimización para mapas planos: construye el mapa en la Y mínima del mundo para que los píxeles de tono plano justo al sur de transparencia dentro de la cuadrícula no requieran rellenos de sombra de vacío.",
@@ -122,8 +126,9 @@ export const esCatalog = {
       [SuppressStepDirection.SouthToNorth]: "S→N",
     } as const satisfies Record<SuppressStepDirection, string>,
     stepDirectionTooltip: "Dirección de supresión: {directionLabel}. Haz clic para alternar.",
-    twoLayerDirectionTooltip: "Actualiza primero el mapa completo. Retira dos columnas superiores por paso y añade bloques tardíos solo en el área despejada. Actualiza 126 bloques más allá de la última columna retirada. Las líneas iniciales dentro de la construcción no se marcan.",
-    twoLayerNorthSouthTooltip: "Actualiza primero el mapa completo. Retira una fila superior por paso y añade bloques tardíos solo en el área despejada. Actualiza 127 bloques al sur de la última fila retirada para N→S, o 126 al norte para S→N. Retira el borde norte superior junto con la fila 0. Las líneas iniciales dentro de la construcción no se marcan.",
+    twoLayerClearScope: { oneWay: "por paso", centerOut: "por lado" },
+    twoLayerDirectionTooltip: "Actualiza primero el mapa completo. Retira dos columnas superiores {clearScope} y añade bloques tardíos solo en el área despejada. Actualiza 126 bloques más allá de la última columna retirada. Las líneas iniciales dentro de la construcción no se marcan.",
+    twoLayerNorthSouthTooltip: "Actualiza primero el mapa completo. Retira una fila superior {clearScope} y añade bloques tardíos solo en el área despejada. Actualiza 127 bloques al sur de la última fila retirada para N→S, o 126 al norte para S→N. Retira el borde norte superior junto con la fila 0. Las líneas iniciales dentro de la construcción no se marcan.",
     stepDirectionAriaLabel: "Dirección de supresión {directionLabel}",
     optionLabels: {
       [BuildMode.Flat]: "Plano",
@@ -360,7 +365,10 @@ export const esCatalog = {
     } as PluralForms,
     suppressStepNorthSouthWarning:
       "{modeLabel} {directionLabel} coloca bloques norte/sur en la misma fase.\nPara conservar el sombreado, se elevan algunos bloques de color, aumentando la complejidad.",
-    suppressTwoLayerNorthSouthWarning: "2 capas {directionLabel} retira una fila por paso.\nRequiere el doble de pasos que E/O.",
+    suppressTwoLayerNorthSouthWarning: {
+      oneWay: "2 capas {directionLabel} retira una fila por paso.\nRequiere el doble de pasos que E/O.",
+      centerOut: "2 capas {directionLabel} retira una fila por lado.\nRequiere el doble de pasos que E/O.",
+    },
     uniqueColorCount: {
       one: "{count} color único",
       other: "{count} colores únicos",

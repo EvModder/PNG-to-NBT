@@ -18,8 +18,8 @@ import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { buildModeUsesLayerGap, isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
-import { buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
+import { buildModeSupportsCenterOut, buildModeUsesLayerGap, isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
+import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
@@ -28,16 +28,12 @@ const CRUBTECH_PAUSE_LAMP_BLOCK = "minecraft:redstone_lamp[lit=true]";
 const CRUBTECH_CONTINUE_LAMP_BLOCK = "minecraft:redstone_lamp[lit=false]";
 
 type NonWaterColorCoord = { x: number; z: number };
-type StepPhaseSpec = {
-  lines: number[];
-  loadLine: number;
-  includeAt: (x: number, z: number) => boolean;
-};
 
 type BuildLoadSpotMarkerOptions = {
   markSuppressLoadSpotsInSchematic?: boolean;
   suppressLoadSpotMarkerBlock?: string;
   crubTech?: boolean;
+  suppressCenterOut?: boolean;
   suppress2LayerLatePairY?: number;
 };
 
@@ -58,85 +54,6 @@ function isXAxisDirection(direction: SuppressStepDirection): boolean {
     direction === SuppressStepDirection.EastToWest ||
     direction === SuppressStepDirection.WestToEast
   );
-}
-
-function getOrderedStepLines(
-  direction: SuppressStepDirection,
-): { axis: "x" | "z"; lines: number[]; lineStep: 1 | -1 } {
-  const axis = isXAxisDirection(direction) ? "x" : "z";
-  const ascending = (
-    direction === SuppressStepDirection.WestToEast ||
-    direction === SuppressStepDirection.NorthToSouth
-  );
-  const lines = Array.from({ length: MAP_SIZE }, (_, index) => ascending ? index : MAP_SIZE - 1 - index);
-  return { axis, lines, lineStep: ascending ? 1 : -1 };
-}
-
-function makeStepPhaseSpec(
-  lines: readonly number[],
-  loadLine: number,
-  includeAt: (x: number, z: number) => boolean,
-): StepPhaseSpec {
-  return { lines: [...lines], loadLine, includeAt };
-}
-
-function buildStepPhaseSpecsForDirection(
-  buildMode: BuildMode.SuppressStepPairs | BuildMode.SuppressStepChecker,
-  direction: SuppressStepDirection,
-): StepPhaseSpec[] {
-  const specs: StepPhaseSpec[] = [];
-  const { axis, lines, lineStep } = getOrderedStepLines(direction);
-  const getLine = (x: number, z: number) => axis === "x" ? x : z;
-  const makeSingleLineParitySpec = (line: number, parity: PixelParity) =>
-    makeStepPhaseSpec([line], line, (x, z) => getLine(x, z) === line && getPixelParity(x, z) === parity);
-  const makeDualParitySpec = (
-    dominantLines: readonly number[],
-    recessiveLines: readonly number[],
-    loadLine: number,
-  ) => {
-    const dominantSet = new Set(dominantLines);
-    const recessiveSet = new Set(recessiveLines);
-    return makeStepPhaseSpec([...dominantLines, ...recessiveLines], loadLine, (x, z) => {
-      const line = getLine(x, z);
-      const parity = getPixelParity(x, z);
-      return (
-        (dominantSet.has(line) && parity === PixelParity.Dominant) ||
-        (recessiveSet.has(line) && parity === PixelParity.Recessive)
-      );
-    });
-  };
-
-  if (buildMode === BuildMode.SuppressStepPairs) {
-    specs.push(makeSingleLineParitySpec(lines[0], PixelParity.Recessive));
-    for (let i = 1; i < lines.length; ++i) {
-      specs.push(makeDualParitySpec([lines[i - 1]], [lines[i]], lines[i]));
-    }
-    specs.push(makeStepPhaseSpec([lines[lines.length - 1]], lines[lines.length - 1] + lineStep, (x, z) => {
-      return getLine(x, z) === lines[lines.length - 1] && getPixelParity(x, z) === PixelParity.Dominant;
-    }));
-    return specs;
-  }
-
-  const linePairs: number[][] = [];
-  for (let i = 0; i < lines.length; i += 2) {
-    const first = lines[i];
-    const second = lines[i + 1];
-    if (second === undefined) break;
-    linePairs.push([first, second]);
-  }
-  specs.push(makeStepPhaseSpec(linePairs[0] ?? [], lines[1] ?? lines[0], (x, z) => {
-    const line = getLine(x, z);
-    return (linePairs[0]?.includes(line) ?? false) && getPixelParity(x, z) === PixelParity.Recessive;
-  }));
-  for (let i = 1; i < linePairs.length; ++i) {
-    specs.push(makeDualParitySpec(linePairs[i - 1], linePairs[i], lines[i * 2 + 1] ?? (lines[lines.length - 1] + lineStep * 2)));
-  }
-  const lastPair = linePairs[linePairs.length - 1] ?? [];
-  specs.push(makeStepPhaseSpec(lastPair, lines[lines.length - 1] + lineStep * 2, (x, z) => {
-    const line = getLine(x, z);
-    return lastPair.includes(line) && getPixelParity(x, z) === PixelParity.Dominant;
-  }));
-  return specs;
 }
 
 function getLoadSpotCoordinate(
@@ -324,14 +241,14 @@ function getNonWaterColorCoords(part: ShapePart): NonWaterColorCoord[] {
 }
 
 function buildSuppressStepPairMarkers(
-  spec: StepPhaseSpec,
+  loadLine: number,
   stepDirection: SuppressStepDirection,
   markerY: number,
   markerBlockName: string,
 ): LoadSpotMarkerEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
-    spec.loadLine,
+    loadLine,
     SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE,
   );
   const markers: LoadSpotMarkerEntry[] = [];
@@ -365,7 +282,7 @@ function buildSuppressStepPairMarkers(
 
 function buildSuppressStepCheckerMarkers(
   coords: readonly NonWaterColorCoord[],
-  spec: StepPhaseSpec,
+  loadLine: number,
   stepDirection: SuppressStepDirection,
   markerY: number,
   markerBlockName: string,
@@ -373,7 +290,7 @@ function buildSuppressStepCheckerMarkers(
 ): LoadSpotMarkerEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
-    spec.loadLine,
+    loadLine,
     SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE,
   );
   return buildSparseDominantLoadSpotMarkers(
@@ -390,10 +307,11 @@ function buildTwoLayerLoadSpotMarkers(
   shape: GeneratedShape,
   direction: SuppressStepDirection,
   markerBlockName: string,
+  centerOut: boolean,
 ): LoadSpotMarkerEntry[] {
   const markerY = getShapeMarkerY(shape);
   if (markerY === null) return [];
-  return buildTwoLayerLoadPhases(direction).flatMap(phase => phase.fronts.flatMap(front => {
+  return buildTwoLayerLoadPhases(direction, centerOut).flatMap(phase => phase.fronts.flatMap(front => {
     // Initial one-way load lines can cross the build or north border; leave them unmarked.
     if (front.loadLine >= (phase.axis === "x" ? 0 : -1) && front.loadLine < MAP_SIZE) return [];
     return buildSparseDominantLoadSpotMarkers(
@@ -408,29 +326,33 @@ function buildSuppressStepLoadSpotMarkers(
   stepDirection: SuppressStepDirection,
   enabled: boolean,
   markerBlockName: string,
+  centerOut: boolean,
 ): LoadSpotMarkerEntry[] {
   if (!enabled || shape.partType !== ShapePartType.SuppressStepPhases) return [];
   if (buildMode !== BuildMode.SuppressStepPairs && buildMode !== BuildMode.SuppressStepChecker) return [];
 
-  const specs = buildStepPhaseSpecsForDirection(buildMode, stepDirection);
+  const specs = buildSuppressStepPhases(buildMode, stepDirection, centerOut);
   const markers: LoadSpotMarkerEntry[] = [];
   for (const part of shape.parts) {
-    // Mixed steps contain borrowed colors from adjacent phases, so coordinates cannot identify the phase.
+    // Mixed steps contain borrowed colors; skipped steps retain their original phase index.
     if (part.suppressStepIndex === undefined) continue;
     const spec = specs[part.suppressStepIndex];
     if (!spec) throw new Error(`Missing suppress step spec for phase ${part.suppressStepIndex}`);
-    const coords = getNonWaterColorCoords(part);
-    if (coords.length === 0) continue;
+    // Both full routes cover the opening recessive strips and transparent cleanup targets too.
+    const coords = centerOut ? [] : getNonWaterColorCoords(part);
+    if (!centerOut && coords.length === 0) continue;
     const markerY = getMarkerY(part);
     if (markerY === null) continue;
-    const specCoords = coords.filter(coord => spec.includeAt(coord.x, coord.z));
-    markers.push(
-      ...(buildMode === BuildMode.SuppressStepPairs
-        ? buildSuppressStepPairMarkers(spec, stepDirection, markerY, markerBlockName)
-        : specCoords.length === 0
-          ? []
-          : buildSuppressStepCheckerMarkers(specCoords, spec, stepDirection, markerY, markerBlockName)),
-    );
+    for (const front of spec.fronts) {
+      const frontCoords = coords.filter(coord => front.includeAt(coord.x, coord.z));
+      markers.push(
+        ...(buildMode === BuildMode.SuppressStepPairs
+          ? buildSuppressStepPairMarkers(front.loadLine, front.direction, markerY, markerBlockName)
+          : !centerOut && frontCoords.length === 0
+            ? []
+            : buildSuppressStepCheckerMarkers(frontCoords, front.loadLine, front.direction, markerY, markerBlockName, centerOut)),
+      );
+    }
   }
   return markers;
 }
@@ -544,10 +466,11 @@ export function buildSuppressLoadSpotMarkers(
 ): LoadSpotMarkerEntry[] {
   const markerBlockName = resolveExportBlockName(options.suppressLoadSpotMarkerBlock ?? DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK);
   const crubTechLatePairY = options.suppress2LayerLatePairY ?? getDefaultCrubTechLatePairY(shape);
+  const centerOut = options.suppressCenterOut === true && buildModeSupportsCenterOut(buildMode, options.crubTech);
   return [
-    ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),
+    ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName, centerOut),
     ...(buildModeUsesLayerGap(buildMode) && options.markSuppressLoadSpotsInSchematic && !(options.crubTech && isCrubTechBuildMode(buildMode))
-      ? buildTwoLayerLoadSpotMarkers(shape, stepDirection, markerBlockName) : []),
+      ? buildTwoLayerLoadSpotMarkers(shape, stepDirection, markerBlockName, centerOut) : []),
     ...buildCrubTechSignalLamps(
       shape,
       buildMode,

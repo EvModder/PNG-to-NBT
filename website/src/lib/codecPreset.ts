@@ -34,6 +34,7 @@ interface SharedSettings {
   buildAtWorldMinY: boolean;
   crubTech: boolean;
   suppressStepDirection: SuppressStepDirection;
+  suppressCenterOut: boolean;
   dominateVoidFillerBlock: string;
   recessiveVoidFillerBlock: string;
   layerGap: number;
@@ -203,6 +204,7 @@ const BOOLEAN_BITS: Record<BooleanKey, number> = {
   buildAtWorldMinY: 4,
   crubTech: 8,
   westEastSlopeEnabled: 16,
+  suppressCenterOut: 32,
 };
 const direction = enumCodec([
   SuppressStepDirection.EastToWest, SuppressStepDirection.WestToEast,

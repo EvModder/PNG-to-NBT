@@ -19,7 +19,7 @@ import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAna
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbt } from "@/lib/nbtExport";
 import { createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
-import { buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
+import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
@@ -1453,8 +1453,8 @@ function assertMixedStepMarkerInvariants(): void {
 }
 
 function assertTwoLayerMapPixels(): void {
-  const schedules = Object.values(SuppressStepDirection).map(direction => {
-    const phases = buildTwoLayerLoadPhases(direction);
+  const schedules = Object.values(SuppressStepDirection).flatMap(direction => [false, true].map(centerOut => {
+    const phases = buildTwoLayerLoadPhases(direction, centerOut);
     const lastUpdate = new Int16Array(MAP_SIZE * MAP_SIZE).fill(-1);
     for (const [index, phase] of phases.entries()) for (const front of phase.fronts) {
       const offsets = (front.loadLine & 1) === 0 ? [15, 41, 65, 89, 113] : [14, 40, 64, 88, 112];
@@ -1465,8 +1465,8 @@ function assertTwoLayerMapPixels(): void {
         })) lastUpdate[x * MAP_SIZE + z] = index;
       }
     }
-    return { direction, phases, lastUpdate };
-  });
+    return { direction, centerOut, phases, lastUpdate };
+  }));
   for (const water of ["none", "above", "below"]) for (const sparse of [false, true]) for (const gap of [2, 5]) {
     let seed = 987654321;
     const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) >>> 8;
@@ -1495,7 +1495,7 @@ function assertTwoLayerMapPixels(): void {
         columns.set(key, column);
       }
       for (const column of columns.values()) column.sort((a, b) => b.y - a.y);
-      for (const { direction, phases, lastUpdate } of schedules) {
+      for (const { direction, centerOut, phases, lastUpdate } of schedules) {
         const top = (x: number, z: number, phase: number) => {
           const line = phases[0].axis === "x" ? x : z;
           // The north border belongs to row 0, not the south-moving half of center-out.
@@ -1521,7 +1521,7 @@ function assertTwoLayerMapPixels(): void {
             }
           }
           if (expected.id === 0 ? block !== undefined : block?.id !== expected.id || shade !== expected.shade) {
-            throw new Error(`Incorrect 2-layer map pixel: ${mode}, ${direction}, water=${water}, gap=${gap}, (${x}, ${z})`);
+            throw new Error(`Incorrect 2-layer map pixel: ${mode}, ${direction}, center=${centerOut}, water=${water}, gap=${gap}, (${x}, ${z})`);
           }
         }
       }
@@ -1583,9 +1583,132 @@ async function assertTwoLayerDirectionInvariants(): Promise<void> {
   }
 }
 
+async function assertCenterOutInvariants(): Promise<void> {
+  const grids: ColorGrid[] = [
+    Array.from({ length: MAP_SIZE }, (_, x) => Array.from({ length: MAP_SIZE }, (_, z) => ({
+      id: 1, isCustom: false, shade: (x * 11 + z * 13) % 3 as Shade,
+    }))),
+    Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR)),
+  ];
+  for (const [x, z] of [[0, 0], [62, 62], [63, 63], [64, 64], [65, 65], [127, 127]]) {
+    grids[1][x][z] = { id: 1, isCustom: false, shade: Shade.Dark };
+  }
+  for (const grid of grids) for (const mode of [BuildMode.SuppressStepChecker, BuildMode.SuppressStepPairs] as const) {
+    for (const direction of [SuppressStepDirection.EastToWest, SuppressStepDirection.NorthToSouth]) {
+      // Center-out north/south is gated off for void shading, which must be approached from one side.
+      if (grid === grids[1] && direction === SuppressStepDirection.NorthToSouth) continue;
+      for (const mixSteps of [false, true]) {
+        const specs = buildSuppressStepPhases(mode, direction, true);
+        const expectedPhases = mode === BuildMode.SuppressStepChecker ? 33 : 65;
+        if (specs.length !== expectedPhases) throw new Error("Incorrect center-out phase count");
+        const visits = new Uint8Array(MAP_SIZE * MAP_SIZE);
+        for (const [phase, spec] of specs.entries()) for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+          const line = spec.axis === "x" ? x : z;
+          const distanceFromCenter = line < MAP_SIZE / 2 ? MAP_SIZE / 2 - 1 - line : line - MAP_SIZE / 2;
+          const expectedPhase = Math.floor(distanceFromCenter / (mode === BuildMode.SuppressStepChecker ? 2 : 1)) + Number(((x + z) & 1) === 1);
+          if (spec.includeAt(x, z) !== (phase === expectedPhase)) throw new Error("Incorrect center-out recessive/dominant strip sequence");
+          if (spec.includeAt(x, z)) ++visits[x * MAP_SIZE + z];
+        }
+        if (visits.some(count => count !== 1)) throw new Error("Center-out schedule must visit every pixel exactly once");
+        const shape = generateShapeMap(grid, undefined, false, true, true, {
+          layerGap: 5, selectedMode: mode, selectedStepDirection: direction,
+          suppressCenterOut: true, mixSteps, skipEmptySuppressSteps: true,
+        })[mode]!;
+        const markers = buildSuppressLoadSpotMarkers(shape, mode, direction, {
+          suppressCenterOut: true, markSuppressLoadSpotsInSchematic: true,
+        });
+        const recorded = new Map<number, string>();
+        const finished = new Set<number>();
+        for (const part of shape.parts) {
+          const spec = specs[part.suppressStepIndex!];
+          const floorY = Math.min(...part.supportFloorYs);
+          const spots = markers.filter(marker => marker.y === floorY + 1);
+          const tops = new Map<number, { y: number; id: number }>();
+          for (const [key, cell] of part.cells) {
+            if (Array.isArray(cell) && !cell.some(role => role === FillerRole.ShadeNorthRow || role === FillerRole.ShadeSuppress)) continue;
+            const [x, y, z] = parseShapeCoordKey(key);
+            const column = x * (MAP_SIZE + 1) + z + 1;
+            if (y > (tops.get(column)?.y ?? -Infinity)) tops.set(column, { y, id: Array.isArray(cell) ? -1 : cell.id });
+          }
+          for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+            const pixel = x * MAP_SIZE + z;
+            const updated = spots.some(spot => {
+              const distance = (spot.x - x) ** 2 + (spot.z - z) ** 2;
+              return distance < 128 ** 2 && (distance <= 126 ** 2 || ((x + z) & 1) === 1);
+            });
+            if (updated && finished.has(pixel)) throw new Error("Center-out load spot overwrites a finished strip");
+            if (!updated) {
+              if (spec.includeAt(x, z)) throw new Error("Center-out load spots miss a phase target");
+              continue;
+            }
+            const column = x * (MAP_SIZE + 1) + z + 1;
+            const top = tops.get(column), northY = tops.get(column - 1)?.y ?? floorY;
+            recorded.set(pixel, top ? `${top.id}:${top.y > northY ? Shade.Light : top.y < northY ? Shade.Dark : Shade.Flat}` : "transparent");
+          }
+          for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+            if (spec.includeAt(x, z)) finished.add(x * MAP_SIZE + z);
+          }
+        }
+        for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+          const color = grid[x][z];
+          const expected = color.id === 0 ? "transparent" : `${color.id}:${color.shade}`;
+          if ((recorded.get(x * MAP_SIZE + z) ?? "transparent") !== expected) {
+            throw new Error(`Incorrect center-out map pixel: ${mode}, ${direction}, mix=${mixSteps}, (${x}, ${z}): ${recorded.get(x * MAP_SIZE + z)} != ${expected}`);
+          }
+        }
+        const result = await convertToNbt(shape, {
+          selectedBlocks: { 1: "stone" }, selectedBlocksCustom: {}, customColors: [],
+          fillerAssignments: [{ role: FillerRole.ShadeSuppress, block: "resin_block" }, { role: FillerRole.ShadeNorthRow, block: "resin_block" }],
+          applySupportFloorYs: true, forceXZ128: true, forceZ129: true,
+          buildMode: mode, suppressStepDirection: direction, suppressCenterOut: true,
+          markSuppressLoadSpotsInSchematic: true, baseName: "center-out",
+        });
+        if (result.isZip) throw new Error("Both center-out fronts must share one schematic");
+        const exportedMarkers = parseStructureBlocks(new Uint8Array(gunzipSync(result.data))).filter(block => block.blockName.startsWith("minecraft:jigsaw"));
+        if (exportedMarkers.length !== markers.length) throw new Error("Center-out NBT lost load markers");
+      }
+    }
+  }
+}
+
+async function assertCenterOutTwoLayerInvariants(): Promise<void> {
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => ({
+    id: 1, isCustom: false, shade: Shade.Dark,
+  })));
+  for (const mode of [BuildMode.Suppress2Layer, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]) for (const direction of Object.values(SuppressStepDirection)) {
+    const axisX = direction === SuppressStepDirection.EastToWest || direction === SuppressStepDirection.WestToEast;
+    const markerCount = axisX ? 320 : 640;
+    const options = { layerGap: 5, selectedMode: mode, selectedStepDirection: direction };
+    const shape = generateShapeMap(grid, undefined, false, false, mode !== BuildMode.Suppress2Layer, options)[mode]!;
+    const centered = generateShapeMap(grid, undefined, false, false, mode !== BuildMode.Suppress2Layer, { ...options, suppressCenterOut: true })[mode];
+    if (shape !== centered) throw new Error("Center-out must reuse the existing 2-layer geometry");
+    const markerOptions = { suppressCenterOut: true, markSuppressLoadSpotsInSchematic: true };
+    const markers = buildSuppressLoadSpotMarkers(shape, mode, options.selectedStepDirection, markerOptions);
+    if (markers.length !== markerCount || !markers.some(marker => (axisX ? marker.x : marker.z) < 0) || !markers.some(marker => (axisX ? marker.x : marker.z) >= MAP_SIZE)) {
+      throw new Error("2-layer center-out requires both complete load routes");
+    }
+    if (mode !== BuildMode.Suppress2LayerLateFillers) {
+      const crubMarkers = buildSuppressLoadSpotMarkers(shape, mode, options.selectedStepDirection, { ...markerOptions, crubTech: true });
+      const oldCrubMarkers = buildSuppressLoadSpotMarkers(shape, mode, options.selectedStepDirection, { ...markerOptions, suppressCenterOut: false, crubTech: true });
+      if (JSON.stringify(crubMarkers) !== JSON.stringify(oldCrubMarkers)) throw new Error("Center-out must not affect CrubTech markers");
+    }
+    const result = await convertToNbt(shape, {
+      selectedBlocks: { 1: "stone" }, selectedBlocksCustom: {}, customColors: [],
+      fillerAssignments: [{ role: FillerRole.ShadeSuppress, block: "resin_block" }, { role: FillerRole.ShadeNorthRow, block: "resin_block" }],
+      applySupportFloorYs: true, forceXZ128: true, forceZ129: true, buildMode: mode,
+      suppressStepDirection: options.selectedStepDirection, ...markerOptions, baseName: "center-out-2layer",
+    });
+    if (result.isZip) throw new Error("Center-out 2-layer must remain one schematic");
+    const exported = parseStructureBlocks(new Uint8Array(gunzipSync(result.data)));
+    if (exported.filter(block => block.blockName.startsWith("minecraft:jigsaw")).length !== markerCount) throw new Error("Missing 2-layer load markers");
+  }
+}
+
 async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
   assertMixedStepMarkerInvariants();
+  await assertCenterOutInvariants();
+  await assertCenterOutTwoLayerInvariants();
   assertCrubTechPresetInvariant();
   assertTwoLayerLatePairEligibilityInvariants();
   await assertTwoLayerDirectionInvariants();

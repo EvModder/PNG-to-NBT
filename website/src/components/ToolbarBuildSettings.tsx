@@ -55,6 +55,9 @@ export type ToolbarBuildSettingsProps = {
   showMixStepsToggle: boolean;
   mixSteps: boolean;
   setMixSteps: (value: boolean) => void;
+  showSuppressCenterOutToggle: boolean;
+  suppressCenterOut: boolean;
+  setSuppressCenterOut: (value: boolean) => void;
   showPaletteSeedToggle: boolean;
   proPaletteSeed: boolean;
   setProPaletteSeed: (value: boolean) => void;
@@ -66,13 +69,18 @@ export type ToolbarBuildSettingsProps = {
   showSuppressDirectionControl: boolean;
   suppressDirection: SuppressStepDirection;
   setSuppressDirection: (value: SuppressStepDirection) => void;
-  isSuppressDirectionSelectable: (direction: SuppressStepDirection) => boolean;
+  isSuppressDirectionSelectable: (direction: SuppressStepDirection, centerOut?: boolean) => boolean;
   staircaseModeOptions: ToolbarBuildModeOption[];
   suppressModeOptions: ToolbarBuildModeOption[];
   shadingMethodTooltip: string;
 };
 
-function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirection }) {
+function SuppressStepDirectionIcon({ direction, rotate, centerOut, isDirectionSelectable }: {
+  direction: SuppressStepDirection;
+  rotate: boolean;
+  centerOut: boolean;
+  isDirectionSelectable: (direction: SuppressStepDirection) => boolean;
+}) {
   const rotation = getSuppressStepDirectionRotationDegrees(direction);
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
@@ -86,16 +94,24 @@ function SuppressStepDirectionIcon({ direction }: { direction: SuppressStepDirec
           strokeWidth: 1.25,
         }}
       >
-        <text x="12" y="3.3" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">N</text>
+        <text x="12" y="3.3" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900" className={isDirectionSelectable(SuppressStepDirection.SouthToNorth) ? undefined : "text-muted-foreground"}>N</text>
         <text x="21.0" y="12" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">E</text>
-        <text x="12" y="21.8" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">S</text>
+        <text x="12" y="21.8" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900" className={isDirectionSelectable(SuppressStepDirection.NorthToSouth) ? undefined : "text-muted-foreground"}>S</text>
         <text x="3.0" y="12" textAnchor="middle" dominantBaseline="middle" fontSize="7.8" fontWeight="900">W</text>
       </g>
-      <g transform={`rotate(${rotation} 12 12)`} className="stroke-current fill-none">
-        <path d="M12 16.6 L12 9.6" strokeWidth="2.1" strokeLinecap="round" />
+      {rotate && !centerOut ? <path
+        d="M12 11.9C12.1 11.6 12.3 11.3 12.7 11.1C13.2 10.9 13.9 11 14.4 11.5C15 12.1 15.2 13.2 14.6 14.2C14 15.1 12.7 15.8 11.3 15.4C10 15.1 8.9 13.7 8.9 12.2V7.5 M7.2 9.2l1.7-1.7 1.7 1.7"
+        transform={`rotate(${rotation} 12 12)`}
+        className="stroke-current fill-none"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      /> : <g transform={`rotate(${rotation} 12 12)`} className="stroke-current fill-none">
+        <path d={centerOut ? "M12 16.2 L12 7.8" : "M12 16.6 L12 9.6"} strokeWidth="2.1" strokeLinecap="round" />
         <path d="M12 7.8 L9.8 10.2" strokeWidth="2.1" strokeLinecap="round" />
         <path d="M12 7.8 L14.2 10.2" strokeWidth="2.1" strokeLinecap="round" />
-      </g>
+        {centerOut && <path d="M9.8 13.8 L12 16.2 L14.2 13.8" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />}
+      </g>}
     </svg>
   );
 }
@@ -122,6 +138,9 @@ export function ToolbarBuildSettings({
   showMixStepsToggle,
   mixSteps,
   setMixSteps,
+  showSuppressCenterOutToggle,
+  suppressCenterOut,
+  setSuppressCenterOut,
   showPaletteSeedToggle,
   proPaletteSeed,
   setProPaletteSeed,
@@ -140,8 +159,14 @@ export function ToolbarBuildSettings({
 }: ToolbarBuildSettingsProps) {
   const showAnyWaterDropControl = visibleWaterLevelControls.length > 0;
   const showLayerGapControl = !lockFlatBuildMode && buildModeUsesLayerGap(buildMode);
-  const directionDisabled = showLayerGapControl && crubTech;
+  const crubTechActive = showCrubTechControl && crubTech;
+  const centerOutDisabled = crubTechActive || (!suppressCenterOut && !isSuppressDirectionSelectable(suppressDirection, true));
+  const nextSuppressDirection = cycleSuppressStepDirection(suppressDirection, direction => isSuppressDirectionSelectable(direction) && (
+    !suppressCenterOut || getSuppressStepDirectionRotationDegrees(direction) % 180 !== getSuppressStepDirectionRotationDegrees(suppressDirection) % 180
+  ));
+  const directionDisabled = nextSuppressDirection === suppressDirection || crubTechActive;
   const showMixStepsControl = !lockFlatBuildMode && showMixStepsToggle;
+  const showCenterOutControl = !lockFlatBuildMode && showSuppressCenterOutToggle;
   const showPaletteSeedControl = !lockFlatBuildMode && showPaletteSeedToggle;
   const showBuildModeControl = !lockFlatBuildMode;
   const groups: { key: string; node: ReactNode }[] = [];
@@ -319,24 +344,50 @@ export function ToolbarBuildSettings({
     });
   }
 
-  if (showSuppressDirectionControl) {
+  if (showCenterOutControl || showSuppressDirectionControl) {
     groups.push({
       key: "direction",
       node: (
-        <button
-          type="button"
-          className={`${INPUT_SQUARE_ICON_BUTTON_CLASS} disabled:opacity-55 disabled:cursor-not-allowed disabled:hover:border-border`}
-          disabled={directionDisabled}
-          title={directionDisabled
-            ? `${messages.buildMode.stepDirectionAriaLabel(suppressDirection)}. ${messages.buildMode.crubTechTooltip}`
-            : `${messages.buildMode.stepDirectionTooltip(suppressDirection)}${showLayerGapControl ? ` ${messages.buildMode.twoLayerDirectionTooltip(suppressDirection)}` : ""}`}
-          aria-label={messages.buildMode.stepDirectionAriaLabel(suppressDirection)}
-          onClick={() => setSuppressDirection(
-            cycleSuppressStepDirection(suppressDirection, isSuppressDirectionSelectable),
-          )}
-        >
-          <SuppressStepDirectionIcon direction={suppressDirection} />
-        </button>
+        <>
+          {showCenterOutControl && <button
+            type="button"
+            className={`${INPUT_SQUARE_ICON_BUTTON_CLASS} disabled:opacity-55 disabled:cursor-not-allowed disabled:hover:border-border`}
+            title={messages.buildMode.centerOutTooltip}
+            aria-label={messages.buildMode.centerOutLabel}
+            aria-pressed={suppressCenterOut}
+            disabled={centerOutDisabled}
+            onClick={() => setSuppressCenterOut(!suppressCenterOut)}
+          >
+            <svg
+              viewBox="0 0 20 20"
+              className="h-5 w-5 fill-current"
+              aria-hidden="true"
+            >
+              <g transform={`rotate(${getSuppressStepDirectionRotationDegrees(suppressDirection) + 90} 10 10)`}>
+                <path d={`M${suppressCenterOut ? 10 : 18} .5v19`} className="text-accent stroke-current fill-none" strokeWidth="2" strokeDasharray="1 1" />
+                <path d={suppressCenterOut ? "M0 10 4 6v3h4v2H4v3z" : "M0 10 4 6v3h11v2H4v3z"} />
+                {suppressCenterOut && <path d="M20 10 16 6v3h-4v2h4v3z" />}
+              </g>
+            </svg>
+          </button>}
+          {showSuppressDirectionControl && <button
+            type="button"
+            className={`${INPUT_SQUARE_ICON_BUTTON_CLASS} disabled:opacity-55 disabled:cursor-not-allowed disabled:hover:border-border`}
+            disabled={directionDisabled}
+            title={directionDisabled
+              ? `${messages.buildMode.stepDirectionAriaLabel(suppressDirection, suppressCenterOut)}. ${crubTechActive ? messages.buildMode.crubTechTooltip : messages.buildMode.centerOutTooltip}`
+              : `${messages.buildMode.stepDirectionTooltip(suppressDirection, suppressCenterOut)}${showLayerGapControl ? ` ${messages.buildMode.twoLayerDirectionTooltip(suppressDirection, suppressCenterOut)}` : ""}`}
+            aria-label={messages.buildMode.stepDirectionAriaLabel(suppressDirection, suppressCenterOut)}
+            onClick={() => setSuppressDirection(nextSuppressDirection)}
+          >
+            <SuppressStepDirectionIcon
+              direction={suppressDirection}
+              rotate={showCenterOutControl}
+              centerOut={showCenterOutControl && suppressCenterOut}
+              isDirectionSelectable={isSuppressDirectionSelectable}
+            />
+          </button>}
+        </>
       ),
     });
   }

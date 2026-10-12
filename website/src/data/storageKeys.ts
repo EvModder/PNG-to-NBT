@@ -29,6 +29,7 @@ export const STORAGE_KEYS = {
   buildMode: "mapart_build_mode",
   supportMode: "mapart_support_mode",
   suppressStepDirection: "mapart_suppress_step_direction",
+  suppressCenterOut: "mapart_suppress_center_out",
   vsFillerLoadSpotDirection: "mapart_vs_filler_load_spot_direction",
   paletteSeed: "mapart_palette_seed",
   layerGap: "mapart_layer_gap",
