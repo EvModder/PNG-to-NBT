@@ -158,6 +158,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
 export function getTileBaseGeometry(
   tileCacheKey: string,
   input: TileBaseGeometryWorkerInput,
+  onPending: () => void,
 ): Promise<TileBaseGeometryWorkerResult> {
   const cacheKey = getTileBaseGeometryCacheKey(tileCacheKey, input);
   const cached = baseGeometryCache.get(cacheKey);
@@ -165,6 +166,7 @@ export function getTileBaseGeometry(
     touchBoundedCache(baseGeometryCache, cacheKey, cached);
     return Promise.resolve(cached);
   }
+  onPending();
   const inFlight = baseGeometryInflight.get(cacheKey);
   if (inFlight) return inFlight;
   const next = runWorkerRequest({ type: "base", input })
@@ -186,6 +188,7 @@ export function getTileBaseGeometry(
 export function getTileFinalGeometry(
   tileCacheKey: string,
   input: TileFinalGeometryWorkerInput,
+  onPending: () => void,
 ): Promise<TileFinalGeometryWorkerResult> {
   const cacheKey = getTileFinalGeometryCacheKey(tileCacheKey, input);
   const cached = finalGeometryCache.get(cacheKey);
@@ -193,6 +196,7 @@ export function getTileFinalGeometry(
     touchBoundedCache(finalGeometryCache, cacheKey, cached);
     return Promise.resolve(cached);
   }
+  onPending();
   const inFlight = finalGeometryInflight.get(cacheKey);
   if (inFlight) return inFlight;
   const next = runWorkerRequest({ type: "final", input })

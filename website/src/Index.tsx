@@ -123,8 +123,9 @@ import {
   aggregateMaterialCounts,
   aggregateOverrideCounts,
   hasBuildAtWorldMinYOpportunity,
+  hasStairStepSupport,
 } from "@/lib/shapeAnalysis";
-import { getCachedShapeFillerNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
+import { cacheShapeMaterialNeeds, getCachedShapeFillerNeeds, getCachedShapeMaterialNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
 import {
   hasAssignedColorBlock,
   normalizeBlockId,
@@ -287,6 +288,7 @@ type TileAnalysis = TileGeometryAnalysis & {
 type TileAnalysisResult = {
   tileGeometryAnalyses: TileGeometryAnalysis[];
   aggregateFillerRoleCounts: Map<FillerRole, number>;
+  useCrubTech: boolean;
 };
 type AnalysisProgress = {
   completed: number;
@@ -686,13 +688,24 @@ const Index = () => {
   const [suppress2LayerLateFillerBlock, setSuppress2LayerLateFillerBlock] = useState(() => loadCached(LS_KEYS.suppress2LayerLateFiller, DEFAULT_SUPPRESS_2LAYER_LATE_FILLER_BLOCK));
   const [dominateVoidFillerBlock, setDominateVoidFillerBlock] = useState(() => loadCached(LS_KEYS.dominateVoidFiller, DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK));
   const [recessiveVoidFillerBlock, setRecessiveVoidFillerBlock] = useState(() => loadCached(LS_KEYS.recessiveVoidFiller, DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK));
-  const [buildMode, setBuildMode] = useState<BuildMode>(() => {
+  const [preferredBuildMode, setPreferredBuildMode] = useState<BuildMode>(() => {
     const storedBuildMode = loadCached(LS_KEYS.buildMode, DEFAULT_BUILD_MODE);
     return Object.values(BuildMode).includes(storedBuildMode as BuildMode) ? storedBuildMode : DEFAULT_BUILD_MODE;
   });
-  const [supportMode, setSupportMode] = useState<SupportMode>(() =>
+  // Constraints may change the live modes, but only user choices replace saved preferences.
+  const [buildMode, setResolvedBuildMode] = useState(preferredBuildMode);
+  const setBuildMode = (mode: BuildMode) => {
+    setPreferredBuildMode(mode);
+    setResolvedBuildMode(mode);
+  };
+  const [preferredSupportMode, setPreferredSupportMode] = useState<SupportMode>(() =>
     loadCached(LS_KEYS.supportMode, DEFAULT_SUPPORT_MODE),
   );
+  const [resolvedSupportMode, setResolvedSupportMode] = useState(preferredSupportMode);
+  const setSupportMode = (mode: SupportMode) => {
+    setPreferredSupportMode(mode);
+    setResolvedSupportMode(mode);
+  };
   const [suppressStepDirection, setSuppressDirection] = useState<SuppressStepDirection>(() => {
     const storedDirection = loadCached(LS_KEYS.suppressStepDirection, DEFAULT_SUPPRESS_STEP_DIRECTION);
     return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_SUPPRESS_STEP_DIRECTION;
@@ -710,6 +723,7 @@ const Index = () => {
   );
   const calcSuppress2LayerLatePairsGap = useDeferredValue(suppress2LayerLatePairsGap);
   const [crubTech, setCrubTech] = useState(() => loadCached(LS_KEYS.crubTech, DEFAULT_CRUBTECH));
+  const supportMode = crubTech && isCrubTechBuildMode(buildMode) ? preferredSupportMode : resolvedSupportMode;
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
   const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, DEFAULT_LIGHT_WATER_DROP));
@@ -1004,6 +1018,10 @@ const Index = () => {
     customColors: ColorRgb[];
     selectedBlocksCustom: Record<number, string>;
   } | null>(null);
+  const preCrubTechPresetRef = useRef<{
+    preset: BlockPreset;
+    savedSnapshot: typeof savedPresetSnapshot;
+  } | null>(null);
   const activePresetCustomColors = preset.customColors ?? [];
   const activePresetCustomSelectedBlocks = useMemo(
     () => normalizeCustomSelectedBlocks(activePresetCustomColors, preset.selectedBlocksCustom),
@@ -1094,8 +1112,8 @@ const Index = () => {
       [LS_KEYS.suppress2LayerLateFiller]: suppress2LayerLateFillerBlock,
       [LS_KEYS.dominateVoidFiller]: dominateVoidFillerBlock,
       [LS_KEYS.recessiveVoidFiller]: recessiveVoidFillerBlock,
-      [LS_KEYS.buildMode]: buildMode,
-      [LS_KEYS.supportMode]: supportMode,
+      [LS_KEYS.buildMode]: preferredBuildMode,
+      [LS_KEYS.supportMode]: preferredSupportMode,
       [LS_KEYS.suppressStepDirection]: suppressStepDirection,
       [LS_KEYS.vsFillerLoadSpotDirection]: vsFillerLoadSpotDirection,
       [LS_KEYS.paletteSeed]: proPaletteSeed,
@@ -1149,8 +1167,8 @@ const Index = () => {
       suppress2LayerLateFillerBlock,
       dominateVoidFillerBlock,
       recessiveVoidFillerBlock,
-      buildMode,
-      supportMode,
+      preferredBuildMode,
+      preferredSupportMode,
       suppressStepDirection,
       vsFillerLoadSpotDirection,
       proPaletteSeed,
@@ -1328,8 +1346,9 @@ const Index = () => {
   );
   const crubTechControlsCurrent2LayerSettings = imageValid && crubTech && isCrubTechBuildMode(buildMode);
   const crubTechControlsLatePairsGap = crubTechControlsCurrent2LayerSettings;
-  const effectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : layerGap;
-  const calcEffectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : calcLayerGap;
+  const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
+  const effectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : Math.max(minLayerGap, layerGap);
+  const calcEffectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : Math.max(minLayerGap, calcLayerGap);
   const suppress2LayerUpperY = Math.max(1, effectiveLayerGap);
   const calcSuppress2LayerUpperY = Math.max(1, calcEffectiveLayerGap);
   const maxSuppress2LayerLatePairsGap = Math.max(1, 64 - suppress2LayerUpperY);
@@ -1357,10 +1376,9 @@ const Index = () => {
     },
     [buildMode, voidShadowSummary],
   );
-  useEffect(() => {
-    if (buildMode !== BuildMode.SuppressStepChecker || isSuppressDirectionSelectable(suppressStepDirection)) return;
-    setSuppressDirection(current => cycleSuppressStepDirection(current, isSuppressDirectionSelectable));
-  }, [buildMode, suppressStepDirection, isSuppressDirectionSelectable]);
+  const effectiveSuppressStepDirection = crubTechControlsCurrent2LayerSettings ? SuppressStepDirection.EastToWest
+    : isSuppressDirectionSelectable(suppressStepDirection) ? suppressStepDirection
+    : cycleSuppressStepDirection(suppressStepDirection, isSuppressDirectionSelectable);
   const normalizedSupportFillerBlockId = normalizeBlockId(effectiveSupportFillerBlock);
   const supportFillerIsFragile =
     normalizedSupportFillerBlockId.length > 0 && isFragileBlock(normalizedSupportFillerBlockId);
@@ -1396,7 +1414,10 @@ const Index = () => {
   );
   const commitSupportFillerBlock = useCallback((value: string) => {
     const nextValue = sanitizeCommittedBlockEntry(value);
-    if (isFillerDisabled(nextValue)) setSupportMode(SupportMode.None);
+    if (isFillerDisabled(nextValue)) {
+      setPreferredSupportMode(SupportMode.None);
+      setResolvedSupportMode(SupportMode.None);
+    }
   }, [sanitizeCommittedBlockEntry]);
   const shadeFillerShadingDisabled = isShadeFillerDisabled(effectiveShadeFillerBlock);
   const crubTechShadeBreakableFillerShadingDisabled = isShadeFillerDisabled(effectiveCrubTechShadeBreakableFillerBlock);
@@ -1435,13 +1456,17 @@ const Index = () => {
     const totalTiles = parsedTiles.length;
     const showTileAnalysisProgress = totalTiles > 1;
 
-    setIsAnalyzingTiles(true);
-    setAnalysisPhase("generating");
-    setAnalysisProgress(showTileAnalysisProgress ? { completed: 0, total: totalTiles } : null);
+    let analysisStarted = false;
+    const startAnalysis = () => {
+      if (analysisStarted || cancelled) return;
+      analysisStarted = true;
+      setIsAnalyzingTiles(true);
+      setAnalysisPhase("generating");
+      setAnalysisProgress(showTileAnalysisProgress ? { completed: 0, total: totalTiles } : null);
+    };
 
     void (async () => {
       try {
-        await yieldToMainThread();
         let completedSteps = 0;
         let lastProgressUpdateAt = performance.now();
         const advanceProgress = () => {
@@ -1478,7 +1503,7 @@ const Index = () => {
             layerGap: calcLayerGap,
             paletteSeed: paletteSeedOffset,
             enableWaterConvenience: supportMode !== SupportMode.None,
-          });
+          }, startAnalysis);
           advanceProgress();
           return {
             tile,
@@ -1520,9 +1545,8 @@ const Index = () => {
           hasMultipleTiles,
           nextShowFlatNbtSuppressStepOptions,
         );
-        const nextResolvedBuildSelection = resolveBuildModeSelection(
-          buildMode,
-          suppressStepDirection,
+        const nextResolvedBuildMode = resolveBuildModeSelection(
+          preferredBuildMode,
           nextLockFlatBuildMode,
           DEFAULT_SWITCH_TO_SUPPRESS_CHECKER_IF_CONTAINS_VOID_SHADOWS,
           hasVoidShadow,
@@ -1530,18 +1554,9 @@ const Index = () => {
           nextStaircaseModeOptions.map(option => option.value),
           nextSuppressModeOptions.map(option => option.value),
         );
-        const nextResolvedBuildMode = nextResolvedBuildSelection.buildMode;
-        const nextResolvedSuppressStepDirection = nextResolvedBuildSelection.suppressStepDirection;
-
-        if (
-          nextResolvedBuildMode !== buildMode ||
-          nextResolvedSuppressStepDirection !== suppressStepDirection
-        ) {
+        if (nextResolvedBuildMode !== buildMode) {
           startTransition(() => {
-            if (nextResolvedBuildMode !== buildMode) setBuildMode(nextResolvedBuildMode);
-            if (nextResolvedSuppressStepDirection !== suppressStepDirection) {
-              setSuppressDirection(nextResolvedSuppressStepDirection);
-            }
+            setResolvedBuildMode(nextResolvedBuildMode);
             setIsAnalyzingTiles(false);
             setAnalysisProgress(null);
             setAnalysisPhase("generating");
@@ -1640,8 +1655,8 @@ const Index = () => {
               skipEmptySuppressSteps,
               collapseStaircaseModes: !hasMultipleTiles,
               includeFlatNorthline: hasMultipleTiles && tile.flatModeBehavior !== FlatModeBehavior.None,
-              selectedStepDirection: nextResolvedSuppressStepDirection,
-            });
+              selectedStepDirection: effectiveSuppressStepDirection,
+            }, startAnalysis);
             advanceProgress();
             return {
               ...tile,
@@ -1666,6 +1681,7 @@ const Index = () => {
           setAnalysisResult({
             tileGeometryAnalyses: nextTileGeometryAnalyses,
             aggregateFillerRoleCounts: nextAggregateFillerRoleCounts,
+            useCrubTech: nextUseCrubTechShadeFillers,
           });
           setIsAnalyzingTiles(false);
           setAnalysisProgress(null);
@@ -1692,6 +1708,7 @@ const Index = () => {
     parsedTiles,
     tileDerivedImageStats,
     transparentBlockMapping,
+    preferredBuildMode,
     buildMode,
     getTileWaterSetting,
     twoLayerRequiresLateShading,
@@ -1705,7 +1722,7 @@ const Index = () => {
     mixedStepMaxHeight,
     skipEmptySuppressSteps,
     crubTech,
-    suppressStepDirection,
+    effectiveSuppressStepDirection,
     applySupportFloorYs,
     buildAtWorldMinY,
     hasMultipleTiles,
@@ -1740,7 +1757,7 @@ const Index = () => {
   const effectiveBuildMode = lockFlatBuildMode ? BuildMode.Flat : buildMode;
   const crubTechControlsActive2LayerSettings = imageValid && crubTech && isCrubTechBuildMode(effectiveBuildMode);
   const effectiveSupportMode = crubTechControlsActive2LayerSettings && supportMode !== SupportMode.None
-    ? SupportMode.Steps
+    ? SupportMode.All
     : supportMode;
   const effectiveShowTransparentRow = !crubTechControlsActive2LayerSettings && showTransparentRow;
   const effectiveForceXZ128 = crubTechControlsActive2LayerSettings || forceXZ128;
@@ -1803,26 +1820,12 @@ const Index = () => {
   );
   const currentWaterDrops = crubTechControlsActive2LayerSettings
     ? CRUBTECH_WATER_DROPS
-    : buildWaterDropInputs(darkWaterDrop, flatWaterDrop, lightWaterDrop);
+    : normalizedImmediateWaterDrops;
   const visibleWaterLevelControls = !imageHasWater || !effectiveBelowPlatformWater
     ? []
     : WATER_DROP_INPUT_ORDER
       .filter(shade => usedWaterShades.has(shade))
       .map(shade => ({ shade, value: currentWaterDrops[shade] }));
-
-  useEffect(() => {
-    if (!effectiveBelowPlatformWater || crubTechControlsActive2LayerSettings) return;
-    if (lightWaterDrop !== normalizedImmediateWaterDrops[Shade.Light]) setLightWaterDrop(normalizedImmediateWaterDrops[Shade.Light]);
-    if (flatWaterDrop !== normalizedImmediateWaterDrops[Shade.Flat]) setFlatWaterDrop(normalizedImmediateWaterDrops[Shade.Flat]);
-    if (darkWaterDrop !== normalizedImmediateWaterDrops[Shade.Dark]) setDarkWaterDrop(normalizedImmediateWaterDrops[Shade.Dark]);
-  }, [
-    effectiveBelowPlatformWater,
-    crubTechControlsActive2LayerSettings,
-    lightWaterDrop,
-    flatWaterDrop,
-    darkWaterDrop,
-    normalizedImmediateWaterDrops,
-  ]);
 
   useEffect(() => {
     if (tileGeometryAnalyses.length === 0) {
@@ -1891,6 +1894,8 @@ const Index = () => {
           fragileSupportOverrideNeedStats: null,
         } satisfies TileAnalysis;
       }
+      const cached = getCachedShapeMaterialNeeds(tile.supportShape, `${tile.tile.cacheKey}|${currentMaterialInputSignature}`);
+      if (cached) return { ...tile, ...cached } satisfies TileAnalysis;
       const previousTile = tileAnalysesState[index];
       if (!canReuseMaterialStats(previousTile, tile)) return null;
       return {
@@ -1954,6 +1959,10 @@ const Index = () => {
                 ? previousTile.fragileSupportOverrideNeedStats
                 : analyzeFragileSupportOverrideNeeds(tile.supportShape, materialAnalysisOptions)
               : null;
+          if (materialNeedStats) cacheShapeMaterialNeeds(tile.supportShape, `${tile.tile.cacheKey}|${currentMaterialInputSignature}`, {
+            materialNeedStats,
+            fragileSupportOverrideNeedStats,
+          });
           nextTileAnalyses.push({
             ...tile,
             materialNeedStats,
@@ -2003,7 +2012,10 @@ const Index = () => {
     effectiveSupportMode,
   ]);
   const tileAnalyses = tileAnalysesState;
-  const hasCurrentTileGeometryAnalysis = hasCurrentTileGeometryAnalyses(parsedTiles, tileGeometryAnalyses);
+  // A toggle invalidates the old filler roles before the analysis effect starts.
+  const hasCurrentTileGeometryAnalysis =
+    analysisResult?.useCrubTech === crubTechControlsActive2LayerSettings &&
+    hasCurrentTileGeometryAnalyses(parsedTiles, tileGeometryAnalyses);
   const materialInputsMatchCurrent = previousMaterialInputsRef.current?.signature === currentMaterialInputSignature;
   const hasCurrentMaterialAnalysis =
     hasCurrentTileGeometryAnalysis &&
@@ -2015,9 +2027,9 @@ const Index = () => {
     const normalizedValue = Math.max(0, Math.trunc(rawValue) || 0);
     const nextDrops = normalizeUsedWaterDrops(
       buildWaterDropInputs(
-        shade === Shade.Dark ? normalizedValue : darkWaterDrop,
-        shade === Shade.Flat ? normalizedValue : flatWaterDrop,
-        shade === Shade.Light ? normalizedValue : lightWaterDrop,
+        shade === Shade.Dark ? normalizedValue : normalizedImmediateWaterDrops[Shade.Dark],
+        shade === Shade.Flat ? normalizedValue : normalizedImmediateWaterDrops[Shade.Flat],
+        shade === Shade.Light ? normalizedValue : normalizedImmediateWaterDrops[Shade.Light],
       ),
       usedWaterShades,
       shade,
@@ -2026,7 +2038,7 @@ const Index = () => {
     setLightWaterDrop(nextDrops[Shade.Light]);
     setFlatWaterDrop(nextDrops[Shade.Flat]);
     setDarkWaterDrop(nextDrops[Shade.Dark]);
-  }, [darkWaterDrop, flatWaterDrop, lightWaterDrop, usedWaterShades]);
+  }, [normalizedImmediateWaterDrops, usedWaterShades]);
 
   const missingColorKeys = useMemo(() => {
     if (!imageValid || usedColorKeys.size === 0) return EMPTY_USED_COLOR_KEYS;
@@ -2045,8 +2057,8 @@ const Index = () => {
   const showPreviewRangeControls = selectedTileAnalysis !== null && (!hasMultipleTiles || selectedTileCount === 1);
   const showWestEastSlopeControls = showPreviewRangeControls && !isSuppressBuildMode(effectiveBuildMode);
   const isNorthSouthSuppressStepDirection =
-    suppressStepDirection === SuppressStepDirection.NorthToSouth ||
-    suppressStepDirection === SuppressStepDirection.SouthToNorth;
+    effectiveSuppressStepDirection === SuppressStepDirection.NorthToSouth ||
+    effectiveSuppressStepDirection === SuppressStepDirection.SouthToNorth;
   const supportShape = selectedTileAnalysis?.supportShape ?? null;
   const maxRangeIndex = useMemo(
     () => {
@@ -2057,7 +2069,6 @@ const Index = () => {
     },
     [effectiveBuildMode, isStepRangeMode, supportShape, effectiveBelowPlatformWater, selectedTileAnalysis],
   );
-  const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
   const supportModeVisibilityPending =
     !!imageData &&
     (
@@ -2068,18 +2079,9 @@ const Index = () => {
         !hasCurrentTileGeometryAnalysis
       )
     );
-  const enableStepsSupportOption = crubTechControlsActive2LayerSettings || (
-    !buildModeUsesLayerGap(effectiveBuildMode) && (
-      !imageData || supportModeVisibilityPending || tileAnalyses.some(tile =>
-        !!tile.supportShape?.parts.some(part =>
-          part.cells.entries().some(([coord, cell]) => {
-            if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
-            const [x, y, z] = parseShapeCoordKey(coord);
-            const supportFloorYs = effectiveApplySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
-            return isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs);
-          }),
-        ),
-      )
+  const enableStepsSupportOption = !buildModeUsesLayerGap(effectiveBuildMode) && (
+    !imageData || supportModeVisibilityPending || tileAnalyses.some(tile =>
+      !!tile.supportShape && hasStairStepSupport(tile.supportShape, effectiveApplySupportFloorYs),
     )
   );
   const enableFragileSupportOption = useMemo(() => {
@@ -2155,7 +2157,7 @@ const Index = () => {
       isNorthSouthSuppressStepDirection
         ? messages.preview.suppressStepNorthSouthWarning(
             messages.buildMode.optionLabel(buildMode),
-            messages.buildMode.stepDirectionLabel(suppressStepDirection),
+            messages.buildMode.stepDirectionLabel(effectiveSuppressStepDirection),
           )
         : null,
     [
@@ -2163,7 +2165,7 @@ const Index = () => {
       imageData,
       imageValid,
       lockFlatBuildMode,
-      suppressStepDirection,
+      effectiveSuppressStepDirection,
       isNorthSouthSuppressStepDirection,
     ],
   );
@@ -2233,7 +2235,7 @@ const Index = () => {
     ),
     [effectiveSupportMode, usesWaterForWater, usesIceForWater, crubTechControlsActive2LayerSettings],
   );
-  const enableAllSupportOption = !crubTechControlsActive2LayerSettings && (
+  const enableAllSupportOption = crubTechControlsActive2LayerSettings || (
     !imageData || supportModeVisibilityPending || getSupportModeRoleCount(...allSupportRoles) > 0
   );
   const enableWaterSupportOption = !crubTechControlsActive2LayerSettings && (
@@ -2409,10 +2411,13 @@ const Index = () => {
 
   useEffect(() => {
     if (!imageData || previewBusy || crubTechControlsActive2LayerSettings) return;
-    if (supportMode === SupportMode.All && !enableAllSupportOption) { setSupportMode(SupportMode.None); return; }
-    if (supportMode === SupportMode.Fragile && (supportFillerIsFragile || !enableFragileSupportOption)) { setSupportMode(SupportMode.None); return; }
-    if (supportMode === SupportMode.Steps && !enableStepsSupportOption) setSupportMode(SupportMode.None);
-    if (supportMode === SupportMode.Water && !enableWaterSupportOption) setSupportMode(SupportMode.None);
+    const selectable =
+      preferredSupportMode === SupportMode.None ||
+      (preferredSupportMode === SupportMode.All && enableAllSupportOption) ||
+      (preferredSupportMode === SupportMode.Fragile && !supportFillerIsFragile && enableFragileSupportOption) ||
+      (preferredSupportMode === SupportMode.Steps && enableStepsSupportOption) ||
+      (preferredSupportMode === SupportMode.Water && enableWaterSupportOption);
+    setResolvedSupportMode(selectable ? preferredSupportMode : SupportMode.None);
   }, [
     imageData,
     previewBusy,
@@ -2421,13 +2426,9 @@ const Index = () => {
     enableStepsSupportOption,
     enableFragileSupportOption,
     enableWaterSupportOption,
-    supportMode,
+    preferredSupportMode,
     supportFillerIsFragile,
   ]);
-
-  useEffect(() => {
-    if ((supportMode === SupportMode.Fragile || supportMode === SupportMode.All) && layerGap < 3) setLayerGap(3);
-  }, [supportMode, layerGap]);
 
   const customBlocksByBase = useMemo(() => buildCustomBlocksByBase(customColors), [customColors]);
 
@@ -2553,6 +2554,7 @@ const Index = () => {
   };
 
   const selectPreset = (idx: number) => {
+    preCrubTechPresetRef.current = null;
     setPendingBlockSelection(null);
     const builtin = getBuiltinPreset(presets[idx].name);
     const nextIdx = currentPresetIsUnsavedAuto && idx > activeIdx ? idx - 1 : idx;
@@ -2578,9 +2580,29 @@ const Index = () => {
 
   const setCrubTechWithPreset = (enabled: boolean) => {
     setCrubTech(enabled);
-    if (!enabled) return;
-    const crubTechPresetIdx = presets.findIndex(p => p.name === CRUBTECH_PRESET_NAME);
-    if (crubTechPresetIdx >= 0 && crubTechPresetIdx !== activeIdx) selectPreset(crubTechPresetIdx);
+    if (enabled) {
+      const crubTechPresetIdx = presets.findIndex(p => p.name === CRUBTECH_PRESET_NAME);
+      if (crubTechPresetIdx >= 0 && crubTechPresetIdx !== activeIdx) {
+        const previous = { preset: { ...preset, ...capturePresetSnapshot() }, savedSnapshot: savedPresetSnapshot };
+        selectPreset(crubTechPresetIdx);
+        preCrubTechPresetRef.current = previous;
+      }
+      return;
+    }
+    const previous = preCrubTechPresetRef.current;
+    preCrubTechPresetRef.current = null;
+    // Restore only the automatic switch, not a palette chosen or edited afterward.
+    if (!previous || preset.name !== CRUBTECH_PRESET_NAME) return;
+    setPendingBlockSelection(null);
+    const previousIdx = presets.findIndex(p => p.name === previous.preset.name);
+    setPresets(current => previousIdx < 0
+      ? [...current, previous.preset]
+      : current.map((p, idx) => idx === previousIdx ? previous.preset : p));
+    setActiveIdx(previousIdx < 0 ? presets.length : previousIdx);
+    setCustomColors(previous.preset.customColors ?? []);
+    setSelectedBlocksCustom(previous.preset.selectedBlocksCustom ?? {});
+    setSavedPresetSnapshot(previous.savedSnapshot);
+    markSavedNextRef.current = previous.savedSnapshot === null;
   };
 
   const createPreset = () => {
@@ -2918,7 +2940,7 @@ const Index = () => {
     setConverting(true);
     try {
       const baseName = imageName.replace(/\.[^/.]+$/, "");
-      const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, suppressStepDirection, crubTechControlsActive2LayerSettings);
+      const suffix = getBuildModeDownloadSuffix(effectiveBuildMode, effectiveSuppressStepDirection, crubTechControlsActive2LayerSettings);
       const exportTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
       const exportEntries: { name: string; data: Uint8Array }[] = [];
       const westEastSlope = westEastSlopeEnabled && westEastSlopeRise !== 0 && !isSuppressBuildMode(effectiveBuildMode)
@@ -3208,7 +3230,7 @@ const Index = () => {
     );
   const activeSuppressDirection = directionControlUsesVsFillers
     ? vsFillerLoadSpotDirection
-    : suppressStepDirection;
+    : effectiveSuppressStepDirection;
   const setActiveSuppressDirection = directionControlUsesVsFillers
     ? setVsFillerLoadSpotDirection
     : setSuppressDirection;

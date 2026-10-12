@@ -237,28 +237,25 @@ export function getVisibleSuppressBuildModes(requiresTwoLayerLateShading: boolea
 // - src/Index.tsx
 export function resolveBuildModeSelection(
   buildMode: BuildMode,
-  suppressStepDirection: SuppressStepDirection,
   lockFlatBuildMode: boolean,
   switchToSuppressCheckerIfContainsVoidShadows: boolean,
   hasVoidShadow: boolean,
   preferLatePairs: boolean,
   staircaseModes: readonly BuildMode[],
   suppressModes: readonly BuildMode[],
-): { buildMode: BuildMode; suppressStepDirection: SuppressStepDirection } {
+): BuildMode {
   let nextBuildMode = buildMode;
-  let nextSuppressStepDirection = suppressStepDirection;
 
-  if (lockFlatBuildMode) return { buildMode: BuildMode.Flat, suppressStepDirection };
+  if (lockFlatBuildMode) return BuildMode.Flat;
   if (switchToSuppressCheckerIfContainsVoidShadows && hasVoidShadow && isStaircaseBuildMode(nextBuildMode)) {
     nextBuildMode = BuildMode.SuppressStepChecker;
-    nextSuppressStepDirection = SuppressStepDirection.EastToWest;
   } else if (nextBuildMode === BuildMode.Flat) {
     nextBuildMode = BuildMode.StaircaseClassic;
   }
 
   const visibleModes = new Set([...staircaseModes, ...suppressModes]);
   if (visibleModes.has(nextBuildMode)) {
-    return { buildMode: nextBuildMode, suppressStepDirection: nextSuppressStepDirection };
+    return nextBuildMode;
   }
   if (
     nextBuildMode === BuildMode.Suppress2Layer &&
@@ -279,7 +276,7 @@ export function resolveBuildModeSelection(
     nextBuildMode = staircaseModes[0] ?? BuildMode.StaircaseClassic;
   }
 
-  return { buildMode: nextBuildMode, suppressStepDirection: nextSuppressStepDirection };
+  return nextBuildMode;
 }
 
 // Callers:

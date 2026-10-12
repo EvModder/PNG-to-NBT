@@ -879,13 +879,13 @@ async function assertCrubTechInvariants(): Promise<void> {
     "stone",
     "stone",
     "stone",
-    SupportMode.Steps,
+    SupportMode.All,
     true,
     false,
     false,
   );
   const standardAllSupportRoles = getSupportModeFillerRoles(SupportMode.All, false, false, false);
-  const crubTechAllSupportRoles = getSupportModeFillerRoles(SupportMode.All, false, false, true);
+  const crubTechStepsSupportRoles = getSupportModeFillerRoles(SupportMode.Steps, false, false, true);
   if (
     !standardAllSupportRoles.includes(FillerRole.SupportAll) ||
     standardAllSupportRoles.includes(FillerRole.SupportBreakable) ||
@@ -893,8 +893,8 @@ async function assertCrubTechInvariants(): Promise<void> {
   ) {
     throw new Error("Expected Support=All to retain standard support assignments outside CrubTech");
   }
-  if (crubTechAllSupportRoles.length !== 0) {
-    throw new Error("Expected CrubTech to disable Support=All in favor of Support=Steps");
+  if (crubTechStepsSupportRoles.length !== 0) {
+    throw new Error("Expected CrubTech to disable Support=Steps in favor of Support=All");
   }
   const crubTechSupportAssignmentsByRole = new Map(
     crubTechSupportAssignments.map(assignment => [assignment.role, assignment.block]),
@@ -904,7 +904,7 @@ async function assertCrubTechInvariants(): Promise<void> {
     crubTechSupportAssignmentsByRole.get(FillerRole.SupportBreakable) !== "azalea" ||
     crubTechSupportAssignmentsByRole.get(FillerRole.SupportPushable) !== "resin_block"
   ) {
-    throw new Error("Expected CrubTech Support=Steps to resolve to split support assignments");
+    throw new Error("Expected CrubTech Support=All to resolve to split support assignments");
   }
 
   const supportExportResult = await convertToNbt(withCrubTech, {
@@ -927,12 +927,12 @@ async function assertCrubTechInvariants(): Promise<void> {
   const supportBytes = new Uint8Array(gunzipSync(supportExportResult.data));
   assertBytesContainAscii(supportBytes, "minecraft:azalea", "CrubTech support export should include breakable support");
   assertBytesContainAscii(supportBytes, "minecraft:resin_block", "CrubTech support export should include pushable support");
-  assertBytesDoNotContainAscii(supportBytes, "minecraft:diamond_block", "CrubTech Support=Steps should ignore the normal support block");
+  assertBytesDoNotContainAscii(supportBytes, "minecraft:diamond_block", "CrubTech Support=All should ignore the normal support block");
   const supportBlocks = parseStructureBlocks(supportBytes);
   for (const y of expectedPlatformYs) {
     const glassCount = supportBlocks.filter(block => block.y === y && block.blockName === "minecraft:glass").length;
     if (glassCount !== MAP_SIZE * MAP_SIZE) {
-      throw new Error(`Expected Support=Steps to preserve the full CrubTech glass platform at y=${y}, got ${glassCount} blocks`);
+      throw new Error(`Expected Support=All to preserve the full CrubTech glass platform at y=${y}, got ${glassCount} blocks`);
     }
   }
 }

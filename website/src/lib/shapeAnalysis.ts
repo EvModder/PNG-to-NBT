@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - analyzeFillerNeeds()
+ * - hasStairStepSupport()
  * - collectFillerRolePixels()
  * - nooblineIsSingleY()
  * - hasNonWaterColorHeightVariance()
@@ -182,6 +183,19 @@ export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
   }
 
   return { roleCounts };
+}
+
+// Callers:
+// - src/Index.tsx
+export function hasStairStepSupport(shape: GeneratedShape, applySupportFloorYs: boolean): boolean {
+  return shape.parts.some(part => {
+    const supportFloorYs = applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+    return part.cells.entries().some(([coord, cell]) => {
+      if (!isShapeFillerCell(cell) || !cell.includes(FillerRole.StairStep)) return false;
+      const [x, y, z] = parseShapeCoordKey(coord);
+      return isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs);
+    });
+  });
 }
 
 // Callers:

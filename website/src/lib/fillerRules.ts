@@ -112,7 +112,7 @@ export function getSupportModeFillerRoles(
   useCrubTechSupport: boolean,
 ): FillerRole[] {
   if (useCrubTechSupport) {
-    return supportMode === SupportMode.Steps
+    return supportMode === SupportMode.All
       ? [FillerRole.SupportBreakable, FillerRole.SupportPushable]
       : [];
   }
