@@ -2048,7 +2048,7 @@ function buildSuppressDualLayerBlocks(
   const cellKey = (x: number, z: number) => toColumnCoordKey(x, z);
   const isRecessive = (x: number, z: number) => getPixelParity(x, z) === PixelParity.Recessive;
   const isDominant = (x: number, z: number) => getPixelParity(x, z) === PixelParity.Dominant;
-  const shadeDeltaFromSouth = (shade: Shade) => (shade === Shade.Light ? 1 : shade === Shade.Flat ? 0 : -1);
+  const shadeDeltaFromSouth = (shade: Shade) => (shade === Shade.Light ? -1 : shade === Shade.Flat ? 0 : 1);
   // Keep the north pixel correct during the full update, then add its provider for the dominant-only update.
   const needsLateDominantShade = (x: number, z: number, color: ShadedColorRef) => {
     if (
@@ -2137,7 +2137,8 @@ function buildSuppressDualLayerBlocks(
         const southTopY = z < MAP_SIZE - 1 ? topYGrid[x][z + 1] : undefined;
         let topY = lowerY - 1;
         if (isRecessive(x, z) && !isTransparentColor(south) && !isWaterColor(south) && southTopY !== undefined) {
-          topY = southTopY + shadeDeltaFromSouth(color.shade);
+          // Height shades the southern pixel; depth shades the water itself.
+          topY = southTopY + shadeDeltaFromSouth(south.shade);
         }
         const depth = getWaterDepth(color.shade, x, z);
         for (let d = 0; d < depth; ++d) addBlock(x, topY - d, z, { kind: "color", color });
