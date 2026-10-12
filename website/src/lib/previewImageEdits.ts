@@ -2,6 +2,8 @@
  * Public API:
  * - PreviewPixelReplacement
  * - PreviewPixelMask
+ * - offsetPreviewPixelReplacements()
+ * - buildSelectedTileVisibleMask()
  * - collectVsFillerPreviewReplacements()
  * - usePreviewVisiblePixelMask()
  * - useVsFillerPreviewReplacements()
@@ -22,6 +24,7 @@ import { isShadeFillerDisabled } from "@/lib/fillerRules";
 import { collectFillerRolePixels } from "@/lib/shapeAnalysis";
 import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { MAP_SIZE } from "@/utils/color";
+import type { ParsedColorGridTile } from "@/lib/colorGridParsing";
 
 // Callers:
 // - src/Index.tsx
@@ -62,6 +65,7 @@ type CollectVsFillerPreviewReplacementOptions = {
   dominateVoidFillerBlock: string;
   recessiveVoidFillerBlock: string;
   xColumnRange?: [number, number];
+  zColumnRange?: [number, number];
 };
 
 type CollectPreviewVisiblePixelMaskOptions = {
@@ -78,6 +82,7 @@ export function collectVsFillerPreviewReplacements(
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
     xColumnRange,
+    zColumnRange,
     minecraftVersion = DEFAULT_MINECRAFT_VERSION,
   }: CollectVsFillerPreviewReplacementOptions,
 ): PreviewPixelReplacement[] {
@@ -94,12 +99,53 @@ export function collectVsFillerPreviewReplacements(
   ];
   if (roles.length === 0) return [];
 
-  return collectFillerRolePixels(shape, roles, xColumnRange).flatMap(({ x, z, role }) => {
+  return collectFillerRolePixels(shape, roles, xColumnRange, zColumnRange).flatMap(({ x, z, role }) => {
     const rgb = role === FillerRole.ShadeVoidDominant ? dominantRgb : recessiveRgb;
     if (!rgb) return [];
     const [r, g, b] = rgb;
     return [{ x, z, r, g, b }];
   });
+}
+
+// Callers:
+// - src/Index.tsx
+export function offsetPreviewPixelReplacements(
+  replacements: readonly PreviewPixelReplacement[],
+  tile: ParsedColorGridTile,
+): PreviewPixelReplacement[] {
+  return replacements.map(replacement => ({
+    ...replacement,
+    x: replacement.x + tile.startX,
+    z: replacement.z + tile.startZ,
+  }));
+}
+
+// Callers:
+// - src/Index.tsx
+export function buildSelectedTileVisibleMask(
+  imageData: ImageData,
+  tile: ParsedColorGridTile,
+  tileVisibleMask?: PreviewPixelMask | null,
+  xColumnRange?: readonly [number, number],
+  zColumnRange?: readonly [number, number],
+): PreviewPixelMask | null {
+  if (!tileVisibleMask && !xColumnRange && !zColumnRange) return null;
+  const mask = new Uint8Array(imageData.width * imageData.height);
+  mask.fill(1);
+
+  for (let z = 0; z < MAP_SIZE; ++z) {
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      const visibleByRange = (!xColumnRange || (x >= xColumnRange[0] && x <= xColumnRange[1])) &&
+        (!zColumnRange || (z >= zColumnRange[0] && z <= zColumnRange[1]));
+      const visibleByMask = !tileVisibleMask || tileVisibleMask[z * MAP_SIZE + x] !== 0;
+      if (visibleByRange && visibleByMask) continue;
+      const globalX = tile.startX + x;
+      const globalZ = tile.startZ + z;
+      mask[globalZ * imageData.width + globalX] = 0;
+    }
+  }
+
+  return mask;
 }
 
 function getPreviewPixelParts(shape: GeneratedShape, phaseRange?: [number, number]) {
@@ -141,6 +187,8 @@ export function useVsFillerPreviewReplacements(
       options.recessiveVoidFillerBlock,
       options.xColumnRange?.[0],
       options.xColumnRange?.[1],
+      options.zColumnRange?.[0],
+      options.zColumnRange?.[1],
     ],
   );
 }

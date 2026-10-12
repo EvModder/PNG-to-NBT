@@ -62,6 +62,7 @@ type MaterialAnalysisOptions = ColorBlockSelections & {
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
   xColumnRange?: [number, number];
+  zColumnRange?: [number, number];
   phaseRange?: [number, number];
 };
 
@@ -116,6 +117,8 @@ function analyzePartMaterialNeeds(
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
+    // Include the north border with row 0, matching the clearing schedule.
+    if (applyColumnRange && options.zColumnRange && (Math.max(0, z) < options.zColumnRange[0] || z > options.zColumnRange[1])) continue;
 
     if (isShapeColorCell(cell)) {
       const isWaterColorCell = !cell.isCustom && cell.id === WATER_BASE_INDEX;
@@ -205,6 +208,7 @@ export function collectFillerRolePixels(
   shape: GeneratedShape,
   roles: readonly FillerRole[],
   xColumnRange?: [number, number],
+  zColumnRange?: [number, number],
 ): FillerRolePixel[] {
   const roleSet = new Set<FillerRole>(roles);
   const pixels = new Map<string, FillerRole>();
@@ -217,6 +221,7 @@ export function collectFillerRolePixels(
 
       const [x, , z] = parseShapeCoordKey(coord);
       if (xColumnRange && (x < xColumnRange[0] || x > xColumnRange[1])) continue;
+      if (zColumnRange && (z < zColumnRange[0] || z > zColumnRange[1])) continue;
       if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
 
       pixels.set(`${x},${z}`, role);
@@ -322,6 +327,7 @@ export function analyzeFragileSupportOverrideNeeds(
       if (!isShapeFillerCell(cell)) continue;
       const [x, y, z] = parseShapeCoordKey(coord);
       if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
+      if (applyColumnRange && options.zColumnRange && (Math.max(0, z) < options.zColumnRange[0] || z > options.zColumnRange[1])) continue;
       const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
       if (!assignedRole) continue;
       if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options, fillerAssignments)) continue;

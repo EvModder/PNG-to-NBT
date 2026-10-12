@@ -19,6 +19,7 @@
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/lib/buildModeShapes.ts
+ * - src/lib/messages.ts
  * - src/lib/nbtExport.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
@@ -87,10 +88,10 @@ export function getBuildModeDownloadSuffix(
     case BuildMode.SuppressStepChecker:
       return `-suppress_step_checker_${getDirectionSuffix(direction)}`;
     case BuildMode.Suppress2LayerLateFillers:
-      return "-suppress_2layer";
+      return `-suppress_2layer_${getDirectionSuffix(direction)}`;
     case BuildMode.Suppress2LayerLatePairs:
     case BuildMode.Suppress2Layer:
-      return crubTech ? "-suppress_crubtech" : "-suppress_2layer";
+      return crubTech ? "-suppress_crubtech" : `-suppress_2layer_${getDirectionSuffix(direction)}`;
   }
 }
 
@@ -154,6 +155,7 @@ export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
 // Callers:
 // - src/Index.tsx
 // - src/components/ToolbarBuildSettings.tsx
+// - src/lib/messages.ts
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {

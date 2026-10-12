@@ -162,11 +162,11 @@ import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { measureToolbarWidths } from "@/utils/toolbarLayout";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
 import {
+  offsetPreviewPixelReplacements,
+  buildSelectedTileVisibleMask,
   collectVsFillerPreviewReplacements,
   usePreviewVisiblePixelMask,
   useVsFillerPreviewReplacements,
-  type PreviewPixelMask,
-  type PreviewPixelReplacement,
 } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { getSupportedBlockIdAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
@@ -468,41 +468,6 @@ function shouldUpdateMainThreadProgress(
   nowMs: number,
 ): boolean {
   return completed === total || nowMs - lastUpdateAtMs >= MAIN_THREAD_PROGRESS_INTERVAL_MS;
-}
-
-function offsetPreviewPixelReplacements(
-  replacements: readonly PreviewPixelReplacement[],
-  tile: ParsedColorGridTile,
-): PreviewPixelReplacement[] {
-  return replacements.map(replacement => ({
-    ...replacement,
-    x: replacement.x + tile.startX,
-    z: replacement.z + tile.startZ,
-  }));
-}
-
-function buildSelectedTileVisibleMask(
-  imageData: ImageData,
-  tile: ParsedColorGridTile,
-  tileVisibleMask?: PreviewPixelMask | null,
-  xColumnRange?: readonly [number, number],
-): PreviewPixelMask | null {
-  if (!tileVisibleMask && !xColumnRange) return null;
-  const mask = new Uint8Array(imageData.width * imageData.height);
-  mask.fill(1);
-
-  for (let z = 0; z < 128; ++z) {
-    for (let x = 0; x < 128; ++x) {
-      const visibleByRange = !xColumnRange || (x >= xColumnRange[0] && x <= xColumnRange[1]);
-      const visibleByMask = !tileVisibleMask || tileVisibleMask[z * 128 + x] !== 0;
-      if (visibleByRange && visibleByMask) continue;
-      const globalX = tile.startX + x;
-      const globalZ = tile.startZ + z;
-      mask[globalZ * imageData.width + globalX] = 0;
-    }
-  }
-
-  return mask;
 }
 
 type ShapeWarning = {
@@ -2059,6 +2024,7 @@ const Index = () => {
   const isNorthSouthSuppressStepDirection =
     effectiveSuppressStepDirection === SuppressStepDirection.NorthToSouth ||
     effectiveSuppressStepDirection === SuppressStepDirection.SouthToNorth;
+  const isRowRangeMode = buildModeUsesLayerGap(effectiveBuildMode) && isNorthSouthSuppressStepDirection;
   const supportShape = selectedTileAnalysis?.supportShape ?? null;
   const maxRangeIndex = useMemo(
     () => {
@@ -2148,16 +2114,16 @@ const Index = () => {
   const showBuildAtWorldMinYToggle = imageValid && buildAtWorldMinYEligible;
   const shadingMethodTooltip = messages.buildMode.tooltip(buildMode);
   const supportModeTooltip = messages.supportMode.tooltip(effectiveSupportMode);
-  const suppressStepNorthSouthWarning = useMemo(
+  const suppressNorthSouthWarning = useMemo(
     () =>
       !!imageData &&
       imageValid &&
       !lockFlatBuildMode &&
-      isSuppressStepsBuildMode(buildMode) &&
+      (isSuppressStepsBuildMode(buildMode) || buildModeUsesLayerGap(buildMode)) &&
       isNorthSouthSuppressStepDirection
-        ? messages.preview.suppressStepNorthSouthWarning(
-            messages.buildMode.optionLabel(buildMode),
-            messages.buildMode.stepDirectionLabel(effectiveSuppressStepDirection),
+        ? messages.preview.suppressNorthSouthWarning(
+            buildMode,
+            effectiveSuppressStepDirection,
           )
         : null,
     [
@@ -2180,10 +2146,10 @@ const Index = () => {
         ...colorBlockSelections,
         fillerAssignments: uiFillerAssignments,
         applySupportFloorYs: effectiveApplySupportFloorYs,
-        ...(isStepRangeMode ? { phaseRange: [colStart, colEnd] as [number, number] } : { xColumnRange: [colStart, colEnd] as [number, number] }),
+        [isStepRangeMode ? "phaseRange" : isRowRangeMode ? "zColumnRange" : "xColumnRange"]: [colStart, colEnd],
       },
     );
-  }, [selectedTileAnalysis, imageValid, colRangeEnabled, currentMaterialInputSignature, isStepRangeMode, colStart, colEnd]);
+  }, [selectedTileAnalysis, imageValid, colRangeEnabled, currentMaterialInputSignature, isStepRangeMode, isRowRangeMode, colStart, colEnd]);
   const allTileMaterialCountsSum = useMemo(
     () => aggregateMaterialCounts(tileAnalyses.flatMap(tile => (tile.materialNeedStats ? [tile.materialNeedStats] : [])), "sum"),
     [tileAnalyses],
@@ -3225,7 +3191,7 @@ const Index = () => {
     !!imageData &&
     imageValid &&
     (
-      (!lockFlatBuildMode && isSuppressStepsBuildMode(buildMode)) ||
+      (!lockFlatBuildMode && (isSuppressStepsBuildMode(buildMode) || buildModeUsesLayerGap(buildMode))) ||
       directionControlUsesVsFillers
     );
   const activeSuppressDirection = directionControlUsesVsFillers
@@ -3341,8 +3307,12 @@ const Index = () => {
     fillerUiVisibilityPending,
   );
   const previewXColumnRange = useMemo<[number, number] | undefined>(
-    () => (selectedTileAnalysis && colRangeEnabled && !isStepRangeMode ? [colStart, colEnd] : undefined),
-    [selectedTileAnalysis, colRangeEnabled, isStepRangeMode, colStart, colEnd],
+    () => (selectedTileAnalysis && colRangeEnabled && !isStepRangeMode && !isRowRangeMode ? [colStart, colEnd] : undefined),
+    [selectedTileAnalysis, colRangeEnabled, isStepRangeMode, isRowRangeMode, colStart, colEnd],
+  );
+  const previewZColumnRange = useMemo<[number, number] | undefined>(
+    () => (selectedTileAnalysis && colRangeEnabled && isRowRangeMode ? [colStart, colEnd] : undefined),
+    [selectedTileAnalysis, colRangeEnabled, isRowRangeMode, colStart, colEnd],
   );
   const previewPhaseRange = useMemo<[number, number] | undefined>(
     () => (selectedTileAnalysis && colRangeEnabled && isStepRangeMode ? [colStart, colEnd] : undefined),
@@ -3355,6 +3325,7 @@ const Index = () => {
     dominateVoidFillerBlock,
     recessiveVoidFillerBlock,
     xColumnRange: previewXColumnRange,
+    zColumnRange: previewZColumnRange,
   });
   const selectedTilePreviewVisiblePixelMask = usePreviewVisiblePixelMask({
     shape: previewPhaseRange ? (selectedTileAnalysis?.supportShape ?? null) : null,
@@ -3403,9 +3374,10 @@ const Index = () => {
         selectedTileAnalysis.tile,
         previewPhaseRange ? selectedTilePreviewVisiblePixelMask : null,
         previewXColumnRange,
+        previewZColumnRange,
       );
     },
-    [displayImageData, selectedTileAnalysis, previewPhaseRange, selectedTilePreviewVisiblePixelMask, previewXColumnRange],
+    [displayImageData, selectedTileAnalysis, previewPhaseRange, selectedTilePreviewVisiblePixelMask, previewXColumnRange, previewZColumnRange],
   );
   const previewStatusText = useMemo(
     () => {
@@ -3685,7 +3657,7 @@ const Index = () => {
         ([block, count]) => count > 0 && ["open_eyeblossom", "closed_eyeblossom"].includes(normalizeBlockId(block)),
       ),
       noFillerWarning,
-      suppressStepNorthSouthWarning,
+      suppressNorthSouthWarning,
       waterSideSupportWarning,
       fragileSupportOverrideWarning,
       vsFillerWarning,
@@ -4160,6 +4132,7 @@ const Index = () => {
               colRangeEnabled={colRangeEnabled}
               setColRangeEnabled={setColRangeEnabled}
               isStepRangeMode={isStepRangeMode}
+              isRowRangeMode={isRowRangeMode}
               colStart={colStart}
               colEnd={colEnd}
               maxRangeIndex={maxRangeIndex}

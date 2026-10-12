@@ -13,12 +13,15 @@ import {
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { CRUBTECH_PRESET_NAME, getBuiltinPreset } from "@/data/presets";
 import { MAP_SIZE, TRANSPARENT_COLOR } from "@/utils/color";
+import { getBuildModeDownloadSuffix } from "@/utils/conversion";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAnalysis";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbt } from "@/lib/nbtExport";
 import { createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
+import { buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
+import { analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
@@ -1449,11 +1452,144 @@ function assertMixedStepMarkerInvariants(): void {
   }
 }
 
+function assertTwoLayerMapPixels(): void {
+  const schedules = Object.values(SuppressStepDirection).map(direction => {
+    const phases = buildTwoLayerLoadPhases(direction);
+    const lastUpdate = new Int16Array(MAP_SIZE * MAP_SIZE).fill(-1);
+    for (const [index, phase] of phases.entries()) for (const front of phase.fronts) {
+      const offsets = (front.loadLine & 1) === 0 ? [15, 41, 65, 89, 113] : [14, 40, 64, 88, 112];
+      for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+        if (offsets.some(offset => {
+          const distance = phase.axis === "x" ? (front.loadLine - x) ** 2 + (offset - z) ** 2 : (offset - x) ** 2 + (front.loadLine - z) ** 2;
+          return distance < 128 ** 2 && (distance <= 126 ** 2 || (x + z) % 2 === 1);
+        })) lastUpdate[x * MAP_SIZE + z] = index;
+      }
+    }
+    return { direction, phases, lastUpdate };
+  });
+  for (const water of ["none", "above", "below"]) for (const sparse of [false, true]) for (const gap of [2, 5]) {
+    let seed = 987654321;
+    const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) >>> 8;
+    const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => {
+      const value = next(), shade = next() % 3 as Shade;
+      return sparse && value % 4 === 0 ? TRANSPARENT_COLOR : { id: water !== "none" && value % 7 === 0 ? WATER_BASE_INDEX : 1, isCustom: false, shade };
+    }));
+    const drops: WaterDrops | undefined = water === "below" ? [24, 14, 7] : undefined;
+    const needsLate = requiresTwoLayerLateShading(grid, drops);
+    for (const mode of [BuildMode.Suppress2Layer, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]) {
+      const lateY = gap + 2;
+      const shape = generateShapeMap(grid, undefined, water !== "none", sparse, needsLate, {
+        layerGap: gap, selectedMode: mode, selectedStepDirection: SuppressStepDirection.EastToWest, suppress2LayerLatePairY: lateY,
+        waterSetting: drops ? { kind: "below-platform", drops } : undefined,
+      })[mode];
+      if (!shape) continue;
+      const columns = new Map<number, { y: number; id: number; late: boolean }[]>();
+      for (const [coord, cell] of shape.parts[0].cells) {
+        if (Array.isArray(cell) && !cell.some(role => role.startsWith("shade_"))) continue;
+        const [x, y, z] = parseShapeCoordKey(coord);
+        const id = Array.isArray(cell) ? -1 : cell.id;
+        const late = Array.isArray(cell) && cell.includes(FillerRole.ShadeSuppressLate) || mode === BuildMode.Suppress2LayerLatePairs && y === lateY && id !== WATER_BASE_INDEX;
+        const key = x * (MAP_SIZE + 1) + z + 1;
+        const column = columns.get(key) ?? [];
+        column.push({ y, id, late });
+        columns.set(key, column);
+      }
+      for (const column of columns.values()) column.sort((a, b) => b.y - a.y);
+      for (const { direction, phases, lastUpdate } of schedules) {
+        const top = (x: number, z: number, phase: number) => {
+          const line = phases[0].axis === "x" ? x : z;
+          // The north border belongs to row 0, not the south-moving half of center-out.
+          const cleared = phase >= 0 && phases[phase].fronts.some(front =>
+            line >= front.clearedRange[0] && line <= front.clearedRange[1] || phases[0].axis === "z" && z === -1 && front.clearedRange[0] === 0);
+          return columns.get(x * (MAP_SIZE + 1) + z + 1)?.find(block => block.late ? cleared : !cleared || block.y < gap);
+        };
+        for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+          const phase = lastUpdate[x * MAP_SIZE + z];
+          const block = top(x, z, phase), northY = top(x, z - 1, phase)?.y ?? -1;
+          const expected = grid[x][z];
+          let shade = block && (block.y > northY ? Shade.Light : block.y < northY ? Shade.Dark : Shade.Flat);
+          if (block?.id === WATER_BASE_INDEX) {
+            const depth = columns.get(x * (MAP_SIZE + 1) + z + 1)!.filter(cell => cell.id === WATER_BASE_INDEX && cell.y <= block.y).length;
+            // Lowered-water cells are source anchors; their falling columns are added during export.
+            if (drops) {
+              const drop = drops.at(expected.shade);
+              if (drop === undefined || block.y !== -drop) throw new Error("Changed below-platform water anchor");
+              shade = expected.shade;
+            } else {
+              const dominant = (x + z) % 2 === 1;
+              shade = depth > (dominant ? 6 : 9) ? Shade.Dark : depth > (dominant ? 2 : 4) ? Shade.Flat : Shade.Light;
+            }
+          }
+          if (expected.id === 0 ? block !== undefined : block?.id !== expected.id || shade !== expected.shade) {
+            throw new Error(`Incorrect 2-layer map pixel: ${mode}, ${direction}, water=${water}, gap=${gap}, (${x}, ${z})`);
+          }
+        }
+      }
+    }
+  }
+}
+
+async function assertTwoLayerDirectionInvariants(): Promise<void> {
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => ({
+    id: 1, isCustom: false, shade: Shade.Dark,
+  })));
+  for (const mode of [BuildMode.Suppress2Layer, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]) {
+    const shape = generateShapeMap(grid, undefined, false, false, mode !== BuildMode.Suppress2Layer, {
+      layerGap: 5, selectedMode: mode, selectedStepDirection: SuppressStepDirection.EastToWest,
+    })[mode]!;
+    const materialOptions = {
+      selectedBlocks: { 1: "stone" }, selectedBlocksCustom: {}, customColors: [], applySupportFloorYs: true,
+      fillerAssignments: [{ role: FillerRole.ShadeSuppress, block: "resin_block" }, { role: FillerRole.ShadeNorthRow, block: "resin_block" }],
+    };
+    const fullCounts = analyzeMaterialNeeds(grid, shape, materialOptions).blockCounts;
+    const rowCounts = analyzeMaterialNeeds(grid, shape, { ...materialOptions, zColumnRange: [0, MAP_SIZE - 1] }).blockCounts;
+    if (JSON.stringify(fullCounts) !== JSON.stringify(rowCounts)) throw new Error("Full row range must retain north-border materials");
+    const firstRow = analyzeMaterialNeeds(grid, shape, { ...materialOptions, zColumnRange: [0, 0] }).colorCounts;
+    if (Object.values(firstRow).reduce((sum, count) => sum + count, 0) !== MAP_SIZE) throw new Error("Row range must count rows, not columns or the full tile");
+    for (const direction of Object.values(SuppressStepDirection)) {
+      const axisX = direction === SuppressStepDirection.EastToWest || direction === SuppressStepDirection.WestToEast;
+      const ascending = direction === SuppressStepDirection.WestToEast || direction === SuppressStepDirection.NorthToSouth;
+      const markers = buildSuppressLoadSpotMarkers(shape, mode, direction, { markSuppressLoadSpotsInSchematic: true });
+      if (markers.length !== (axisX ? 315 : ascending ? 635 : 625)) throw new Error("Incorrect 2-layer load route length");
+      for (const [index, marker] of markers.entries()) {
+        const expectedLine = ascending ? MAP_SIZE + Number(axisX) + Math.floor(index / 5) * (axisX ? 2 : 1) : -2 - Math.floor(index / 5) * (axisX ? 2 : 1);
+        const orientation = axisX ? ascending ? "up_west" : "up_east" : ascending ? "up_north" : "up_south";
+        if ((axisX ? marker.x : marker.z) !== expectedLine || !marker.blockName.includes(orientation)) {
+          throw new Error("Incorrect 2-layer load route or marker orientation");
+        }
+        const orthogonal = axisX ? marker.z : marker.x;
+        if (orthogonal < 0 || orthogonal >= MAP_SIZE || shape.parts.some(part => part.cells.has(toShapeCoordKey(marker.x, marker.y, marker.z)))) {
+          throw new Error("2-layer marker overlaps the build");
+        }
+      }
+      const suffix = axisX ? ascending ? "_WE" : "_EW" : ascending ? "_NS" : "_SN";
+      if (!getBuildModeDownloadSuffix(mode, direction).endsWith(suffix)) throw new Error("Incorrect 2-layer direction suffix");
+      if (buildSuppressLoadSpotMarkers(shape, mode, direction, {}).length) throw new Error("Disabled markers must remain absent");
+      const result = await convertToNbt(shape, {
+        selectedBlocks: { 1: "stone" }, selectedBlocksCustom: {}, customColors: [],
+        fillerAssignments: [{ role: FillerRole.ShadeSuppress, block: "resin_block" }, { role: FillerRole.ShadeNorthRow, block: "resin_block" }],
+        applySupportFloorYs: true, forceXZ128: true, forceZ129: true, buildMode: mode,
+        suppressStepDirection: direction, markSuppressLoadSpotsInSchematic: true, baseName: "two-layer-direction",
+      });
+      if (result.isZip) throw new Error("Directional 2-layer must remain one schematic");
+      const exported = parseStructureBlocks(new Uint8Array(gunzipSync(result.data)));
+      if (exported.filter(block => block.blockName.startsWith("minecraft:jigsaw")).length !== markers.length) throw new Error("Lost 2-layer load markers");
+      if (new Set(exported.map(block => `${block.x},${block.y},${block.z}`)).size !== exported.length) throw new Error("Duplicate export coordinates");
+      if (mode !== BuildMode.Suppress2LayerLateFillers) {
+        const crubMarkers = buildSuppressLoadSpotMarkers(shape, mode, direction, { crubTech: true, markSuppressLoadSpotsInSchematic: true });
+        if (crubMarkers.some(marker => marker.blockName.startsWith("minecraft:jigsaw"))) throw new Error("CrubTech must retain its fixed route");
+      }
+    }
+  }
+}
+
 async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
   assertMixedStepMarkerInvariants();
   assertCrubTechPresetInvariant();
   assertTwoLayerLatePairEligibilityInvariants();
+  await assertTwoLayerDirectionInvariants();
+  assertTwoLayerMapPixels();
   await assertCrubTechInvariants();
   await assertCrubTechWaterPlatformInvariant();
   await assertCrubTechLatePairPauseMarkerInvariants();

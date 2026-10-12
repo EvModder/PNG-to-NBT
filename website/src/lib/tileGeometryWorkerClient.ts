@@ -6,6 +6,7 @@
  * Callers:
  * - src/Index.tsx
  */
+import { buildModeUsesLayerGap } from "@/utils/conversion";
 import type {
   TileBaseGeometryWorkerInput,
   TileBaseGeometryWorkerResult,
@@ -127,6 +128,8 @@ function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeomet
 }
 
 function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeometryWorkerInput): string {
+  // 2-layer direction changes the loading route, not the block geometry.
+  const twoLayer = buildModeUsesLayerGap(input.buildMode);
   return [
     tileCacheKey,
     input.allSameShade ?? "",
@@ -149,7 +152,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     input.skipEmptySuppressSteps ? 1 : 0,
     input.collapseStaircaseModes ? 1 : 0,
     input.includeFlatNorthline ? 1 : 0,
-    input.selectedStepDirection,
+    twoLayer ? "" : input.selectedStepDirection,
   ].join("|");
 }
 

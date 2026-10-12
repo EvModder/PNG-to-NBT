@@ -140,6 +140,7 @@ export function ToolbarBuildSettings({
 }: ToolbarBuildSettingsProps) {
   const showAnyWaterDropControl = visibleWaterLevelControls.length > 0;
   const showLayerGapControl = !lockFlatBuildMode && buildModeUsesLayerGap(buildMode);
+  const directionDisabled = showLayerGapControl && crubTech;
   const showMixStepsControl = !lockFlatBuildMode && showMixStepsToggle;
   const showPaletteSeedControl = !lockFlatBuildMode && showPaletteSeedToggle;
   const showBuildModeControl = !lockFlatBuildMode;
@@ -324,8 +325,11 @@ export function ToolbarBuildSettings({
       node: (
         <button
           type="button"
-          className={INPUT_SQUARE_ICON_BUTTON_CLASS}
-          title={messages.buildMode.stepDirectionTooltip(suppressDirection)}
+          className={`${INPUT_SQUARE_ICON_BUTTON_CLASS} disabled:opacity-55 disabled:cursor-not-allowed disabled:hover:border-border`}
+          disabled={directionDisabled}
+          title={directionDisabled
+            ? `${messages.buildMode.stepDirectionAriaLabel(suppressDirection)}. ${messages.buildMode.crubTechTooltip}`
+            : `${messages.buildMode.stepDirectionTooltip(suppressDirection)}${showLayerGapControl ? ` ${messages.buildMode.twoLayerDirectionTooltip(suppressDirection)}` : ""}`}
           aria-label={messages.buildMode.stepDirectionAriaLabel(suppressDirection)}
           onClick={() => setSuppressDirection(
             cycleSuppressStepDirection(suppressDirection, isSuppressDirectionSelectable),

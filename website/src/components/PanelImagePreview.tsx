@@ -49,7 +49,7 @@ type PanelImagePreviewProps = {
   missingBlockCount: number;
   usesEyeblossoms: boolean;
   noFillerWarning: { text: string; blocking: boolean } | null;
-  suppressStepNorthSouthWarning: string | null;
+  suppressNorthSouthWarning: string | null;
   waterSideSupportWarning: PreviewWarning | null;
   fragileSupportOverrideWarning: PreviewWarning | null;
   vsFillerWarning: PreviewWarning | null;
@@ -80,6 +80,7 @@ type PanelImagePreviewProps = {
   colRangeEnabled: boolean;
   setColRangeEnabled: (value: boolean | ((value: boolean) => boolean)) => void;
   isStepRangeMode: boolean;
+  isRowRangeMode: boolean;
   colStart: number;
   colEnd: number;
   maxRangeIndex: number;
@@ -248,7 +249,7 @@ export function PanelImagePreview({
   missingBlockCount,
   usesEyeblossoms,
   noFillerWarning,
-  suppressStepNorthSouthWarning,
+  suppressNorthSouthWarning,
   waterSideSupportWarning,
   fragileSupportOverrideWarning,
   vsFillerWarning,
@@ -279,6 +280,7 @@ export function PanelImagePreview({
   colRangeEnabled,
   setColRangeEnabled,
   isStepRangeMode,
+  isRowRangeMode,
   colStart,
   colEnd,
   maxRangeIndex,
@@ -545,7 +547,7 @@ export function PanelImagePreview({
       {imageValid && <>
         {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
         {noFillerWarning && <WarningBanner text={noFillerWarning.text} tone={noFillerWarning.blocking ? "error" : "warning"} />}
-        {suppressStepNorthSouthWarning && <WarningBanner text={suppressStepNorthSouthWarning} tone="warning" />}
+        {suppressNorthSouthWarning && <WarningBanner text={suppressNorthSouthWarning} tone="warning" />}
         {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
         {fragileSupportOverrideWarning && <WarningBanner text={fragileSupportOverrideWarning.text} tone="warning" invalid={fragileSupportOverrideWarning.invalid} />}
         {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} warningHeadline />}
@@ -577,7 +579,7 @@ export function PanelImagePreview({
                 className={`text-[10px] px-1.5 py-0.5 rounded border ${colRangeEnabled ? "border-primary bg-primary/15 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
                 onClick={() => setColRangeEnabled(value => !value)}
               >
-                {messages.preview.rangeButtonLabel(isStepRangeMode)}
+                {messages.preview.rangeButtonLabel(isStepRangeMode, isRowRangeMode)}
               </button>
               {showWestEastSlopeControls && (
                 <button

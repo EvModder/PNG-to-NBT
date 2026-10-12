@@ -10,6 +10,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/previewImageEdits.ts
  * - src/components/PanelImagePreview.tsx
  */
 import * as UTIF from "utif";
@@ -45,6 +46,7 @@ type ImagePreprocessResult = {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/previewImageEdits.ts
 export interface ParsedColorGridTile {
   row: number;
   col: number;

@@ -18,7 +18,8 @@ import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
 import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { isSuppressBuildMode } from "@/utils/conversion";
+import { buildModeUsesLayerGap, isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
+import { buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 
 const SUPPRESS_STEP_PAIR_LOAD_SPOT_DISTANCE = 126;
 const SUPPRESS_STEP_CHECKER_LOAD_SPOT_DISTANCE = 124;
@@ -188,9 +189,10 @@ function buildSparseDominantLoadSpotMarkers(
   stepDirection: SuppressStepDirection,
   markerY: number,
   blockName: string,
+  fullStrip = false,
 ): LoadSpotMarkerEntry[] {
   const offsets = getDominantSparseLoadSpotOffsets(markerLine);
-  const usedOffsetIndices = new Set<number>();
+  const usedOffsetIndices = new Set<number>(fullStrip ? offsets.map((_, index) => index) : []);
 
   for (const coord of coords) {
     if (getPixelParity(coord.x, coord.z) !== PixelParity.Dominant) continue;
@@ -367,6 +369,7 @@ function buildSuppressStepCheckerMarkers(
   stepDirection: SuppressStepDirection,
   markerY: number,
   markerBlockName: string,
+  fullStrip = false,
 ): LoadSpotMarkerEntry[] {
   const markerLine = getLoadSpotCoordinate(
     stepDirection,
@@ -379,7 +382,24 @@ function buildSuppressStepCheckerMarkers(
     stepDirection,
     markerY,
     orientLoadSpotMarkerBlockName(markerBlockName, stepDirection),
+    fullStrip,
   );
+}
+
+function buildTwoLayerLoadSpotMarkers(
+  shape: GeneratedShape,
+  direction: SuppressStepDirection,
+  markerBlockName: string,
+): LoadSpotMarkerEntry[] {
+  const markerY = getShapeMarkerY(shape);
+  if (markerY === null) return [];
+  return buildTwoLayerLoadPhases(direction).flatMap(phase => phase.fronts.flatMap(front => {
+    // Initial one-way load lines can cross the build or north border; leave them unmarked.
+    if (front.loadLine >= (phase.axis === "x" ? 0 : -1) && front.loadLine < MAP_SIZE) return [];
+    return buildSparseDominantLoadSpotMarkers(
+      [], front.loadLine, front.direction, markerY, orientLoadSpotMarkerBlockName(markerBlockName, front.direction), true,
+    );
+  }));
 }
 
 function buildSuppressStepLoadSpotMarkers(
@@ -526,6 +546,8 @@ export function buildSuppressLoadSpotMarkers(
   const crubTechLatePairY = options.suppress2LayerLatePairY ?? getDefaultCrubTechLatePairY(shape);
   return [
     ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName),
+    ...(buildModeUsesLayerGap(buildMode) && options.markSuppressLoadSpotsInSchematic && !(options.crubTech && isCrubTechBuildMode(buildMode))
+      ? buildTwoLayerLoadSpotMarkers(shape, stepDirection, markerBlockName) : []),
     ...buildCrubTechSignalLamps(
       shape,
       buildMode,

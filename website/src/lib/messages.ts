@@ -41,6 +41,7 @@ import { esCatalog } from "@/data/i18n/es";
 import { Shade } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { SupportMode, type BlockDisplayMode, type ColumnId } from "@/types/ui";
+import { buildModeUsesLayerGap } from "@/utils/conversion";
 
 type TemplateValues = Record<string, string | number>;
 
@@ -312,6 +313,10 @@ export const messages = {
       });
     },
     paletteSeedLabel: catalog.buildMode.paletteSeedLabel,
+    twoLayerDirectionTooltip(direction: SuppressStepDirection): string {
+      return direction === SuppressStepDirection.NorthToSouth || direction === SuppressStepDirection.SouthToNorth
+        ? catalog.buildMode.twoLayerNorthSouthTooltip : catalog.buildMode.twoLayerDirectionTooltip;
+    },
     stepDirectionLabel(direction: SuppressStepDirection): string {
       return catalog.buildMode.stepDirectionLabels[direction];
     },
@@ -533,10 +538,13 @@ export const messages = {
         value,
       });
     },
-    suppressStepNorthSouthWarning(modeLabel: string, directionLabel: string): string {
-      return formatTemplate(catalog.preview.suppressStepNorthSouthWarning, {
-        modeLabel,
-        directionLabel,
+    suppressNorthSouthWarning(mode: BuildMode, direction: SuppressStepDirection): string {
+      const template = buildModeUsesLayerGap(mode)
+        ? catalog.preview.suppressTwoLayerNorthSouthWarning
+        : catalog.preview.suppressStepNorthSouthWarning;
+      return formatTemplate(template, {
+        modeLabel: getLookupValue(catalog.buildMode.optionLabels, mode, mode),
+        directionLabel: catalog.buildMode.stepDirectionLabels[direction],
       });
     },
     uniqueColorCount(count: number): string {
@@ -548,8 +556,8 @@ export const messages = {
     voidShadowCount(count: number): string {
       return formatPlural(catalog.preview.voidShadowCount, count);
     },
-    rangeButtonLabel(isStepRangeMode: boolean): string {
-      return isStepRangeMode ? catalog.preview.stepRangeButton : catalog.preview.columnRangeButton;
+    rangeButtonLabel(isStepRangeMode: boolean, isRowRangeMode: boolean): string {
+      return isStepRangeMode ? catalog.preview.stepRangeButton : isRowRangeMode ? catalog.preview.rowRangeButton : catalog.preview.columnRangeButton;
     },
     westEastSlopeButton: catalog.preview.westEastSlopeButton,
     westEastSlopeTooltip: catalog.preview.westEastSlopeTooltip,

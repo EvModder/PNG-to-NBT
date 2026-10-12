@@ -128,6 +128,8 @@ export const enCatalog = {
       [SuppressStepDirection.SouthToNorth]: "S→N",
     } as const satisfies Record<SuppressStepDirection, string>,
     stepDirectionTooltip: "Suppression direction: {directionLabel}. Click to cycle.",
+    twoLayerDirectionTooltip: "Load the full map first. Clear two upper-layer columns per step, then add late blocks only in the cleared area. Load 126 blocks beyond the last cleared column. Initial load lines inside the build are unmarked.",
+    twoLayerNorthSouthTooltip: "Load the full map first. Clear one upper-layer row per step, then add late blocks only in the cleared area. Load 127 blocks south of the last cleared row for N→S, or 126 north for S→N. Clear the upper north border with row 0. Initial load lines inside the build are unmarked.",
     stepDirectionAriaLabel: "Suppression direction {directionLabel}",
     optionLabels: {
       [BuildMode.Flat]: "Flat",
@@ -361,7 +363,8 @@ export const enCatalog = {
       other: "Late-Filler is invalid ({value}).\n{count} late suppress spots require shading.",
     } as PluralForms,
     suppressStepNorthSouthWarning:
-      "Warning: {modeLabel} N→S / S→N places north/south blocks in the same phase.\nTo preserve shading, this causes some blocks to be lifted by 1 Y, making the overall build less intuitive and compact.",
+      "{modeLabel} {directionLabel} places north/south blocks in the same phase.\nTo preserve shading, this raises some color blocks, increasing build complexity.",
+    suppressTwoLayerNorthSouthWarning: "2-Layer {directionLabel} clears one row per step.\nThis requires twice as many steps as E/W.",
     uniqueColorCount: {
       one: "{count} unique color",
       other: "{count} unique colors",
@@ -376,6 +379,7 @@ export const enCatalog = {
     } as PluralForms,
     stepRangeButton: "Step range",
     columnRangeButton: "Column range",
+    rowRangeButton: "Row range",
     westEastSlopeButton: "W→E slope",
     westEastSlopeTooltip: "Slope generated map blocks west-to-east across columns before export.",
     westEastSlopeRunTitle: "West-to-east run, 0-127; 0 means every column",

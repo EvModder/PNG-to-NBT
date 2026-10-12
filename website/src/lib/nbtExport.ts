@@ -27,7 +27,7 @@ import { messages } from "./messages";
 import { createZip } from "@/utils/zip";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { Shade, WATER_BASE_INDEX } from "@/data/mapColors";
-import { isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
+import { buildModeUsesLayerGap, isCrubTechBuildMode, isSuppressBuildMode } from "@/utils/conversion";
 import {
   isShapeColorCell,
   isShapeFillerCell,
@@ -188,6 +188,7 @@ function getLoadMarkerDistance(options: ExportBoundsOptions): number {
   if (!options.markSuppressLoadSpotsInSchematic) return 0;
   if (options.buildMode === BuildMode.SuppressStepPairs) return 127;
   if (options.buildMode === BuildMode.SuppressStepChecker) return 126;
+  if (buildModeUsesLayerGap(options.buildMode) && !(options.crubTech && isCrubTechBuildMode(options.buildMode))) return 127;
   if (!isSuppressBuildMode(options.buildMode)) return 127;
   return 0;
 }
@@ -200,14 +201,13 @@ function validateExportHorizontalBounds(
   options: ExportBoundsOptions,
 ): void {
   const loadMarkerDistance = getLoadMarkerDistance(options);
+  const direction = options.suppressStepDirection;
   const extendsX =
     loadMarkerDistance > 0 &&
-    (options.suppressStepDirection === SuppressStepDirection.EastToWest ||
-      options.suppressStepDirection === SuppressStepDirection.WestToEast);
+    (direction === SuppressStepDirection.EastToWest || direction === SuppressStepDirection.WestToEast);
   const extendsZ =
     loadMarkerDistance > 0 &&
-    (options.suppressStepDirection === SuppressStepDirection.NorthToSouth ||
-      options.suppressStepDirection === SuppressStepDirection.SouthToNorth);
+    (direction === SuppressStepDirection.NorthToSouth || direction === SuppressStepDirection.SouthToNorth);
   const minExpectedX = extendsX ? -loadMarkerDistance : 0;
   const maxExpectedX = extendsX ? MAP_SIZE - 1 + loadMarkerDistance : MAP_SIZE - 1;
   const minExpectedZ = extendsZ ? -loadMarkerDistance : -1;
