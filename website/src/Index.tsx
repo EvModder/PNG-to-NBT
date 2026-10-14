@@ -101,6 +101,7 @@ import {
   hasStepMixOpportunity,
   summarizeVoidShadows,
   canUseSuppressDirection,
+  getBelowPlatformWaterBlockedDirections,
   type WaterDrops,
 } from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
@@ -1333,10 +1334,13 @@ const Index = () => {
     : clampLatePairsGap(calcSuppress2LayerLatePairsGap, calcMaxSuppress2LayerLatePairsGap);
   const effectiveSuppress2LayerLatePairY = suppress2LayerUpperY + effectiveSuppress2LayerLatePairsGap;
   const calcEffectiveSuppress2LayerLatePairY = calcSuppress2LayerUpperY + calcEffectiveSuppress2LayerLatePairsGap;
+  const blockedWaterDirections = useMemo(() => getBelowPlatformWaterBlockedDirections(
+    parsedTiles, belowPlatformWater && isSuppressStepsBuildMode(buildMode) ? normalizedDeferredWaterDrops : undefined,
+  ), [parsedTiles, belowPlatformWater, buildMode, normalizedDeferredWaterDrops]);
   const isSuppressDirectionSelectable = useCallback(
     (direction: SuppressStepDirection, centerOut = suppressCenterOut) =>
-      canUseSuppressDirection(buildMode, direction, voidShadowSummary, imageHasWater, centerOut),
-    [buildMode, suppressCenterOut, imageHasWater, voidShadowSummary],
+      !blockedWaterDirections.has(direction) && canUseSuppressDirection(buildMode, direction, voidShadowSummary, imageHasWater, centerOut),
+    [buildMode, suppressCenterOut, imageHasWater, voidShadowSummary, blockedWaterDirections],
   );
   const effectiveSuppressStepDirection = crubTechControlsCurrent2LayerSettings ? SuppressStepDirection.EastToWest
     : isSuppressDirectionSelectable(suppressStepDirection) ? suppressStepDirection

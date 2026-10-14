@@ -682,7 +682,8 @@ function getStepPhaseYOffset(
       if (isTransparentColor(color)) continue;
       if (isWaterColor(color)) {
         if (belowPlatformWater) continue;
-        if (color.shade !== Shade.Light) yOffset = Math.max(yOffset, getWaterDepth(color.shade, x, z));
+        // N/S can put two light-shade land pixels south of a reused water pillar.
+        yOffset = Math.max(yOffset, getWaterDepth(color.shade, x, z) + (axisZSuppress ? 2 : 0));
         continue;
       }
       if (color.shade === Shade.Light) {
@@ -2362,9 +2363,11 @@ function buildStepPhaseBlocks(
   };
   const canReuseAxisZNorthColumnAsShader = (shadedColor: ShadedColorRef, northColor: ShadedColorRef): boolean => {
     return currentSpec.axis === "z" &&
+      !isTransparentColor(shadedColor) &&
+      !isWaterColor(shadedColor) &&
       !isTransparentColor(northColor) &&
-      !isWaterColor(northColor) &&
-      shadedColor.shade !== Shade.Flat;
+      !(belowPlatformWater && isWaterColor(northColor) &&
+        (getWaterDrop(waterDrops, northColor.shade) !== 0 || shadedColor.shade === Shade.Dark));
   };
   const canReuseCurrentPhaseNorthColumnAsShader = (shadedColor: ShadedColorRef, northColor: ShadedColorRef): boolean => {
     if (canReuseNorthColumnAsShader(shadedColor, northColor)) return true;
@@ -2433,15 +2436,18 @@ function buildStepPhaseBlocks(
 
   const propagateCurrentPhaseYOffsets = () => {
     if (currentSpec.axis !== "z") return;
+    const northWaterHeight = (x: number, z: number) => !belowPlatformWater && isWaterColor(colorGrid[x][z])
+      ? getWaterDepth(colorGrid[x][z].shade, x, z) - 1 : 0;
     for (let x = 0; x < MAP_SIZE; ++x) {
       for (let z = MAP_SIZE - 1; z >= 1; --z) {
         if (!currentSpec.includeAt(x, z)) continue;
         const color = colorGrid[x][z];
-        if (isTransparentColor(color)) continue;
+        if (isTransparentColor(color) || isWaterColor(color)) continue;
         if (color.shade !== Shade.Flat && color.shade !== Shade.Dark) continue;
         const southKey = cellKey(x, z);
         const northKey = cellKey(x, z - 1);
-        const requiredNorthOffset = (currentPhaseColorYOffsets.get(southKey) ?? 0) + (color.shade === Shade.Dark ? 1 : 0);
+        const requiredNorthOffset = (currentPhaseColorYOffsets.get(southKey) ?? 0) +
+          (color.shade === Shade.Dark ? 1 : 0) - northWaterHeight(x, z - 1);
         if (shadedByCurrentNorth.has(southKey)) {
           setMaxOffset(currentPhaseColorYOffsets, northKey, requiredNorthOffset);
           continue;
@@ -2456,15 +2462,17 @@ function buildStepPhaseBlocks(
       for (let z = 1; z < MAP_SIZE; ++z) {
         if (!currentSpec.includeAt(x, z)) continue;
         const color = colorGrid[x][z];
-        if (isTransparentColor(color) || color.shade !== Shade.Light) continue;
+        if (isTransparentColor(color) || isWaterColor(color) || color.shade === Shade.Dark) continue;
         const southKey = cellKey(x, z);
         const northKey = cellKey(x, z - 1);
+        // Compare land against the north column's top, including the full water depth.
+        const rise = northWaterHeight(x, z - 1) + (color.shade === Shade.Light ? 1 : 0);
         if (shadedByCurrentNorth.has(southKey)) {
-          setMaxOffset(currentPhaseColorYOffsets, southKey, (currentPhaseColorYOffsets.get(northKey) ?? 0) + 1);
+          setMaxOffset(currentPhaseColorYOffsets, southKey, (currentPhaseColorYOffsets.get(northKey) ?? 0) + rise);
           continue;
         }
         if (shadedByRepeatedNorth.has(southKey)) {
-          setMaxOffset(currentPhaseColorYOffsets, southKey, (repeatedPhaseColorYOffsets.get(northKey) ?? 0) + 1);
+          setMaxOffset(currentPhaseColorYOffsets, southKey, (repeatedPhaseColorYOffsets.get(northKey) ?? 0) + rise);
         }
       }
     }
@@ -2533,7 +2541,11 @@ function buildStepPhaseBlocks(
         if (!currentSpec.includeAt(x, z)) continue;
         const color = colorGrid[x][z];
         if (isTransparentColor(color)) continue;
-        if (belowPlatformWater && isWaterColor(color)) continue;
+        if (belowPlatformWater && isWaterColor(color)) {
+          // Zero-drop water shares the clearing plane and must be restored when this pixel updates.
+          if (getWaterDrop(waterDrops, color.shade) === 0) pushUniqueDroppedWater({ x, y: currentBaseY, z, ref: { kind: "color", color } });
+          continue;
+        }
         if (shadedByRepeatedNorth.has(cellKey(x, z)) || shadedByCurrentNorth.has(cellKey(x, z))) {
           pushUnique({ x, y: getCurrentPhaseBaseY(x, z), z, ref: { kind: "color", color } });
           continue;
@@ -2552,7 +2564,10 @@ function buildStepPhaseBlocks(
         if (!currentSpec.includeAt(x, z)) continue;
         const color = colorGrid[x][z];
         if (isTransparentColor(color)) continue;
-        if (belowPlatformWater && isWaterColor(color)) continue;
+        if (belowPlatformWater && isWaterColor(color)) {
+          if (getWaterDrop(waterDrops, color.shade) === 0) pushUniqueDroppedWater({ x, y: currentBaseY, z, ref: { kind: "color", color } });
+          continue;
+        }
         if (shadedByRepeatedNorth.has(cellKey(x, z)) || shadedByCurrentNorth.has(cellKey(x, z))) {
           pushUnique({ x, y: getCurrentPhaseBaseY(x, z), z, ref: { kind: "color", color } });
           continue;

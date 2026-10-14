@@ -12,6 +12,7 @@
  * - collectShadeCountsByColorRefKey()
  * - summarizeVoidShadows()
  * - canUseSuppressDirection()
+ * - getBelowPlatformWaterBlockedDirections()
  * - deriveImageStats()
  * - aggregateDerivedImageStats()
  *
@@ -108,7 +109,7 @@ export function canUseSuppressDirection(
   if (centerOut && isSuppressStepsBuildMode(buildMode) &&
     (voidShadowSummary.hasAnyVoidShadow || hasWater) &&
     (direction === SuppressStepDirection.NorthToSouth || direction === SuppressStepDirection.SouthToNorth)) return false;
-  if (buildMode !== BuildMode.SuppressStepChecker) return true;
+  if (!isSuppressStepsBuildMode(buildMode)) return true;
   switch (direction) {
     case SuppressStepDirection.EastToWest:
     case SuppressStepDirection.WestToEast:
@@ -118,6 +119,28 @@ export function canUseSuppressDirection(
     case SuppressStepDirection.SouthToNorth:
       return voidShadowSummary.southToNorthSelectable;
   }
+}
+
+// Callers:
+// - src/Index.tsx
+export function getBelowPlatformWaterBlockedDirections(tiles: readonly { colorGrid: ColorGrid }[], waterDrops?: WaterDrops) {
+  const blocked = new Set<SuppressStepDirection>();
+  if (!waterDrops) return blocked;
+  for (const { colorGrid } of tiles) {
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      for (let z = 1; z < MAP_SIZE; ++z) {
+        const color = colorGrid[x][z];
+        const north = colorGrid[x][z - 1];
+        if (isTransparentColor(color) || isWaterColor(color) || !isWaterColor(north)) continue;
+        if (color.shade === Shade.Light || (color.shade === Shade.Flat && waterDrops[north.shade as Shade.Dark | Shade.Flat | Shade.Light] === 0)) continue;
+        // A temporary shader over fixed, lowered water cannot update alongside that water pixel.
+        blocked.add(getPixelParity(x, z - 1) === PixelParity.Dominant
+          ? SuppressStepDirection.NorthToSouth : SuppressStepDirection.SouthToNorth);
+        if (blocked.size === 2) return blocked;
+      }
+    }
+  }
+  return blocked;
 }
 
 // Callers:
