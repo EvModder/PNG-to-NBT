@@ -17,6 +17,7 @@
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
+ * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
  */
 import { isFragileBlock } from "@/data/fragileBlocks";
@@ -50,7 +51,10 @@ const SHAPE_COORD_Z_SIZE = 512;
 const SHAPE_COORD_Y_SIZE = 8192;
 
 // Callers:
+// - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressClearance.ts
 export function toShapeCoordKey(x: number, y: number, z: number): ShapeCoordKey {
   return ((x + 1) * SHAPE_COORD_Y_SIZE + (y + SHAPE_COORD_Y_OFFSET)) * SHAPE_COORD_Z_SIZE + (z + SHAPE_COORD_Z_OFFSET);
 }

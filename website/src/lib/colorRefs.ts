@@ -14,6 +14,7 @@
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
+ * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  */
 import type { ColorRef } from "@/types/color";
@@ -48,6 +49,7 @@ export function getColorRefKey(color: Pick<ColorRef, "id" | "isCustom">): ColorR
 // - src/Index.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/fillerRules.ts
+// - src/lib/previewImageEdits.ts
 export function parseColorRefKey(key: ColorRefKey): ColorRef {
   return { isCustom: (key & 1) === 1, id: Math.floor(key / 2) };
 }

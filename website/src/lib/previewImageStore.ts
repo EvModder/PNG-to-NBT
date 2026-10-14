@@ -71,11 +71,8 @@ function createPreviewCanvas(
   if (!ctx) return null;
   const previewImageData = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
   if (visiblePixelMask) {
-    for (let z = 0; z < previewImageData.height; ++z) {
-      for (let x = 0; x < previewImageData.width; ++x) {
-        if (isPreviewPixelVisible(x, z, previewImageData.width, visiblePixelMask)) continue;
-        previewImageData.data[(z * previewImageData.width + x) * 4 + 3] = 0;
-      }
+    for (let i = 0; i < visiblePixelMask.length; ++i) {
+      if (visiblePixelMask[i] === 0) previewImageData.data[i * 4 + 3] = 0;
     }
   }
   for (const { x, z, r, g, b } of pixelReplacements) {

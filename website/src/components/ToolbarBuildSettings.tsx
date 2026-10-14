@@ -7,7 +7,7 @@
  * - src/components/ToolbarPresetSettings.tsx
  */
 import { Fragment, type ReactNode } from "react";
-import { Droplets, ArrowDownToLine, Printer, Pickaxe } from "lucide-react";
+import { Droplets, ArrowDownToLine, Printer, Pickaxe, Recycle } from "lucide-react";
 import { Shade } from "@/data/mapColors";
 import { messages } from "@/lib/messages";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -15,6 +15,7 @@ import {
   buildModeUsesLayerGap,
   cycleSuppressStepDirection,
   getSuppressStepDirectionRotationDegrees,
+  isSuppressStepsBuildMode,
 } from "@/utils/conversion";
 import { INPUT_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
 import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
@@ -55,6 +56,8 @@ export type ToolbarBuildSettingsProps = {
   showMixStepsToggle: boolean;
   mixSteps: boolean;
   setMixSteps: (value: boolean) => void;
+  keepSuppressExtras: boolean;
+  setKeepSuppressExtras: (value: boolean) => void;
   showSuppressCenterOutToggle: boolean;
   suppressCenterOut: boolean;
   setSuppressCenterOut: (value: boolean) => void;
@@ -138,6 +141,8 @@ export function ToolbarBuildSettings({
   showMixStepsToggle,
   mixSteps,
   setMixSteps,
+  keepSuppressExtras,
+  setKeepSuppressExtras,
   showSuppressCenterOutToggle,
   suppressCenterOut,
   setSuppressCenterOut,
@@ -191,7 +196,7 @@ export function ToolbarBuildSettings({
                 >
                   <Droplets className="h-3 w-3" />
                   <span>{shade}</span>
-                  <span className="inline-flex items-center"><ArrowDownToLine className="h-3 w-3" />:</span>
+                  <span className="inline-flex items-center"><ArrowDownToLine className="h-3 w-3 -mr-px" />:</span>
                 </span>
                 <span className="sr-only">{ariaLabel}</span>
                 <input
@@ -294,17 +299,11 @@ export function ToolbarBuildSettings({
           title={messages.buildMode.mixStepsTooltip}
         >
           <span aria-hidden="true" className="inline-flex items-center">
-            <svg viewBox="5 0 9 16" className="h-4 w-[9px] fill-current">
-              <path d="M7 0h4v4H7z M8 4h2v6H8z M8 10h2l-3 6H5z M8 10h2l3 6h-2z" />
-              <path d="m8 4 6 3-1 2-6-3z" />
-            </svg>
-            <span>[</span>
             <span className="inline-flex items-center gap-px">
               <Printer className="h-4 w-4" />
               <span className="-mr-px">+</span>
-              <Pickaxe className="h-4 w-4" />
+              <Pickaxe className="h-4 w-4 mr-[0.25px]" />
             </span>
-            <span className="-mr-[0.05em]">]</span>
             <span>:</span>
           </span>
           <span className="sr-only">{messages.buildMode.mixStepsLabel}</span>
@@ -313,6 +312,30 @@ export function ToolbarBuildSettings({
             checked={mixSteps}
             onChange={e => setMixSteps(e.target.checked)}
             title={messages.buildMode.mixStepsTooltip}
+            className="h-3.5 w-3.5"
+          />
+        </label>
+      ),
+    });
+  }
+
+  if (!lockFlatBuildMode && isSuppressStepsBuildMode(buildMode)) {
+    groups.push({
+      key: "keep-extras",
+      node: (
+        <label
+          className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`}
+          title={messages.buildMode.keepSuppressExtrasTooltip}
+        >
+          <span aria-hidden="true" className="inline-flex items-center">
+            <Recycle className="h-4 w-4 -mr-[0.5px]" />
+            <span>:</span>
+          </span>
+          <span className="sr-only">{messages.buildMode.keepSuppressExtrasLabel}</span>
+          <input
+            type="checkbox"
+            checked={!keepSuppressExtras}
+            onChange={e => setKeepSuppressExtras(!e.target.checked)}
             className="h-3.5 w-3.5"
           />
         </label>

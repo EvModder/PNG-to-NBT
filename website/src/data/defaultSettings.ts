@@ -65,6 +65,7 @@ export const DEFAULT_CRUBTECH_LAYER_GAP = 14;
 export const DEFAULT_CRUBTECH_LATE_PAIRS_GAP = 10;
 export const DEFAULT_CRUBTECH = false;
 export const DEFAULT_MIX_STEPS = true;
+export const DEFAULT_KEEP_SUPPRESS_EXTRAS = false;
 // Experimental E/W land-height cap (0-10). At 0, colors stay on the floor and
 // shaders may reach +1. Positive caps apply to both; water is unchanged.
 export const MAX_STEP_COLOR_BLOCK_LIFT: number = 0;

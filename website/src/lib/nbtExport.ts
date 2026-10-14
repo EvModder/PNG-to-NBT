@@ -37,6 +37,7 @@ import {
   getFragileSupportOverride,
 } from "./shapeModel";
 import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
+import { appendSuppressClearanceMarkers } from "./suppressClearance";
 
 interface ExportOptions extends ColorBlockSelections {
   fillerAssignments: FillerAssignment[];
@@ -51,6 +52,7 @@ interface ExportOptions extends ColorBlockSelections {
   buildMode: BuildMode;
   suppressStepDirection: SuppressStepDirection;
   suppressCenterOut?: boolean;
+  keepSuppressExtras?: boolean;
   suppress2LayerLatePairY?: number;
   crubTech?: boolean;
   markSuppressLoadSpotsInSchematic?: boolean;
@@ -307,9 +309,13 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
 }
 
 function materializeShapeParts(shape: GeneratedShape, options: ExportOptions): PaletteSourceBlock[][] {
-  return shape.parts.map(part =>
+  const parts = shape.parts.map(part =>
     materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
   );
+  if (options.keepSuppressExtras) {
+    appendSuppressClearanceMarkers(shape, parts);
+  }
+  return parts;
 }
 
 function applyWestEastSlope(blocks: PaletteSourceBlock[], options: ExportOptions): void {
@@ -526,6 +532,7 @@ function assembleCombinedExportBlocks(
       suppressLoadSpotMarkerBlock: options.suppressLoadSpotMarkerBlock,
       crubTech: options.crubTech,
       suppressCenterOut: options.suppressCenterOut,
+      keepSuppressExtras: options.keepSuppressExtras,
       suppress2LayerLatePairY: options.suppress2LayerLatePairY,
     },
   )) {

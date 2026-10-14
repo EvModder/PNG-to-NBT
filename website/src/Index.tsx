@@ -28,6 +28,7 @@ import {
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH,
   DEFAULT_MIX_STEPS,
+  DEFAULT_KEEP_SUPPRESS_EXTRAS,
   MAX_STEP_COLOR_BLOCK_LIFT,
   MIXED_STEP_REACHABLE_TOP,
   DEFAULT_LIGHT_WATER_DROP,
@@ -170,7 +171,7 @@ import {
   buildSelectedTileVisibleMask,
   getPreviewRangeMax,
   collectVsFillerPreviewReplacements,
-  usePreviewVisiblePixelMask,
+  useStepPreview,
   useVsFillerPreviewReplacements,
 } from "@/lib/previewImageEdits";
 import { usePreviewImageUrl } from "@/lib/previewImageStore";
@@ -698,6 +699,9 @@ const Index = () => {
   const supportMode = crubTech && isCrubTechBuildMode(buildMode) ? preferredSupportMode : resolvedSupportMode;
   const [mixSteps, setMixSteps] = useState(() => loadCached(LS_KEYS.mixSteps, DEFAULT_MIX_STEPS));
   const calcMixSteps = useDeferredValue(mixSteps);
+  const [keepSuppressExtras, setKeepSuppressExtras] = useState(() => loadCached(LS_KEYS.keepSuppressExtras, DEFAULT_KEEP_SUPPRESS_EXTRAS));
+  const activeKeepSuppressExtras = keepSuppressExtras && isSuppressStepsBuildMode(buildMode);
+  const calcKeepSuppressExtras = useDeferredValue(activeKeepSuppressExtras);
   const [lightWaterDrop, setLightWaterDrop] = useState(() => loadCached(LS_KEYS.lightWaterDrop, DEFAULT_LIGHT_WATER_DROP));
   const calcLightWaterDrop = useDeferredValue(lightWaterDrop);
   const [flatWaterDrop, setFlatWaterDrop] = useState(() => loadCached(LS_KEYS.flatWaterDrop, DEFAULT_FLAT_WATER_DROP));
@@ -870,6 +874,7 @@ const Index = () => {
     fillerAssignmentsByRole: Map<FillerRole, string>;
     applySupportFloorYs: boolean;
     supportModeEnabled: boolean;
+    keepSuppressExtras: boolean;
   } | null>(null);
   const decodedImageSet = useMemo<ColorGridSetParseResult | null>(
     () => decodedColorGrid
@@ -1099,6 +1104,7 @@ const Index = () => {
       [LS_KEYS.suppress2LayerLatePairsGap]: suppress2LayerLatePairsGap,
       [LS_KEYS.crubTech]: crubTech,
       [LS_KEYS.mixSteps]: mixSteps,
+      [LS_KEYS.keepSuppressExtras]: keepSuppressExtras,
       [LS_KEYS.lightWaterDrop]: lightWaterDrop,
       [LS_KEYS.flatWaterDrop]: flatWaterDrop,
       [LS_KEYS.darkWaterDrop]: darkWaterDrop,
@@ -1157,6 +1163,7 @@ const Index = () => {
       suppress2LayerLatePairsGap,
       crubTech,
       mixSteps,
+      keepSuppressExtras,
       lightWaterDrop,
       flatWaterDrop,
       darkWaterDrop,
@@ -1631,7 +1638,7 @@ const Index = () => {
               mixedStepPalette,
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
-              skipEmptySuppressSteps,
+              skipEmptySuppressSteps: skipEmptySuppressSteps && !calcKeepSuppressExtras,
               collapseStaircaseModes: !hasMultipleTiles,
               includeFlatNorthline: hasMultipleTiles && tile.flatModeBehavior !== FlatModeBehavior.None,
               selectedStepDirection: effectiveSuppressStepDirection,
@@ -1696,6 +1703,7 @@ const Index = () => {
     calcEffectiveSuppress2LayerLatePairY,
     showMixStepsToggle,
     calcMixSteps,
+    calcKeepSuppressExtras,
     calcSuppressCenterOut,
     paletteSeedOffset,
     supportMode,
@@ -1795,9 +1803,10 @@ const Index = () => {
         usedMaterialFillerAssignments,
         `support=${effectiveSupportMode !== SupportMode.None ? 1 : 0}`,
         `supportFloorY=${effectiveApplySupportFloorYs ? 1 : 0}`,
+        activeKeepSuppressExtras ? 1 : 0,
         minecraftVersion,
       ].join("||"),
-    [usedMaterialColorAssignments, usedMaterialFillerAssignments, effectiveSupportMode, effectiveApplySupportFloorYs, minecraftVersion],
+    [usedMaterialColorAssignments, usedMaterialFillerAssignments, effectiveSupportMode, effectiveApplySupportFloorYs, activeKeepSuppressExtras, minecraftVersion],
   );
   const currentWaterDrops = crubTechControlsActive2LayerSettings
     ? CRUBTECH_WATER_DROPS
@@ -1827,6 +1836,7 @@ const Index = () => {
       fillerAssignments: uiFillerAssignments,
       applySupportFloorYs: effectiveApplySupportFloorYs,
       customColors,
+      keepSuppressExtras: activeKeepSuppressExtras,
     };
     const currentColorAssignmentsByKey = new Map(
       [...usedColorKeys].map(key => [key, normalizeBlockId(resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections))] as const),
@@ -1854,6 +1864,7 @@ const Index = () => {
       if (!previousTile?.materialNeedStats || !tile.supportShape) return false;
       if (previousTile.tile.cacheKey !== tile.tile.cacheKey || previousTile.supportShape !== tile.supportShape) return false;
       if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== effectiveApplySupportFloorYs) return false;
+      if (previousMaterialInputs.keepSuppressExtras !== activeKeepSuppressExtras) return false;
       if (getVersionedSupportRules(previousMaterialInputs.minecraftVersion) !== getVersionedSupportRules(minecraftVersion)) return false;
       if (hasAnySharedValue(tile.derivedImageStats.usedShadesByColorKey.keys(), changedColorKeys)) return false;
       if (hasAnySharedValue(tile.fillerNeedStats?.roleCounts.keys() ?? [], changedFillerRoles)) return false;
@@ -1904,6 +1915,7 @@ const Index = () => {
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
         applySupportFloorYs: effectiveApplySupportFloorYs,
         supportModeEnabled: currentSupportModeEnabled,
+        keepSuppressExtras: activeKeepSuppressExtras,
       };
       setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, reusableTileAnalyses) ? current : reusableTileAnalyses));
       setIsAnalyzingMaterials(false);
@@ -1916,6 +1928,7 @@ const Index = () => {
 
     void (async () => {
       await yieldToMainThread();
+      if (cancelled) return;
       let lastMainThreadProgressUpdateAt = performance.now();
       const nextTileAnalyses: TileAnalysis[] = [];
 
@@ -1975,6 +1988,7 @@ const Index = () => {
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
         applySupportFloorYs: effectiveApplySupportFloorYs,
         supportModeEnabled: currentSupportModeEnabled,
+        keepSuppressExtras: activeKeepSuppressExtras,
       };
       setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, nextTileAnalyses) ? current : nextTileAnalyses));
       setIsAnalyzingMaterials(false);
@@ -2161,6 +2175,7 @@ const Index = () => {
         ...colorBlockSelections,
         fillerAssignments: uiFillerAssignments,
         applySupportFloorYs: effectiveApplySupportFloorYs,
+        keepSuppressExtras: activeKeepSuppressExtras,
         [isStepRangeMode ? "phaseRange" : isRowRangeMode ? "zColumnRange" : "xColumnRange"]: [colStart, colEnd],
       },
     );
@@ -2349,6 +2364,7 @@ const Index = () => {
         }
         if (decodedPreset.proPaletteSeed !== undefined) setProPaletteSeed(decodedPreset.proPaletteSeed);
         if (decodedPreset.mixSteps !== undefined) setMixSteps(decodedPreset.mixSteps);
+        if (decodedPreset.keepSuppressExtras !== undefined) setKeepSuppressExtras(decodedPreset.keepSuppressExtras);
         if (decodedPreset.suppressCenterOut !== undefined) setSuppressCenterOut(decodedPreset.suppressCenterOut);
         if (decodedPreset.buildAtWorldMinY !== undefined) setBuildAtWorldMinY(decodedPreset.buildAtWorldMinY);
         if (decodedPreset.crubTech !== undefined) setCrubTech(decodedPreset.crubTech);
@@ -2656,6 +2672,7 @@ const Index = () => {
           suppress2LayerLatePairsGap,
           proPaletteSeed,
           mixSteps,
+          keepSuppressExtras,
           buildAtWorldMinY,
           crubTech,
           suppressStepDirection,
@@ -2693,6 +2710,7 @@ const Index = () => {
     suppress2LayerLatePairsGap,
     proPaletteSeed,
     mixSteps,
+    keepSuppressExtras,
     buildAtWorldMinY,
     crubTech,
     suppressStepDirection,
@@ -2949,6 +2967,7 @@ const Index = () => {
           suppressStepDirection: activeSuppressDirection,
           suppressCenterOut,
           westEastSlope,
+          keepSuppressExtras,
           suppress2LayerLatePairY: effectiveSuppress2LayerLatePairY,
           crubTech: crubTechControlsActive2LayerSettings,
           markSuppressLoadSpotsInSchematic,
@@ -3248,6 +3267,8 @@ const Index = () => {
     showMixStepsToggle,
     mixSteps,
     setMixSteps,
+    keepSuppressExtras,
+    setKeepSuppressExtras,
     showSuppressCenterOutToggle: buildModeSupportsCenterOut(effectiveBuildMode),
     suppressCenterOut: suppressCenterOut && buildModeSupportsCenterOut(effectiveBuildMode, crubTech),
     setSuppressCenterOut,
@@ -3349,18 +3370,26 @@ const Index = () => {
     xColumnRange: previewXColumnRange,
     zColumnRange: previewZColumnRange,
   });
-  const selectedTilePreviewVisiblePixelMask = usePreviewVisiblePixelMask({
+  const selectedTileStepPreview = useStepPreview({
     shape: previewPhaseRange ? (selectedTileAnalysis?.supportShape ?? null) : null,
     phaseRange: previewPhaseRange,
+    retainedState: selectedTileMaterialNeedStats?.retainedState,
+    selections: colorBlockSelections,
+    fillerAssignments: uiFillerAssignments,
+    belowPlatformWater,
   });
   const showVsFillersInPreviewToggle =
     vsFillerSpotCount > 0 && (!dominateVoidFillerShadingDisabled || !recessiveVoidFillerShadingDisabled);
-  const previewVsFillerReplacements = useMemo(
+  const previewPixelReplacements = useMemo(
     () => {
-      if (!showVsFillersInPreview || !showVsFillersInPreviewToggle) return [];
+      const showVs = showVsFillersInPreview && showVsFillersInPreviewToggle;
       if (selectedTileAnalysis) {
-        return offsetPreviewPixelReplacements(selectedTilePreviewVsFillerReplacements, selectedTileAnalysis.tile);
+        return offsetPreviewPixelReplacements([
+          ...(showVs ? selectedTilePreviewVsFillerReplacements : []),
+          ...selectedTileStepPreview.replacements,
+        ], selectedTileAnalysis.tile);
       }
+      if (!showVs) return [];
       return tileAnalyses.flatMap(tile =>
         !tile.supportShape
           ? []
@@ -3381,6 +3410,7 @@ const Index = () => {
       showVsFillersInPreviewToggle,
       selectedTileAnalysis,
       selectedTilePreviewVsFillerReplacements,
+      selectedTileStepPreview.replacements,
       minecraftVersion,
       tileAnalyses,
       shadeFillerBlock,
@@ -3394,12 +3424,12 @@ const Index = () => {
       return buildSelectedTileVisibleMask(
         displayImageData,
         selectedTileAnalysis.tile,
-        previewPhaseRange ? selectedTilePreviewVisiblePixelMask : null,
+        previewPhaseRange ? selectedTileStepPreview.mask : null,
         previewXColumnRange,
         previewZColumnRange,
       );
     },
-    [displayImageData, selectedTileAnalysis, previewPhaseRange, selectedTilePreviewVisiblePixelMask, previewXColumnRange, previewZColumnRange],
+    [displayImageData, selectedTileAnalysis, previewPhaseRange, selectedTileStepPreview.mask, previewXColumnRange, previewZColumnRange],
   );
   const previewStatusText = useMemo(
     () => {
@@ -3444,7 +3474,7 @@ const Index = () => {
   const previewImageUrl = usePreviewImageUrl({
     enabled: !!displayImageData,
     imageData: displayImageData,
-    pixelReplacements: previewVsFillerReplacements,
+    pixelReplacements: previewPixelReplacements,
     visiblePixelMask: previewVisiblePixelMask ?? undefined,
   });
   const showTileSelection = hasMultipleTiles && !!displayImageData && imageValid;
@@ -3485,7 +3515,7 @@ const Index = () => {
 	    showAlignmentReminder &&
 	    imageValid &&
 	    tileGeometryAnalyses.length > 0 &&
-	    (effectiveForceZ129 || hasValidNorthRowShadeFiller);
+	    (effectiveForceZ129 || hasValidNorthRowShadeFiller || activeKeepSuppressExtras);
   const noFillerWarning = useMemo(() => {
     if (crubTechControlsActive2LayerSettings) {
       const parts: string[] = [];
@@ -4206,8 +4236,9 @@ const Index = () => {
         belowPlatformWater={effectiveBelowPlatformWater}
         setBelowPlatformWater={setBelowPlatformWater}
         belowPlatformWaterDisabled={crubTechControlsActive2LayerSettings}
-        skipEmptySuppressSteps={skipEmptySuppressSteps}
+        skipEmptySuppressSteps={skipEmptySuppressSteps && !activeKeepSuppressExtras}
         setSkipEmptySuppressSteps={setSkipEmptySuppressSteps}
+        skipEmptySuppressStepsDisabled={activeKeepSuppressExtras}
         showAlignmentReminder={showAlignmentReminder}
         setShowAlignmentReminder={setShowAlignmentReminder}
         showNooblineWarnings={showNooblineWarnings}

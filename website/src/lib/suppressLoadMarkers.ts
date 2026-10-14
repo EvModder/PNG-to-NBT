@@ -34,6 +34,7 @@ type BuildLoadSpotMarkerOptions = {
   suppressLoadSpotMarkerBlock?: string;
   crubTech?: boolean;
   suppressCenterOut?: boolean;
+  keepSuppressExtras?: boolean;
   suppress2LayerLatePairY?: number;
 };
 
@@ -327,20 +328,22 @@ function buildSuppressStepLoadSpotMarkers(
   enabled: boolean,
   markerBlockName: string,
   centerOut: boolean,
+  keepExtras: boolean,
 ): LoadSpotMarkerEntry[] {
   if (!enabled || shape.partType !== ShapePartType.SuppressStepPhases) return [];
   if (buildMode !== BuildMode.SuppressStepPairs && buildMode !== BuildMode.SuppressStepChecker) return [];
 
   const specs = buildSuppressStepPhases(buildMode, stepDirection, centerOut);
+  const fullStrip = centerOut || keepExtras;
   const markers: LoadSpotMarkerEntry[] = [];
   for (const part of shape.parts) {
     // Mixed steps contain borrowed colors; skipped steps retain their original phase index.
     if (part.suppressStepIndex === undefined) continue;
     const spec = specs[part.suppressStepIndex];
     if (!spec) throw new Error(`Missing suppress step spec for phase ${part.suppressStepIndex}`);
-    // Both full routes cover the opening recessive strips and transparent cleanup targets too.
-    const coords = centerOut ? [] : getNonWaterColorCoords(part);
-    if (!centerOut && coords.length === 0) continue;
+    // Full routes also cover transparent cleanup targets, even in otherwise empty phases.
+    const coords = fullStrip ? [] : getNonWaterColorCoords(part);
+    if (!fullStrip && coords.length === 0) continue;
     const markerY = getMarkerY(part);
     if (markerY === null) continue;
     for (const front of spec.fronts) {
@@ -348,9 +351,9 @@ function buildSuppressStepLoadSpotMarkers(
       markers.push(
         ...(buildMode === BuildMode.SuppressStepPairs
           ? buildSuppressStepPairMarkers(front.loadLine, front.direction, markerY, markerBlockName)
-          : !centerOut && frontCoords.length === 0
+          : !fullStrip && frontCoords.length === 0
             ? []
-            : buildSuppressStepCheckerMarkers(frontCoords, front.loadLine, front.direction, markerY, markerBlockName, centerOut)),
+            : buildSuppressStepCheckerMarkers(frontCoords, front.loadLine, front.direction, markerY, markerBlockName, fullStrip)),
       );
     }
   }
@@ -468,7 +471,7 @@ export function buildSuppressLoadSpotMarkers(
   const crubTechLatePairY = options.suppress2LayerLatePairY ?? getDefaultCrubTechLatePairY(shape);
   const centerOut = options.suppressCenterOut === true && buildModeSupportsCenterOut(buildMode, options.crubTech);
   return [
-    ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName, centerOut),
+    ...buildSuppressStepLoadSpotMarkers(shape, buildMode, stepDirection, options.markSuppressLoadSpotsInSchematic === true, markerBlockName, centerOut, options.keepSuppressExtras === true),
     ...(buildModeUsesLayerGap(buildMode) && options.markSuppressLoadSpotsInSchematic && !(options.crubTech && isCrubTechBuildMode(buildMode))
       ? buildTwoLayerLoadSpotMarkers(shape, stepDirection, markerBlockName, centerOut) : []),
     ...buildCrubTechSignalLamps(

@@ -109,6 +109,8 @@ export const enCatalog = {
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
       "Keep reusable blocks between phases to provide shading, reducing placement and manual mining. Disable for platforms with built-in clearing.",
+    keepSuppressExtrasLabel: "Full recycling",
+    keepSuppressExtrasTooltip: "On: Full recycling. Clear all obsolete blocks each step.\nOff: Partial recycling. Leave extra blocks for later platform clearing or reuse in another mapart. Barriers mark spaces that MUST be cleared each step: remove Litematica verifier-marked Wrong blocks, and ignore Extras. Requires more materials because fewer blocks are recycled between steps.",
     centerOutLabel: "Center-out:",
     centerOutTooltip: "Build in one direction; load from one side.\nOr build outward from the center; load from both sides.",
     centerOutEastWest: "W←Center→E",
@@ -415,6 +417,7 @@ export const enCatalog = {
       belowPlatformWaterTooltip: "Assume water placements below the platform, with adjustable surface heights for each shade.",
       skipEmptySuppressSteps: "Skip empty Suppress-steps",
       skipEmptySuppressStepsTooltip: "Omit empty steps and their vertical spacing from exports.",
+      skipEmptySuppressStepsDisabledTooltip: "Full recycling is off. Empty steps may still need barriers to clear leftover blocks, including those from previous maps.",
       showAlignmentReminder: "Show alignment reminder",
       showAlignmentReminderTooltip: "Reminder to align the color area, not the noobline, within the map grid.",
       showNooblineWarnings: "Show warnings for nooblines",

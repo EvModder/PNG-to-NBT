@@ -3168,8 +3168,10 @@ function getGeneratedShape(
       : buildMode === BuildMode.SuppressSplitChecker
         ? ["dominant", "recessive"] as [string, string]
         : null;
-  const shape = {
+  const shape: GeneratedShape = {
     parts,
+    ...(buildMode === BuildMode.SuppressStepPairs || buildMode === BuildMode.SuppressStepChecker
+      ? { suppressStepLayout: { buildMode, direction: stepDirection, centerOut } } : {}),
     partType:
       buildMode === BuildMode.SuppressStepPairs || buildMode === BuildMode.SuppressStepChecker
         ? ShapePartType.SuppressStepPhases

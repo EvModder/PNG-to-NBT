@@ -80,6 +80,7 @@ export function sanitizeUserBlockEntry(raw: string): string {
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
 export interface ColorBlockSelections {

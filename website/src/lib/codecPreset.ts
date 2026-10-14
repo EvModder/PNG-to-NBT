@@ -31,6 +31,7 @@ interface SharedSettings {
   suppress2LayerLatePairsGap: number;
   proPaletteSeed: boolean;
   mixSteps: boolean;
+  keepSuppressExtras: boolean;
   buildAtWorldMinY: boolean;
   crubTech: boolean;
   suppressStepDirection: SuppressStepDirection;
@@ -205,6 +206,7 @@ const BOOLEAN_BITS: Record<BooleanKey, number> = {
   crubTech: 8,
   westEastSlopeEnabled: 16,
   suppressCenterOut: 32,
+  keepSuppressExtras: 64,
 };
 const direction = enumCodec([
   SuppressStepDirection.EastToWest, SuppressStepDirection.WestToEast,

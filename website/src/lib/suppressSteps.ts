@@ -6,6 +6,7 @@
  *
  * Callers:
  * - src/lib/shapeGeneration.ts
+ * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
  * - tests/invariants.mts
  */
@@ -83,6 +84,7 @@ export function buildTwoLayerLoadPhases(direction: SuppressStepDirection, center
 
 // Callers:
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressClearance.ts
 // - src/lib/suppressLoadMarkers.ts
 export function buildSuppressStepPhases(
   buildMode: BuildMode.SuppressStepPairs | BuildMode.SuppressStepChecker,

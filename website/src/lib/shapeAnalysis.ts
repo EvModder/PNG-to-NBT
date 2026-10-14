@@ -19,14 +19,14 @@
  * - src/lib/tileGeometry.worker.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
-import { type ColorGrid, Shade } from "@/types/color";
-import type { ShapePart } from "@/types/shape";
+import { Shade, type ColorGrid } from "@/types/color";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { normalizeBlockId, resolveExportBlockName, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
 import { addColorRefCount, getColorRefKey } from "./colorRefs";
-import { ShapePartType, type GeneratedShape } from "@/types/shape";
+import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
+import { forEachSuppressClearanceCell, getSuppressClearancePlan } from "./suppressClearance";
 import {
   getFragileSupportOverride,
   isShapeColorCell,
@@ -34,6 +34,7 @@ import {
   isWithinShapeBounds,
   NO_SUPPORT_FLOORS,
   parseShapeCoordKey,
+  toShapeCoordKey,
   shouldIncludeFragileSupportCell,
 } from "./shapeModel";
 
@@ -52,6 +53,7 @@ interface MaterialNeedStats {
   colorCounts: Record<string, number>;
   numUniqueColorShadesForPart: number;
   fillerRoleCounts: Map<FillerRole, number>;
+  retainedState?: { blocks: ReadonlyMap<number, RetainedMaterial>; pixelMask: Uint8Array };
 }
 
 interface FragileSupportOverrideNeedStats {
@@ -64,6 +66,15 @@ type MaterialAnalysisOptions = ColorBlockSelections & {
   xColumnRange?: [number, number];
   zColumnRange?: [number, number];
   phaseRange?: [number, number];
+  keepSuppressExtras?: boolean;
+};
+
+type RetainedMaterial = {
+  blockName: string;
+  colorKey?: number;
+  visibleKey?: number;
+  role?: FillerRole;
+  waterColumn?: number;
 };
 
 interface PartMaterialNeedStats {
@@ -99,6 +110,7 @@ function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): nu
   return getColorRefKey(color) * 4 + color.shade;
 }
 
+// Retained blocks are counted during replay; collecting them skips unused per-part totals.
 function analyzePartMaterialNeeds(
   colorGrid: ColorGrid,
   part: ShapePart,
@@ -106,6 +118,8 @@ function analyzePartMaterialNeeds(
   options: MaterialAnalysisOptions,
   applyColumnRange: boolean,
   supportFloorYs: ReadonlySet<number>,
+  materials?: Map<number, RetainedMaterial>,
+  materialFloor = 0,
 ): PartMaterialNeedStats {
   const blockCounts: Record<string, number> = {};
   const colorCounts: Record<string, number> = {};
@@ -119,11 +133,12 @@ function analyzePartMaterialNeeds(
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
     // Include the north border with row 0, matching the clearing schedule.
     if (applyColumnRange && options.zColumnRange && (Math.max(0, z) < options.zColumnRange[0] || z > options.zColumnRange[1])) continue;
+    const materialCoord = materials ? toShapeCoordKey(x, y - materialFloor, z) : coord;
 
     if (isShapeColorCell(cell)) {
       const isWaterColorCell = !cell.isCustom && cell.id === WATER_BASE_INDEX;
       const waterColumnKey = isWaterColorCell ? (x * 128 + z) : -1;
-      if (!isWaterColorCell || !countedVisibleWaterColumns.has(waterColumnKey)) {
+      if (!materials && (!isWaterColorCell || !countedVisibleWaterColumns.has(waterColumnKey))) {
         if (isWaterColorCell) countedVisibleWaterColumns.add(waterColumnKey);
         if (!cell.fillerRole) addColorRefCount(colorCounts, cell);
         const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);
@@ -133,8 +148,15 @@ function analyzePartMaterialNeeds(
       if (cell.fillerRole) {
         const blockName = resolveShapeColorBlockName(cell, options, fillerAssignments);
         if (blockName) {
-          addRoleCount(fillerRoleCounts, cell.fillerRole);
-          addCount(blockCounts, normalizeBlockId(blockName));
+          const blockId = normalizeBlockId(blockName);
+          if (!materials) {
+            addRoleCount(fillerRoleCounts, cell.fillerRole);
+            addCount(blockCounts, blockId);
+          }
+          materials?.set(materialCoord, {
+            blockName: blockId, role: cell.fillerRole,
+            visibleKey: getVisibleColorShadeKey(colorGrid, x, z) ?? undefined,
+          });
         }
         continue;
       }
@@ -147,6 +169,14 @@ function analyzePartMaterialNeeds(
         colorBlockNames.set(colorKey, blockName);
       }
       if (!blockName) continue;
+      if (materials) {
+        const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);
+        materials.set(materialCoord, {
+          blockName, colorKey, visibleKey: visibleKey ?? undefined,
+          waterColumn: isWaterColorCell ? x * (MAP_SIZE + 1) + z + 1 : undefined,
+        });
+        continue;
+      }
       if (isWaterColorCell && blockName === "water") {
         if (countedRealWaterColumns.has(waterColumnKey)) continue;
         countedRealWaterColumns.add(waterColumnKey);
@@ -159,7 +189,7 @@ function analyzePartMaterialNeeds(
     if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options, fillerAssignments)) continue;
     if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
     if (
-      assignedRole &&
+      !materials && assignedRole &&
       (
         (assignedRole !== FillerRole.SupportWaterSides && assignedRole !== FillerRole.SupportWaterSidesCovered) ||
         !!resolveAssignedFillerName(fillerAssignments, assignedRole)
@@ -173,10 +203,141 @@ function analyzePartMaterialNeeds(
       ? resolveExportBlockName(override.replacementBlockId)
       : resolveCellFillerName(cell, options.fillerAssignments, fillerAssignments);
     if (!fillerName) continue;
-    addCount(blockCounts, normalizeBlockId(fillerName));
+    const blockId = normalizeBlockId(fillerName);
+    if (!materials) addCount(blockCounts, blockId);
+    materials?.set(materialCoord, { blockName: blockId, role: assignedRole ?? undefined });
   }
 
   return { blockCounts, colorCounts, visibleColorKeys, fillerRoleCounts };
+}
+
+// Cache one range-preview preparation, not resolved phases for every tile/settings combination.
+let retainedPreviewCache: {
+  shape: GeneratedShape;
+  colorGrid: ColorGrid;
+  options: MaterialAnalysisOptions;
+  prepared: {
+    plan: NonNullable<ReturnType<typeof getSuppressClearancePlan>>;
+    parts: Map<number, RetainedMaterial>[];
+    maxHeight: number;
+  };
+} | undefined;
+
+function prepareRetainedMaterials(
+  colorGrid: ColorGrid,
+  shape: GeneratedShape,
+  options: MaterialAnalysisOptions,
+) {
+  const cached = retainedPreviewCache;
+  // Selections are immutable React inputs. Range changes do not change material resolution.
+  if (cached?.shape === shape && cached.colorGrid === colorGrid &&
+    cached.options.selectedBlocks === options.selectedBlocks &&
+    cached.options.selectedBlocksCustom === options.selectedBlocksCustom &&
+    cached.options.customColors === options.customColors &&
+    cached.options.minecraftVersion === options.minecraftVersion &&
+    cached.options.fillerAssignments === options.fillerAssignments &&
+    cached.options.applySupportFloorYs === options.applySupportFloorYs) return cached.prepared;
+  const plan = getSuppressClearancePlan(shape)!;
+  const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
+  let maxHeight = 0;
+  const parts = shape.parts.map((part, index) => {
+    const materials = new Map<number, RetainedMaterial>();
+    analyzePartMaterialNeeds(colorGrid, part, fillerAssignments, options, false,
+      options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS, materials, plan[index].floor);
+    if (plan[index].columns.size) {
+      for (const coord of materials.keys()) maxHeight = Math.max(maxHeight, parseShapeCoordKey(coord)[1]);
+    }
+    return materials;
+  });
+  const prepared = { plan, parts, maxHeight };
+  if (options.phaseRange) retainedPreviewCache = { shape, colorGrid, options, prepared };
+  return prepared;
+}
+
+function analyzeRetainedMaterialNeeds(
+  colorGrid: ColorGrid,
+  shape: GeneratedShape,
+  options: MaterialAnalysisOptions,
+): MaterialNeedStats {
+  const [start, end] = options.phaseRange ?? [0, shape.parts.length - 1];
+  const { plan, parts, maxHeight } = prepareRetainedMaterials(colorGrid, shape, options);
+  const world = new Map<number, RetainedMaterial>();
+  const currentBlocks: Record<string, number> = {};
+  const currentColors: Record<string, number> = {};
+  const currentRoles = new Map<FillerRole, number>();
+  const currentVisible = new Map<number, number>();
+  const waterColors = new Map<number, number>();
+  const waterBlocks = new Map<number, number>();
+  const blockCounts: Record<string, number> = {};
+  const colorCounts: Record<string, number> = {};
+  const fillerRoleCounts = new Map<FillerRole, number>();
+  const visibleColorKeys = new Set<number>();
+  const adjustCount = (counts: Record<string, number>, key: string, amount: number) => {
+    addCount(counts, key, amount);
+    if (counts[key] === 0) delete counts[key];
+  };
+  const adjustColumn = (counts: Map<number, number>, key: number, amount: number) => {
+    const before = counts.get(key) ?? 0;
+    const after = before + amount;
+    if (after) counts.set(key, after);
+    else counts.delete(key);
+    return Number(after > 0) - Number(before > 0);
+  };
+  const adjust = (material: RetainedMaterial, amount: number) => {
+    const { blockName, colorKey, visibleKey, role, waterColumn } = material;
+    // Water inventory/visible colors count columns, not flowing-water depth cells.
+    adjustCount(currentBlocks, blockName, waterColumn !== undefined && blockName === "water"
+      ? adjustColumn(waterBlocks, waterColumn, amount) : amount);
+    if (colorKey !== undefined) adjustCount(currentColors, String(colorKey), waterColumn !== undefined
+      ? adjustColumn(waterColors, waterColumn, amount) : amount);
+    if (role !== undefined) {
+      addRoleCount(currentRoles, role, amount);
+      if (currentRoles.get(role) === 0) currentRoles.delete(role);
+    }
+    if (visibleKey !== undefined) adjustColumn(currentVisible, visibleKey, amount);
+  };
+  const remove = (coord: number) => {
+    const material = world.get(coord);
+    if (!material) return;
+    adjust(material, -1);
+    world.delete(coord);
+  };
+  // Replay the prefix even for a selected phase range: earlier leftovers still occupy inventory.
+  for (let index = 0; index <= end && index < parts.length; ++index) {
+    const part = parts[index];
+    forEachSuppressClearanceCell(plan[index].columns, 0, maxHeight, coord => {
+      if (!part.has(coord)) remove(coord);
+    });
+    for (const [coord, material] of part) {
+      remove(coord);
+      world.set(coord, material);
+      adjust(material, 1);
+    }
+    if (index < start) continue;
+    maximizeCounts(blockCounts, currentBlocks);
+    maximizeCounts(colorCounts, currentColors);
+    maximizeRoleCounts(fillerRoleCounts, currentRoles);
+    for (const key of currentVisible.keys()) visibleColorKeys.add(key);
+  }
+  // Only the selected range retains its world for preview; whole-tile caches stay small.
+  let retainedPixelMask: Uint8Array | undefined;
+  if (options.phaseRange) {
+    retainedPixelMask = new Uint8Array(MAP_SIZE * MAP_SIZE);
+    for (const coord of world.keys()) {
+      const [x, y, z] = parseShapeCoordKey(coord);
+      if (y >= 0 && x >= 0 && x < MAP_SIZE && z >= 0 && z < MAP_SIZE) retainedPixelMask[z * MAP_SIZE + x] = 1;
+    }
+    for (let index = start; index <= end && index < parts.length; ++index) {
+      for (const coord of parts[index].keys()) {
+        const [x, , z] = parseShapeCoordKey(coord);
+        if (x >= 0 && x < MAP_SIZE && z >= 0 && z < MAP_SIZE) retainedPixelMask[z * MAP_SIZE + x] = 0;
+      }
+    }
+  }
+  return {
+    blockCounts, colorCounts, fillerRoleCounts, numUniqueColorShadesForPart: visibleColorKeys.size,
+    ...(retainedPixelMask ? { retainedState: { blocks: world, pixelMask: retainedPixelMask } } : {}),
+  };
 }
 
 // Callers:
@@ -365,6 +526,9 @@ export function analyzeMaterialNeeds(
   shape: GeneratedShape,
   options: MaterialAnalysisOptions,
 ): MaterialNeedStats {
+  if (options.keepSuppressExtras && shape.partType === ShapePartType.SuppressStepPhases && shape.suppressStepLayout) {
+    return analyzeRetainedMaterialNeeds(colorGrid, shape, options);
+  }
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
 
   if (shape.partType === ShapePartType.SuppressStepPhases) {

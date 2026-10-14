@@ -103,6 +103,8 @@ export const esCatalog = {
     mixStepsLabel: "Printer+Nuker:",
     mixStepsTooltip:
       "Conserva bloques reutilizables entre fases para dar sombra, reduciendo la colocación y el minado manual. Desactívalo en plataformas con limpieza integrada.",
+    keepSuppressExtrasLabel: "Reciclaje completo",
+    keepSuppressExtrasTooltip: "Activado: Reciclaje completo. Retira todos los bloques que ya no sean necesarios en cada paso.\nDesactivado: Reciclaje parcial. Deja bloques extra para limpiar la plataforma más adelante o reutilizarlos en otro mapart. Las barreras marcan espacios que DEBEN despejarse en cada paso: retira los bloques que el verificador de Litematica marque como incorrectos e ignora los extras. Requiere más materiales porque se reciclan menos bloques entre pasos.",
     centerOutLabel: "Desde el centro:",
     centerOutTooltip: "Construye en una dirección; actualiza desde un lado.\nO construye del centro hacia fuera; actualiza desde ambos lados.",
     centerOutEastWest: "O←Centro→E",
@@ -411,6 +413,7 @@ export const esCatalog = {
       belowPlatformWaterTooltip: "Suponer colocaciones de agua bajo la plataforma, con alturas de superficie ajustables para cada tono.",
       skipEmptySuppressSteps: "Omitir Suppress-steps vacíos",
       skipEmptySuppressStepsTooltip: "Omitir los pasos vacíos y su separación vertical de las exportaciones.",
+      skipEmptySuppressStepsDisabledTooltip: "El reciclaje completo está desactivado. Los pasos vacíos aún pueden necesitar barreras para retirar bloques sobrantes, incluidos los de mapas anteriores.",
       showAlignmentReminder: "Mostrar recordatorio de alineación",
       showAlignmentReminderTooltip: "Recordatorio de alinear el área de color, no la noobline, con la cuadrícula del mapa.",
       showNooblineWarnings: "Mostrar advertencias para nooblines",

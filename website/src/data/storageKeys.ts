@@ -36,6 +36,7 @@ export const STORAGE_KEYS = {
   suppress2LayerLatePairsGap: "mapart_suppress_2layer_late_pairs_gap",
   crubTech: "mapart_crubtech",
   mixSteps: "mapart_mix_steps",
+  keepSuppressExtras: "mapart_keep_suppress_extras",
   lightWaterDrop: "mapart_light_water_drop",
   flatWaterDrop: "mapart_flat_water_drop",
   darkWaterDrop: "mapart_dark_water_drop",

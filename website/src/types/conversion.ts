@@ -47,6 +47,7 @@
 // - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometryWorkerTypes.ts
+// - src/types/shape.ts
 // - src/utils/conversion.ts
 export enum BuildMode {
   Flat = "flat",
@@ -102,6 +103,7 @@ export type MixedStepPalette = {
 // - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometryWorkerTypes.ts
+// - src/types/shape.ts
 // - src/utils/conversion.ts
 export enum SuppressStepDirection {
   EastToWest = "east_to_west",
@@ -151,6 +153,7 @@ export enum FillerRole {
 // - src/lib/fillerRules.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/nbtExport.ts
+// - src/lib/previewImageEdits.ts
 export interface FillerAssignment {
   role: FillerRole;
   block: string;

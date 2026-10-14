@@ -25,6 +25,7 @@
  * - src/lib/codecColorGrid.ts
  * - src/lib/messages.ts
  * - src/lib/mixedStepHeights.ts
+ * - src/lib/previewImageEdits.ts
  * - src/lib/codecPreset.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -47,6 +48,7 @@
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/messages.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
@@ -61,6 +63,7 @@ export enum Shade {
 // Callers:
 // - src/lib/blockId.ts
 // - src/lib/colorRefs.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/colorGridAnalysis.ts
 // - src/components/PanelCustomColors.tsx
 // - src/lib/shapeModel.ts

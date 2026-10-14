@@ -304,6 +304,8 @@ export const messages = {
     layerGapTooltip: catalog.buildMode.layerGapTooltip,
     mixStepsLabel: catalog.buildMode.mixStepsLabel,
     mixStepsTooltip: catalog.buildMode.mixStepsTooltip,
+    keepSuppressExtrasLabel: catalog.buildMode.keepSuppressExtrasLabel,
+    keepSuppressExtrasTooltip: catalog.buildMode.keepSuppressExtrasTooltip,
     centerOutLabel: catalog.buildMode.centerOutLabel,
     centerOutTooltip: catalog.buildMode.centerOutTooltip,
     buildAtWorldMinYLabel: catalog.buildMode.buildAtWorldMinYLabel,

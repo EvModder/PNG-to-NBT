@@ -46,6 +46,7 @@ type SecretsSettingsDialogProps = {
   belowPlatformWaterDisabled?: boolean;
   skipEmptySuppressSteps: boolean;
   setSkipEmptySuppressSteps: Dispatch<SetStateAction<boolean>>;
+  skipEmptySuppressStepsDisabled?: boolean;
   showAlignmentReminder: boolean;
   setShowAlignmentReminder: Dispatch<SetStateAction<boolean>>;
   showNooblineWarnings: boolean;
@@ -178,6 +179,7 @@ export function SecretsSettingsDialog({
   belowPlatformWaterDisabled = false,
   skipEmptySuppressSteps,
   setSkipEmptySuppressSteps,
+  skipEmptySuppressStepsDisabled = false,
   showAlignmentReminder,
   setShowAlignmentReminder,
   showNooblineWarnings,
@@ -292,12 +294,6 @@ export function SecretsSettingsDialog({
             disabled={belowPlatformWaterDisabled}
           />
           <OptionRow
-            checked={skipEmptySuppressSteps}
-            onChange={setSkipEmptySuppressSteps}
-            label={messages.dialogs.options.skipEmptySuppressSteps}
-            title={messages.dialogs.options.skipEmptySuppressStepsTooltip}
-          />
-          <OptionRow
             checked={showAlignmentReminder}
             onChange={setShowAlignmentReminder}
             label={messages.dialogs.options.showAlignmentReminder}
@@ -319,6 +315,13 @@ export function SecretsSettingsDialog({
             checked={showFlatNbtSuppressStepModes}
             onChange={setShowFlatNbtSuppressStepModes}
             label={messages.dialogs.options.showFlatNbtSuppressStepModes}
+          />
+          <OptionRow
+            checked={skipEmptySuppressSteps}
+            onChange={setSkipEmptySuppressSteps}
+            label={messages.dialogs.options.skipEmptySuppressSteps}
+            title={skipEmptySuppressStepsDisabled ? messages.dialogs.options.skipEmptySuppressStepsDisabledTooltip : messages.dialogs.options.skipEmptySuppressStepsTooltip}
+            disabled={skipEmptySuppressStepsDisabled}
           />
           <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2">
             <OptionRow

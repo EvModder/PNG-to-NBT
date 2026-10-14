@@ -18,16 +18,18 @@
  * - src/lib/shapeAnalysisCache.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
+ * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  */
 import type { ColorRef } from "./color";
-import { FillerRole } from "./conversion";
+import type { BuildMode, FillerRole, SuppressStepDirection } from "./conversion";
 
 // Callers:
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressClearance.ts
 // - src/lib/suppressLoadMarkers.ts
 export enum ShapePartType {
   SingleColumn = "single_column",
@@ -38,15 +40,22 @@ export enum ShapePartType {
 // - src/Index.tsx
 // - src/lib/buildModeShapes.ts
 // - src/lib/nbtExport.ts
-// - src/lib/suppressLoadMarkers.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeAnalysisCache.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressClearance.ts
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 export interface GeneratedShape {
   parts: ShapePart[];
   partType: ShapePartType;
+  // Keep clearing schedules tied to their geometry while UI settings change.
+  suppressStepLayout?: {
+    buildMode: BuildMode.SuppressStepPairs | BuildMode.SuppressStepChecker;
+    direction: SuppressStepDirection;
+    centerOut: boolean;
+  };
   splitExportNames: [string, string] | null;
   suppressedTransparentVsCollisionCount: number;
 }

@@ -6,7 +6,7 @@
  * - buildSelectedTileVisibleMask()
  * - getPreviewRangeMax()
  * - collectVsFillerPreviewReplacements()
- * - usePreviewVisiblePixelMask()
+ * - useStepPreview()
  * - useVsFillerPreviewReplacements()
  *
  * Callers:
@@ -14,17 +14,19 @@
  * - src/lib/previewImageStore.ts
  */
 import { useMemo } from "react";
-import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
+import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getMinecraftCatalog } from "@/lib/minecraftVersion";
-import { normalizeBlockId, toDisplayName } from "@/lib/blockId";
-import { FillerRole, type BuildMode } from "@/types/conversion";
+import { normalizeBlockId, toDisplayName, type ColorBlockSelections } from "@/lib/blockId";
+import { parseColorRefKey } from "@/lib/colorRefs";
+import { Shade, type ColorRef } from "@/types/color";
+import { FillerRole, type BuildMode, type FillerAssignment } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
-import { isShadeFillerDisabled } from "@/lib/fillerRules";
-import { collectFillerRolePixels } from "@/lib/shapeAnalysis";
-import { isShapeColorCell, parseShapeCoordKey } from "@/lib/shapeModel";
-import { MAP_SIZE } from "@/utils/color";
+import { buildFillerAssignmentMap, isShadeFillerDisabled } from "@/lib/fillerRules";
+import { collectFillerRolePixels, type analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
+import { isShapeColorCell, parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
+import { getShadedRgb, MAP_SIZE } from "@/utils/color";
 import { getBuildModeRangeMax, isSuppressStepsBuildMode } from "@/utils/conversion";
 import type { ParsedColorGridTile } from "@/lib/colorGridParsing";
 
@@ -70,9 +72,13 @@ type CollectVsFillerPreviewReplacementOptions = {
   zColumnRange?: [number, number];
 };
 
-type CollectPreviewVisiblePixelMaskOptions = {
+type StepPreviewOptions = {
   shape: GeneratedShape | null;
   phaseRange?: [number, number];
+  retainedState?: ReturnType<typeof analyzeMaterialNeeds>["retainedState"];
+  selections: ColorBlockSelections;
+  fillerAssignments: FillerAssignment[];
+  belowPlatformWater: boolean;
 };
 
 // Callers:
@@ -139,11 +145,9 @@ export function buildSelectedTileVisibleMask(
     for (let x = 0; x < MAP_SIZE; ++x) {
       const visibleByRange = (!xColumnRange || (x >= xColumnRange[0] && x <= xColumnRange[1])) &&
         (!zColumnRange || (z >= zColumnRange[0] && z <= zColumnRange[1]));
-      const visibleByMask = !tileVisibleMask || tileVisibleMask[z * MAP_SIZE + x] !== 0;
-      if (visibleByRange && visibleByMask) continue;
       const globalX = tile.startX + x;
       const globalZ = tile.startZ + z;
-      mask[globalZ * imageData.width + globalX] = 0;
+      mask[globalZ * imageData.width + globalX] = visibleByRange ? (tileVisibleMask?.[z * MAP_SIZE + x] ?? 1) : 0;
     }
   }
 
@@ -170,11 +174,77 @@ function getPreviewPixelParts(shape: GeneratedShape, phaseRange?: [number, numbe
   return shape.parts.slice(start, end + 1);
 }
 
-function collectPreviewVisiblePixelMask(
-  { shape, phaseRange }: CollectPreviewVisiblePixelMaskOptions,
-): PreviewPixelMask | null {
-  if (!shape) return null;
+function collectRetainedPixelReplacements(
+  { retainedState, selections, fillerAssignments, belowPlatformWater }: StepPreviewOptions,
+): PreviewPixelReplacement[] {
+  if (!retainedState) return [];
+  const { blocks, pixelMask } = retainedState;
+  const colors = BLOCK_BASE_COLOR_INDEX.get(selections.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION)!;
+  const assignments = buildFillerAssignmentMap(fillerAssignments);
+  const fillerColors = new Map<string, ColorRef | null>();
+  const colorAt = (coord: number): ColorRef | null => {
+    const material = blocks.get(coord);
+    if (!material) return null;
+    if (material.colorKey !== undefined) return parseColorRefKey(material.colorKey);
+    const assigned = material.role && assignments.get(material.role);
+    // Special support overrides keep their actual block, not the requested filler.
+    const name = assigned && normalizeBlockId(assigned) === material.blockName ? toDisplayName(assigned) : material.blockName;
+    if (!fillerColors.has(name)) {
+      const id = colors.get(name) ?? colors.get(normalizeBlockId(name));
+      fillerColors.set(name, id === undefined ? null : { id, isCustom: false });
+    }
+    return fillerColors.get(name)!;
+  };
+  const columns = new Map<number, { y: number; color: ColorRef; waterShade?: Shade }>();
+  for (const [coord, material] of blocks) {
+    const color = colorAt(coord);
+    if (!color || (!color.isCustom && color.id === TRANSPARENCY_BASE_INDEX)) continue;
+    const [x, y, z] = parseShapeCoordKey(coord);
+    if (x < 0 || x >= MAP_SIZE || z < -1 || z >= MAP_SIZE) continue;
+    const key = (z + 1) * MAP_SIZE + x;
+    if (y > (columns.get(key)?.y ?? -Infinity)) columns.set(key, {
+      y, color,
+      waterShade: belowPlatformWater && material.waterColumn !== undefined && material.visibleKey !== undefined
+        ? material.visibleKey % 4 : undefined,
+    });
+  }
+  const replacements: PreviewPixelReplacement[] = [];
+  for (let z = 0; z < MAP_SIZE; ++z) {
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      if (!pixelMask[z * MAP_SIZE + x]) continue;
+      const column = columns.get((z + 1) * MAP_SIZE + x);
+      if (!column) continue;
+      const { y, color, waterShade } = column;
+      const northY = columns.get(z * MAP_SIZE + x)?.y ?? -Infinity;
+      let shade = y > northY ? Shade.Light : y < northY ? Shade.Dark : Shade.Flat;
+      if (!color.isCustom && color.id === WATER_BASE_INDEX) {
+        if (waterShade !== undefined) {
+          // Lowered-water layers rely on the user's external depth-shading platform.
+          shade = waterShade;
+        } else {
+          let depth = 1;
+          for (;;) {
+            const nextColor = colorAt(toShapeCoordKey(x, y - depth, z));
+            if (!nextColor || nextColor.isCustom || nextColor.id !== WATER_BASE_INDEX) break;
+            ++depth;
+          }
+          const waterShade = depth * 0.1 + ((x + z) & 1) * 0.2;
+          shade = waterShade < 0.5 ? Shade.Light : waterShade > 0.9 ? Shade.Dark : Shade.Flat;
+        }
+      }
+      const [r, g, b] = getShadedRgb({ ...color, shade }, selections.customColors);
+      replacements.push({ x, z, r, g, b });
+    }
+  }
+  return replacements;
+}
+
+function collectStepPreview(options: StepPreviewOptions): { mask: PreviewPixelMask | null; replacements: PreviewPixelReplacement[] } {
+  const { shape, phaseRange } = options;
+  if (!shape) return { mask: null, replacements: [] };
+  const replacements = collectRetainedPixelReplacements(options);
   const mask = new Uint8Array(MAP_SIZE * MAP_SIZE);
+  for (const { x, z } of replacements) mask[z * MAP_SIZE + x] = 1;
 
   for (const part of getPreviewPixelParts(shape, phaseRange)) {
     for (const [coord, cell] of part.cells) {
@@ -185,7 +255,7 @@ function collectPreviewVisiblePixelMask(
     }
   }
 
-  return mask;
+  return { mask, replacements };
 }
 
 // Callers:
@@ -211,15 +281,17 @@ export function useVsFillerPreviewReplacements(
 
 // Callers:
 // - src/Index.tsx
-export function usePreviewVisiblePixelMask(
-  options: CollectPreviewVisiblePixelMaskOptions,
-): PreviewPixelMask | null {
+export function useStepPreview(options: StepPreviewOptions) {
   return useMemo(
-    () => collectPreviewVisiblePixelMask(options),
+    () => collectStepPreview(options),
     [
       options.shape,
       options.phaseRange?.[0],
       options.phaseRange?.[1],
+      options.retainedState,
+      options.selections,
+      options.fillerAssignments,
+      options.belowPlatformWater,
     ],
   );
 }

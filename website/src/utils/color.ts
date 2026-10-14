@@ -104,6 +104,7 @@ function resolveColorRgb(
 // - src/components/PanelCustomColors.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/previewImageEdits.ts
 export function getShadedRgb(
   color: Pick<ColorRgb, "r" | "g" | "b">,
   shade: Shade,
