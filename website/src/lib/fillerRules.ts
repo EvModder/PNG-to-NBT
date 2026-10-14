@@ -18,6 +18,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -35,6 +36,7 @@ const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
 
 // Callers:
 // - src/components/ToolbarFillerSettings.tsx
+// - src/lib/mixedStepHeights.ts
 export function getFillerFloorAttachmentFix(block: string): string | null {
   const id = normalizeBlockId(block);
   if (id !== "resin_clump" && id !== "glow_lichen" && id !== "sculk_vein") return null;
@@ -129,7 +131,7 @@ export function getSupportModeFillerRoles(
       roles.push(FillerRole.SupportAll);
       break;
     case SupportMode.Fragile:
-      roles.push(FillerRole.SupportFragile);
+      roles.push(FillerRole.SupportFragile, FillerRole.SupportRetained);
       break;
     case SupportMode.Water:
       if (!usesDirectWaterBlock) {
@@ -200,6 +202,7 @@ export function createFillerAssignments(
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/mixedStepHeights.ts
 export function isFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   return normalized ? DISABLED_FILLER_ALIASES.has(normalized) : false;
@@ -249,7 +252,7 @@ function needsRaisedStepSupport(block: string): boolean {
 // Raised reuse must not add supports or leave unsupported blocks. Custom colors
 // stay on the existing layout because their placement requirements are unknown.
 // Callers:
-// - src/Index.tsx
+// - src/lib/mixedStepHeights.ts
 export function canRaiseStepBlocks(
   usedColorKeys: Iterable<ColorRefKey>,
   selections: ColorBlockSelections,

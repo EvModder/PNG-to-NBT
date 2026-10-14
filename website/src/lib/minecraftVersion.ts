@@ -12,6 +12,7 @@
  * - src/components/PanelColorBlockTable.tsx
  * - src/lib/nbtExport.ts
  * - src/lib/codecPreset.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeModel.ts
  * - src/lib/presetFallbacks.ts
@@ -135,6 +136,7 @@ legacySupportRules.set("dead_bush", {
 // Callers:
 // - src/Index.tsx
 // - src/lib/shapeModel.ts
+// - src/lib/mixedStepHeights.ts
 export function getVersionedSupportRules(version: MinecraftVersion = DEFAULT_MINECRAFT_VERSION) {
   return version === "1.21.4" ? legacySupportRules : FRAGILE_SUPPORT_RULES;
 }

@@ -16,6 +16,7 @@
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/blockIconAtlas.ts
  * - src/lib/fillerRules.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -25,6 +26,8 @@
 import { BASE_COLORS } from "@/data/mapColors";
 import type { MinecraftVersion } from "@/data/minecraftVersions";
 import type { ColorRef, ColorRgb } from "@/types/color";
+import type { FillerRole } from "@/types/conversion";
+import type { ShapeColorRef } from "@/types/shape";
 import { getSelectedCustomColorBlock } from "@/utils/customColors";
 
 const DEFAULT_NAMESPACE = "minecraft:";
@@ -40,6 +43,7 @@ export function stripDefaultBlockNamespace(raw: string): string {
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/ToolbarFillerSettings.tsx
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
@@ -74,6 +78,7 @@ export function sanitizeUserBlockEntry(raw: string): string {
 // Callers:
 // - src/Index.tsx
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
@@ -86,6 +91,7 @@ export interface ColorBlockSelections {
 
 // Callers:
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
@@ -123,6 +129,7 @@ export function resolveExportBlockName(block: string): string {
 // Callers:
 // - src/Index.tsx
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/shapeModel.ts
 export function resolveAssignedColorBlock(
   color: ColorRef,
@@ -156,9 +163,10 @@ export function toDisplayName(blockName: string): string {
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export function resolveShapeColorBlockName(
-  color: ColorRef,
+  color: ShapeColorRef,
   selections: ColorBlockSelections,
+  fillerAssignments?: ReadonlyMap<FillerRole, string>,
 ): string | null {
-  const block = resolveAssignedColorBlock(color, selections);
+  const block = color.fillerRole ? fillerAssignments?.get(color.fillerRole) : resolveAssignedColorBlock(color, selections);
   return block ? resolveExportBlockName(block) : null;
 }

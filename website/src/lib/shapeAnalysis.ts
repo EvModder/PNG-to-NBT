@@ -125,9 +125,18 @@ function analyzePartMaterialNeeds(
       const waterColumnKey = isWaterColorCell ? (x * 128 + z) : -1;
       if (!isWaterColorCell || !countedVisibleWaterColumns.has(waterColumnKey)) {
         if (isWaterColorCell) countedVisibleWaterColumns.add(waterColumnKey);
-        addColorRefCount(colorCounts, cell);
+        if (!cell.fillerRole) addColorRefCount(colorCounts, cell);
         const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);
         if (visibleKey !== null) visibleColorKeys.add(visibleKey);
+      }
+
+      if (cell.fillerRole) {
+        const blockName = resolveShapeColorBlockName(cell, options, fillerAssignments);
+        if (blockName) {
+          addRoleCount(fillerRoleCounts, cell.fillerRole);
+          addCount(blockCounts, normalizeBlockId(blockName));
+        }
+        continue;
       }
 
       const colorKey = getColorRefKey(cell);

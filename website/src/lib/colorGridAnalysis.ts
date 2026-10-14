@@ -28,7 +28,6 @@
  * - src/lib/tileParsingWorkerTypes.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
-import { MAX_MIXED_STEP_HEIGHT } from "@/data/defaultSettings";
 import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { Shade, type ColorGrid, type ColorRef } from "@/types/color";
@@ -172,9 +171,10 @@ export function requiresTwoLayerLateShading(colorGrid: ColorGrid, waterDrops?: W
 // - src/Index.tsx
 export function hasStepMixOpportunity(
   colorGrid: ColorGrid,
-  options: { waterDrops?: WaterDrops },
+  options: { waterDrops?: WaterDrops; maxColorBlockLift?: number },
 ): boolean {
   const waterDrops = options.waterDrops;
+  const maxColorBlockLift = options.maxColorBlockLift ?? 0;
   const belowPlatformWater = waterDrops !== undefined;
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 1; z < MAP_SIZE; ++z) {
@@ -186,8 +186,8 @@ export function hasStepMixOpportunity(
         continue;
       }
       if (!isWaterColor(north) && color.shade === Shade.Flat) return true;
-      if (MAX_MIXED_STEP_HEIGHT > 0 && !isWaterColor(north) && color.shade === Shade.Dark
-        && (MAX_MIXED_STEP_HEIGHT > 1 || north.shade !== Shade.Dark)) return true;
+      if (maxColorBlockLift > 0 && !isWaterColor(north) && color.shade === Shade.Dark
+        && (maxColorBlockLift > 1 || north.shade !== Shade.Dark)) return true;
       if (!isWaterColor(north)) continue;
       if (belowPlatformWater) {
         const northWaterDrop = waterDrops[north.shade as Shade.Dark | Shade.Flat | Shade.Light];

@@ -54,6 +54,10 @@ type SecretsSettingsDialogProps = {
   setShowVsFillerWarnings: Dispatch<SetStateAction<boolean>>;
   showFlatNbtSuppressStepModes: boolean;
   setShowFlatNbtSuppressStepModes: Dispatch<SetStateAction<boolean>>;
+  mixedStepReachableTop: boolean;
+  setMixedStepReachableTop: Dispatch<SetStateAction<boolean>>;
+  maxStepColorBlockLift: number;
+  setMaxStepColorBlockLift: Dispatch<SetStateAction<number>>;
   markSuppressLoadSpotsInSchematic: boolean;
   setMarkSuppressLoadSpotsInSchematic: Dispatch<SetStateAction<boolean>>;
   suppressLoadSpotMarkerBlock: SuppressLoadSpotMarkerBlock;
@@ -79,12 +83,13 @@ type OptionRowProps = {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
+  title?: string;
   disabled?: boolean;
 };
 
-function OptionRow({ checked, onChange, label, disabled = false }: OptionRowProps) {
+function OptionRow({ checked, onChange, label, title, disabled = false }: OptionRowProps) {
   return (
-    <label className={`flex items-center gap-1 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+    <label title={title} className={`flex items-center gap-1 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
       <input
         type="checkbox"
         checked={checked}
@@ -179,6 +184,10 @@ export function SecretsSettingsDialog({
   setShowVsFillerWarnings,
   showFlatNbtSuppressStepModes,
   setShowFlatNbtSuppressStepModes,
+  mixedStepReachableTop,
+  setMixedStepReachableTop,
+  maxStepColorBlockLift,
+  setMaxStepColorBlockLift,
   markSuppressLoadSpotsInSchematic,
   setMarkSuppressLoadSpotsInSchematic,
   suppressLoadSpotMarkerBlock,
@@ -297,6 +306,33 @@ export function SecretsSettingsDialog({
             onChange={setShowFlatNbtSuppressStepModes}
             label={messages.dialogs.options.showFlatNbtSuppressStepModes}
           />
+          <div className="grid grid-cols-subgrid items-center">
+            <OptionRow
+              checked={maxStepColorBlockLift === 1 && mixedStepReachableTop}
+              onChange={setMixedStepReachableTop}
+              label={messages.dialogs.options.mixedStepReachableTop}
+              title={messages.dialogs.options.mixedStepReachableTopTooltip}
+              disabled={maxStepColorBlockLift !== 1}
+            />
+            <label
+              className="flex items-center justify-end gap-1"
+              title={messages.dialogs.options.maxStepColorBlockLiftTooltip}
+            >
+              <span>{messages.dialogs.options.maxStepColorBlockLift}</span>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                step={1}
+                value={maxStepColorBlockLift}
+                onChange={event => {
+                  const value = Number(event.target.value);
+                  if (Number.isSafeInteger(value)) setMaxStepColorBlockLift(Math.min(10, Math.max(0, value)));
+                }}
+                className="h-6 w-16 rounded border border-border bg-input px-1.5 text-xs text-foreground"
+              />
+            </label>
+          </div>
           <OptionSelectRow<SuppressLoadSpotMarkerBlock>
             checked={markSuppressLoadSpotsInSchematic}
             onCheckedChange={setMarkSuppressLoadSpotsInSchematic}

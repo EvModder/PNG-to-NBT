@@ -69,6 +69,7 @@ function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileFinalGeo
       layerGap: input.layerGap,
       mixSteps: input.mixSteps,
       mixedStepMaxHeight: input.mixedStepMaxHeight,
+      mixedStepPalette: input.mixedStepPalette,
       includeTransparentBlocks: input.includeTransparentBlocks,
       paletteSeed: input.paletteSeed,
       waterSetting: input.waterSetting,

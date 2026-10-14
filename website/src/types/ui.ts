@@ -17,6 +17,7 @@
  * - src/lib/codecPreset.ts
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
+ * - src/lib/mixedStepHeights.ts
  */
 
 // Callers:
@@ -28,6 +29,7 @@
 // - src/lib/codecPreset.ts
 // - src/lib/fillerRules.ts
 // - src/lib/messages.ts
+// - src/lib/mixedStepHeights.ts
 export enum SupportMode {
   None = "none",
   All = "all",

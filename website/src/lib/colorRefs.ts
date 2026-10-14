@@ -13,6 +13,7 @@
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/fillerRules.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/shapeAnalysis.ts
  */
 import type { ColorRef } from "@/types/color";
@@ -29,6 +30,7 @@ import type { ColorRef } from "@/types/color";
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 export type ColorRefKey = number;
 
 // Callers:

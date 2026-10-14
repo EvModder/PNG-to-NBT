@@ -18,6 +18,7 @@
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/pixelArtScaling.ts
  * - src/lib/previewImageEdits.ts
@@ -39,6 +40,7 @@ import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRe
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
 // - src/lib/pixelArtScaling.ts
 // - src/lib/previewImageEdits.ts
@@ -62,6 +64,7 @@ export const TRANSPARENT_COLOR: ShadedColorRef = Object.freeze({ isCustom: false
 
 // Callers:
 // - src/lib/colorGridAnalysis.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 export function isTransparentColor(cell: ShadedColorRef): boolean {
@@ -70,6 +73,7 @@ export function isTransparentColor(cell: ShadedColorRef): boolean {
 
 // Callers:
 // - src/lib/colorGridAnalysis.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 export function isWaterColor(color: ShadedColorRef): boolean {

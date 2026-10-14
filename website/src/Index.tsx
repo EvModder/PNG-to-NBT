@@ -28,7 +28,8 @@ import {
   DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH,
   DEFAULT_MIX_STEPS,
-  MAX_MIXED_STEP_HEIGHT,
+  MAX_STEP_COLOR_BLOCK_LIFT,
+  MIXED_STEP_REACHABLE_TOP,
   DEFAULT_LIGHT_WATER_DROP,
   DEFAULT_FLAT_WATER_DROP,
   DEFAULT_DARK_WATER_DROP,
@@ -146,7 +147,6 @@ import {
   isFillerDisabled,
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
-  canRaiseStepBlocks,
 } from "@/lib/fillerRules";
 import {
   LOCALE_BROWSER,
@@ -164,6 +164,7 @@ import { buildInputColorPalette, compareInputColorPalettes, presetCoversAllColor
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { measureToolbarWidths } from "@/utils/toolbarLayout";
 import { getShapeForBuildMode } from "@/lib/buildModeShapes";
+import { getMixedStepSettings } from "@/lib/mixedStepHeights";
 import {
   offsetPreviewPixelReplacements,
   buildSelectedTileVisibleMask,
@@ -735,6 +736,11 @@ const Index = () => {
     LS_KEYS.showFlatNbtSuppressStepModes,
     DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   ));
+  const [mixedStepReachableTop, setMixedStepReachableTop] = useState(() => loadCached(LS_KEYS.mixedStepReachableTop, MIXED_STEP_REACHABLE_TOP));
+  const [maxStepColorBlockLift, setMaxStepColorBlockLift] = useState(() => {
+    const value = loadCached(LS_KEYS.maxStepColorBlockLift, MAX_STEP_COLOR_BLOCK_LIFT);
+    return Number.isSafeInteger(value) && value >= 0 ? Math.min(10, value) : MAX_STEP_COLOR_BLOCK_LIFT;
+  });
   const [sharedBuildMode, setSharedBuildMode] = useState<BuildMode | null>(null);
   const flatSuppressStepsEnabled = showFlatNbtSuppressStepModes ||
     (buildMode === sharedBuildMode && isSuppressStepsBuildMode(buildMode));
@@ -1120,6 +1126,8 @@ const Index = () => {
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
       [LS_KEYS.showFlatNbtSuppressStepModes]: showFlatNbtSuppressStepModes,
+      [LS_KEYS.mixedStepReachableTop]: mixedStepReachableTop,
+      [LS_KEYS.maxStepColorBlockLift]: maxStepColorBlockLift,
       [LS_KEYS.markSuppressLoadSpotsInSchematic]: markSuppressLoadSpotsInSchematic,
       [LS_KEYS.suppressLoadSpotMarkerBlock]: suppressLoadSpotMarkerBlock,
       [LS_KEYS.autoScalePixelArt]: autoScalePixelArt,
@@ -1176,6 +1184,8 @@ const Index = () => {
       showNooblineWarnings,
       showVsFillerWarnings,
       showFlatNbtSuppressStepModes,
+      mixedStepReachableTop,
+      maxStepColorBlockLift,
       markSuppressLoadSpotsInSchematic,
       suppressLoadSpotMarkerBlock,
       autoScalePixelArt,
@@ -1303,9 +1313,10 @@ const Index = () => {
         const waterSetting = getTileWaterSetting(tileDerivedImageStats[index], buildMode);
         return hasStepMixOpportunity(tile.colorGrid, {
           waterDrops: waterSetting?.kind === "below-platform" ? waterSetting.drops : undefined,
+          maxColorBlockLift: maxStepColorBlockLift,
         });
       }),
-    [buildMode, imageValid, parsedTiles, tileDerivedImageStats, getTileWaterSetting],
+    [buildMode, imageValid, parsedTiles, tileDerivedImageStats, getTileWaterSetting, maxStepColorBlockLift],
   );
   const twoLayerRequiresLateShading = useMemo(
     () => imageValid && parsedTiles.some((tile, index) => {
@@ -1402,11 +1413,12 @@ const Index = () => {
     () => ({ selectedBlocks: effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion }),
     [effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion],
   );
-  const mixedStepMaxHeight = useMemo(
-    () => MAX_MIXED_STEP_HEIGHT > 0 && supportMode === SupportMode.None
-      && canRaiseStepBlocks(usedColorKeys, colorBlockSelections, effectiveShadeFillerBlock)
-      ? MAX_MIXED_STEP_HEIGHT : 0,
-    [supportMode, usedColorKeys, colorBlockSelections, effectiveShadeFillerBlock],
+  const { maxHeight: mixedStepMaxHeight, palette: mixedStepPalette } = useMemo(
+    () => getMixedStepSettings(
+      usedColorKeys, colorBlockSelections, supportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock,
+      applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop,
+    ),
+    [usedColorKeys, colorBlockSelections, supportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock, applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop],
   );
   useEffect(() => {
     if (!imageValid || parsedTiles.length === 0) {
@@ -1617,6 +1629,7 @@ const Index = () => {
               mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
               suppressCenterOut: calcSuppressCenterOut,
               mixedStepMaxHeight,
+              mixedStepPalette,
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
               skipEmptySuppressSteps,
@@ -1688,6 +1701,7 @@ const Index = () => {
     paletteSeedOffset,
     supportMode,
     mixedStepMaxHeight,
+    mixedStepPalette,
     skipEmptySuppressSteps,
     crubTech,
     effectiveSuppressStepDirection,
@@ -2049,6 +2063,8 @@ const Index = () => {
   );
   const enableFragileSupportOption = useMemo(() => {
     if (crubTechControlsActive2LayerSettings) return false;
+    // The experimental plan needs Fragile even when every support is reused.
+    if (mixedStepPalette) return true;
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
       return uiFillerAssignments.some(({ block }) => !isShadeFillerDisabled(block) && hasFragileMappedBlock(block)) ||
@@ -2074,6 +2090,7 @@ const Index = () => {
     );
   }, [
     crubTechControlsActive2LayerSettings,
+    mixedStepPalette,
     imageData,
     supportModeVisibilityPending,
     tileAnalyses,
@@ -4200,6 +4217,10 @@ const Index = () => {
         setShowVsFillerWarnings={setShowVsFillerWarnings}
         showFlatNbtSuppressStepModes={showFlatNbtSuppressStepModes}
         setShowFlatNbtSuppressStepModes={setShowFlatNbtSuppressStepModes}
+        mixedStepReachableTop={mixedStepReachableTop}
+        setMixedStepReachableTop={setMixedStepReachableTop}
+        maxStepColorBlockLift={maxStepColorBlockLift}
+        setMaxStepColorBlockLift={setMaxStepColorBlockLift}
         markSuppressLoadSpotsInSchematic={markSuppressLoadSpotsInSchematic}
         setMarkSuppressLoadSpotsInSchematic={setMarkSuppressLoadSpotsInSchematic}
         suppressLoadSpotMarkerBlock={suppressLoadSpotMarkerBlock}

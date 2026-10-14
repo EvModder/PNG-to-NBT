@@ -15,7 +15,7 @@
  */
 import type { ColorGrid, Shade } from "@/types/color";
 import type { GeneratedShape } from "@/types/shape";
-import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
+import { BuildMode, FillerRole, SuppressStepDirection, type MixedStepPalette } from "@/types/conversion";
 import { FlatModeBehavior, type WaterDrops } from "@/lib/colorGridAnalysis";
 
 // Callers:
@@ -71,6 +71,7 @@ export type TileFinalGeometryWorkerInput = {
   useCrubTech: boolean;
   mixSteps: boolean;
   mixedStepMaxHeight: number;
+  mixedStepPalette?: MixedStepPalette;
   paletteSeed: number;
   enableWaterConvenience: boolean;
   skipEmptySuppressSteps: boolean;

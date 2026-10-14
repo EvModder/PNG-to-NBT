@@ -3,12 +3,15 @@
  * - ShapePartType
  * - GeneratedShape
  * - ShapeCell
+ * - ShapeColorRef
  * - ShapeCoordKey
  * - ShapePart
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/blockId.ts
  * - src/lib/buildModeShapes.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -51,7 +54,16 @@ export interface GeneratedShape {
 // Callers:
 // - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
-export type ShapeCell = ColorRef | FillerRole[];
+export type ShapeCell = ShapeColorRef | FillerRole[];
+
+// Callers:
+// - src/lib/blockId.ts
+// - src/lib/mixedStepHeights.ts
+// - src/lib/nbtExport.ts
+// - src/lib/shapeGeneration.ts
+// - src/lib/shapeModel.ts
+// Keep pixel identity when a configured filler supplies its color.
+export type ShapeColorRef = ColorRef & { fillerRole?: FillerRole };
 
 // Callers:
 // - src/lib/shapeModel.ts

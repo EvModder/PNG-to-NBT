@@ -24,6 +24,7 @@
  * - src/lib/colorGridParsing.ts
  * - src/lib/codecColorGrid.ts
  * - src/lib/messages.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/codecPreset.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -45,6 +46,7 @@
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/messages.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
@@ -75,6 +77,7 @@ export interface ColorRef {
 // - src/utils/color.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/codecColorGrid.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/shapeGeneration.ts
 export interface ShadedColorRef extends ColorRef {
   shade: Shade;
@@ -88,6 +91,7 @@ export interface ShadedColorRef extends ColorRef {
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/codecColorGrid.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts

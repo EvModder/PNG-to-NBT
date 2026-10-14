@@ -21,6 +21,7 @@
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/fillerRules.ts
  * - src/lib/minecraftVersion.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/paletteSeed.ts
  * - src/lib/presetFallbacks.ts
@@ -105,6 +106,7 @@ export const TRANSPARENCY_BASE_INDEX = 0;
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/mixedStepHeights.ts
 // - src/utils/color.ts
 export const WATER_BASE_INDEX = 12;
 
@@ -121,6 +123,7 @@ export const WATER_BASE_INDEX = 12;
 // - src/lib/codecPreset.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/paletteSeed.ts
 // - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts

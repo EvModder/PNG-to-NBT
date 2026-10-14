@@ -22,18 +22,17 @@
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { getVersionedSupportRules } from "@/lib/minecraftVersion";
 import { resolveAssignedFillerName } from "@/lib/fillerRules";
-import type { ColorRef } from "@/types/color";
 import { FillerRole } from "@/types/conversion";
-import { type ShapeCell, type ShapeCoordKey, type ShapePart } from "@/types/shape";
+import { type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { type ColorBlockSelections, normalizeBlockId, resolveAssignedColorBlock } from "@/lib/blockId";
+import { normalizeBlockId, resolveAssignedColorBlock, type ColorBlockSelections } from "@/lib/blockId";
 
 // Callers:
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/suppressLoadMarkers.ts
-export function isShapeColorCell(cell: ShapeCell): cell is ColorRef {
+export function isShapeColorCell(cell: ShapeCell): cell is ShapeColorRef {
   return !Array.isArray(cell);
 }
 
@@ -83,7 +82,7 @@ export function getSupportedBlockIdAbove(
   const above = part.cells.get(coord + SHAPE_COORD_Z_SIZE);
   if (!above) return null;
   if (isShapeColorCell(above)) {
-    const block = resolveAssignedColorBlock(above, options);
+    const block = above.fillerRole ? resolveAssignedFillerName(fillerAssignments, above.fillerRole) : resolveAssignedColorBlock(above, options);
     return block ? normalizeBlockId(block) : null;
   }
   // Assignment order also determines which filler wins during export.

@@ -16,8 +16,7 @@ import {
   DEFAULT_CRUBTECH_FLAT_WATER_DROP,
   DEFAULT_CRUBTECH_DARK_WATER_DROP,
 } from "@/data/defaultSettings";
-import type { ColorRef } from "@/types/color";
-import type { GeneratedShape, ShapePart } from "@/types/shape";
+import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
 import { CRUBTECH_NOOBLINE_FILLER_BLOCK, buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
 import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
@@ -110,6 +109,7 @@ function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
       return "vs_filler";
     case FillerRole.SupportAll:
     case FillerRole.SupportFragile:
+    case FillerRole.SupportRetained:
     case FillerRole.SupportBreakable:
     case FillerRole.SupportPushable:
     case FillerRole.SupportWaterBase:
@@ -240,14 +240,15 @@ function getWaterColumnTopY(part: ShapePart): Map<number, number> {
 }
 
 function resolveExportShapeColorBlockName(
-  color: ColorRef,
+  color: ShapeColorRef,
   x: number,
   y: number,
   z: number,
   waterTopYByColumn: ReadonlyMap<number, number>,
   options: ExportOptions,
+  fillerAssignments: ReadonlyMap<FillerRole, string>,
 ): string | null {
-  const blockName = resolveShapeColorBlockName(color, options);
+  const blockName = resolveShapeColorBlockName(color, options, fillerAssignments);
   if (!blockName) return null;
   if (color.isCustom || color.id !== WATER_BASE_INDEX) return blockName;
 
@@ -267,7 +268,7 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
   for (const [coord, cell] of part.cells) {
     if (!isShapeColorCell(cell)) continue;
     const [x, y, z] = parseShapeCoordKey(coord);
-    const blockName = resolveExportShapeColorBlockName(cell, x, y, z, waterTopYByColumn, options);
+    const blockName = resolveExportShapeColorBlockName(cell, x, y, z, waterTopYByColumn, options, fillerAssignments);
     if (!blockName) continue;
     resolved.push({ x, y, z, blockName });
     occupied.add(coord);

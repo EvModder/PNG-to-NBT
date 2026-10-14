@@ -8,6 +8,7 @@
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/fillerRules.ts
  * - src/lib/minecraftVersion.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/shapeModel.ts
  *
  * Notes:
@@ -163,6 +164,7 @@ function getBaseBlockId(blockId: string): string {
 // - src/Index.tsx
 // - src/components/ToolbarFillerSettings.tsx
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/shapeModel.ts
 export function isFragileBlock(blockId: string): boolean {
   return FRAGILE_BLOCKS.has(getBaseBlockId(blockId));

@@ -63,6 +63,8 @@ export const STORAGE_KEYS = {
   showNooblineWarnings: "mapart_secret_show_noobline_warnings",
   showVsFillerWarnings: "mapart_secret_show_vs_filler_warnings",
   showFlatNbtSuppressStepModes: "mapart_secret_show_flat_nbt_suppress_step_modes",
+  mixedStepReachableTop: "mapart_secret_mixed_step_reachable_top",
+  maxStepColorBlockLift: "mapart_secret_max_step_color_block_lift",
   markSuppressLoadSpotsInSchematic: "mapart_secret_mark_suppress_load_spots_in_schematic",
   suppressLoadSpotMarkerBlock: "mapart_secret_suppress_load_spot_marker_block",
   autoScalePixelArt: "mapart_secret_auto_scale_pixel_art",

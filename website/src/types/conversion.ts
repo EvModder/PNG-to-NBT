@@ -4,6 +4,7 @@
  * - SuppressStepDirection
  * - FillerRole
  * - FillerAssignment
+ * - MixedStepPalette
  *
  * Callers:
  * - src/Index.tsx
@@ -15,6 +16,7 @@
  * - src/lib/codecPreset.ts
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -62,6 +64,26 @@ export enum BuildMode {
   Suppress2LayerLateFillers = "suppress_2layer_late_fillers",
   Suppress2LayerLatePairs = "suppress_2layer_late_pairs",
 }
+
+// Callers:
+// - src/lib/mixedStepHeights.ts
+// - src/lib/shapeGeneration.ts
+// - src/lib/tileGeometryWorkerTypes.ts
+export type MixedStepPalette = {
+  blocks: readonly string[];
+  canRaise: readonly boolean[];
+  canSupport: readonly boolean[];
+  needsSupport: readonly boolean[];
+  reachableTop: boolean;
+  shadeNeedsSupport: boolean;
+  shadeCanSupport: boolean;
+  supportCanShade: boolean;
+  shadeColor: number;
+  supportColor: number;
+  shade: string;
+  support: string;
+  key: string;
+};
 
 // Callers:
 // - src/Index.tsx
@@ -112,6 +134,8 @@ export enum FillerRole {
 
   SupportAll = "support_all",
   SupportFragile = "support_fragile",
+  // Shared between support and shading across phases, in either order.
+  SupportRetained = "support_retained",
   SupportBreakable = "support_breakable",
   SupportPushable = "support_pushable",
   SupportWaterBase = "support_water_base",
