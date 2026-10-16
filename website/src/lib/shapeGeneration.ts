@@ -576,6 +576,8 @@ function getCrubTechSupportRole(
 ): FillerRole.SupportBreakable | FillerRole.SupportPushable {
   if (y < upperY) return FillerRole.SupportBreakable;
   if (y !== upperY) return FillerRole.SupportPushable;
+  // The sweep extends down to support height along the north row.
+  if (z < 0) return FillerRole.SupportBreakable;
   // Isolated moss below the sweep is ignored; a paired block must push into it.
   const pairX = (x & 1) === 0 ? x + 1 : x - 1;
   return occupied.has(toShapeCoordKey(pairX, y, z))
