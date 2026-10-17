@@ -4,6 +4,7 @@
  * - MinecraftVersion
  * - BLOCK_INTRODUCTIONS
  * Callers:
+ * - scripts/audit-block-wiki.mjs
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/SecretsSettingsDialog.tsx
@@ -19,6 +20,7 @@
 // Keep ranges chronological; preset decoding locates ranges by DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
 // Callers:
+// - scripts/audit-block-wiki.mjs
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/data/defaultSettings.ts

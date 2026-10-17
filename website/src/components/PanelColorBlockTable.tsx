@@ -16,6 +16,7 @@ import {
   type SetStateAction,
 } from "react";
 import { Glasses, Minus, PanelRightClose, PanelRightOpen, Plus } from "lucide-react";
+import { getBlockWikiUrl } from "@/data/blockWiki";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { BASE_COLORS, Shade, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import type { MinecraftVersion } from "@/data/minecraftVersions";
@@ -554,6 +555,11 @@ export function PanelColorBlockTable({
   const renderColorRow = useCallback((idx: number) => {
     const color = BASE_COLORS[idx];
     const swatchShades = getColorSwatchShades(idx);
+    const handleBlockClick = (event: React.MouseEvent<HTMLButtonElement>, block: string) => {
+      if (event.ctrlKey || event.metaKey) {
+        window.open(getBlockWikiUrl(block), "_blank", "noopener,noreferrer");
+      } else onUpdateBlock(idx, block);
+    };
     const copySwatchColor = (event: React.MouseEvent<HTMLDivElement>) => {
       event.preventDefault();
       const shade = getShadeAtPointer(event.clientY, event.currentTarget.getBoundingClientRect(), swatchShades);
@@ -699,7 +705,7 @@ export function PanelColorBlockTable({
                           : "border-border hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
                   }`}
                   title={isIceWaterOption ? messages.blocks.iceWaterOptionTitle(block) : block}
-                  onClick={() => onUpdateBlock(idx, block)}
+                  onClick={event => handleBlockClick(event, block)}
                 >
                   <PackedBlockIcon
                     atlasKey={iconAsset.atlasKey}
@@ -725,7 +731,7 @@ export function PanelColorBlockTable({
                           : "border-border hover:shadow-[0_0_0_1px_hsl(var(--primary))]"
                       }`}
                       title={`custom: ${block}`}
-                      onClick={() => onUpdateBlock(idx, block)}
+                      onClick={event => handleBlockClick(event, block)}
                     >
                       <PackedBlockIcon
                         atlasKey={iconAsset.atlasKey}

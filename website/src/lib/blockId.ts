@@ -11,9 +11,11 @@
  * - resolveShapeColorBlockName()
  *
  * Callers:
+ * - scripts/audit-block-wiki.mjs
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/data/blockWiki.ts
  * - src/lib/blockIconAtlas.ts
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
@@ -39,9 +41,11 @@ export function stripDefaultBlockNamespace(raw: string): string {
 }
 
 // Callers:
+// - scripts/audit-block-wiki.mjs
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/ToolbarFillerSettings.tsx
+// - src/data/blockWiki.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts

@@ -20,7 +20,9 @@
     "test:versions": "bun run tests/minecraftVersions.mts",
     "test:presets": "bun run tests/codecPreset.mts",
     "test:pixel-art": "bun run tests/pixelArtScaling.mts",
-    "test:all": "bun run test:typecheck && bun run test:invariants && bun run test:versions && bun run test:presets && bun run test:pixel-art && bun run test:fixtures",
+    "test:wiki": "bun ../scripts/audit-block-wiki.mjs --offline",
+    "test:all": "bun run test:typecheck && bun run test:invariants && bun run test:versions && bun run test:presets && bun run test:pixel-art && bun run test:wiki && bun run test:fixtures",
+    "audit:block-wiki": "bun ../scripts/audit-block-wiki.mjs",
     "audit:mapcolors": "node ../scripts/audit-mapcolors.mjs",
     "audit:mapcolors:strict": "node ../scripts/audit-mapcolors.mjs --strict-missing",
     "build:block-icons": "python3 ../scripts/generate-stateful-icon-overrides.py && node ../scripts/build-block-icon-files.mjs && python3 ../scripts/postprocess-block-icon-files.py && python3 ../scripts/render-shulker-icons.py && python3 ../scripts/build-icon-atlases.py"
@@ -38,6 +40,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/utif": "^3.0.6",
     "@vitejs/plugin-react": "^6.1.2",
+    "playwright": "^1.64.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
