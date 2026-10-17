@@ -1619,7 +1619,6 @@ const Index = () => {
               requiresTwoLayerLateShading: twoLayerRequiresLateShading,
               includeTransparentBlocks,
               waterSetting,
-              flatModeBehavior: tile.derivedImageStats.flatModeBehavior,
               buildAtWorldMinY: nextActiveBuildAtWorldMinY,
               buildMode: nextResolvedBuildMode,
               isFlatShape: tile.isFlatShape,

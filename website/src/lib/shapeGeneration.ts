@@ -169,11 +169,11 @@ interface GridShapeCache {
   columnPixelsByZ: Map<number, Map<number, ColumnPixelCell>>;
   // Water-filtered variant of the same lookup, for below-platform staircase shaping.
   columnNonWaterPixelsByZ: Map<number, Map<number, ColumnPixelCell>>;
-  staircaseBaseBlocks: Map<string, ShapeBlock[]>;
+  staircaseBaseBlocks: Map<number, ShapeBlock[]>;
   // Per-mode staircase layouts before water convenience fillers or lowered-water overlays are added.
   staircaseVariantBlocks: Map<string, ShapeBlock[]>;
   // Cached vertical spacing between suppress step phases for this image.
-  stepPhaseYOffsets: Map<string, number>;
+  stepPhaseYOffsets: Map<number, number>;
   mixedStepColumnHeights?: Map<number | string, Map<number, Uint8Array>>;
 }
 
@@ -673,7 +673,7 @@ function getStepPhaseYOffset(
 ): number {
   const belowPlatformWater = waterDrops !== undefined;
   const axisZSuppress = getSuppressStepAxis(stepDirection) === "z";
-  const cacheKey = `${belowPlatformWater ? "below" : "default"}|${axisZSuppress ? "axis-z" : "axis-x"}`;
+  const cacheKey = (belowPlatformWater ? 2 : 0) | (axisZSuppress ? 1 : 0);
   const cached = cache?.stepPhaseYOffsets.get(cacheKey);
   if (cached !== undefined) return cached;
   let yOffset = 1;
@@ -2789,6 +2789,11 @@ function getCachedRawParts(cache: GridShapeCache, keyId: ShapeCacheKeyId, build:
   return parts;
 }
 
+function getStaircaseBaseCacheKey(excludeWater: boolean, topAlignedWater: boolean, buildAtWorldMinY: boolean): number {
+  // Three water modes, each with two world-height modes.
+  return ((excludeWater ? 2 : topAlignedWater ? 1 : 0) << 1) | (buildAtWorldMinY ? 1 : 0);
+}
+
 function getCachedStaircaseBaseBlocks(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
@@ -2796,7 +2801,7 @@ function getCachedStaircaseBaseBlocks(
   topAlignedWater: boolean,
   buildAtWorldMinY: boolean,
 ): ShapeBlock[] {
-  const cacheKey = `${excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default")}|${buildAtWorldMinY ? "world-min-y" : "default-y"}`;
+  const cacheKey = getStaircaseBaseCacheKey(excludeWater, topAlignedWater, buildAtWorldMinY);
   const cached = cache.staircaseBaseBlocks.get(cacheKey);
   if (cached) return cached;
   const blocks = buildStaircaseBlocks(colorGrid, excludeWater, topAlignedWater, buildAtWorldMinY);
@@ -2811,8 +2816,11 @@ function getStaircaseVariantCacheKey(
   topAlignedWater: boolean,
   buildAtWorldMinY: boolean,
 ): string {
-  const modeKey = buildModeUsesPaletteSeed(buildMode) ? `${buildMode}|seed:${paletteSeed}` : buildMode;
-  return `${excludeWater ? "exclude-water" : (topAlignedWater ? "top-aligned-water" : "default")}|${buildAtWorldMinY ? "world-min-y" : "default-y"}|${modeKey}`;
+  return [
+    getStaircaseBaseCacheKey(excludeWater, topAlignedWater, buildAtWorldMinY),
+    buildMode,
+    buildModeUsesPaletteSeed(buildMode) ? paletteSeed : 0,
+  ].join("|");
 }
 
 function getCachedStaircaseVariantBlocks(

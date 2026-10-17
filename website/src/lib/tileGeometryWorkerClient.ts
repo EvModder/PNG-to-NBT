@@ -6,7 +6,8 @@
  * Callers:
  * - src/Index.tsx
  */
-import { buildModeUsesLayerGap } from "@/utils/conversion";
+import { buildModeUsesLayerGap, isSuppressStepsBuildMode } from "@/utils/conversion";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import type {
   TileBaseGeometryWorkerInput,
   TileBaseGeometryWorkerResult,
@@ -45,14 +46,10 @@ function touchBoundedCache<T>(cache: Map<string, T>, key: string, value: T): voi
   if (oldestKey !== undefined) cache.delete(oldestKey);
 }
 
-function serializeWaterDrops(drops: readonly [number, number, number] | undefined): string {
-  return drops ? `${drops[0]},${drops[1]},${drops[2]}` : "";
-}
-
 function serializeWaterSetting(waterSetting: TileWaterSetting): string {
   if (!waterSetting) return "";
   if (waterSetting.kind === "top-aligned") return "top";
-  return `below:${serializeWaterDrops(waterSetting.drops)}`;
+  return `below:${waterSetting.drops.join(",")}`;
 }
 
 function createWorkerSlot(): WorkerSlot {
@@ -113,6 +110,7 @@ function runWorkerRequest(request:
 }
 
 function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeometryWorkerInput): string {
+  // The base pass only generates staircase shapes, so layer gap has no effect.
   return [
     tileCacheKey,
     input.allSameShade ?? "",
@@ -121,15 +119,18 @@ function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeomet
     input.includeTransparentBlocks ? 1 : 0,
     serializeWaterSetting(input.waterSetting),
     input.flatModeBehavior,
-    input.layerGap,
     input.paletteSeed,
     input.enableWaterConvenience ? 1 : 0,
   ].join("|");
 }
 
 function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeometryWorkerInput): string {
-  // 2-layer direction and center-out change the loading route, not the block geometry.
   const twoLayer = buildModeUsesLayerGap(input.buildMode);
+  const steps = isSuppressStepsBuildMode(input.buildMode);
+  const mixSteps = steps && input.mixSteps;
+  const raisedSteps = mixSteps && input.mixedStepMaxHeight > 0
+    && (input.selectedStepDirection === SuppressStepDirection.EastToWest || input.selectedStepDirection === SuppressStepDirection.WestToEast);
+  // Ignore inactive settings, especially the large palette key when no blocks can be raised.
   return [
     tileCacheKey,
     input.allSameShade ?? "",
@@ -138,23 +139,22 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     input.requiresTwoLayerLateShading ? 1 : 0,
     input.includeTransparentBlocks ? 1 : 0,
     serializeWaterSetting(input.waterSetting),
-    input.flatModeBehavior,
     input.buildAtWorldMinY ? 1 : 0,
     input.buildMode,
     input.isFlatShape ? 1 : 0,
-    input.layerGap,
-    input.suppress2LayerLatePairY,
-    input.useCrubTech ? 1 : 0,
-    input.mixSteps ? 1 : 0,
-    input.mixedStepMaxHeight,
-    input.mixedStepPalette?.key ?? "",
+    twoLayer ? input.layerGap : 0,
+    input.buildMode === BuildMode.Suppress2LayerLatePairs ? input.suppress2LayerLatePairY : 0,
+    twoLayer && input.useCrubTech ? 1 : 0,
+    mixSteps ? 1 : 0,
+    raisedSteps ? input.mixedStepMaxHeight : 0,
+    raisedSteps ? input.mixedStepPalette?.key ?? "" : "",
     input.paletteSeed,
     input.enableWaterConvenience ? 1 : 0,
-    input.skipEmptySuppressSteps ? 1 : 0,
+    steps && input.skipEmptySuppressSteps ? 1 : 0,
     input.collapseStaircaseModes ? 1 : 0,
     input.includeFlatNorthline ? 1 : 0,
-    twoLayer ? "" : input.selectedStepDirection,
-    !twoLayer && input.suppressCenterOut ? 1 : 0,
+    steps ? input.selectedStepDirection : "",
+    steps && input.suppressCenterOut ? 1 : 0,
   ].join("|");
 }
 

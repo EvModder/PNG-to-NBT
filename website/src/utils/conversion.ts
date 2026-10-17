@@ -26,6 +26,7 @@
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
+ * - src/lib/tileGeometryWorkerClient.ts
  */
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { TRANSPARENCY_BASE_INDEX } from "@/data/mapColors";
@@ -153,6 +154,7 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/tileGeometryWorkerClient.ts
 export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.SuppressStepPairs:
@@ -168,6 +170,7 @@ export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
 // - src/components/ToolbarBuildSettings.tsx
 // - src/lib/messages.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/tileGeometryWorkerClient.ts
 export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Suppress2Layer:

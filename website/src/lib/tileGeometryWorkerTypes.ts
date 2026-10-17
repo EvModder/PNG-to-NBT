@@ -62,7 +62,6 @@ export type TileFinalGeometryWorkerInput = {
   requiresTwoLayerLateShading: boolean;
   includeTransparentBlocks: boolean;
   waterSetting: TileWaterSetting;
-  flatModeBehavior: FlatModeBehavior;
   buildAtWorldMinY: boolean;
   buildMode: BuildMode;
   isFlatShape: boolean;

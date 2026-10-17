@@ -25,6 +25,7 @@
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/suppressSteps.ts
  * - src/lib/tileGeometry.worker.ts
+ * - src/lib/tileGeometryWorkerClient.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/types/shape.ts
  * - src/utils/conversion.ts
@@ -44,6 +45,7 @@
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
 // - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/utils/conversion.ts
 export enum BuildMode {
@@ -98,6 +100,7 @@ export type MixedStepPalette = {
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
 // - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/utils/conversion.ts
 export enum SuppressStepDirection {
