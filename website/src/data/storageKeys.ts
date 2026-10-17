@@ -60,6 +60,8 @@ export const STORAGE_KEYS = {
   applySupportFloorYs: "mapart_secret_apply_support_floor_ys",
   belowPlatformWater: "mapart_secret_below_platform_water",
   skipEmptySuppressSteps: "mapart_secret_skip_empty_suppress_steps",
+  minSuppressStepOffset: "mapart_secret_min_suppress_step_offset",
+  uniformSuppressStepSpacing: "mapart_secret_uniform_suppress_step_spacing",
   showAlignmentReminder: "mapart_secret_show_alignment_reminder",
   showNooblineWarnings: "mapart_secret_show_noobline_warnings",
   showVsFillerWarnings: "mapart_secret_show_vs_filler_warnings",

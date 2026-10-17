@@ -57,6 +57,8 @@ import {
   DEFAULT_APPLY_SUPPORT_FLOOR_YS,
   DEFAULT_BELOW_PLATFORM_WATER,
   DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS,
+  DEFAULT_MIN_SUPPRESS_STEP_OFFSET,
+  DEFAULT_UNIFORM_SUPPRESS_STEP_SPACING,
   DEFAULT_SHOW_ALIGNMENT_REMINDER,
   DEFAULT_SHOW_NOOBLINE_WARNINGS,
   DEFAULT_SHOW_VS_FILLER_WARNINGS,
@@ -733,6 +735,11 @@ const Index = () => {
   const [applySupportFloorYs, setApplySupportFloorYs] = useState(() => loadCached(LS_KEYS.applySupportFloorYs, DEFAULT_APPLY_SUPPORT_FLOOR_YS));
   const [belowPlatformWater, setBelowPlatformWater] = useState(() => loadCached(LS_KEYS.belowPlatformWater, DEFAULT_BELOW_PLATFORM_WATER));
   const [skipEmptySuppressSteps, setSkipEmptySuppressSteps] = useState(() => loadCached(LS_KEYS.skipEmptySuppressSteps, DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS));
+  const [minSuppressStepOffset, setMinSuppressStepOffset] = useState(() => {
+    const value = loadCached(LS_KEYS.minSuppressStepOffset, DEFAULT_MIN_SUPPRESS_STEP_OFFSET);
+    return Number.isSafeInteger(value) && value >= 1 ? Math.min(20, value) : DEFAULT_MIN_SUPPRESS_STEP_OFFSET;
+  });
+  const [uniformSuppressStepSpacing, setUniformSuppressStepSpacing] = useState(() => loadCached(LS_KEYS.uniformSuppressStepSpacing, DEFAULT_UNIFORM_SUPPRESS_STEP_SPACING));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
@@ -1128,6 +1135,8 @@ const Index = () => {
       [LS_KEYS.applySupportFloorYs]: applySupportFloorYs,
       [LS_KEYS.belowPlatformWater]: belowPlatformWater,
       [LS_KEYS.skipEmptySuppressSteps]: skipEmptySuppressSteps,
+      [LS_KEYS.minSuppressStepOffset]: minSuppressStepOffset,
+      [LS_KEYS.uniformSuppressStepSpacing]: uniformSuppressStepSpacing,
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
@@ -1187,6 +1196,8 @@ const Index = () => {
       applySupportFloorYs,
       belowPlatformWater,
       skipEmptySuppressSteps,
+      minSuppressStepOffset,
+      uniformSuppressStepSpacing,
       showAlignmentReminder,
       showNooblineWarnings,
       showVsFillerWarnings,
@@ -1639,6 +1650,9 @@ const Index = () => {
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
               skipEmptySuppressSteps: skipEmptySuppressSteps && !calcKeepSuppressExtras,
+              minSuppressStepOffset,
+              uniformSuppressStepSpacing,
+              keepSuppressExtras: calcKeepSuppressExtras,
               collapseStaircaseModes: !hasMultipleTiles,
               includeFlatNorthline: hasMultipleTiles && tile.flatModeBehavior !== FlatModeBehavior.None,
               selectedStepDirection: effectiveSuppressStepDirection,
@@ -1710,6 +1724,8 @@ const Index = () => {
     mixedStepMaxHeight,
     mixedStepPalette,
     skipEmptySuppressSteps,
+    minSuppressStepOffset,
+    uniformSuppressStepSpacing,
     crubTech,
     effectiveSuppressStepDirection,
     applySupportFloorYs,
@@ -4239,6 +4255,11 @@ const Index = () => {
         skipEmptySuppressSteps={skipEmptySuppressSteps && !activeKeepSuppressExtras}
         setSkipEmptySuppressSteps={setSkipEmptySuppressSteps}
         skipEmptySuppressStepsDisabled={activeKeepSuppressExtras}
+        minSuppressStepOffset={minSuppressStepOffset}
+        setMinSuppressStepOffset={setMinSuppressStepOffset}
+        uniformSuppressStepSpacing={uniformSuppressStepSpacing}
+        setUniformSuppressStepSpacing={setUniformSuppressStepSpacing}
+        suppressStepSpacingDisabled={!isSuppressStepsBuildMode(buildMode)}
         showAlignmentReminder={showAlignmentReminder}
         setShowAlignmentReminder={setShowAlignmentReminder}
         showNooblineWarnings={showNooblineWarnings}

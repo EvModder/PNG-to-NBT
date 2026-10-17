@@ -74,6 +74,9 @@ export type TileFinalGeometryWorkerInput = {
   paletteSeed: number;
   enableWaterConvenience: boolean;
   skipEmptySuppressSteps: boolean;
+  minSuppressStepOffset: number;
+  uniformSuppressStepSpacing: boolean;
+  keepSuppressExtras: boolean;
   collapseStaircaseModes: boolean;
   includeFlatNorthline: boolean;
   selectedStepDirection: SuppressStepDirection;

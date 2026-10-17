@@ -47,6 +47,11 @@ type SecretsSettingsDialogProps = {
   skipEmptySuppressSteps: boolean;
   setSkipEmptySuppressSteps: Dispatch<SetStateAction<boolean>>;
   skipEmptySuppressStepsDisabled?: boolean;
+  minSuppressStepOffset: number;
+  setMinSuppressStepOffset: Dispatch<SetStateAction<number>>;
+  uniformSuppressStepSpacing: boolean;
+  setUniformSuppressStepSpacing: Dispatch<SetStateAction<boolean>>;
+  suppressStepSpacingDisabled: boolean;
   showAlignmentReminder: boolean;
   setShowAlignmentReminder: Dispatch<SetStateAction<boolean>>;
   showNooblineWarnings: boolean;
@@ -180,6 +185,11 @@ export function SecretsSettingsDialog({
   skipEmptySuppressSteps,
   setSkipEmptySuppressSteps,
   skipEmptySuppressStepsDisabled = false,
+  minSuppressStepOffset,
+  setMinSuppressStepOffset,
+  uniformSuppressStepSpacing,
+  setUniformSuppressStepSpacing,
+  suppressStepSpacingDisabled,
   showAlignmentReminder,
   setShowAlignmentReminder,
   showNooblineWarnings,
@@ -323,6 +333,34 @@ export function SecretsSettingsDialog({
             title={skipEmptySuppressStepsDisabled ? messages.dialogs.options.skipEmptySuppressStepsDisabledTooltip : messages.dialogs.options.skipEmptySuppressStepsTooltip}
             disabled={skipEmptySuppressStepsDisabled}
           />
+          <div className="grid grid-cols-subgrid items-center">
+            <OptionRow
+              checked={uniformSuppressStepSpacing}
+              onChange={setUniformSuppressStepSpacing}
+              label={messages.dialogs.options.uniformSuppressStepSpacing}
+              title={messages.dialogs.options.uniformSuppressStepSpacingTooltip}
+              disabled={suppressStepSpacingDisabled}
+            />
+            <label
+              className={`flex items-center justify-end gap-1 ${suppressStepSpacingDisabled ? "cursor-not-allowed opacity-60" : ""}`}
+              title={messages.dialogs.options.minSuppressStepOffsetTooltip}
+            >
+              <span>{messages.dialogs.options.minSuppressStepOffset}</span>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                step={1}
+                value={minSuppressStepOffset}
+                disabled={suppressStepSpacingDisabled}
+                onChange={event => {
+                  const value = Number(event.target.value);
+                  if (Number.isSafeInteger(value)) setMinSuppressStepOffset(Math.min(20, Math.max(1, value)));
+                }}
+                className="h-6 w-16 rounded border border-border bg-input px-1.5 text-xs text-foreground"
+              />
+            </label>
+          </div>
           <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2">
             <OptionRow
               checked={maxStepColorBlockLift === 1 && mixedStepReachableTop}

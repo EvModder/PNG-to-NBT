@@ -27,6 +27,7 @@ type ShapeRef =
 type ShapeBlock = PositionedEntry & { ref: ShapeRef };
 type FillerCandidate = PositionedEntry & { roles: FillerRole[] };
 type ShapeBounds = ShapePart["bounds"];
+type SuppressStepSpacing = { minimum: number; uniform: boolean; keepExtras: boolean };
 type RecessivePlacementOverride = {
   colorY: number;
   fillerY?: number;
@@ -3098,6 +3099,51 @@ function buildRawShapeParts(
   }
 }
 
+function spaceSuppressStepParts(parts: RawShapePart[], { minimum, uniform, keepExtras }: SuppressStepSpacing): RawShapePart[] {
+  const phases = parts.filter(part => part.suppressStepIndex !== undefined).map(part => {
+    const floor = Math.min(...part.supportFloorYs) + 1;
+    const hasBlocks = part.blocks.length > 0 || part.loweredWaterBlocks.length > 0;
+    return {
+      floor,
+      bottom: hasBlocks ? Math.min(0, part.bounds.minY - floor) : 0,
+      height: hasBlocks ? Math.max(1, part.bounds.maxY - floor + 1) : 1,
+    };
+  });
+  if (!phases.length) return parts;
+  const originalOffset = phases.length > 1 ? phases[1].floor - phases[0].floor : phases[0].floor || phases[0].height;
+  const uniformOffset = Math.max(minimum, originalOffset);
+  if (uniform && uniformOffset === originalOffset) return parts;
+  // Barriers must reach the same clearance ceiling in every phase, including empty ones.
+  const clearanceHeight = keepExtras ? Math.max(...phases.map(phase => phase.height)) : 1;
+  let index = 0;
+  let floor = 0;
+  return parts.map(part => {
+    // The initial below-platform water reference is not a movable build phase.
+    if (part.suppressStepIndex === undefined) return part;
+    const phase = phases[index];
+    if (uniform) floor = phase.floor / originalOffset * uniformOffset;
+    else if (index === 0) floor = phase.floor ? Math.max(minimum, phase.floor) : 0;
+    else floor += Math.max(minimum, Math.max(phases[index - 1].height, clearanceHeight) - phase.bottom);
+    ++index;
+    const shift = floor - phase.floor;
+    // Reject oversized spacing before packed coordinates could wrap into another column.
+    for (const y of [floor + phase.bottom - 1, floor + Math.max(phase.height, clearanceHeight) - 1]) {
+      if (!Number.isSafeInteger(y) || parseShapeCoordKey(toShapeCoordKey(0, y, 0))[1] !== y) {
+        throw new RangeError("Suppression steps exceed the supported schematic height. Reduce the minimum step Y offset.");
+      }
+    }
+    if (shift === 0) return part;
+    return {
+      ...part,
+      blocks: part.blocks.map(block => ({ ...block, y: block.y + shift })),
+      loweredWaterBlocks: part.loweredWaterBlocks.map(block => ({ ...block, y: block.y + shift })),
+      fillerCandidates: part.fillerCandidates.map(candidate => ({ ...candidate, y: candidate.y + shift })),
+      supportFloorYs: new Set([...part.supportFloorYs].map(y => y + shift)),
+      bounds: { ...part.bounds, minY: part.bounds.minY + shift, maxY: part.bounds.maxY + shift },
+    };
+  });
+}
+
 function getGeneratedShape(
   colorGrid: ColorGrid,
   buildMode: InternalBuildMode,
@@ -3117,9 +3163,10 @@ function getGeneratedShape(
   transparentPlacementMode: BuildMode = buildMode,
   suppress2LayerLatePairY = layerGap + 1,
   mixedStepPalette?: MixedStepPalette,
+  stepSpacing?: SuppressStepSpacing,
 ): CachedGeneratedShape {
   const cache = getGridShapeCache(colorGrid);
-  const cacheKeyId = getShapeCacheKeyId(
+  let cacheKeyId = getShapeCacheKeyId(
     buildMode,
     layerGap,
     mixSteps,
@@ -3137,6 +3184,7 @@ function getGeneratedShape(
     transparentPlacementMode,
     suppress2LayerLatePairY,
   );
+  if (stepSpacing) cacheKeyId = `${cacheKeyId}|spacing:${stepSpacing.minimum}:${stepSpacing.uniform ? 1 : 0}:${!stepSpacing.uniform && stepSpacing.keepExtras ? 1 : 0}` as ShapeCacheKeyId;
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
@@ -3161,7 +3209,7 @@ function getGeneratedShape(
     suppress2LayerLatePairY,
     mixedStepPalette,
   );
-  const parts = rawParts.map(finalizeShapePart);
+  const parts = (stepSpacing ? spaceSuppressStepParts(rawParts, stepSpacing) : rawParts).map(finalizeShapePart);
   const splitExportNames =
     buildMode === BuildMode.SuppressSplitRow
       ? ["odd_rows", "even_rows"] as [string, string]
@@ -3206,6 +3254,9 @@ export function generateShapeMap(
     enableWaterConvenience?: boolean;
     buildAtWorldMinY?: boolean;
     skipEmptySuppressSteps?: boolean;
+    minSuppressStepOffset?: number;
+    uniformSuppressStepSpacing?: boolean;
+    keepSuppressExtras?: boolean;
     suppress2LayerLatePairY?: number;
     useCrubTech?: boolean;
     includeTransparentBlocks?: boolean;
@@ -3229,6 +3280,11 @@ export function generateShapeMap(
   const enableWaterConvenience = options.enableWaterConvenience ?? true;
   const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
   const skipEmptySuppressSteps = options.skipEmptySuppressSteps ?? true;
+  const minimumStepOffset = options.minSuppressStepOffset ?? 1;
+  const uniformStepSpacing = options.uniformSuppressStepSpacing ?? true;
+  if (!Number.isSafeInteger(minimumStepOffset) || minimumStepOffset < 1) {
+    throw new RangeError("Minimum step Y offset must be a positive integer");
+  }
   const suppress2LayerLatePairY = options.suppress2LayerLatePairY ?? Math.max(1, options.layerGap) + 1;
   const useCrubTech = options.useCrubTech ?? false;
   const includeTransparentBlocks = options.includeTransparentBlocks ?? false;
@@ -3271,6 +3327,9 @@ export function generateShapeMap(
       buildMode,
       suppress2LayerLatePairY,
       mixedStepPalette,
+      isSuppressStepsBuildMode(buildMode) && (minimumStepOffset !== 1 || !uniformStepSpacing)
+        ? { minimum: minimumStepOffset, uniform: uniformStepSpacing, keepExtras: options.keepSuppressExtras === true }
+        : undefined,
     );
     // Single-mode jobs still generate the full shape, but have nothing to deduplicate.
     if (requestedModes.length > 1) {

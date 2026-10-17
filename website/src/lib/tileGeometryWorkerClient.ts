@@ -127,6 +127,7 @@ function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeomet
 function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeometryWorkerInput): string {
   const twoLayer = buildModeUsesLayerGap(input.buildMode);
   const steps = isSuppressStepsBuildMode(input.buildMode);
+  const independentStepSpacing = steps && !input.uniformSuppressStepSpacing;
   const mixSteps = steps && input.mixSteps;
   const raisedSteps = mixSteps && input.mixedStepMaxHeight > 0
     && (input.selectedStepDirection === SuppressStepDirection.EastToWest || input.selectedStepDirection === SuppressStepDirection.WestToEast);
@@ -151,6 +152,9 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     input.paletteSeed,
     input.enableWaterConvenience ? 1 : 0,
     steps && input.skipEmptySuppressSteps ? 1 : 0,
+    steps ? input.minSuppressStepOffset : "",
+    independentStepSpacing ? 1 : 0,
+    independentStepSpacing && input.keepSuppressExtras ? 1 : 0,
     input.collapseStaircaseModes ? 1 : 0,
     input.includeFlatNorthline ? 1 : 0,
     steps ? input.selectedStepDirection : "",
