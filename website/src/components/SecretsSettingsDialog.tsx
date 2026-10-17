@@ -6,7 +6,7 @@
  * - src/Index.tsx
  */
 import type { Dispatch, SetStateAction } from "react";
-import { X } from "lucide-react";
+import { X, Printer, Pickaxe } from "lucide-react";
 import {
   SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
   PIXEL_ART_SCALE_MODE_OPTIONS,
@@ -112,6 +112,7 @@ type OptionSelectRowProps<T extends string> = {
   optionLabel?: (value: T) => string;
   optionDisabled?: (value: T) => boolean;
   selectLabel: string;
+  title: string;
 };
 
 function OptionSelectRow<T extends string>({
@@ -124,9 +125,10 @@ function OptionSelectRow<T extends string>({
   optionLabel,
   optionDisabled,
   selectLabel,
+  title,
 }: OptionSelectRowProps<T>) {
   return (
-    <div className="grid grid-cols-subgrid items-center">
+    <div className="grid grid-cols-subgrid items-center" title={title}>
       <label className="flex min-w-0 flex-1 items-center gap-1 cursor-pointer">
         <input
           type="checkbox"
@@ -209,6 +211,7 @@ export function SecretsSettingsDialog({
   setMinecraftVersion,
 }: SecretsSettingsDialogProps) {
   if (!open) return null;
+  const [liftLabelBefore, liftLabelAfter] = messages.dialogs.options.maxStepColorBlockLift.split("{printerNuker}");
 
   return (
     <div
@@ -245,68 +248,79 @@ export function SecretsSettingsDialog({
             checked={showTransparentRow}
             onChange={setShowTransparentRow}
             label={messages.dialogs.options.showTransparentRow}
+            title={messages.dialogs.options.showTransparentRowTooltip}
             disabled={showTransparentRowDisabled}
           />
           <OptionRow
             checked={showExcludedBlocks}
             onChange={setShowExcludedBlocks}
             label={messages.dialogs.options.showExcludedBlocks}
+            title={messages.dialogs.options.showExcludedBlocksTooltip}
           />
           <OptionRow
             checked={collapseDuplicateNbtPaletteStates}
             onChange={setCollapseDuplicateNbtPaletteStates}
             label={messages.dialogs.options.collapseDuplicateNbtPaletteStates}
+            title={messages.dialogs.options.collapseDuplicateNbtPaletteStatesTooltip}
           />
           <OptionRow
             checked={forceXZ128}
             onChange={setForceXZ128}
             label={messages.dialogs.options.forceXZ128}
+            title={messages.dialogs.options.forceXZ128Tooltip}
             disabled={forceXZ128Disabled}
           />
           <OptionRow
             checked={forceZ129}
             onChange={setForceZ129}
             label={messages.dialogs.options.forceZ129}
+            title={messages.dialogs.options.forceZ129Tooltip}
             disabled={forceZ129Disabled}
           />
           <OptionRow
             checked={applySupportFloorYs}
             onChange={setApplySupportFloorYs}
             label={messages.dialogs.options.assumeFloor}
+            title={messages.dialogs.options.assumeFloorTooltip}
             disabled={applySupportFloorYsDisabled}
           />
           <OptionRow
             checked={belowPlatformWater}
             onChange={setBelowPlatformWater}
             label={messages.dialogs.options.belowPlatformWater}
+            title={messages.dialogs.options.belowPlatformWaterTooltip}
             disabled={belowPlatformWaterDisabled}
           />
           <OptionRow
             checked={skipEmptySuppressSteps}
             onChange={setSkipEmptySuppressSteps}
             label={messages.dialogs.options.skipEmptySuppressSteps}
+            title={messages.dialogs.options.skipEmptySuppressStepsTooltip}
           />
           <OptionRow
             checked={showAlignmentReminder}
             onChange={setShowAlignmentReminder}
             label={messages.dialogs.options.showAlignmentReminder}
+            title={messages.dialogs.options.showAlignmentReminderTooltip}
           />
           <OptionRow
             checked={showNooblineWarnings}
             onChange={setShowNooblineWarnings}
             label={messages.dialogs.options.showNooblineWarnings}
+            title={messages.dialogs.options.showNooblineWarningsTooltip}
           />
           <OptionRow
             checked={showVsFillerWarnings}
             onChange={setShowVsFillerWarnings}
             label={messages.dialogs.options.showVsFillerWarnings}
+            title={messages.dialogs.options.showVsFillerWarningsTooltip}
           />
           <OptionRow
             checked={showFlatNbtSuppressStepModes}
             onChange={setShowFlatNbtSuppressStepModes}
             label={messages.dialogs.options.showFlatNbtSuppressStepModes}
           />
-          <div className="grid grid-cols-subgrid items-center">
+          <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-2">
             <OptionRow
               checked={maxStepColorBlockLift === 1 && mixedStepReachableTop}
               onChange={setMixedStepReachableTop}
@@ -318,7 +332,16 @@ export function SecretsSettingsDialog({
               className="flex items-center justify-end gap-1"
               title={messages.dialogs.options.maxStepColorBlockLiftTooltip}
             >
-              <span>{messages.dialogs.options.maxStepColorBlockLift}</span>
+              <span className="inline-flex items-center gap-0.5">
+                {liftLabelBefore}
+                <span aria-hidden="true" className="inline-flex items-center gap-px">
+                  <Printer className="h-4 w-4" />
+                  <span className="-mr-px">+</span>
+                  <Pickaxe className="h-4 w-4 mr-[0.25px]" />
+                </span>
+                <span className="sr-only">{messages.buildMode.mixStepsLabel}</span>
+                {liftLabelAfter}
+              </span>
               <input
                 type="number"
                 min={0}
@@ -337,6 +360,7 @@ export function SecretsSettingsDialog({
             checked={markSuppressLoadSpotsInSchematic}
             onCheckedChange={setMarkSuppressLoadSpotsInSchematic}
             label={messages.dialogs.options.markSuppressLoadSpotsInSchematic}
+            title={messages.dialogs.options.markSuppressLoadSpotsInSchematicTooltip}
             value={suppressLoadSpotMarkerBlock}
             onValueChange={setSuppressLoadSpotMarkerBlock}
             options={SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS}
@@ -346,6 +370,7 @@ export function SecretsSettingsDialog({
             checked={autoScalePixelArt}
             onCheckedChange={setAutoScalePixelArt}
             label={messages.dialogs.options.autoScalePixelArt}
+            title={messages.dialogs.options.autoScalePixelArtTooltip}
             value={pixelArtScaleMode}
             onValueChange={setPixelArtScaleMode}
             options={PIXEL_ART_SCALE_MODE_OPTIONS}
@@ -356,6 +381,7 @@ export function SecretsSettingsDialog({
             checked={autoFixInvalidDimensions}
             onCheckedChange={setAutoFixInvalidDimensions}
             label={messages.dialogs.options.autoFixInvalidDimensions}
+            title={messages.dialogs.options.autoFixInvalidDimensionsTooltip}
             value={invalidDimensionsStrategy}
             onValueChange={setInvalidDimensionsStrategy}
             options={INVALID_DIMENSIONS_STRATEGY_OPTIONS}
@@ -366,6 +392,7 @@ export function SecretsSettingsDialog({
             checked={autoFixInvalidColors}
             onCheckedChange={setAutoFixInvalidColors}
             label={messages.dialogs.options.autoFixInvalidColors}
+            title={messages.dialogs.options.autoFixInvalidColorsTooltip}
             value={invalidColorsPalette}
             onValueChange={setInvalidColorsPalette}
             options={INVALID_COLORS_PALETTE_OPTIONS}
@@ -373,7 +400,7 @@ export function SecretsSettingsDialog({
             optionDisabled={palette => palette !== "full" && !hasPresetColors}
             selectLabel={messages.dialogs.options.invalidColorsPalette}
           />
-          <label className="grid grid-cols-subgrid items-center">
+          <label className="grid grid-cols-subgrid items-center" title={messages.dialogs.options.minecraftVersionTooltip}>
             <span>{messages.dialogs.options.minecraftVersion}</span>
             <select
               value={minecraftVersion}
