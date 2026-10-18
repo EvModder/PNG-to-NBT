@@ -114,11 +114,12 @@ function parseAssignedTiles(message: TileParsingWorkerRequest): TileParsingWorke
 self.onmessage = (event: MessageEvent<TileParsingWorkerRequest>) => {
   const message = event.data;
   try {
+    const result = parseAssignedTiles(message);
     self.postMessage({
       id: message.id,
       type: "result",
-      result: parseAssignedTiles(message),
-    } satisfies TileParsingWorkerResponse);
+      result,
+    } satisfies TileParsingWorkerResponse, result.imagePatches.map(patch => patch.data.buffer));
   } catch (error) {
     self.postMessage({
       id: message.id,

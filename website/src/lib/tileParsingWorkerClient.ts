@@ -121,7 +121,8 @@ function runWorkerRequest(
       onProgressDelta,
       completed: 0,
     });
-    slot.worker.postMessage({ id, input } satisfies TileParsingWorkerRequest);
+    // Each request owns an extracted batch; the source image remains available for fallback.
+    slot.worker.postMessage({ id, input } satisfies TileParsingWorkerRequest, [input.imageData.data.buffer]);
   });
 }
 

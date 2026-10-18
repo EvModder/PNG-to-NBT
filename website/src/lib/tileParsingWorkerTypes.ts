@@ -47,7 +47,7 @@ export type TileParsingWorkerImagePatch = {
   startZ: number;
   width: number;
   height: number;
-  data: Uint8ClampedArray;
+  data: Uint8ClampedArray<ArrayBuffer>;
 };
 
 // Callers:
