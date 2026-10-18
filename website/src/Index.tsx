@@ -4063,6 +4063,7 @@ const Index = () => {
             minecraftVersion={minecraftVersion}
             isStackedLayout={isStackedLayout}
             imageValid={colorTableDisplayState.imageValid}
+            restrictToPresetColors={allowedColors !== undefined}
             belowPlatformWater={effectiveBelowPlatformWater}
             hasRequiredCol={colorTableDisplayState.hasRequiredCol}
             showUsageInfo={colorTableDisplayState.showUsageInfo}

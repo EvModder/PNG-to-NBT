@@ -417,8 +417,8 @@ export const messages = {
     blockColumnResizeAriaLabel(isExpanded: boolean): string {
       return isExpanded ? catalog.table.blockColumnAriaExpanded : catalog.table.blockColumnAriaCollapsed;
     },
-    unusedColorsLabel(count: number): string {
-      return formatPlural(catalog.table.unusedColorsLabel, count);
+    unusedColorsLabel(count: number, restrictToPresetColors: boolean): string {
+      return formatPlural(restrictToPresetColors ? catalog.table.unusedPresetColorsLabel : catalog.table.unusedColorsLabel, count);
     },
   },
   customColors: {

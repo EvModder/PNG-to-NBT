@@ -80,6 +80,7 @@ type PanelColorBlockTableProps = {
   minecraftVersion: MinecraftVersion;
   isStackedLayout: boolean;
   imageValid: boolean;
+  restrictToPresetColors: boolean;
   belowPlatformWater: boolean;
   hasRequiredCol: boolean;
   showUsageInfo: boolean;
@@ -169,6 +170,7 @@ export function PanelColorBlockTable({
   minecraftVersion,
   isStackedLayout,
   imageValid,
+  restrictToPresetColors,
   belowPlatformWater,
   hasRequiredCol,
   showUsageInfo,
@@ -323,6 +325,9 @@ export function PanelColorBlockTable({
       unusedIndices: sortedIndices.filter(index => !usedShadesByColorKey.has(getBaseColorKey(index))),
     };
   }, [imageValid, sortedIndices, usedShadesByColorKey, getBaseColorKey]);
+  const unusedColorCount = restrictToPresetColors
+    ? unusedIndices.filter(index => selectedBlocks[index]).length
+    : unusedIndices.length;
 
   useLayoutEffect(() => {
     const el = blockMeasureSelectRef.current;
@@ -1026,7 +1031,7 @@ export function PanelColorBlockTable({
                 onClick={() => setShowUnusedColors(value => !value)}
               >
                 <span className={`inline-block transition-transform ${showUnusedColors ? "rotate-180" : ""}`}>▼</span>
-                <span>{messages.table.unusedColorsLabel(unusedIndices.length)}</span>
+                <span>{messages.table.unusedColorsLabel(unusedColorCount, restrictToPresetColors)}</span>
               </button>
               {showUnusedColors && <div className="opacity-50">{unusedIndices.map(renderColorRow)}</div>}
             </div>

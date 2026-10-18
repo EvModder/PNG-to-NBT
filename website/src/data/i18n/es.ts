@@ -262,6 +262,10 @@ export const esCatalog = {
       one: "{count} color sin usar (no está en la imagen)",
       other: "{count} colores sin usar (no están en la imagen)",
     } as PluralForms,
+    unusedPresetColorsLabel: {
+      one: "{count} color del preset sin usar (no está en la imagen)",
+      other: "{count} colores del preset sin usar (no están en la imagen)",
+    } as PluralForms,
   },
   customColors: {
     title: "Mapeos personalizados",

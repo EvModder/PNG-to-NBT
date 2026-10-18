@@ -266,6 +266,10 @@ export const enCatalog = {
       one: "{count} unused color (not in image)",
       other: "{count} unused colors (not in image)",
     } as PluralForms,
+    unusedPresetColorsLabel: {
+      one: "{count} unused preset color (not in image)",
+      other: "{count} unused preset colors (not in image)",
+    } as PluralForms,
   },
   customColors: {
     title: "Custom Mappings",
