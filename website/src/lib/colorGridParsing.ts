@@ -13,7 +13,6 @@
  * - src/lib/previewImageEdits.ts
  * - src/components/PanelImagePreview.tsx
  */
-import * as UTIF from "utif";
 import type { InvalidDimensionsMode } from "@/data/defaultSettings";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";
 import { MAP_SIZE, packRgb } from "@/utils/color";
@@ -213,7 +212,7 @@ function loadBrowserImageData(file: File): Promise<ImageData> {
 }
 
 async function loadTiffImageData(file: File): Promise<ImageData> {
-  const buffer = await file.arrayBuffer();
+  const [UTIF, buffer] = await Promise.all([import("utif"), file.arrayBuffer()]);
   const ifds = UTIF.decode(buffer);
   const ifd = ifds[0];
   if (!ifd) throw new Error(messages.parsing.tiffNoImageData);
