@@ -120,9 +120,8 @@ def main() -> int:
     for block_id in SHULKER_BLOCK_IDS:
         texture = fetch_image(shulker_entity_url(block_id))
         icon = render_shulker_icon(texture)
-        icon.save(UNUSED_ROOT / f"{block_id}.png", optimize=True)
-        if block_id == "purple_shulker_box":
-            icon.save(PRIMARY_ROOT / f"{block_id}.png", optimize=True)
+        output_root = PRIMARY_ROOT if block_id == "purple_shulker_box" else UNUSED_ROOT
+        icon.save(output_root / f"{block_id}.png", optimize=True)
     for block_id, texture_url in COMMAND_BLOCK_SIDE_TEXTURES.items():
         render_command_block_icon(fetch_image(texture_url)).save(UNUSED_ROOT / f"{block_id}.png", optimize=True)
     for block_id, texture_url in SPECIAL_BLOCK_TEXTURES.items():
@@ -134,7 +133,7 @@ def main() -> int:
     )
     print(
         f"Rendered {len(SHULKER_BLOCK_IDS)} shulker icons "
-        f"and portal overrides into {UNUSED_ROOT.relative_to(ROOT)}"
+        "and portal overrides into primary/unused icon sets"
     )
     return 0
 

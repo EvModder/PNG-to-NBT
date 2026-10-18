@@ -113,6 +113,10 @@ export const BLOCK_ICON_ATLASES = """ + json.dumps(manifests, indent=2, sort_key
 
 
 def main() -> int:
+    duplicates = {path.name for path in PRIMARY_ROOT.glob("*.png")} & {path.name for path in UNUSED_ROOT.glob("*.png")}
+    if duplicates:
+        raise RuntimeError(f"Icons exist in both primary and unused sets: {', '.join(sorted(duplicates))}")
+
     PACKED_ROOT.mkdir(parents=True, exist_ok=True)
     for stale in PACKED_ROOT.glob("block-icons.*.png"):
         stale.unlink()
