@@ -7,22 +7,11 @@
  * - src/lib/nbtExport.ts
  */
 
-class NbtWriter {
-  private data: number[] = [];
+import { ByteWriter } from "@/utils/byteWriter";
+
+class NbtWriter extends ByteWriter {
   private encoder = new TextEncoder();
   private strings = new Map<string, Uint8Array>();
-
-  writeByte(v: number) {
-    this.data.push(v & 0xFF);
-  }
-
-  writeShort(v: number) {
-    this.data.push((v >> 8) & 0xFF, v & 0xFF);
-  }
-
-  writeInt(v: number) {
-    this.data.push((v >>> 24) & 0xFF, (v >>> 16) & 0xFF, (v >>> 8) & 0xFF, v & 0xFF);
-  }
 
   writeString(v: string) {
     let encoded = this.strings.get(v);
@@ -31,7 +20,7 @@ class NbtWriter {
       this.strings.set(v, encoded);
     }
     this.writeShort(encoded.length);
-    for (const b of encoded) this.data.push(b);
+    this.writeBytes(encoded);
   }
 
   tagHeader(type: number, name: string) {
@@ -48,10 +37,6 @@ class NbtWriter {
     this.tagHeader(9, name);
     this.writeByte(elemType);
     this.writeInt(count);
-  }
-
-  toUint8Array(): Uint8Array {
-    return new Uint8Array(this.data);
   }
 }
 

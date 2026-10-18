@@ -3020,6 +3020,8 @@ const Index = () => {
         download: downloadName,
       });
       a.click();
+      // Allow the browser to start the download before releasing its backing data.
+      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
     } catch (e: unknown) {
       setPaletteNotices([messages.parsing.errorNotice((e as Error).message || messages.parsing.conversionFailed)]);
     }
