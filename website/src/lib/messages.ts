@@ -129,6 +129,12 @@ export function getLocaleLabel(locale: SupportedLocale): string {
   return LOCALE_LABELS[locale];
 }
 
+// The text around {name}, for templates whose name is rendered as a link.
+function splitAtName(template: string): [string, string] {
+  const [before = "", after = ""] = template.split("{name}");
+  return [before, after];
+}
+
 function formatTemplate(template: string, values: TemplateValues): string {
   return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key: string) => String(values[key] ?? `{${key}}`));
 }
@@ -627,6 +633,8 @@ export const messages = {
     // Names and links are the same in every language.
     evModderName: "ÉvModder",
     evModderUrl: "https://www.youtube.com/@evmodder",
+    pngToNbtName: "PNG-to-NBT",
+    pngToNbtApiUrl: "./api/",
     mapToolsName: "MapTools",
     mapToolsUrl: "https://evmodder.net/EvMod/",
     crubleighName: "crubleigh",
@@ -637,13 +645,11 @@ export const messages = {
     rebaneUrl: "https://rebane2001.com/",
     mapArtCraftName: "MapArtCraft",
     mapArtCraftUrl: "https://mike2b2t.github.io/mapartcraft/",
+    evModderRoleParts: () => splitAtName(catalog.credits.evModderRole),
     rebaneRole(name: string): string {
       return formatTemplate(catalog.credits.rebaneRole, { name });
     },
-    rebaneRoleParts(): [string, string] {
-      const [before = "", after = ""] = catalog.credits.rebaneRole.split("{name}");
-      return [before, after];
-    },
+    rebaneRoleParts: () => splitAtName(catalog.credits.rebaneRole),
   },
   parsing: {
     unableToCreateImageCanvas: catalog.parsing.unableToCreateImageCanvas,

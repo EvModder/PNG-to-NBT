@@ -9,6 +9,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PresetFallbackDialog.tsx
  * - src/lib/codecPreset.ts
@@ -26,6 +27,7 @@ function blockId(block: string): string {
 }
 
 // Callers:
+// - src/api/generateTile.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/presetFallbacks.ts
@@ -35,6 +37,7 @@ export function getVersionedBlockName(block: string, dataVersion: number): strin
 }
 
 // Callers:
+// - src/api/generateTile.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/nbtExport.ts
 export function isBlockAvailable(block: string, dataVersion: number): boolean {
@@ -71,6 +74,7 @@ const catalogs = new Map<number, ReturnType<typeof buildCatalog>>(Object.values(
 
 // Shared URLs can refer to versions no longer in the dropdown.
 // Callers:
+// - src/api/generateTile.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/codecPreset.ts
 // - src/lib/previewImageEdits.ts

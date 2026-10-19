@@ -6,6 +6,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/index.html
  */
 import { STORAGE_KEYS } from "@/data/storageKeys";
 

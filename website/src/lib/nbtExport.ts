@@ -7,6 +7,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  */
 import { MAP_SIZE } from "@/utils/color";
 import {
@@ -572,6 +573,7 @@ async function buildSingleEntry(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export async function convertToNbtEntries(
   shape: GeneratedShape,
   options: ExportOptions,
@@ -595,6 +597,7 @@ export function getCrubTechLayerSplitSectionCount(buildMode: BuildMode, hasWater
 // and signal lamps) starts at the late platform.
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export async function convertToCrubTechLayerSplitNbtEntries(
   shape: GeneratedShape,
   options: ExportOptions,

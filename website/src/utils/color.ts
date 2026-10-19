@@ -12,6 +12,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/PreviewCanvas.tsx
@@ -42,6 +43,7 @@ import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRe
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/PreviewCanvas.tsx
 // - src/lib/codecColorGrid.ts
 // - src/lib/colorGridAnalysis.ts

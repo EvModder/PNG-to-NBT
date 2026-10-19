@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PNG-to-NBT generation API</title>
+  <!-- Mojang's chain_command_block_side texture, first animation frame. -->
+  <link rel="icon" href="./favicon.png" type="image/png" sizes="16x16">
+  <style>
+    :root {
+      color-scheme: light;
+      font: 16px/1.5 system-ui, -apple-system, sans-serif;
+      --background: light-dark(hsl(0 0% 95%), hsl(220 15% 13%));
+      --foreground: light-dark(hsl(220 15% 18%), hsl(40 10% 85%));
+      --muted-foreground: light-dark(hsl(220 5% 45%), hsl(220 5% 55%));
+      --card: light-dark(hsl(0 0% 91%), hsl(220 12% 16%));
+      --accent: light-dark(hsl(30 70% 34%), hsl(45 85% 55%));
+      --border: light-dark(hsl(0 0% 78%), hsl(220 10% 25%));
+      --link: light-dark(oklch(52% 0.105 223.128), oklch(86.5% 0.127 207.078));
+    }
+    :root.dark { color-scheme: dark; }
+    html { scrollbar-gutter: stable; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 1rem .5rem; font-size: .875rem; line-height: 1.25rem; background: var(--background); color: var(--foreground); }
+    h1, h2 { color: var(--accent); }
+    h1 { font-size: 1.125rem; font-weight: 700; line-height: 1.75rem; margin: 0 0 .5rem; }
+    h1 a { text-decoration: none; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin: -1rem -.5rem .5rem;
+      padding: 6px 8px 6px 17px; border-bottom: 1px solid var(--border);
+      background: light-dark(hsl(0 0% 89%), hsl(220 15% 13%)); }
+    header h1 { margin: 0; }
+    #theme-toggle { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px;
+      background: light-dark(hsl(0 0% 88%), hsl(30 15% 20%)); color: light-dark(hsl(220 10% 30%), hsl(40 10% 80%)); cursor: pointer; }
+    #theme-toggle:hover { background: light-dark(hsl(0 0% 89%), hsl(220 10% 18%)); }
+    #theme-toggle svg { width: 14px; height: 14px; }
+    #theme-toggle .sun, .dark #theme-toggle .moon { display: none; }
+    .dark #theme-toggle .sun { display: block; }
+    h2 { font-size: 1rem; line-height: 1.5rem; margin: 2rem 0 .5rem; padding-bottom: .25rem; border-bottom: 1px solid var(--border); }
+    p { margin: .5rem 0; }
+    .intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1rem; margin: .5rem 0; }
+    .intro p { margin: 0; }
+    .intro-links { white-space: nowrap; }
+    a { color: var(--link); text-underline-offset: .2em; }
+    .site-logo { color: hsl(100 45% 35%); font-weight: 700; }
+    a:focus-visible, button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+    code, pre { font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    code { font-size: .75rem; overflow-wrap: anywhere; }
+    code:not(pre code) {
+      padding: 1px .25rem; background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+    }
+    pre { overflow-x: auto; margin: .5rem 0; padding: .75rem; background: var(--card); border: 1px solid var(--border); border-radius: 4px; }
+    pre code { overflow-wrap: normal; }
+    .keyword, td:first-child code { color: light-dark(#8941a3, #d4a2ed); }
+    .string, .default, h1 a { color: light-dark(#356124, #a6ce8e); }
+    .number, .requirement { color: light-dark(#96501d, #edba86); }
+    .comment { color: light-dark(#60646b, #969da8); }
+    ul { margin: .5rem 0; padding-left: 1.25rem; } li + li { margin-top: .25rem; }
+    table { border-collapse: collapse; width: 100%; }
+    table code { display: inline-block; max-width: 100%; line-height: 1rem; vertical-align: baseline; }
+    td:first-child code { display: inline; padding: 0; border: 0; background: none; line-height: normal; vertical-align: baseline; }
+    td, th { padding: .25rem .75rem; line-height: 1.125rem; text-align: left; vertical-align: baseline; border-bottom: 1px solid var(--border); }
+    th { background: var(--card); }
+    th:first-child, td:first-child { width: 1%; }
+    th:nth-child(2), td:nth-child(2) { width: clamp(16rem, 38vw, 35rem); }
+    td:first-child, td:nth-child(2) code { white-space: nowrap; }
+    .value-note { margin-inline-start: .5rem; color: var(--muted-foreground); }
+    .requirement { display: block; margin-top: .125rem; }
+    tbody tr:nth-child(odd) { background: color-mix(in srgb, var(--foreground) 2%, var(--background)); }
+    tbody tr:has(td):hover { background: var(--card); }
+    .default { font-weight: 600; }
+    @media (max-width: 800px) {
+      table, thead, tbody, tr, th, td { display: block; }
+      thead { display: none; }
+      th:nth-child(-n+2), td:nth-child(-n+2) { width: auto; }
+      td:first-child, td:nth-child(2) code { white-space: normal; }
+      td { border: 0; padding: .125rem .75rem; }
+      tr { padding: .25rem 0; border-bottom: 1px solid var(--border); }
+      td:first-child { font-weight: 600; }
+    }
+  </style>
+</head>
+<body>
+  <script>try{const r=localStorage.getItem("mapart_theme");const t=r==="dark"||r==="light"?r:JSON.parse(r||"null");document.documentElement.classList.toggle("dark",t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches)}catch(e){document.documentElement.classList.toggle("dark",matchMedia("(prefers-color-scheme: dark)").matches)}</script>
+  <main>
+  <header>
+    <h1><a class="site-logo" href="../">Image &rarr; Schematic</a> / <a href="#options">API</a></h1>
+    <button id="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>
+      </svg>
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10Z"/>
+      </svg>
+    </button>
+  </header>
+  <div class="intro">
+    <p>Generate schematics using PNG-to-NBT's engine.</p>
+    <p class="intro-links"><a href="../api.d.ts">TS interface</a> | <a href="../api.js">JS module</a></p>
+  </div>
+  <h2>Quick-start</h2>
+  <pre><code><span class="keyword">import</span> { connect } <span class="keyword">from</span> <span class="string">"https://evmodder.net/PNG-to-NBT/api.js"</span>;
+
+<span class="keyword">const</span> generator = <span class="keyword">await</span> connect();
+<span class="keyword">try</span> {
+  <span class="keyword">const</span> result = <span class="keyword">await</span> generator.generateTile({
+    colors: <span class="keyword">new</span> Uint8Array(<span class="number">128</span> * <span class="number">128</span>).fill(<span class="number">7</span> * <span class="number">4</span> + <span class="number">1</span>),
+    blocks: { <span class="number">7</span>: <span class="string">"bamboo_block[axis=x]"</span> },
+    options: { mode: <span class="string">"suppress_step_checker"</span> },
+  });
+  <span class="comment">// files: { name, data: Uint8Array }[], each a gzip-compressed structure NBT.</span>
+  console.log(result.files, result.warnings, result.effectiveOptions);
+}
+<span class="keyword">finally</span> { generator.dispose(); }</code></pre>
+  <p>You can reuse one connection; calls queue in order. Inputs are copied on submission.
+    <code>dispose()</code> stops active work and rejects queued calls.</p>
+  <h2>Contract</h2>
+  <ul>
+    <li><code>colors</code>: 16384 <a href="https://minecraft.wiki/w/Map_item_format">map-color bytes</a>,
+      indexed by <code>z * 128 + x</code>, north at top. Shade 3 is unsupported.</li>
+    <li><code>blocks</code>: map each used nontransparent base color ID to a block, e.g. <code>{ 11: "minecraft:stone" }</code>.</li>
+    <li><code>options</code>: defaults apply when omitted, but non-flat tiles require an explicit, compatible <code>options.mode</code>.</li>
+  </ul>
+  <h2 id="options">Options</h2>
+  <p>Non-flat tiles require a compatible <code>mode</code>. Resolved options are returned in <code>effectiveOptions</code>.
+    Unknown fields or invalid values are rejected. CrubTech options are volatile: they follow the current
+    CrubTech platform and may change or lose support when it is revised.</p>
+  <table>
+    <thead><tr><th>Option</th><th>Values (<span class="default">default</span>)</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>mode</code></td><td><span class="default" title="Default"><code>flat</code></span>,
+        <code>incline_up</code>, <code>incline_down</code>,
+        <code>staircase_northline</code>, <code>staircase_southline</code>, <code>staircase_classic</code>,
+        <code>staircase_valley</code>, <code>staircase_group</code>, <code>staircase_party</code>,
+        <code>suppress_step_pairs</code>, <code>suppress_step_checker</code>, <code>suppress_2layer</code>,
+        <code>suppress_2layer_late_fillers</code>, <code>suppress_2layer_late_pairs</code></td><td>
+        Schematic generation method</td></tr>
+      <tr><td><code>minecraftVersion</code></td><td><span class="default" title="Default"><code>26.2</code></span></td><td>
+        A key from <code>generator.minecraftVersions</code></td></tr>
+      <tr><td><code>paletteSeed</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Seed supported staircase layouts from the selected palette</td></tr>
+      <tr><td><code>partyMinHeight</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Minimize Party's color-height range; supports and covers may extend it</td></tr>
+      <tr><td><code>westEastSlope</code></td><td><span class="default" title="Default"><code>unset</code></span><br>
+        <code>{ run, rise }</code> <span class="value-note">Integers: run 1-127; rise -128 to 128.</span></td><td>
+        Additional west/east slope
+        <span class="requirement">Requires a non-suppression mode</span></td></tr>
+      <tr><td><code>direction</code></td><td><span class="default" title="Default"><code>east_to_west</code></span>,
+        <code>west_to_east</code>, <code>north_to_south</code>, <code>south_to_north</code></td><td>
+        Suppression direction; also orients void-shading load markers</td></tr>
+      <tr><td><code>centerOut</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Build outward from the center
+        <span class="requirement">Requires steps or 2-layer; incompatible water/void shading is rejected</span></td></tr>
+      <tr><td><code>crubTech</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Forces E&rarr;W, fixed gaps and below-platform water drops; enabled support becomes <code>all</code>
+        <span class="requirement">Requires 2-layer or late-pairs</span></td></tr>
+      <tr><td><code>layerSplit</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Export CrubTech sections as separate NBTs
+        <span class="requirement">Requires <code>crubTech</code></span></td></tr>
+      <tr><td><code>layerGap</code></td><td><span class="default" title="Default"><code>5</code></span> <span class="value-note">Integer: 2-63.</span></td><td>
+        2-layer spacing; support may raise the minimum to <code>3</code></td></tr>
+      <tr><td><code>latePairsGap</code></td><td><span class="default" title="Default"><code>1</code></span> <span class="value-note">Integer: 1-63.</span></td><td>
+        Extra late-pairs spacing; reduced to keep <code>layerGap + latePairsGap &le; 64</code></td></tr>
+      <tr><td><code>markLoadSpots</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Mark map-loading positions</td></tr>
+      <tr><td><code>loadSpotBlock</code></td><td><span class="default" title="Default"><code>jigsaw</code></span>,
+        <code>barrier</code></td><td>
+        Map-loading marker block
+        <span class="requirement">Requires <code>markLoadSpots</code></span></td></tr>
+      <tr><td><code>reuseBlocks</code></td><td><span class="default" title="Default"><code>true</code></span></td><td>
+        Reuse blocks between steps to reduce placing/mining
+        <span class="requirement">Applies to suppression steps</span></td></tr>
+      <tr><td><code>keepExtras</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Leave unneeded blocks between steps; barriers mark spaces to clear; uses more materials
+        <span class="requirement">Requires suppression steps</span></td></tr>
+      <tr><td><code>maxBlockLift</code></td><td><span class="default" title="Default"><code>0</code></span> <span class="value-note">Integer: 0-10.</span></td><td>
+        Maximum lift for block reuse
+        <span class="requirement">Requires <code>reuseBlocks</code>, E/W steps and compatible blocks/support</span></td></tr>
+      <tr><td><code>jumpableTops</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Keep raised tops reachable in one jump
+        <span class="requirement">Requires lift <code>1</code>, <code>fragile</code> support and an assumed floor</span></td></tr>
+      <tr><td><code>skipEmptySteps</code></td><td><span class="default" title="Default"><code>true</code></span></td><td>
+        Omit empty steps and their spacing
+        <span class="requirement">Disabled by <code>keepExtras</code></span></td></tr>
+      <tr><td><code>minStepOffset</code></td><td><span class="default" title="Default"><code>1</code></span> <span class="value-note">Integer: 1-20.</span></td><td>
+        Minimum vertical offset between steps</td></tr>
+      <tr><td><code>uniformStepSpacing</code></td><td><span class="default" title="Default"><code>true</code></span></td><td>
+        Use the largest step offset throughout; disable for per-step spacing</td></tr>
+      <tr><td><code>support</code></td><td><span class="default" title="Default"><code>none</code></span>,
+        <code>all</code>, <code>steps</code>, <code>fragile</code>, <code>water</code></td><td>
+        Which blocks receive support</td></tr>
+      <tr><td><code>assumeSupportFloor</code></td><td><span class="default" title="Default"><code>true</code></span></td><td>
+        Omit floor-level supports; disabled for Party and for explicit supports in <code>flat</code> mode</td></tr>
+      <tr><td><code>supportBlock</code></td><td><span class="default" title="Default"><code>cobblestone</code></span></td><td>
+        Support filler, including directly below living coral where a waterlogged, full-top block is needed</td></tr>
+      <tr><td><code>autoPickSupports</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Replace unsuitable generated supports per block; keep compatible supports and assumed floors unchanged</td></tr>
+      <tr><td><code>shadeBlock</code></td><td><span class="default" title="Default"><code>resin_block</code></span></td><td>
+        Shading filler, including the north shading row</td></tr>
+      <tr><td><code>growthCoverBlock</code></td><td><span class="default" title="Default"><code>tripwire</code></span></td><td>
+        Transparent plant covers; empty or <code>air</code> omits them; vines always export <code>age=25</code></td></tr>
+      <tr><td><code>crubTechBreakableBlock</code></td><td><span class="default" title="Default"><code>moss_block</code></span></td><td>
+        CrubTech piston-breakable filler</td></tr>
+      <tr><td><code>crubTechPushableBlock</code></td><td><span class="default" title="Default"><code>resin_block</code></span></td><td>
+        CrubTech piston-pushable filler</td></tr>
+      <tr><td><code>lateFillerBlock</code></td><td><span class="default" title="Default"><code>resin_block</code></span></td><td>
+        Temporary filler for 2-layer late shading</td></tr>
+      <tr><td><code>dominantVoidBlock</code></td><td><span class="default" title="Default"><code>slime_block</code></span></td><td>
+        Dominant void-shading filler</td></tr>
+      <tr><td><code>recessiveVoidBlock</code></td><td><span class="default" title="Default"><code>resin_block</code></span></td><td>
+        Recessive void-shading filler</td></tr>
+      <tr><td><code>belowPlatformWater</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Place water below the platform
+        <span class="requirement">Disables world-minimum-Y placement</span></td></tr>
+      <tr><td><code>waterDrops</code></td><td><span class="default" title="Default"><code>[4, 2, 0]</code></span><br>
+        <code>[dark, flat, light]</code> <span class="value-note">Integers: 0-64.</span></td><td>
+        Water surface drops; used shades are normalized to distinct levels
+        <span class="requirement">Applies when water is below the platform</span></td></tr>
+      <tr><td><code>buildAtWorldMinY</code></td><td><span class="default" title="Default"><code>true</code></span></td><td>
+        Use the dimension's minimum Y where eligible; disabled for Party</td></tr>
+      <tr><td><code>collapsePaletteStates</code></td><td><span class="default" title="Default"><code>true</code></span></td><td>
+        Share identical color, filler and support palette entries</td></tr>
+      <tr><td><code>forceXZ128</code></td><td><span class="default" title="Default"><code>true</code></span></td><td>
+        Preserve the full 128&times;128 map footprint, including empty edges</td></tr>
+      <tr><td><code>forceZ129</code></td><td><span class="default" title="Default"><code>false</code></span></td><td>
+        Reserve the north shading row even when unused</td></tr>
+    </tbody>
+  </table>
+  <h2>Integration</h2>
+  <ul>
+    <li><strong>Exports:</strong> <code>result.files</code> contains one or more named NBT files.</li>
+    <li><strong>Connection:</strong> reuse it across tiles; calls queue in order. <code>dispose()</code> stops pending work and releases the worker.</li>
+    <li><strong>Errors:</strong> generation failures reject with a message and <code>code</code>; invalid input uses <code>INVALID_INPUT</code>.</li>
+    <li id="warnings"><strong>Warnings:</strong> <code>result.warnings</code> lists <code>{ code, message }</code> entries. Codes are stable;
+      messages are English and may be reworded.<br>
+      <code>CRUBTECH_CONSTRAINTS</code>, <code>KEEP_EXTRAS</code>, <code>LIFT_INACTIVE</code>,
+      <code>LIFT_UNSUPPORTED</code>, <code>NORTH_SOUTH_STEPS</code>, <code>NORTH_SOUTH_TWO_LAYER</code>,
+      <code>VOID_FILLERS</code>, <code>WATER_SUPPORT</code>, <code>WORLD_MIN_Y</code>;<br>
+      <code>PLACEMENT_ATTACHMENT_SUPPORT</code>, <code>PLACEMENT_AUTO_SUPPORT</code>,
+      <code>PLACEMENT_CORAL_SUPPORT</code>, <code>PLACEMENT_CROP_LIGHT</code>, <code>PLACEMENT_FALLING</code>,
+      <code>PLACEMENT_FIRE_SPREAD</code>, <code>PLACEMENT_FROSTED_ICE</code>, <code>PLACEMENT_GRASS_SPREAD</code>,
+      <code>PLACEMENT_GROWTH_COVER</code>, <code>PLACEMENT_ICE_MELT</code>, <code>PLACEMENT_ICE_SNOW_MELT</code>,
+      <code>PLACEMENT_ICE_SNOW_RISK</code>, <code>PLACEMENT_INVALID_SUPPORT</code>, <code>PLACEMENT_MELT_RISK</code>,
+      <code>PLACEMENT_MISSING_COVER</code>, <code>PLACEMENT_MISSING_SUPPORT</code>,
+      <code>PLACEMENT_MUSHROOM_LIGHT</code>, <code>PLACEMENT_MUSHROOM_SPREAD</code>,
+      <code>PLACEMENT_SCAFFOLD_CONNECTION</code>, <code>PLACEMENT_SCAFFOLD_SUPPORT_FILLER</code>,
+      <code>PLACEMENT_SHELF_SUPPORT</code>, <code>PLACEMENT_SNOW_MELT</code>, <code>PLACEMENT_SNOW_RISK</code>,
+      <code>PLACEMENT_SUPPORT_BLOCK</code>, <code>PLACEMENT_SUPPORT_MODE</code>, <code>PLACEMENT_TNT</code>,
+      <code>PLACEMENT_TNT_IGNITION</code>, <code>PLACEMENT_TRANSPARENT_SUPPORT</code></li>
+    <li><strong>Hosting:</strong> HTTP(S) caller; no opaque sandbox. Import URL directly; keep external in bundlers.
+      CSP: allow API origin in <code>script-src</code> and <code>frame-src</code>.</li>
+    <li><strong>Versions:</strong> <code>protocolVersion</code> identifies the interface; <code>engineRevision</code>, the generator build.
+      Include the revision and effective options in bug reports.</li>
+  </ul>
+  </main>
+  <script type="module">
+    import { observeTheme, toggleTheme } from "@/lib/theme";
+
+    observeTheme();
+    document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  </script>
+</body>
+</html>

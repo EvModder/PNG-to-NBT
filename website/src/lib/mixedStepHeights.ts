@@ -10,6 +10,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/lib/shapeBlocksSuppress.ts
  * - src/lib/shapeGeneration.ts
  */
@@ -53,6 +54,7 @@ function canRaiseStepBlocks(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 //
 // Colors that N/S step reuse must leave at their required height: lifted, they would
 // need a support these settings do not place, or one that cannot hold them.
@@ -110,6 +112,7 @@ function dropsUnsupported(block: string): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function getMixedStepSettings(
   usedColorKeys: Iterable<ColorRefKey>,
   selections: ColorBlockSelections,
@@ -173,6 +176,7 @@ export function getMixedStepSettings(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 //
 // Pixels that stay on the floor but would be lifted if the support block could hold every block.
 export function countUnsupportedLifts(colorGrid: ColorGrid, palette: MixedStepPalette | undefined, unsupported: UnsupportedLifts): number {

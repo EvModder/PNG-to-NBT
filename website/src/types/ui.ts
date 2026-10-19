@@ -8,6 +8,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/PanelImagePreview.tsx
@@ -24,6 +25,7 @@
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/PanelImagePreview.tsx
 // - src/components/ToolbarPresetSettings.tsx
 // - src/data/defaultSettings.ts

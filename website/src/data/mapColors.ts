@@ -8,6 +8,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/ToolbarBuildSettings.tsx
@@ -104,6 +105,7 @@ export const TRANSPARENCY_BASE_INDEX = 0;
 // WATER is the only base color with special logic; current hardcoding has it stored at index 12
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
@@ -120,6 +122,7 @@ export const WATER_BASE_INDEX = 12;
 // 62 base colors (index 0 = transparent/NONE)
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/PanelCustomColors.tsx
 // - src/data/colorSortOrder.ts

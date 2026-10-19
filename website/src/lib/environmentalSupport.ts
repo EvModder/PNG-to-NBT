@@ -8,6 +8,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/mixedStepHeights.ts
  * - src/lib/placementWarnings.ts

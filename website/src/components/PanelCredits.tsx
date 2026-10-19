@@ -35,6 +35,7 @@ export function PanelCredits({
   isStackedLayout,
   creditsFloatGapPx,
 }: PanelCreditsProps) {
+  const [evModderRolePrefix, evModderRoleSuffix] = messages.credits.evModderRoleParts();
   const [rebaneRolePrefix, rebaneRoleSuffix] = messages.credits.rebaneRoleParts();
 
   return (
@@ -53,7 +54,14 @@ export function PanelCredits({
         >
           {messages.credits.evModderName}
         </a>{" "}
-        — {messages.credits.evModderRole}{" "}
+        — {evModderRolePrefix}
+        <a
+          href={messages.credits.pngToNbtApiUrl}
+          className="underline hover:text-foreground"
+        >
+          {messages.credits.pngToNbtName}
+        </a>
+        {evModderRoleSuffix}{" "}
         <a
           href={messages.credits.mapToolsUrl}
           target="_blank"

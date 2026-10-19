@@ -11,6 +11,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/PanelColorBlockTable.tsx
  * - src/data/blockWiki.ts
  * - src/lib/blockIconAtlas.ts
@@ -46,6 +47,7 @@ function withDefaultFace(id: string, props: readonly string[]): readonly string[
 }
 
 // Callers:
+// - src/api/generateTile.ts
 // - src/lib/blockIconAtlas.ts
 // - src/lib/mixedStepHeights.ts
 export function stripDefaultBlockNamespace(raw: string): string {
@@ -54,6 +56,7 @@ export function stripDefaultBlockNamespace(raw: string): string {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/data/blockWiki.ts
 // - src/lib/blockSupport.ts
@@ -106,6 +109,7 @@ export interface ColorBlockSelections {
 }
 
 // Callers:
+// - src/api/generateTile.ts
 // - src/lib/blockSupport.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts

@@ -8,6 +8,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/ToolbarBuildSettings.tsx
  * - src/data/defaultSettings.ts
  * - src/data/i18n/en.ts
@@ -39,6 +40,7 @@
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/ToolbarBuildSettings.tsx
 // - src/data/defaultSettings.ts
 // - src/data/i18n/en.ts
@@ -106,6 +108,7 @@ export type MixedStepPalette = {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/ToolbarBuildSettings.tsx
 // - src/data/defaultSettings.ts
 // - src/data/i18n/en.ts
@@ -132,6 +135,7 @@ export enum SuppressStepDirection {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/environmentalSupport.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts

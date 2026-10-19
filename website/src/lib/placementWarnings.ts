@@ -7,6 +7,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  */
 import { FRAGILE_SUPPORT_RULES, isFragileBlock, isFallingBlock } from "@/data/blockFragility";
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";

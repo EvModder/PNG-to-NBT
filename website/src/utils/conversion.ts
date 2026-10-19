@@ -17,6 +17,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/ToolbarBuildSettings.tsx
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/generationPolicy.ts
@@ -105,6 +106,7 @@ export function getBuildModeDownloadSuffix(
 }
 
 // Callers:
+// - src/api/generateTile.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesWorldMinYGeometry(mode: BuildMode): boolean {
@@ -114,6 +116,7 @@ export function buildModeUsesWorldMinYGeometry(mode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/shapeGeneration.ts
 export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
@@ -135,6 +138,7 @@ export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
 export function isSuppressBuildMode(buildMode: BuildMode): boolean {
@@ -143,6 +147,7 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/ToolbarBuildSettings.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/previewImageEdits.ts
@@ -160,6 +165,7 @@ export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/ToolbarBuildSettings.tsx
 // - src/lib/messages.ts
 // - src/lib/nbtExport.ts
@@ -179,6 +185,7 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
@@ -194,6 +201,7 @@ export function isCrubTechBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/suppressLoadMarkers.ts
 export function buildModeSupportsCenterOut(buildMode: BuildMode, crubTech = false): boolean {
   return isSuppressStepsBuildMode(buildMode) ||
@@ -202,6 +210,7 @@ export function buildModeSupportsCenterOut(buildMode: BuildMode, crubTech = fals
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/shapeGeneration.ts
 export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
   return buildMode === BuildMode.StaircaseParty;
@@ -209,6 +218,7 @@ export function buildModeUsesPaletteSeed(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function shouldIncludeTransparentBlocks(
   blockMapping: Record<number, string>,
   hasTransparency: boolean,

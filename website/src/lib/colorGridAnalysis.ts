@@ -18,6 +18,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/generationPolicy.ts
@@ -88,6 +89,7 @@ type VoidShadowSummary = {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/tileGeometry.ts
@@ -111,6 +113,7 @@ export function getPixelParity(x: number, z: number): PixelParity {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function canUseSuppressDirection(
   buildMode: BuildMode,
   direction: SuppressStepDirection,
@@ -135,6 +138,7 @@ export function canUseSuppressDirection(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function getBelowPlatformWaterBlockedDirections(tiles: readonly { colorGrid: ColorGrid }[], waterDrops?: WaterDrops) {
   const blocked = new Set<SuppressStepDirection>();
   if (!waterDrops) return blocked;
@@ -157,6 +161,7 @@ export function getBelowPlatformWaterBlockedDirections(tiles: readonly { colorGr
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function requiresTwoLayerLateShading(colorGrid: ColorGrid, waterDrops?: WaterDrops): boolean {
   for (let x = 0; x < MAP_SIZE; ++x) {
     for (let z = 1; z < MAP_SIZE; ++z) {
@@ -321,6 +326,7 @@ function analyzeFlatModeBehavior(colorGrid: ColorGrid): FlatModeBehavior {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function computeColorGridStats(colorGrid: ColorGrid): ColorGridStats {
   const colorFrequencyMap = computeColorFrequencyMap(colorGrid);
   return {
@@ -355,6 +361,7 @@ export function collectShadeCountsByColorRefKey(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function summarizeVoidShadows(tileImageStats: readonly ColorGridStats[]): VoidShadowSummary {
   let hasAnyVoidShadow = false;
   let northToSouthSelectable = true;
@@ -433,6 +440,7 @@ function summarizeUsedShadesByColorKey(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/generationPolicy.ts
 export function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
   const usedShadesByColorKey = collectUsedShadesByColorKey(imageStats.colorFrequencyMap);

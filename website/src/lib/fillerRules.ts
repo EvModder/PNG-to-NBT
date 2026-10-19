@@ -14,6 +14,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/lib/environmentalSupport.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
@@ -89,6 +90,7 @@ const CRUBTECH_NON_PUSHABLE_FILLER_BLOCKS = new Set<string>([
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function getSupportModeFillerRoles(
   supportMode: SupportMode,
   usesDirectWaterBlock: boolean,
@@ -147,6 +149,7 @@ export function getSupportModeFillerRoles(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function createFillerAssignments(
   supportFillerBlock: string,
   shadeFillerBlock: string,
@@ -186,6 +189,7 @@ export function createFillerAssignments(
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/environmentalSupport.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
@@ -196,6 +200,7 @@ export function isFillerDisabled(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/previewImageEdits.ts
 export function isShadeFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
@@ -205,6 +210,7 @@ export function isShadeFillerDisabled(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function isCrubTechBreakableValid(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   return !!normalized && !isShadeFillerDisabled(fillerBlock) && CRUBTECH_BREAKABLE_FILLER_BLOCKS.has(normalized);
@@ -212,6 +218,7 @@ export function isCrubTechBreakableValid(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function isCrubTechPushableValid(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
   return !!normalized && !isShadeFillerDisabled(fillerBlock) && !CRUBTECH_NON_PUSHABLE_FILLER_BLOCKS.has(normalized);
@@ -224,6 +231,7 @@ function isTransparentMapColorBlock(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/environmentalSupport.ts
 export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
   return !isFillerDisabled(fillerBlock) && isTransparentMapColorBlock(fillerBlock);

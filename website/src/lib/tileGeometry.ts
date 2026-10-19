@@ -4,6 +4,7 @@
  * - analyzeFinalGeometry()
  *
  * Callers:
+ * - src/api/generateTile.ts
  * - src/lib/tileGeometry.worker.ts
  */
 import { generateShapeMap } from "@/lib/shapeGeneration";
@@ -41,7 +42,7 @@ export function analyzeBaseGeometry(input: TileBaseGeometryWorkerInput): TileBas
       skipEmptySuppressSteps: true,
       collapseStaircaseModes: !input.northlineOnly,
       includeFlatNorthline: false,
-      selectedMode: input.northlineOnly ? BuildMode.StaircaseNorthline : null,
+      selectedMode: input.selectedStaircase ?? (input.northlineOnly ? BuildMode.StaircaseNorthline : null),
       selectedStepDirection: SuppressStepDirection.EastToWest,
     },
   );

@@ -1,4 +1,5 @@
 @import "tailwindcss" source("./");
+@source not "./api";
 @config "../tailwind.config.ts";
 
 @layer base {

@@ -16,6 +16,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/ImageColorNotice.tsx
  * - src/components/PanelImagePreview.tsx
  * - src/components/SecretsSettingsDialog.tsx
@@ -43,6 +44,7 @@ import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type S
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/ToolbarFillerSettings.tsx
 // - src/lib/blockSupport.ts
 // - src/lib/environmentalSupport.ts
@@ -66,6 +68,7 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/suppressLoadMarkers.ts
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
@@ -97,11 +100,13 @@ export const DEFAULT_BUILD_AT_WORLD_MIN_Y = true;
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/SecretsSettingsDialog.tsx
 export const SUPPRESS_STEP_LIMITS = { minOffset: 1, maxOffset: 20, maxLift: 10 } as const;
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/SecretsSettingsDialog.tsx
 // - src/lib/suppressLoadMarkers.ts
 // - src/utils/colorTableLayout.ts
@@ -171,6 +176,7 @@ export type InvalidColorsPalette = typeof INVALID_COLORS_PALETTE_OPTIONS[number]
 export const DEFAULT_INVALID_COLORS_PALETTE: InvalidColorsPalette = "full";
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/blockSupport.ts
 // - src/lib/minecraftVersion.ts
 // - src/lib/mixedStepHeights.ts

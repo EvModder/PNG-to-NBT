@@ -9,6 +9,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/components/PanelCustomColors.tsx
  * - src/data/i18n/en.ts
  * - src/data/i18n/es.ts
@@ -44,6 +45,7 @@
 // Index 0=dark, 1=flat, 2=light, 3=darkest (not obtainable)
 // References to Darkest or 3 should not occur anywhere else in the codebase.
 // Callers:
+// - src/api/generateTile.ts
 // - src/data/i18n/en.ts
 // - src/data/i18n/es.ts
 // - src/data/mapColors.ts
@@ -83,6 +85,7 @@ export interface ColorRef {
 }
 
 // Callers:
+// - src/api/generateTile.ts
 // - src/lib/codecColorGrid.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/mixedStepHeights.ts
@@ -96,6 +99,7 @@ export interface ShadedColorRef extends ColorRef {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/lib/codecColorGrid.ts
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts

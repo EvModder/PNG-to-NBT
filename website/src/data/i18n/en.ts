@@ -4,6 +4,7 @@
  * - MessageCatalog
  *
  * Callers:
+ * - src/api/generateTile.ts
  * - src/data/i18n/*
  * - src/lib/messages.ts
  */
@@ -27,6 +28,7 @@ type WidenStrings<T> =
   : T;
 
 // Callers:
+// - src/api/generateTile.ts
 // - src/lib/messages.ts
 export const enCatalog = {
   locale: "en",
@@ -514,7 +516,7 @@ export const enCatalog = {
   },
   credits: {
     title: "Credits",
-    evModderRole: "Creator of PNG-to-NBT &",
+    evModderRole: "Creator of {name} &",
     crubleighRole: "MapArt Platform technical wizard",
     gu2t4vRole: "Inventor of 2-Layer suppression",
     rebaneRole: "Creator of {name}",

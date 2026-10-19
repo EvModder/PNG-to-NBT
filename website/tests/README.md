@@ -28,6 +28,24 @@ bun run test:fixtures --update
 bun run test:fixtures img4-northline
 ```
 
+Hosted API checks:
+```bash
+bun run test:api
+bun run build
+bun run test:api-browser
+```
+
+The browser suite uses Playwright Chromium and WebKit on two temporary local origins,
+including the `/PNG-to-NBT/` deployment prefix. It checks transport lifecycle, delivery
+isolation, and byte-equivalent exports from the API and the site's actual UI.
+
+The API suite also checks the help table's options, defaults, enums and numeric bounds
+against actual generation/validation, including mode-dependent adjustments.
+When changing generation behavior, update the API adapter, standalone contract, help
+table and parity tests in the same commit as the feature. Prefer shared engine policy
+over duplicated rules. UI-only changes need no API option. Do not silently widen the
+single-128x128-tile input contract.
+
 Targeted support eligibility and placement checks:
 ```bash
 bun run test:rules

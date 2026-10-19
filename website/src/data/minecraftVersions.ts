@@ -6,6 +6,8 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
+ * - src/api/generateTile.worker.ts
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/data/defaultSettings.ts
@@ -28,6 +30,8 @@
 // Every version/catalog refresh must update audit:block-support; see website/tests/README.md.
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
+// - src/api/generateTile.worker.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/lib/blockSupport.ts
@@ -51,6 +55,7 @@ export const MINECRAFT_VERSIONS = {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/data/defaultSettings.ts

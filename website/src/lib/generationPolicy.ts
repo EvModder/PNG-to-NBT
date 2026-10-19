@@ -17,6 +17,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/api/generateTile.ts
  * - src/lib/tileGeometry.ts
  */
 import {
@@ -44,6 +45,7 @@ const EMPTY_USED_WATER_SHADES: ReadonlySet<Shade> = new Set();
 // Party has no assumed platform; explicit flat-map supports replace it.
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function shouldAssumeSupportFloor(assumeFloor: boolean, mode: BuildMode, support: SupportMode, block: string): boolean {
   return assumeFloor && mode !== BuildMode.StaircaseParty
     && !(mode === BuildMode.Flat && support !== SupportMode.None && !!block.trim() && !isFillerDisabled(block));
@@ -51,6 +53,7 @@ export function shouldAssumeSupportFloor(assumeFloor: boolean, mode: BuildMode, 
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function getTwoLayerSpacing(
   support: SupportMode, layerGap: number, latePairsGap: number, crubTech: boolean, minimumLayerGap = 2,
 ) {
@@ -115,6 +118,7 @@ function hashString32(input: string): number {
 
 // Callers:
 // - src/Index.tsx
+// - src/api/generateTile.ts
 export function getPaletteSeedOffset(blockMapping: Record<number, string>): number {
   const serialized = Array.from({ length: BASE_COLORS.length - 1 }, (_, i) => `${i + 1}:${blockMapping[i + 1] ?? ""}`).join("|");
   return hashString32(serialized);

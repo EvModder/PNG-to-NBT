@@ -510,7 +510,7 @@ export const esCatalog = {
   },
   credits: {
     title: "Créditos",
-    evModderRole: "Creador de PNG-to-NBT y",
+    evModderRole: "Creador de {name} y",
     crubleighRole: "Mago técnico de MapArt Platform",
     gu2t4vRole: "Inventor de la supresión 2-Layer",
     rebaneRole: "Creadora original de {name}",
