@@ -1011,10 +1011,13 @@ const Index = () => {
       }
       return [p];
     });
-    localStorage.setItem(LS_KEYS.presets, JSON.stringify(persistedPresets));
+    try {
+      localStorage.setItem(LS_KEYS.presets, JSON.stringify(persistedPresets));
+    } catch { /* Presets remain usable in memory when storage is blocked or full. */ }
   }, [presets, activeIdx, currentPresetIsUnsavedAuto, presetDirty, savedPresetNames, savedPresetSnapshot]);
-  const persistedSettings = useMemo(
-    () => ({
+  const savedSettings = useRef<Record<string, unknown>>({});
+  useEffect(() => {
+    const settings = {
       [LS_KEYS.activePreset]: preset.name,
       [LS_KEYS.supportFiller]: supportFillerBlock,
       [LS_KEYS.shadeFiller]: shadeFillerBlock,
@@ -1074,77 +1077,15 @@ const Index = () => {
       [LS_KEYS.autoFixInvalidColors]: autoFixInvalidColors,
       [LS_KEYS.invalidColorsPalette]: invalidColorsPalette,
       [LS_KEYS.minecraftVersion]: minecraftVersion,
-    }),
-    [
-      preset.name,
-      supportFillerBlock,
-      shadeFillerBlock,
-      crubTechShadeBreakableFillerBlock,
-      crubTechShadePushableFillerBlock,
-      suppress2LayerLateFillerBlock,
-      dominateVoidFillerBlock,
-      recessiveVoidFillerBlock,
-      preferredBuildMode,
-      preferredSupportMode,
-      suppressStepDirection,
-      suppressCenterOut,
-      vsFillerLoadSpotDirection,
-      proPaletteSeed,
-      layerGap,
-      suppress2LayerLatePairsGap,
-      crubTech,
-      mixSteps,
-      keepSuppressExtras,
-      lightWaterDrop,
-      flatWaterDrop,
-      darkWaterDrop,
-      buildAtWorldMinY,
-      showVsFillersInPreview,
-      showIds,
-      showNames,
-      showOptions,
-      blockDisplayMode,
-      blockColExpanded,
-      sortKey,
-      sortDir,
-      showStacks,
-      showMaxPerSplit,
-      columnOrder,
-      showTransparentRow,
-      showExcludedBlocks,
-      collapseDuplicateNbtPaletteStates,
-      forceXZ128,
-      forceZ129,
-      applySupportFloorYs,
-      belowPlatformWater,
-      skipEmptySuppressSteps,
-      minSuppressStepOffset,
-      uniformSuppressStepSpacing,
-      showAlignmentReminder,
-      showNooblineWarnings,
-      showVsFillerWarnings,
-      showFlatNbtSuppressStepModes,
-      mixedStepReachableTop,
-      maxStepColorBlockLift,
-      markSuppressLoadSpotsInSchematic,
-      suppressLoadSpotMarkerBlock,
-      autoScalePixelArt,
-      pixelArtScaleMode,
-      autoFixInvalidDimensions,
-      invalidDimensionsStrategy,
-      autoFixInvalidColors,
-      invalidColorsPalette,
-      minecraftVersion,
-    ],
-  );
-  const persistedSettingsRef = useRef<Record<string, unknown>>({});
-  useEffect(() => {
-    for (const [k, v] of Object.entries(persistedSettings)) {
-      if (persistedSettingsRef.current[k] === v) continue;
-      localStorage.setItem(k, JSON.stringify(v));
-      persistedSettingsRef.current[k] = v;
-    }
-  }, [persistedSettings]);
+    };
+    try {
+      for (const [key, value] of Object.entries(settings)) {
+        if (savedSettings.current[key] === value) continue;
+        localStorage.setItem(key, JSON.stringify(value));
+        savedSettings.current[key] = value;
+      }
+    } catch { /* Persistence must not interrupt the current session. */ }
+  });
 
   const showPaletteSeedToggle = buildModeUsesPaletteSeed(buildMode);
   const paletteSeedOffset = useMemo(
@@ -3031,9 +2972,8 @@ const Index = () => {
 
   const handleLocalePreferenceChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value as LocalePreference;
-    if (next === localePreference) return;
+    if (next === localePreference || !setLocalePreference(next)) return;
     setLocalePreferenceState(next);
-    setLocalePreference(next);
     window.location.reload();
   };
   const localePreferenceDisplay = localePreference === LOCALE_BROWSER ? "auto" : localePreference;

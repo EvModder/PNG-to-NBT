@@ -39,7 +39,9 @@ export function observeTheme(onChange?: (dark: boolean) => void): () => void {
     onChange?.(dark);
   };
   const onStorage = (event: StorageEvent) => {
-    if (event.storageArea === localStorage && (event.key === STORAGE_KEYS.theme || event.key === null)) sync();
+    try {
+      if (event.storageArea === localStorage && (event.key === STORAGE_KEYS.theme || event.key === null)) sync();
+    } catch { /* Storage access may have been revoked since this page opened. */ }
   };
   const system = matchMedia(systemThemeQuery);
   sync();

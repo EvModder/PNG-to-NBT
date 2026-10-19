@@ -81,7 +81,6 @@ function resolveLocaleOverride(rawLocale: string | null | undefined): SupportedL
 }
 
 function getStoredLocale(): SupportedLocale | null {
-  if (typeof localStorage === "undefined") return null;
   try {
     return resolveLocaleOverride(localStorage.getItem(STORAGE_KEYS.language));
   } catch {
@@ -113,13 +112,14 @@ export function getLocalePreference(): LocalePreference {
 
 // Callers:
 // - src/Index.tsx
-export function setLocalePreference(locale: LocalePreference): void {
-  if (typeof localStorage === "undefined") return;
-  if (locale === LOCALE_BROWSER) {
-    localStorage.removeItem(STORAGE_KEYS.language);
-    return;
+export function setLocalePreference(locale: LocalePreference): boolean {
+  try {
+    if (locale === LOCALE_BROWSER) localStorage.removeItem(STORAGE_KEYS.language);
+    else localStorage.setItem(STORAGE_KEYS.language, locale);
+    return true;
+  } catch {
+    return false;
   }
-  localStorage.setItem(STORAGE_KEYS.language, locale);
 }
 
 // Callers:
