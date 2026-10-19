@@ -11,8 +11,6 @@
  * - isWaterSideSupportFillerValid()
  * - buildFillerAssignmentMap()
  * - resolveAssignedFillerName()
- * - resolveCellAssignedRole()
- * - resolveCellFillerName()
  *
  * Callers:
  * - src/Index.tsx
@@ -262,31 +260,4 @@ export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, 
   if (role === FillerRole.SupportWaterSides && !isWaterSideSupportFillerValid(block)) return null;
   if (isShadeCriticalFillerRole(role) ? isShadeFillerDisabled(block) : isFillerDisabled(block)) return null;
   return resolveExportBlockName(block);
-}
-
-// Callers:
-// - src/lib/shapeAnalysis.ts
-export function resolveCellAssignedRole(
-  cellRoles: readonly FillerRole[],
-  assignments: readonly FillerAssignment[],
-): FillerRole | null {
-  for (const assignment of assignments) {
-    if (cellRoles.includes(assignment.role)) return assignment.role;
-  }
-  return null;
-}
-
-// Callers:
-// - src/lib/shapeAnalysis.ts
-export function resolveCellFillerName(
-  cellRoles: readonly FillerRole[],
-  assignments: readonly FillerAssignment[],
-  byRole: Map<FillerRole, string>,
-): string | null {
-  for (const assignment of assignments) {
-    if (!cellRoles.includes(assignment.role)) continue;
-    const fillerName = resolveAssignedFillerName(byRole, assignment.role);
-    if (fillerName) return fillerName;
-  }
-  return null;
 }

@@ -245,6 +245,59 @@ async function exportTestStructureNbt(
   return new Uint8Array(gunzipSync(data));
 }
 
+async function assertSharedSupportMaterialCounts(): Promise<void> {
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR));
+  const cells: TestExportCell[] = [
+    { x: 0, y: 1, z: 0, cell: { id: 11, isCustom: false } },
+    { x: 0, y: 0, z: 0, cell: [FillerRole.SupportFragile, FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered] },
+  ];
+  for (const block of ["stone", "resin_clump[down=true]", "poppy"]) for (const support of ["glass", "cobblestone", "none"]) {
+    const selectedBlocks = { 11: block };
+    const fillerAssignments = [
+      { role: FillerRole.SupportFragile, block: support },
+      { role: FillerRole.SupportWaterSides, block: support },
+      { role: FillerRole.SupportWaterSidesCovered, block: "glass" },
+    ];
+    const exported = parseStructureBlocks(await exportTestStructureNbt(cells, selectedBlocks, fillerAssignments, true));
+    const counts = analyzeMaterialNeeds(grid, buildTestShape(cells), {
+      selectedBlocks, selectedBlocksCustom: {}, customColors: [], fillerAssignments, applySupportFloorYs: false,
+    }).blockCounts;
+    const expected: Record<string, number> = {};
+    for (const cell of exported) {
+      const id = cell.blockName.replace("minecraft:", "").split("[")[0];
+      expected[id] = (expected[id] ?? 0) + 1;
+    }
+    for (const id of new Set([...Object.keys(counts), ...Object.keys(expected)])) {
+      if (counts[id] !== expected[id]) throw new Error(`Shared support count mismatch for ${block}/${support}: ${id} ${counts[id]} != ${expected[id]}`);
+    }
+  }
+
+  let seed = 123456789;
+  const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0);
+  const waterGrid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => ({
+    id: random() % 100 < 15 ? WATER_BASE_INDEX : 11, isCustom: false, shade: random() % 3 as Shade,
+  })));
+  for (const mode of [BuildMode.StaircaseValley, BuildMode.StaircaseClassic, BuildMode.StaircaseNorthline]) {
+    const shape = generateShapeMap(waterGrid, undefined, true, false, false, {
+      layerGap: 5, selectedMode: mode, selectedStepDirection: SuppressStepDirection.EastToWest,
+      waterSetting: { kind: "top-aligned" }, enableWaterConvenience: true,
+    })[mode]!;
+    for (const support of ["glass", "cobblestone"]) {
+      const options = {
+        selectedBlocks: { 11: "stone", [WATER_BASE_INDEX]: "water" }, selectedBlocksCustom: {}, customColors: [],
+        fillerAssignments: createFillerAssignments(support, "resin_block", "moss_block", "resin_block", "slime_block", "slime_block", "resin_block", SupportMode.Fragile, false, true, false),
+        applySupportFloorYs: false, buildMode: mode, baseName: "materials",
+        suppressStepDirection: SuppressStepDirection.EastToWest, markSuppressLoadSpotsInSchematic: false,
+      };
+      const result = await convertToNbt(shape, options);
+      const exported = parseStructureBlocks(new Uint8Array(gunzipSync(result.data)));
+      const expected = exported.filter(cell => cell.blockName === `minecraft:${support}`).length;
+      const actual = analyzeMaterialNeeds(waterGrid, shape, options).blockCounts[support] ?? 0;
+      if (actual !== expected) throw new Error(`${mode}/${support}: counted ${actual} supports, exported ${expected}`);
+    }
+  }
+}
+
 function assertVsSparseMarkerCoverage(
   z: number,
   role: FillerRole,
@@ -1705,6 +1758,7 @@ async function assertCenterOutTwoLayerInvariants(): Promise<void> {
 }
 
 async function main(): Promise<number> {
+  await assertSharedSupportMaterialCounts();
   assertVsSparseMarkerInvariants();
   assertMixedStepMarkerInvariants();
   await assertCenterOutInvariants();

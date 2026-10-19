@@ -22,13 +22,14 @@ import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
 import { Shade, type ColorGrid } from "@/types/color";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
-import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
+import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
 import { normalizeBlockId, resolveExportBlockName, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
 import { getColorRefKey } from "./colorRefs";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { forEachSuppressClearanceCell, getSuppressClearancePlan } from "./suppressClearance";
 import {
   getFragileSupportOverride,
+  type FragileSupportOverride,
   isShapeColorCell,
   isShapeFillerCell,
   isWithinShapeBounds,
@@ -110,6 +111,27 @@ function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): nu
   return getColorRefKey(color) * 4 + color.shade;
 }
 
+function resolveShapeFiller(
+  part: ShapePart,
+  coord: number,
+  roles: readonly FillerRole[],
+  options: ColorBlockSelections,
+  assignments: Map<FillerRole, string>,
+): { role: FillerRole; blockName: string | null; override: FragileSupportOverride | null } | null {
+  let missing: ReturnType<typeof resolveShapeFiller> = null;
+  // Match export priority: rejected or disabled assignments do not claim the cell.
+  for (const [role, block] of assignments) {
+    if (!roles.includes(role) || !shouldIncludeFragileSupportCell(part, coord, roles, role, options, assignments)) continue;
+    const override = getFragileSupportOverride(part, coord, role, block, options, assignments);
+    const blockName = override ? resolveExportBlockName(override.replacementBlockId) : resolveAssignedFillerName(assignments, role);
+    const resolved = { role, blockName, override };
+    if (blockName) return resolved;
+    // Keep the unfilled requirement visible in the material toolbar.
+    missing ??= resolved;
+  }
+  return missing;
+}
+
 // Retained blocks are counted during replay; collecting them skips unused per-part totals.
 function analyzePartMaterialNeeds(
   colorGrid: ColorGrid,
@@ -188,9 +210,10 @@ function analyzePartMaterialNeeds(
       continue;
     }
 
-    const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
-    if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options, fillerAssignments)) continue;
     if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
+    const resolved = resolveShapeFiller(part, coord, cell, options, fillerAssignments);
+    if (!resolved) continue;
+    const { role: assignedRole, blockName: fillerName } = resolved;
     if (
       !materials && assignedRole &&
       (
@@ -200,11 +223,6 @@ function analyzePartMaterialNeeds(
     ) {
       addRoleCount(fillerRoleCounts, assignedRole);
     }
-    const assignedSupportBlock = assignedRole ? (fillerAssignments.get(assignedRole) ?? null) : null;
-    const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options, fillerAssignments);
-    const fillerName = override
-      ? resolveExportBlockName(override.replacementBlockId)
-      : resolveCellFillerName(cell, options.fillerAssignments, fillerAssignments);
     if (!fillerName) continue;
     const blockId = normalizeBlockId(fillerName);
     if (!materials) addCount(blockCounts, blockId);
@@ -502,12 +520,8 @@ export function analyzeFragileSupportOverrideNeeds(
       const [x, y, z] = parseShapeCoordKey(coord);
       if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
       if (applyColumnRange && options.zColumnRange && (Math.max(0, z) < options.zColumnRange[0] || z > options.zColumnRange[1])) continue;
-      const assignedRole = resolveCellAssignedRole(cell, options.fillerAssignments);
-      if (!assignedRole) continue;
-      if (!shouldIncludeFragileSupportCell(part, coord, cell, assignedRole, options, fillerAssignments)) continue;
       if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
-      const assignedSupportBlock = fillerAssignments.get(assignedRole) ?? null;
-      const override = getFragileSupportOverride(part, coord, assignedRole, assignedSupportBlock, options, fillerAssignments);
+      const override = resolveShapeFiller(part, coord, cell, options, fillerAssignments)?.override;
       if (!override) continue;
       addCount(overrideCounts, override.blockId);
     }
