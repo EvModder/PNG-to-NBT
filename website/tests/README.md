@@ -8,3 +8,11 @@ bun run test:fixtures
 bun run test:fixtures --update
 bun run test:fixtures img4-northline
 ```
+
+Image import checks:
+```bash
+bun run test:images-browser
+```
+
+Checks exact palette PNGs and color-managed photos in Chromium and WebKit using
+generated PNGs with gamma/chromaticity metadata.

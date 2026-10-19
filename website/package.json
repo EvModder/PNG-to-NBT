@@ -20,6 +20,7 @@
     "test:versions": "bun run tests/minecraftVersions.mts",
     "test:presets": "bun run tests/codecPreset.mts",
     "test:pixel-art": "bun run tests/pixelArtScaling.mts",
+    "test:images-browser": "node tests/imageImportBrowser.mjs",
     "test:wiki": "bun ../scripts/audit-block-wiki.mjs --offline",
     "test:all": "bun run test:typecheck && bun run test:invariants && bun run test:versions && bun run test:presets && bun run test:pixel-art && bun run test:wiki && bun run test:fixtures",
     "audit:block-wiki": "bun ../scripts/audit-block-wiki.mjs",

@@ -155,13 +155,42 @@ function getInvalidDimensionNotices(imageData: ImageData, customColors: ColorRgb
   return notices;
 }
 
+const COLOR_CHUNKS = new Set(["gAMA", "cHRM", "iCCP", "sRGB", "cICP", "mDCV", "cLLI"]);
+const SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+
+// Only inspect chunk headers, not compressed pixel data. Blob slices avoid copying
+// a large upload into JS memory; retained chunks keep their original CRCs.
+async function withoutPngColorProfile(file: Blob): Promise<Blob | null> {
+  const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  if (!SIGNATURE.every((byte, i) => signature[i] === byte)) return null;
+  const parts: Blob[] = [file.slice(0, 8)];
+  let removed = false;
+  for (let offset = 8; offset + 12 <= file.size;) {
+    const header = new Uint8Array(await file.slice(offset, offset + 8).arrayBuffer());
+    const length = new DataView(header.buffer).getUint32(0);
+    const end = offset + length + 12;
+    if (end > file.size) return null;
+    const type = String.fromCharCode(...header.subarray(4));
+    if (type === "acTL") return null; // Animated uploads retain their browser behavior.
+    if (type === "IDAT") {
+      if (!removed) return null;
+      parts.push(file.slice(offset));
+      return new Blob(parts, { type: "image/png" });
+    }
+    if (COLOR_CHUNKS.has(type)) removed = true;
+    else parts.push(file.slice(offset, end));
+    offset = end;
+  }
+  return null;
+}
+
 function isTiffFile(file: File): boolean {
   const type = file.type.toLowerCase();
   const name = file.name.toLowerCase();
   return type === "image/tiff" || name.endsWith(".tif") || name.endsWith(".tiff");
 }
 
-function loadBrowserImageData(file: File): Promise<ImageData> {
+function loadBrowserImageData(file: Blob): Promise<ImageData> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
@@ -200,6 +229,21 @@ async function loadTiffImageData(file: File): Promise<ImageData> {
 // - src/Index.tsx
 export async function loadImageDataFromFile(file: File): Promise<ImageData> {
   if (isTiffFile(file)) return loadTiffImageData(file);
+  const unprofiled = await withoutPngColorProfile(file);
+  if (unprofiled) {
+    const raw = await loadBrowserImageData(unprofiled);
+    const palette = getBaseColorLookup();
+    let exact = true;
+    for (let i = 0; i < raw.data.length; i += 4) {
+      if (raw.data[i + 3] === 0) continue;
+      if (raw.data[i + 3] !== 255 || !palette.has(packRgb(raw.data[i], raw.data[i + 1], raw.data[i + 2]))) {
+        exact = false;
+        break;
+      }
+    }
+    // Exact mapart stores palette bytes as data. Photos still need their profile.
+    if (exact) return raw;
+  }
   return loadBrowserImageData(file);
 }
 
