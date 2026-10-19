@@ -26,6 +26,7 @@ import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 import { SupportMode } from "@/types/ui";
+import { createZip } from "@/utils/zip";
 
 const VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH = 14;
 const CRUBTECH_WATER_COLOR_BLOCK = "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
@@ -1757,7 +1758,28 @@ async function assertCenterOutTwoLayerInvariants(): Promise<void> {
   }
 }
 
+function assertZipMetadata(): void {
+  const name = "caf\u00e9-\u5730\u56fe.nbt";
+  const data = new Uint8Array([1, 2, 3]);
+  const before = new Date();
+  const archive = createZip([{ name, data }]);
+  const after = new Date();
+  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
+  const nameSize = new TextEncoder().encode(name).length;
+  const central = 30 + nameSize + data.length;
+  for (const [offset, flags, date, filename] of [[0, 6, 12, 30], [central, 8, 14, 46]]) {
+    if (view.getUint16(offset + flags, true) !== 0x800) throw new Error("ZIP filenames must be marked UTF-8 in both headers");
+    if (![before, after].some(now =>
+      view.getUint16(offset + date, true) === ((now.getFullYear() - 1980) << 9 | (now.getMonth() + 1) << 5 | now.getDate()) &&
+      view.getUint16(offset + date - 2, true) === (now.getHours() << 11 | now.getMinutes() << 5 | now.getSeconds() >> 1),
+    )) throw new Error("ZIP timestamp must reflect generation time");
+    if (new TextDecoder().decode(archive.subarray(offset + filename, offset + filename + nameSize)) !== name) throw new Error("ZIP filename changed");
+  }
+  assertBytesEqual(archive.subarray(30 + nameSize, central), data, "ZIP payload unchanged");
+}
+
 async function main(): Promise<number> {
+  assertZipMetadata();
   await assertSharedSupportMaterialCounts();
   assertVsSparseMarkerInvariants();
   assertMixedStepMarkerInvariants();

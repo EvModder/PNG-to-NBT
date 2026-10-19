@@ -31,6 +31,9 @@ interface ZipEntry {
 // - src/lib/nbtExport.ts
 export function createZip(entries: ZipEntry[]): Uint8Array {
   const enc = new TextEncoder();
+  const now = new Date();
+  const date = ((Math.max(1980, Math.min(2107, now.getFullYear())) - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
   const files = entries.map(entry => ({
     name: enc.encode(entry.name),
     data: entry.data,
@@ -47,10 +50,10 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
     // Local file header
     out.writeInt(0x04034B50); // signature
     out.writeShort(20);      // version needed
-    out.writeShort(0);       // flags
+    out.writeShort(0x800);   // UTF-8 filenames
     out.writeShort(0);       // compression (store)
-    out.writeShort(0);       // mod time
-    out.writeShort(0);       // mod date
+    out.writeShort(time);    // generation time, DOS two-second precision
+    out.writeShort(date);
     out.writeInt(file.crc);
     out.writeInt(file.data.length); // compressed size
     out.writeInt(file.data.length); // uncompressed size
@@ -66,10 +69,10 @@ export function createZip(entries: ZipEntry[]): Uint8Array {
     out.writeInt(0x02014B50); // central dir signature
     out.writeShort(20);      // version made by
     out.writeShort(20);      // version needed
-    out.writeShort(0);       // flags
+    out.writeShort(0x800);   // UTF-8 filenames
     out.writeShort(0);       // compression
-    out.writeShort(0);       // mod time
-    out.writeShort(0);       // mod date
+    out.writeShort(time);
+    out.writeShort(date);
     out.writeInt(file.crc);
     out.writeInt(file.data.length); // compressed
     out.writeInt(file.data.length); // uncompressed
