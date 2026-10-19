@@ -31,13 +31,18 @@ import {
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
   DEFAULT_AUTO_FIX_INVALID_COLORS,
 } from "@/data/defaultSettings";
-import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
+import { BASE_COLORS, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
 import { normalizeBlockId, sanitizeUserBlockEntry } from "@/lib/blockId";
-import { computeColorGridStats, hasStepMixOpportunity, requiresTwoLayerLateShading } from "@/lib/colorGridAnalysis";
+import { deriveImageStats, hasStepMixOpportunity, requiresTwoLayerLateShading } from "@/lib/colorGridAnalysis";
+import {
+  getUsedWaterShades,
+  normalizeUsedWaterDrops,
+  resolveTileWaterSetting,
+  getPaletteSeedOffset,
+} from "@/lib/generationPolicy";
 import { convertImageToColorGridSet } from "@/lib/colorGridParsing";
-import { getPaletteSeedOffset } from "@/lib/generationPolicy";
 import {
   buildModeUsesPaletteSeed,
   isSuppressStepsBuildMode,
@@ -48,7 +53,7 @@ import type { ColorRgb } from "@/types/color";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { createFillerAssignments, isFillerDisabled } from "@/lib/fillerRules";
 import { convertToNbt } from "@/lib/nbtExport";
-import { hasNonWaterColorHeightVariance } from "@/lib/shapeAnalysis";
+import { analyzeBaseGeometry } from "@/lib/tileGeometry";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { SupportMode } from "@/types/ui";
 
@@ -62,8 +67,6 @@ const REPO_ROOT = path.resolve(TEST_ROOT, "../..");
 function toRepoRelativePath(absolutePath: string): string {
   return path.relative(REPO_ROOT, absolutePath);
 }
-const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
-type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 if (typeof globalThis.ImageData === "undefined") {
@@ -152,60 +155,6 @@ type FailurePayload = {
   actualData?: Uint8Array;
   actualExt?: string;
 };
-
-function normalizeUsedWaterDrops(
-  rawDrops: Record<WaterDropShade, number>,
-  usedWaterShades: ReadonlySet<Shade>,
-  preferredFirstShade?: WaterDropShade,
-): readonly [dark: number, flat: number, light: number] {
-  const next: [number, number, number] = [
-    Math.max(0, rawDrops[Shade.Dark] || 0),
-    Math.max(0, rawDrops[Shade.Flat] || 0),
-    Math.max(0, rawDrops[Shade.Light] || 0),
-  ];
-  const usedValues = new Set<number>();
-  const orderedShades = preferredFirstShade === undefined
-    ? WATER_DROP_INPUT_ORDER
-    : [preferredFirstShade, ...WATER_DROP_INPUT_ORDER.filter(shade => shade !== preferredFirstShade)];
-
-  for (const shade of orderedShades) {
-    if (!usedWaterShades.has(shade)) continue;
-    let value = next[shade];
-    while (usedValues.has(value)) ++value;
-    next[shade] = value;
-    usedValues.add(value);
-  }
-
-  return next;
-}
-
-function deriveImageStatsViews(imageStats: ReturnType<typeof computeColorGridStats>) {
-  let hasTransparency = false;
-  let usedWaterShades = new Set<Shade>();
-
-  for (const [colorKey, shadeFrequencyMap] of imageStats.colorFrequencyMap) {
-    if (colorKey.isCustom) {
-      continue;
-    }
-
-    if (colorKey.id === TRANSPARENCY_BASE_INDEX) {
-      if ((shadeFrequencyMap.get(Shade.Dark) ?? 0) > 0) hasTransparency = true;
-      continue;
-    }
-
-    if (colorKey.id === WATER_BASE_INDEX) {
-      usedWaterShades = new Set(shadeFrequencyMap.keys());
-    }
-  }
-
-  return {
-    allSameShade: imageStats.allSameShade,
-    hasTransparency,
-    imageHasWater: usedWaterShades.size > 0,
-    imageHasNonLightWater: usedWaterShades.has(Shade.Dark) || usedWaterShades.has(Shade.Flat),
-    usedWaterShades,
-  };
-}
 
 function sha256(data: Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
@@ -789,10 +738,10 @@ async function runFixtureCase(
   }
 
   const { colorGrid, imageStats } = analysis.tiles[0];
-  const derivedImageStats = deriveImageStatsViews(imageStats);
-  const usedWaterShades = derivedImageStats.usedWaterShades;
-  const imageHasWater = derivedImageStats.imageHasWater;
-  const imageHasNonLightWater = derivedImageStats.imageHasNonLightWater;
+  const derivedImageStats = deriveImageStats(imageStats);
+  const usedWaterShades = getUsedWaterShades(derivedImageStats.usedShadesByColorKey);
+  const imageHasWater = usedWaterShades.size > 0;
+  const imageHasNonLightWater = usedWaterShades.has(Shade.Dark) || usedWaterShades.has(Shade.Flat);
   const selectedWaterBlock = testCase.preset.selectedBlocks[WATER_BASE_INDEX] || BASE_COLORS[WATER_BASE_INDEX].blocks[0] || "";
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
@@ -814,12 +763,10 @@ async function runFixtureCase(
     },
     usedWaterShades,
   );
-  const activeWaterSetting =
-    testCase.settings.belowPlatformWater && imageHasWater
-      ? ({ kind: "below-platform", drops: waterDrops } as const)
-      : (!testCase.settings.belowPlatformWater && usesWaterForWater && imageHasNonLightWater
-          ? ({ kind: "top-aligned" } as const)
-          : undefined);
+  const activeWaterSetting = resolveTileWaterSetting(
+    derivedImageStats, testCase.settings.buildMode, testCase.settings.belowPlatformWater,
+    false, usesWaterForWater, waterDrops,
+  );
   const activeWaterDrops = activeWaterSetting?.kind === "below-platform" ? activeWaterSetting.drops : undefined;
 
   const showMixStepsToggle =
@@ -840,6 +787,13 @@ async function runFixtureCase(
     testCase.settings.buildMode,
   );
 
+  const { isFlatShape } = analyzeBaseGeometry({
+    colorGrid, allSameShade: derivedImageStats.allSameShade, hasWater: imageHasWater,
+    hasTransparency: derivedImageStats.hasTransparency, flatModeBehavior: derivedImageStats.flatModeBehavior,
+    includeTransparentBlocks, waterSetting: activeWaterSetting, layerGap: testCase.settings.layerGap,
+    paletteSeed: paletteSeedOffset, enableWaterConvenience: testCase.settings.supportMode !== SupportMode.None,
+  });
+  const effectiveBuildMode = isFlatShape && !isSuppressStepsBuildMode(testCase.settings.buildMode) ? BuildMode.Flat : testCase.settings.buildMode;
   const shapeMap = generateShapeMap(
     colorGrid,
     derivedImageStats.allSameShade,
@@ -855,14 +809,12 @@ async function runFixtureCase(
       enableWaterConvenience: testCase.settings.supportMode !== SupportMode.None,
       buildAtWorldMinY: testCase.settings.buildAtWorldMinY ?? false,
       skipEmptySuppressSteps: testCase.settings.skipEmptySuppressSteps,
-      selectedMode: testCase.settings.buildMode,
+      selectedMode: effectiveBuildMode,
       selectedStepDirection: testCase.settings.suppressStepDirection,
     },
   );
 
   const northlineShape = shapeMap[BuildMode.StaircaseNorthline] ?? null;
-  const isFlatShape = !!northlineShape && !hasNonWaterColorHeightVariance(northlineShape);
-  const effectiveBuildMode = isFlatShape ? BuildMode.Flat : testCase.settings.buildMode;
   const effectiveShape =
     effectiveBuildMode === BuildMode.Flat
       ? northlineShape
