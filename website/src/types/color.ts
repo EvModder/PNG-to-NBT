@@ -28,9 +28,7 @@
  * - src/lib/previewImageEdits.ts
  * - src/lib/codecPreset.ts
  * - src/lib/shapeAnalysis.ts
- * - src/lib/shapeModel.ts
  * - src/lib/shapeGeneration.ts
- * - src/lib/nbtExport.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/lib/tileParsingWorkerTypes.ts
@@ -66,9 +64,6 @@ export enum Shade {
 // - src/lib/previewImageEdits.ts
 // - src/lib/colorGridAnalysis.ts
 // - src/components/PanelCustomColors.tsx
-// - src/lib/shapeModel.ts
-// - src/lib/shapeGeneration.ts
-// - src/lib/nbtExport.ts
 // - src/utils/color.ts
 // - src/types/shape.ts
 export interface ColorRef {

@@ -11,7 +11,6 @@
  * - resolveShapeColorBlockName()
  *
  * Callers:
- * - scripts/audit-block-wiki.mjs
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/ToolbarFillerSettings.tsx
@@ -41,7 +40,6 @@ export function stripDefaultBlockNamespace(raw: string): string {
 }
 
 // Callers:
-// - scripts/audit-block-wiki.mjs
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/ToolbarFillerSettings.tsx

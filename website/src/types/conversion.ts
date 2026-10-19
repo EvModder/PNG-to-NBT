@@ -29,6 +29,8 @@
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/types/shape.ts
  * - src/utils/conversion.ts
+ * - src/lib/blockId.ts
+ * - src/lib/colorGridAnalysis.ts
  */
 
 // Callers:
@@ -49,6 +51,8 @@
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/types/shape.ts
 // - src/utils/conversion.ts
+// - src/lib/colorGridAnalysis.ts
+// - src/lib/previewImageEdits.ts
 export enum BuildMode {
   Flat = "flat",
   InclineUp = "incline_up",
@@ -105,6 +109,7 @@ export type MixedStepPalette = {
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/types/shape.ts
 // - src/utils/conversion.ts
+// - src/lib/colorGridAnalysis.ts
 export enum SuppressStepDirection {
   EastToWest = "east_to_west",
   WestToEast = "west_to_east",
@@ -123,6 +128,8 @@ export enum SuppressStepDirection {
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/types/shape.ts
+// - src/lib/blockId.ts
+// - src/lib/mixedStepHeights.ts
 export enum FillerRole {
   ShadeNorthRow = "shade_north_row",
   ShadeSuppress = "shade_suppress",
@@ -149,7 +156,6 @@ export enum FillerRole {
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/fillerRules.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/nbtExport.ts

@@ -261,6 +261,7 @@ export type PaletteNotice =
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/nbtExport.ts
 // - src/lib/tileParsing.worker.ts
+// - src/components/PresetFallbackDialog.tsx
 export const messages = {
   locale: catalog.locale,
   common: catalog.common,

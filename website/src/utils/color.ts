@@ -30,6 +30,7 @@
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/utils/colorGridKey.ts
+ * - src/lib/suppressClearance.ts
  */
 import { BASE_COLORS, SHADE_MULTIPLIERS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRef } from "@/types/color";
@@ -52,6 +53,7 @@ import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRe
 // - src/lib/tileParsing.worker.ts
 // - src/lib/tileParsingWorkerClient.ts
 // - src/utils/colorGridKey.ts
+// - src/lib/suppressClearance.ts
 export const MAP_SIZE = 128;
 
 // Callers:
@@ -82,6 +84,7 @@ export function isWaterColor(color: ShadedColorRef): boolean {
 
 // Callers:
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/colorGridParsing.ts
 export function packRgb(r: number, g: number, b: number): number {
   return (r << 16) | (g << 8) | b;
 }

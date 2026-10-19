@@ -487,6 +487,7 @@ export function hasBuildAtWorldMinYOpportunity(
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/shapeAnalysisCache.ts
 export function analyzeFragileSupportOverrideNeeds(
   shape: GeneratedShape,
   options: MaterialAnalysisOptions,
@@ -524,6 +525,8 @@ export function analyzeFragileSupportOverrideNeeds(
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysisCache.ts
 export function analyzeMaterialNeeds(
   colorGrid: ColorGrid,
   shape: GeneratedShape,

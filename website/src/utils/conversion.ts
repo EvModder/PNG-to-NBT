@@ -138,6 +138,7 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/components/ToolbarBuildSettings.tsx
 export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.SuppressStepPairs:
@@ -154,6 +155,8 @@ export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
 // - src/lib/messages.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/lib/nbtExport.ts
+// - src/lib/suppressLoadMarkers.ts
 export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Suppress2Layer:
@@ -181,7 +184,6 @@ export function isCrubTechBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
 export function buildModeSupportsCenterOut(buildMode: BuildMode, crubTech = false): boolean {
   return isSuppressStepsBuildMode(buildMode) ||

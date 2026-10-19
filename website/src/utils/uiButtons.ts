@@ -19,7 +19,6 @@ const SWATCH_SIZED_ICON_BUTTON_BASE_CLASS =
   "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border";
 
 // Callers:
-// - src/components/ToolbarPresetSettings.tsx
 // - src/components/PanelCustomColors.tsx
 // - src/components/PanelImagePreview.tsx
 export const DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS =

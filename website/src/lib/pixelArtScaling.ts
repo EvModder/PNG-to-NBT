@@ -4,7 +4,6 @@
  *
  * Callers:
  * - src/Index.tsx
- * - tests/pixelArtScaling.mts
  */
 import type { PixelArtScaleMode } from "@/data/defaultSettings";
 import { MAP_SIZE } from "@/utils/color";

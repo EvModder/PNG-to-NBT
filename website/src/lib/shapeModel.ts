@@ -135,9 +135,6 @@ export function shouldIncludeFragileSupportCell(
   return !!blockId && isFragileBlock(blockId);
 }
 
-// Callers:
-// - src/lib/nbtExport.ts
-// - src/lib/shapeAnalysis.ts
 export interface FragileSupportOverride {
   blockId: string;
   replacementBlockId: string;

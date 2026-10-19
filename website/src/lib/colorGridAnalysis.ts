@@ -55,7 +55,6 @@ export type WaterDrops = readonly [dark: number, flat: number, light: number];
 export type ColorFrequencyMap = Map<ColorRef, Map<Shade, number>>;
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/tileParsingWorkerTypes.ts

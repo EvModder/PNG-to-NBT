@@ -31,7 +31,6 @@ import { isSuppressStepsBuildMode } from "@/utils/conversion";
 import type { ParsedColorGridTile } from "@/lib/colorGridParsing";
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/previewImageStore.ts
 export interface PreviewPixelReplacement {
   x: number;
@@ -42,7 +41,6 @@ export interface PreviewPixelReplacement {
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/previewImageStore.ts
 export type PreviewPixelMask = Uint8Array;
 

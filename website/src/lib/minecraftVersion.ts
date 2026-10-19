@@ -8,7 +8,6 @@
  * - getVersionedSelections()
  * - getVersionedSupportRules()
  * Callers:
- * - scripts/audit-block-wiki.mjs
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/lib/nbtExport.ts
@@ -70,7 +69,6 @@ const catalogs = new Map(Object.keys(MINECRAFT_VERSIONS).map(version =>
 ));
 
 // Callers:
-// - scripts/audit-block-wiki.mjs
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/previewImageEdits.ts
 export function getMinecraftCatalog(version: MinecraftVersion = DEFAULT_MINECRAFT_VERSION) {

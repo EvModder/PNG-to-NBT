@@ -8,7 +8,6 @@
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
- * - tests/invariants.mts
  */
 import { getPixelParity, PixelParity } from "@/lib/colorGridAnalysis";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
@@ -54,7 +53,6 @@ function buildDirectionalPhases(
 
 // Callers:
 // - src/lib/suppressLoadMarkers.ts
-// - tests/invariants.mts
 export function buildTwoLayerLoadPhases(direction: SuppressStepDirection, centerOut = false) {
   const axis = direction === SuppressStepDirection.EastToWest || direction === SuppressStepDirection.WestToEast ? "x" : "z";
   const width = axis === "x" ? 2 : 1;

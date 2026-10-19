@@ -53,6 +53,7 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 // - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/mixedStepHeights.ts
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
 export const DEFAULT_SUPPORT_MODE = SupportMode.None;
 export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
@@ -131,6 +132,7 @@ export const DEFAULT_PIXEL_ART_SCALE_MODE: PixelArtScaleMode = "downscale";
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/lib/colorGridParsing.ts
+// - src/components/PanelImagePreview.tsx
 export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = false;
 export const INVALID_DIMENSIONS_STRATEGY_OPTIONS = ["crop", "pad"] as const;
 export type InvalidDimensionsStrategy = typeof INVALID_DIMENSIONS_STRATEGY_OPTIONS[number];
@@ -142,6 +144,7 @@ export const DEFAULT_INVALID_DIMENSIONS_STRATEGY: InvalidDimensionsStrategy = "c
 // - src/components/ImageColorNotice.tsx
 // - src/components/PanelImagePreview.tsx
 // - src/components/SecretsSettingsDialog.tsx
+// - src/lib/messages.ts
 export const DEFAULT_AUTO_FIX_INVALID_COLORS = false;
 export const INVALID_COLORS_PALETTE_OPTIONS = ["full", "current", "current-flat"] as const;
 export type InvalidColorsPalette = typeof INVALID_COLORS_PALETTE_OPTIONS[number];

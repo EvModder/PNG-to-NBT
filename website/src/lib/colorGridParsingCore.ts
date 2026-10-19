@@ -71,7 +71,6 @@ function findNearestPaletteColor(r: number, g: number, b: number, colors: readon
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/components/ImageColorNotice.tsx
 // - src/components/PanelImagePreview.tsx
 export type InputPaletteEquivalence = { fullPreset: boolean; fullFlat: boolean; presetFlat: boolean };

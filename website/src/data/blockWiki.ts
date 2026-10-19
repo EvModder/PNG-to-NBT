@@ -8,7 +8,6 @@
  * - getBlockWikiUrl()
  *
  * Callers:
- * - scripts/audit-block-wiki.mjs
  * - src/components/PanelColorBlockTable.tsx
  */
 import { normalizeBlockId } from "@/lib/blockId";

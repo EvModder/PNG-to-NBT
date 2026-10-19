@@ -4,7 +4,6 @@
  * - MinecraftVersion
  * - BLOCK_INTRODUCTIONS
  * Callers:
- * - scripts/audit-block-wiki.mjs
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/SecretsSettingsDialog.tsx
@@ -20,13 +19,12 @@
 // Keep ranges chronological; preset decoding locates ranges by DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
 // Callers:
-// - scripts/audit-block-wiki.mjs
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
-// - src/data/defaultSettings.ts
 // - src/lib/minecraftVersion.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
+// - src/lib/codecPreset.ts
 export const MINECRAFT_VERSIONS = {
   "1.21.4": { label: "1.21.4", dataVersion: 4189 },
   "1.21.5": { label: "1.21.5–1.21.8", dataVersion: 4440 },
