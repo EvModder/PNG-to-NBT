@@ -10,6 +10,8 @@
 const RAW_PREFIX = "r";
 const PACKED_PREFIX = "p";
 const COMPRESSED_PREFIX = "z";
+// Shared links contain one tile or preset, not arbitrary file-sized payloads.
+const MAX_PAYLOAD_BYTES = 1024 * 1024;
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -69,12 +71,14 @@ function unpackBytes(bytes: Uint8Array): Uint8Array | null {
     if ((control & 0x80) !== 0) {
       if (i >= bytes.length) return null;
       const runLength = (control & 0x7f) + 3;
+      if (unpacked.length + runLength > MAX_PAYLOAD_BYTES) return null;
       const value = bytes[i++];
       for (let j = 0; j < runLength; ++j) unpacked.push(value);
       continue;
     }
 
     const literalLength = control + 1;
+    if (unpacked.length + literalLength > MAX_PAYLOAD_BYTES) return null;
     if (i + literalLength > bytes.length) return null;
     for (let j = 0; j < literalLength; ++j) unpacked.push(bytes[i++]);
   }
@@ -85,12 +89,20 @@ function unpackBytes(bytes: Uint8Array): Uint8Array | null {
 async function readStreamBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
+  let totalLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalLength += value.length;
+      if (totalLength > MAX_PAYLOAD_BYTES) {
+        await reader.cancel();
+        throw new Error("Shared payload exceeds 1 MiB");
+      }
+      chunks.push(value);
+    }
   }
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  finally { reader.releaseLock(); }
   const bytes = new Uint8Array(totalLength);
   let offset = 0;
   for (const chunk of chunks) {
@@ -150,6 +162,7 @@ async function encodeSingleUrlParamBytes(bytes: Uint8Array): Promise<string> {
 // - src/lib/codecColorGrid.ts
 // - src/lib/codecPreset.ts
 export async function encodeUrlParamBytes(bytes: Uint8Array): Promise<string> {
+  if (bytes.length > MAX_PAYLOAD_BYTES) throw new Error("Shared payload exceeds 1 MiB");
   return encodeSingleUrlParamBytes(bytes);
 }
 
@@ -157,13 +170,13 @@ export async function encodeUrlParamBytes(bytes: Uint8Array): Promise<string> {
 // - src/lib/codecColorGrid.ts
 // - src/lib/codecPreset.ts
 export async function decodeUrlParamBytes(encoded: string): Promise<Uint8Array | null> {
-  if (!encoded) return null;
+  if (!encoded || encoded.length > 1 + Math.ceil(MAX_PAYLOAD_BYTES / 3) * 4) return null;
   try {
     const prefix = encoded[0];
     const payload = base64UrlToBytes(encoded.slice(1));
     switch (prefix) {
       case RAW_PREFIX:
-        return payload;
+        return payload.length <= MAX_PAYLOAD_BYTES ? payload : null;
       case PACKED_PREFIX:
         return unpackBytes(payload);
       case COMPRESSED_PREFIX:

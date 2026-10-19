@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { deflateRawSync } from "node:zlib";
 import { BASE_COLORS } from "@/data/mapColors";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { BLOCK_INTRODUCTIONS, MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
@@ -7,13 +8,21 @@ import { STORAGE_KEYS } from "@/data/storageKeys";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 import { encodeFullPreset, decodeFullPreset, loadPresets } from "@/lib/codecPreset";
-import { decodeUrlParamBytes } from "@/lib/codecUrlParam";
+import { decodeUrlParamBytes, encodeUrlParamBytes } from "@/lib/codecUrlParam";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
 import { resolveAssignedColorBlock } from "@/lib/blockId";
 import { Shade, type ColorGrid } from "@/types/color";
 import { removeCustomColorBlock } from "@/utils/customColors";
 
 type FullPreset = Parameters<typeof encodeFullPreset>[0];
+
+const limit = 1024 * 1024;
+const oversized = new Uint8Array(limit + 1);
+assert.equal(await decodeUrlParamBytes(`r${Buffer.from(oversized).toString("base64url")}`), null);
+assert.equal(await decodeUrlParamBytes(`z${deflateRawSync(oversized).toString("base64url")}`), null);
+assert.equal(await decodeUrlParamBytes(`p${Buffer.from(Array.from({ length: Math.ceil((limit + 1) / 130) }, () => [255, 0]).flat()).toString("base64url")}`), null);
+await assert.rejects(encodeUrlParamBytes(oversized));
+assert.equal((await decodeUrlParamBytes(await encodeUrlParamBytes(new Uint8Array(limit))))?.length, limit);
 
 // Fixed values make the wire fixture independent of changing application defaults.
 const standard: FullPreset = {
