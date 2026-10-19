@@ -2732,24 +2732,35 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
   };
 }
 
-function getShapeCacheKeyId(
-  buildMode: InternalBuildMode,
-  layerGap: number,
-  mixSteps: boolean,
-  mixedStepHeightKey: number | string,
-  stepDirection: SuppressStepDirection,
-  centerOut: boolean,
-  paletteSeed: number,
-  waterDrops?: WaterDrops,
-  topAlignedWater = false,
-  enableWaterConvenience = true,
-  buildAtWorldMinY = false,
-  skipEmptySuppressSteps = true,
-  useCrubTech = false,
-  includeTransparentBlocks = false,
-  transparentPlacementMode: BuildMode = buildMode,
-  suppress2LayerLatePairY = layerGap + 1,
-): ShapeCacheKeyId {
+type ShapeOptions = {
+  buildMode: InternalBuildMode;
+  layerGap?: number;
+  mixSteps?: boolean;
+  mixedStepMaxHeight?: number;
+  stepDirection?: SuppressStepDirection;
+  centerOut?: boolean;
+  paletteSeed?: number;
+  waterDrops?: WaterDrops;
+  topAlignedWater?: boolean;
+  enableWaterConvenience?: boolean;
+  buildAtWorldMinY?: boolean;
+  skipEmptySuppressSteps?: boolean;
+  useCrubTech?: boolean;
+  includeTransparentBlocks?: boolean;
+  transparentPlacementMode?: BuildMode;
+  suppress2LayerLatePairY?: number;
+  mixedStepPalette?: MixedStepPalette;
+  stepSpacing?: SuppressStepSpacing;
+};
+
+function getShapeCacheKeyId({
+  buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette,
+  stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0,
+  waterDrops, topAlignedWater = false, enableWaterConvenience = true, buildAtWorldMinY = false,
+  skipEmptySuppressSteps = true, useCrubTech = false, includeTransparentBlocks = false,
+  transparentPlacementMode = buildMode, suppress2LayerLatePairY = layerGap + 1,
+}: ShapeOptions): ShapeCacheKeyId {
+  const mixedStepHeightKey = mixedStepPalette ? `${mixedStepMaxHeight}:${mixedStepPalette.key}` : mixedStepMaxHeight;
   let id: string = buildMode;
   if (buildModeUsesLayerGap(buildMode)) id += `|gap:${layerGap}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|dir:${stepDirection}`;
@@ -2874,23 +2885,10 @@ function getCachedStaircaseParts(
     buildMode === BuildMode.StaircaseSouthline || buildMode === BuildMode.StaircaseClassic
       ? BuildMode.StaircaseNorthline
       : buildMode;
-  const keyId = getShapeCacheKeyId(
-    buildMode,
-    0,
-    false,
-    0,
-    SuppressStepDirection.EastToWest,
-    false,
-    paletteSeed,
-    waterDrops,
-    topAlignedWater,
-    enableWaterConvenience,
-    buildAtWorldMinY,
-    true,
-    false,
-    includeTransparentBlocks,
-    transparentPlacementMode,
-  );
+  const keyId = getShapeCacheKeyId({
+    buildMode, paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience,
+    buildAtWorldMinY, includeTransparentBlocks, transparentPlacementMode,
+  });
   return getCachedRawParts(cache, keyId, () => {
     if (buildMode === BuildMode.InclineUp || buildMode === BuildMode.InclineDown) {
       const blocks = buildInclineBlocks(colorGrid, buildMode, includeTransparentBlocks);
@@ -2945,7 +2943,7 @@ function getCachedSuppressSplitParts(
   buildMode: BuildMode.SuppressSplitRow | BuildMode.SuppressSplitChecker,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(buildMode, 0, false, 0, SuppressStepDirection.EastToWest, false, 0, waterDrops);
+  const keyId = getShapeCacheKeyId({ buildMode, waterDrops });
   return getCachedRawParts(cache, keyId, () =>
       buildMode === BuildMode.SuppressSplitRow
         ? buildSuppressSplitRowBlockSets(colorGrid, waterDrops).map(({ blocks, loweredWaterBlocks }) => buildShapePart(blocks, [], true, new Set<number>([-1]), loweredWaterBlocks))
@@ -2965,15 +2963,15 @@ function getCachedSuppressStepParts(
   waterDrops?: WaterDrops,
   mixedStepPalette?: MixedStepPalette,
 ): RawShapePart[] {
-  const heightKey = mixedStepPalette ? `${mixedStepMaxHeight}:${mixedStepPalette.key}` : mixedStepMaxHeight;
-  const keyId = getShapeCacheKeyId(buildMode, 0, mixSteps, heightKey, stepDirection, centerOut, 0, waterDrops, false, true, false, skipEmptySuppressSteps);
+  const keyOptions = { buildMode, mixSteps, mixedStepMaxHeight, mixedStepPalette, stepDirection, centerOut, waterDrops, skipEmptySuppressSteps };
+  const keyId = getShapeCacheKeyId(keyOptions);
   const cached = cache.rawParts.get(keyId);
   if (cached) return cached;
 
   const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, waterDrops, skipEmptySuppressSteps, cache, mixedStepPalette);
   cache.rawParts.set(keyId, rawPartsBuild.parts);
   if (!rawPartsBuild.hasAnyEmptyPhase) {
-    const alternateKeyId = getShapeCacheKeyId(buildMode, 0, mixSteps, heightKey, stepDirection, centerOut, 0, waterDrops, false, true, false, !skipEmptySuppressSteps);
+    const alternateKeyId = getShapeCacheKeyId({ ...keyOptions, skipEmptySuppressSteps: !skipEmptySuppressSteps });
     cache.rawParts.set(alternateKeyId, rawPartsBuild.parts);
   }
   return rawPartsBuild.parts;
@@ -2988,24 +2986,7 @@ function getCachedSuppress2LayerParts(
   useCrubTech: boolean,
   waterDrops?: WaterDrops,
 ): RawShapePart[] {
-  const keyId = getShapeCacheKeyId(
-    buildMode,
-    layerGap,
-    false,
-    0,
-    SuppressStepDirection.EastToWest,
-    false,
-    0,
-    waterDrops,
-    false,
-    true,
-    false,
-    true,
-    useCrubTech,
-    false,
-    buildMode,
-    suppress2LayerLatePairY,
-  );
+  const keyId = getShapeCacheKeyId({ buildMode, layerGap, waterDrops, useCrubTech, suppress2LayerLatePairY });
   return getCachedRawParts(cache, keyId, () => {
     const { blocks, loweredWaterBlocks, supportFloorYs } = buildSuppressDualLayerBlocks(
       colorGrid,
@@ -3022,23 +3003,13 @@ function getCachedSuppress2LayerParts(
 function buildRawShapeParts(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
-  buildMode: InternalBuildMode,
-  layerGap: number,
-  mixSteps: boolean,
-  mixedStepMaxHeight: number,
-  stepDirection: SuppressStepDirection,
-  centerOut: boolean,
-  paletteSeed: number,
-  waterDrops?: WaterDrops,
-  topAlignedWater = false,
-  enableWaterConvenience = true,
-  buildAtWorldMinY = false,
-  skipEmptySuppressSteps = true,
-  useCrubTech = false,
-  includeTransparentBlocks = false,
-  transparentPlacementMode: BuildMode = buildMode,
-  suppress2LayerLatePairY = layerGap + 1,
-  mixedStepPalette?: MixedStepPalette,
+  {
+    buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette,
+    stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0,
+    waterDrops, topAlignedWater = false, enableWaterConvenience = true, buildAtWorldMinY = false,
+    skipEmptySuppressSteps = true, useCrubTech = false, includeTransparentBlocks = false,
+    transparentPlacementMode = buildMode, suppress2LayerLatePairY = layerGap + 1,
+  }: ShapeOptions,
 ): RawShapePart[] {
   switch (buildMode) {
     case BuildMode.SuppressSplitRow:
@@ -3133,69 +3104,16 @@ function spaceSuppressStepParts(parts: RawShapePart[], { minimum, uniform, keepE
 
 function getGeneratedShape(
   colorGrid: ColorGrid,
-  buildMode: InternalBuildMode,
-  layerGap: number,
-  mixSteps: boolean,
-  mixedStepMaxHeight: number,
-  stepDirection: SuppressStepDirection,
-  centerOut: boolean,
-  paletteSeed: number,
-  waterDrops?: WaterDrops,
-  topAlignedWater = false,
-  enableWaterConvenience = true,
-  buildAtWorldMinY = false,
-  skipEmptySuppressSteps = true,
-  useCrubTech = false,
-  includeTransparentBlocks = false,
-  transparentPlacementMode: BuildMode = buildMode,
-  suppress2LayerLatePairY = layerGap + 1,
-  mixedStepPalette?: MixedStepPalette,
-  stepSpacing?: SuppressStepSpacing,
+  options: ShapeOptions,
 ): CachedGeneratedShape {
+  const { buildMode, stepDirection = SuppressStepDirection.EastToWest, centerOut = false, stepSpacing } = options;
   const cache = getGridShapeCache(colorGrid);
-  let cacheKeyId = getShapeCacheKeyId(
-    buildMode,
-    layerGap,
-    mixSteps,
-    mixedStepPalette ? `${mixedStepMaxHeight}:${mixedStepPalette.key}` : mixedStepMaxHeight,
-    stepDirection,
-    centerOut,
-    paletteSeed,
-    waterDrops,
-    topAlignedWater,
-    enableWaterConvenience,
-    buildAtWorldMinY,
-    skipEmptySuppressSteps,
-    useCrubTech,
-    includeTransparentBlocks,
-    transparentPlacementMode,
-    suppress2LayerLatePairY,
-  );
+  let cacheKeyId = getShapeCacheKeyId(options);
   if (stepSpacing) cacheKeyId = `${cacheKeyId}|spacing:${stepSpacing.minimum}:${stepSpacing.uniform ? 1 : 0}:${!stepSpacing.uniform && stepSpacing.keepExtras ? 1 : 0}` as ShapeCacheKeyId;
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
-  const rawParts = buildRawShapeParts(
-    colorGrid,
-    cache,
-    buildMode,
-    layerGap,
-    mixSteps,
-    mixedStepMaxHeight,
-    stepDirection,
-    centerOut,
-    paletteSeed,
-    waterDrops,
-    topAlignedWater,
-    enableWaterConvenience,
-    buildAtWorldMinY,
-    skipEmptySuppressSteps,
-    useCrubTech,
-    includeTransparentBlocks,
-    transparentPlacementMode,
-    suppress2LayerLatePairY,
-    mixedStepPalette,
-  );
+  const rawParts = buildRawShapeParts(colorGrid, cache, options);
   const parts = (stepSpacing ? spaceSuppressStepParts(rawParts, stepSpacing) : rawParts).map(finalizeShapePart);
   const splitExportNames =
     buildMode === BuildMode.SuppressSplitRow
@@ -3295,29 +3213,16 @@ export function generateShapeMap(
 
   for (const buildMode of requestedModes) {
     const internalBuildMode = getCanonicalBuildMode(buildMode);
-    const generated = getGeneratedShape(
-      colorGrid,
-      internalBuildMode,
-      options.layerGap,
-      mixSteps,
-      mixedStepMaxHeight,
-      stepDirection,
-      options.suppressCenterOut === true && isSuppressStepsBuildMode(buildMode),
-      paletteSeed,
-      waterDrops,
-      topAlignedWater,
-      enableWaterConvenience,
-      buildAtWorldMinY,
-      skipEmptySuppressSteps,
-      useCrubTech,
-      includeTransparentBlocks,
-      buildMode,
-      suppress2LayerLatePairY,
-      mixedStepPalette,
-      isSuppressStepsBuildMode(buildMode) && (minimumStepOffset !== 1 || !uniformStepSpacing)
+    const generated = getGeneratedShape(colorGrid, {
+      buildMode: internalBuildMode, layerGap: options.layerGap, mixSteps, mixedStepMaxHeight, stepDirection,
+      centerOut: options.suppressCenterOut === true && isSuppressStepsBuildMode(buildMode),
+      paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience, buildAtWorldMinY,
+      skipEmptySuppressSteps, useCrubTech, includeTransparentBlocks, transparentPlacementMode: buildMode,
+      suppress2LayerLatePairY, mixedStepPalette,
+      stepSpacing: isSuppressStepsBuildMode(buildMode) && (minimumStepOffset !== 1 || !uniformStepSpacing)
         ? { minimum: minimumStepOffset, uniform: uniformStepSpacing, keepExtras: options.keepSuppressExtras === true }
         : undefined,
-    );
+    });
     // Single-mode jobs still generate the full shape, but have nothing to deduplicate.
     if (requestedModes.length > 1) {
       const signatureId = generated.signatureId ??= getGeneratedShapeSignatureId(generated.shape);
