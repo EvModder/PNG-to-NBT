@@ -17,13 +17,14 @@
  * - aggregateDerivedImageStats()
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
+ * - src/lib/tileGeometry.ts
  * - src/Index.tsx
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/suppressSteps.ts
- * - src/lib/tileGeometry.worker.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/lib/tileParsingWorkerTypes.ts
  */
@@ -45,9 +46,9 @@ export enum PixelParity {
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
+// - src/lib/generationPolicy.ts
 export type WaterDrops = readonly [dark: number, flat: number, light: number];
 
 // Callers:
@@ -79,8 +80,9 @@ type VoidShadowSummary = {
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridParsingCore.ts
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerTypes.ts
+// - src/lib/generationPolicy.ts
+// - src/lib/tileGeometry.ts
 export enum FlatModeBehavior {
   None = "none",
   Plain = "plain",
@@ -419,6 +421,7 @@ function summarizeUsedShadesByColorKey(
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/generationPolicy.ts
 export function deriveImageStats(imageStats: ColorGridStats): DerivedImageStats {
   const usedShadesByColorKey = collectUsedShadesByColorKey(imageStats.colorFrequencyMap);
   return {

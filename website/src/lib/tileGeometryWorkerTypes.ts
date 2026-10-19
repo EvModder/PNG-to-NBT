@@ -9,6 +9,8 @@
  * - TileGeometryWorkerResponse
  *
  * Callers:
+ * - src/lib/tileGeometry.ts
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/lib/tileGeometry.worker.ts
  * - src/lib/tileGeometryWorkerClient.ts
@@ -21,14 +23,15 @@ import { FlatModeBehavior, type WaterDrops } from "@/lib/colorGridAnalysis";
 // Callers:
 // - src/Index.tsx
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/lib/generationPolicy.ts
 export type TileWaterSetting =
   | { kind: "below-platform"; drops: WaterDrops }
   | { kind: "top-aligned" }
   | undefined;
 
 // Callers:
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/lib/tileGeometry.ts
 export type TileBaseGeometryWorkerInput = {
   colorGrid: ColorGrid;
   allSameShade?: Shade;
@@ -43,8 +46,9 @@ export type TileBaseGeometryWorkerInput = {
 };
 
 // Callers:
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/lib/generationPolicy.ts
+// - src/lib/tileGeometry.ts
 export type TileBaseGeometryWorkerResult = {
   baseShapeMap: Partial<Record<BuildMode, GeneratedShape>>;
   baseNorthlineShape: GeneratedShape | null;
@@ -52,8 +56,8 @@ export type TileBaseGeometryWorkerResult = {
 };
 
 // Callers:
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/lib/tileGeometry.ts
 export type TileFinalGeometryWorkerInput = {
   colorGrid: ColorGrid;
   allSameShade?: Shade;
@@ -84,8 +88,8 @@ export type TileFinalGeometryWorkerInput = {
 };
 
 // Callers:
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/lib/tileGeometry.ts
 export type TileFinalGeometryWorkerResult = {
   shapeMap: Partial<Record<BuildMode, GeneratedShape>>;
   northlineShape: GeneratedShape | null;

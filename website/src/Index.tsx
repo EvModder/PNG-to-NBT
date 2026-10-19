@@ -34,9 +34,6 @@ import {
   DEFAULT_LIGHT_WATER_DROP,
   DEFAULT_FLAT_WATER_DROP,
   DEFAULT_DARK_WATER_DROP,
-  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
-  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
-  DEFAULT_CRUBTECH_DARK_WATER_DROP,
   DEFAULT_BUILD_AT_WORLD_MIN_Y,
   DEFAULT_SHOW_VS_FILLERS_IN_PREVIEW,
   DEFAULT_SHOW_IDS,
@@ -85,6 +82,7 @@ import {
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
+import { getDarkTheme, observeTheme, toggleTheme } from "@/lib/theme";
 import { scalePixelArt } from "@/lib/pixelArtScaling";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbtEntries, getCrubTechLayerSplitSectionCount } from "@/lib/nbtExport";
 import {
@@ -106,7 +104,6 @@ import {
   summarizeVoidShadows,
   canUseSuppressDirection,
   getBelowPlatformWaterBlockedDirections,
-  type WaterDrops,
 } from "@/lib/colorGridAnalysis";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
 import { createImageDataFromColorGrid, MAP_SIZE } from "@/utils/color";
@@ -129,7 +126,6 @@ import {
   analyzeMaterialNeeds,
   aggregateMaterialCounts,
   aggregateOverrideCounts,
-  hasBuildAtWorldMinYOpportunity,
   hasStairStepSupport,
 } from "@/lib/shapeAnalysis";
 import { cacheShapeMaterialNeeds, getCachedShapeFillerNeeds, getCachedShapeMaterialNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
@@ -166,7 +162,18 @@ import { decodeFullPreset, encodeFullPreset, loadPresets } from "@/lib/codecPres
 import { buildInputColorPalette, compareInputColorPalettes, presetCoversAllColors } from "@/lib/colorGridParsingCore";
 import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { measureToolbarWidths } from "@/utils/toolbarLayout";
-import { getShapeForBuildMode } from "@/lib/buildModeShapes";
+import {
+  getShapeForBuildMode,
+  CRUBTECH_WATER_DROPS,
+  WATER_DROP_INPUT_ORDER,
+  getUsedWaterShades,
+  normalizeUsedWaterDrops,
+  resolveTileWaterSetting,
+  getFlatBuildAtWorldMinYEligible,
+  getBuildAtWorldMinYEligibleForBuildMode,
+  type WaterDropShade,
+  getPaletteSeedOffset,
+} from "@/lib/generationPolicy";
 import { getMixedStepSettings } from "@/lib/mixedStepHeights";
 import {
   offsetPreviewPixelReplacements,
@@ -198,7 +205,6 @@ import {
 import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
 import { BuildMode, SuppressStepDirection, FillerRole } from "@/types/conversion";
-import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getVersionedSelections, getVersionedSupportRules } from "@/lib/minecraftVersion";
@@ -254,14 +260,6 @@ function clampWestEastSlopeRise(value: number): number {
   return nextValue;
 }
 
-const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
-type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
-const CRUBTECH_WATER_DROPS = [
-  DEFAULT_CRUBTECH_DARK_WATER_DROP,
-  DEFAULT_CRUBTECH_FLAT_WATER_DROP,
-  DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
-] as const satisfies WaterDrops;
-const CRUBTECH_SHAPE_WATER_DROPS = CRUBTECH_WATER_DROPS.map(drop => drop + 1) as [...WaterDrops];
 type TileSelectionModifiers = {
   shiftKey: boolean;
   metaKey: boolean;
@@ -306,7 +304,6 @@ type TileAnalysisPhase = "generating" | "fillerAnalysis";
 
 const EMPTY_USED_SHADES_BY_COLOR_KEY = new Map<ColorRefKey, Set<Shade>>();
 const EMPTY_USED_COLOR_KEYS = new Set<ColorRefKey>();
-const EMPTY_USED_WATER_SHADES = new Set<Shade>();
 const EMPTY_FILLER_ROLE_COUNTS = new Map<FillerRole, number>();
 const EMPTY_COLOR_COUNTS: Readonly<Record<string, number>> = Object.freeze({});
 const EMPTY_MATERIAL_COUNTS: Readonly<MaterialCountsLike> = Object.freeze({
@@ -344,32 +341,6 @@ function mergeTileSelections(current: readonly number[], next: readonly number[]
 function toggleTileSelectionIndex(current: readonly number[], tileIndex: number): number[] {
   if (current.includes(tileIndex)) return current.filter(index => index !== tileIndex);
   return [...current, tileIndex].toSorted((a, b) => a - b);
-}
-
-function normalizeUsedWaterDrops(
-  rawDrops: Record<WaterDropShade, number>,
-  usedWaterShades: ReadonlySet<Shade>,
-  preferredFirstShade?: WaterDropShade,
-): readonly [dark: number, flat: number, light: number] {
-  const next: [number, number, number] = [
-    Math.max(0, rawDrops[Shade.Dark] || 0),
-    Math.max(0, rawDrops[Shade.Flat] || 0),
-    Math.max(0, rawDrops[Shade.Light] || 0),
-  ];
-  const usedValues = new Set<number>();
-  const orderedShades = preferredFirstShade === undefined
-    ? WATER_DROP_INPUT_ORDER
-    : [preferredFirstShade, ...WATER_DROP_INPUT_ORDER.filter(shade => shade !== preferredFirstShade)];
-
-  for (const shade of orderedShades) {
-    if (!usedWaterShades.has(shade)) continue;
-    let value = next[shade];
-    while (usedValues.has(value)) ++value;
-    next[shade] = value;
-    usedValues.add(value);
-  }
-
-  return next;
 }
 
 function buildWaterDropInputs(dark: number, flat: number, light: number): Record<WaterDropShade, number> {
@@ -419,12 +390,6 @@ function hasCurrentMaterialAnalyses(
     if (tileAnalysis.supportShape !== tile.supportShape) return false;
     return !tile.supportShape || tileAnalysis.materialNeedStats !== null;
   });
-}
-
-function getUsedWaterShades(
-  usedShadesByColorKey: ReadonlyMap<ColorRefKey, ReadonlySet<Shade>>,
-): ReadonlySet<Shade> {
-  return usedShadesByColorKey.get(getColorRefKey({ id: WATER_BASE_INDEX, isCustom: false })) ?? EMPTY_USED_WATER_SHADES;
 }
 
 function getAggregatedFlatModeBehavior(tileAnalyses: readonly TileBaseAnalysis[]): FlatModeBehavior {
@@ -593,44 +558,6 @@ function getSuppressModeOptionsForState(
     return visibleModes.has(option.value);
   });
 }
-
-function getFlatBuildAtWorldMinYEligible(
-  tileBaseAnalyses: readonly TileBaseAnalysis[],
-  applySupportFloorYs: boolean,
-): boolean {
-  return tileBaseAnalyses.some(tile =>
-    tile.flatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
-    !!tile.baseNorthlineShape &&
-    hasBuildAtWorldMinYOpportunity(tile.tile.colorGrid, tile.baseNorthlineShape, applySupportFloorYs),
-  );
-}
-
-function getBuildAtWorldMinYEligibleForBuildMode(
-  tileBaseAnalyses: readonly TileBaseAnalysis[],
-  buildMode: BuildMode,
-  applySupportFloorYs: boolean,
-): boolean {
-  if (!isStaircaseBuildMode(buildMode)) return false;
-  if (buildMode === BuildMode.Flat) {
-    return getFlatBuildAtWorldMinYEligible(tileBaseAnalyses, applySupportFloorYs);
-  }
-  return tileBaseAnalyses.some(tile => {
-    const shape = getShapeForBuildMode(tile.baseShapeMap, buildMode, tile.isFlatShape);
-    return !!shape && hasBuildAtWorldMinYOpportunity(tile.tile.colorGrid, shape, applySupportFloorYs);
-  });
-}
-
-const getStoredTheme = (): "light" | "dark" | null => {
-  const raw = localStorage.getItem(LS_KEYS.theme);
-  return raw === "light" || raw === "dark" ? raw : null;
-};
-
-const getSystemPrefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-const resolveDarkTheme = () => {
-  const stored = getStoredTheme();
-  return stored ? stored === "dark" : getSystemPrefersDark();
-};
 
 // ── Component ──
 const Index = () => {
@@ -836,7 +763,7 @@ const Index = () => {
   const [paletteNotices, setPaletteNotices] = useState<PaletteNotice[]>([]);
   const [converting, setConverting] = useState(false);
   const [showUnusedColors, setShowUnusedColors] = useState(false);
-  const [isDark, setIsDark] = useState(resolveDarkTheme);
+  const [isDark, setIsDark] = useState(getDarkTheme);
   const [localePreference, setLocalePreferenceState] = useState<LocalePreference>(getLocalePreference);
   const [showSecretsDialog, setShowSecretsDialog] = useState(false);
   const [pendingBlockSelection, setPendingBlockSelection] = useState<{
@@ -950,12 +877,7 @@ const Index = () => {
     const base = import.meta.env.BASE_URL || "/";
     link.href = `${base}${imageData ? "favicon-active.png" : "favicon.png"}`;
   }, [imageData]);
-  useEffect(() => {
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => { if (!getStoredTheme()) setIsDark(e.matches); };
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
+  useEffect(() => observeTheme(setIsDark), []);
   useEffect(
     () => () => {
       if (uploadedPreviewUrlRef.current) {
@@ -1301,27 +1223,13 @@ const Index = () => {
     ),
     [calcDarkWaterDrop, calcFlatWaterDrop, calcLightWaterDrop, usedWaterShades],
   );
-  const usesBelowPlatformWaterForBuildMode = useCallback(
-    (targetBuildMode: BuildMode) => belowPlatformWater || (crubTech && isCrubTechBuildMode(targetBuildMode)),
-    [belowPlatformWater, crubTech],
-  );
   const getTileWaterSetting = useCallback(
     (tileDerivedImageStats: DerivedImageStats, targetBuildMode: BuildMode): TileWaterSetting => {
-      const targetBelowPlatformWater = usesBelowPlatformWaterForBuildMode(targetBuildMode);
-      const tileUsedWaterShades = getUsedWaterShades(tileDerivedImageStats.usedShadesByColorKey);
-      const tileHasWater = tileUsedWaterShades.size > 0;
-      const tileHasNonLightWater = tileUsedWaterShades.has(Shade.Dark) || tileUsedWaterShades.has(Shade.Flat);
-      const targetCrubTechWater = crubTech && isCrubTechBuildMode(targetBuildMode);
-      if (targetBelowPlatformWater && tileHasWater) {
-        return { kind: "below-platform", drops: targetCrubTechWater ? CRUBTECH_SHAPE_WATER_DROPS : normalizedDeferredWaterDrops };
-      }
-      // Extend top alignment to flat land; preserve leaf/ice staircase convenience placement.
-      if (tileHasNonLightWater && (usesWaterForWater || tileDerivedImageStats.hasOnlyFlatLand)) {
-        return { kind: "top-aligned" };
-      }
-      return undefined;
+      return resolveTileWaterSetting(
+        tileDerivedImageStats, targetBuildMode, belowPlatformWater, crubTech, usesWaterForWater, normalizedDeferredWaterDrops,
+      );
     },
-    [crubTech, normalizedDeferredWaterDrops, usesBelowPlatformWaterForBuildMode, usesWaterForWater],
+    [crubTech, normalizedDeferredWaterDrops, belowPlatformWater, usesWaterForWater],
   );
   const showMixStepsToggle = useMemo(
     () =>
@@ -2969,6 +2877,7 @@ const Index = () => {
       for (const tile of exportTileAnalyses) {
         if (!tile.supportShape) throw new Error(messages.parsing.conversionFailed);
         const tileEntries = await convertTileToNbtEntries(tile.supportShape, {
+          blockUnavailableMessage: messages.parsing.blockUnavailableInVersion,
           selectedBlocks: effectiveSelectedBlocks,
           minecraftVersion,
           fillerAssignments: uiFillerAssignments,
@@ -3120,14 +3029,6 @@ const Index = () => {
     setTileSelectionAnchorIndex(tileIndex);
   }, [tileSelectionAnchorIndex, tileCount]);
 
-  const toggleTheme = () => {
-    const next = isDark ? "light" : "dark";
-    const systemTheme = getSystemPrefersDark() ? "dark" : "light";
-    if (next === systemTheme) localStorage.removeItem(LS_KEYS.theme);
-    else localStorage.setItem(LS_KEYS.theme, next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-    setIsDark(next === "dark");
-  };
   const handleLocalePreferenceChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = event.target.value as LocalePreference;
     if (next === localePreference) return;
@@ -3925,7 +3826,7 @@ const Index = () => {
         </div>
       )}
       <header className="border-b border-border pl-[17px] pr-2 py-1.5 flex items-center justify-between bg-[hsl(var(--header-bg))]">
-        <h1 className="text-base font-bold text-primary">
+        <h1 className="text-lg font-bold text-primary">
           <button
             type="button"
             className="hover:underline decoration-dotted underline-offset-2"
@@ -3958,7 +3859,7 @@ const Index = () => {
             </select>
           </label>
           <button
-            onClick={toggleTheme}
+            onClick={() => setIsDark(toggleTheme())}
             className="h-7 w-7 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors grid place-items-center"
             aria-label={messages.common.toggleThemeAriaLabel}
             title={messages.common.toggleThemeAriaLabel}

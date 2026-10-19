@@ -22,7 +22,6 @@ import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlo
 import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getVersionedBlockName, isBlockAvailable } from "./minecraftVersion";
-import { messages } from "./messages";
 import { createZip } from "@/utils/zip";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { Shade, WATER_BASE_INDEX } from "@/data/mapColors";
@@ -40,6 +39,7 @@ import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
 import { appendSuppressClearanceMarkers } from "./suppressClearance";
 
 interface ExportOptions extends ColorBlockSelections {
+  blockUnavailableMessage?: (block: string, version: MinecraftVersion) => string;
   fillerAssignments: FillerAssignment[];
   applySupportFloorYs: boolean;
   collapseDuplicatePaletteStates?: boolean;
@@ -496,7 +496,9 @@ async function writeExportBlocksToNbt(
     version,
   );
   for (const block of paletteBlockIds) {
-    if (!isBlockAvailable(block, version)) throw new Error(messages.parsing.blockUnavailableInVersion(block, version));
+    if (!isBlockAvailable(block, version)) {
+      throw new Error(options.blockUnavailableMessage?.(block, version) ?? `${block} is unavailable in Minecraft ${version}`);
+    }
   }
   return gzipCompress(writeStructureNbt(stateBlocks, paletteBlockIds, sizeX, sizeY, sizeZ, MINECRAFT_VERSIONS[version].dataVersion, DEFAULT_NBT_AUTHOR));
 }

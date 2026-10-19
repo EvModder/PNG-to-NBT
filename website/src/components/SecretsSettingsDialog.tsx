@@ -19,8 +19,7 @@ import {
 } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { messages } from "@/lib/messages";
-import { MUTED_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
-import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
+import { MUTED_SQUARE_ICON_BUTTON_CLASS, PANEL_TITLE_TEXT_CLASS } from "@/data/uiClasses";
 
 type SecretsSettingsDialogProps = {
   open: boolean;

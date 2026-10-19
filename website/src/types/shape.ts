@@ -10,7 +10,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/lib/blockId.ts
- * - src/lib/buildModeShapes.ts
+ * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
@@ -38,7 +38,7 @@ export enum ShapePartType {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/buildModeShapes.ts
+// - src/lib/generationPolicy.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts

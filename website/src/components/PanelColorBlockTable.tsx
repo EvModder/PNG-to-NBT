@@ -40,7 +40,7 @@ import { measureNoWrapSectionWidth } from "@/utils/toolbarLayout";
 import {
   MUTED_INLINE_TOGGLE_CONTROL_CLASS,
   PANEL_TITLE_TEXT_CLASS,
-} from "@/utils/uiTypography";
+} from "@/data/uiClasses";
 import {
   APPROX_TABLE_MONO_CHAR_WIDTH_PX,
   COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX,

@@ -35,8 +35,8 @@ import { COLOR_TABLE_FIXED_COLUMN_WIDTHS_PX } from "@/utils/colorTableLayout";
 import {
   DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS,
   PRIMARY_SQUARE_ICON_BUTTON_CLASS,
-} from "@/utils/uiButtons";
-import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
+  PANEL_TITLE_TEXT_CLASS,
+} from "@/data/uiClasses";
 import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 
 type NewCustomColorDraft = {

@@ -7,6 +7,7 @@
  * - BASE_COLORS
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
@@ -23,7 +24,6 @@
  * - src/lib/minecraftVersion.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
- * - src/lib/paletteSeed.ts
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -108,6 +108,7 @@ export const TRANSPARENCY_BASE_INDEX = 0;
 // - src/lib/mixedStepHeights.ts
 // - src/utils/color.ts
 // - src/lib/colorGridAnalysis.ts
+// - src/lib/generationPolicy.ts
 // - src/lib/previewImageEdits.ts
 export const WATER_BASE_INDEX = 12;
 
@@ -125,7 +126,7 @@ export const WATER_BASE_INDEX = 12;
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
-// - src/lib/paletteSeed.ts
+// - src/lib/generationPolicy.ts
 // - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts
 // - src/utils/color.ts

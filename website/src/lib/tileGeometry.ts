@@ -1,0 +1,97 @@
+/**
+ * Public API: analyzeBaseGeometry(), analyzeFinalGeometry()
+ * Callers:
+ * - src/lib/tileGeometry.worker.ts
+ */
+import { generateShapeMap } from "@/lib/shapeGeneration";
+import {
+  analyzeFillerNeeds,
+  hasNonWaterColorHeightVariance,
+  nooblineIsSingleY,
+} from "@/lib/shapeAnalysis";
+import { getShapeForBuildMode } from "@/lib/generationPolicy";
+import { FlatModeBehavior } from "@/lib/colorGridAnalysis";
+import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import type {
+  TileBaseGeometryWorkerInput,
+  TileBaseGeometryWorkerResult,
+  TileFinalGeometryWorkerInput,
+  TileFinalGeometryWorkerResult,
+} from "@/lib/tileGeometryWorkerTypes";
+
+export function analyzeBaseGeometry(input: TileBaseGeometryWorkerInput): TileBaseGeometryWorkerResult {
+  const baseShapeMap = generateShapeMap(
+    input.colorGrid,
+    input.allSameShade,
+    input.hasWater,
+    input.hasTransparency,
+    false,
+    {
+      layerGap: input.layerGap,
+      mixSteps: false,
+      includeTransparentBlocks: input.includeTransparentBlocks,
+      paletteSeed: input.paletteSeed,
+      waterSetting: input.waterSetting,
+      enableWaterConvenience: input.enableWaterConvenience,
+      buildAtWorldMinY: false,
+      skipEmptySuppressSteps: true,
+      collapseStaircaseModes: true,
+      includeFlatNorthline: false,
+      selectedMode: null,
+      selectedStepDirection: SuppressStepDirection.EastToWest,
+    },
+  );
+  const baseNorthlineShape = baseShapeMap[BuildMode.StaircaseNorthline] ?? null;
+  const isFlatShape = !!baseNorthlineShape
+    && (!hasNonWaterColorHeightVariance(baseNorthlineShape) || input.flatModeBehavior !== FlatModeBehavior.None);
+
+  return {
+    baseShapeMap,
+    baseNorthlineShape,
+    isFlatShape,
+  };
+}
+
+export function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileFinalGeometryWorkerResult {
+  const shapeMap = generateShapeMap(
+    input.colorGrid,
+    input.allSameShade,
+    input.hasWater,
+    input.hasTransparency,
+    input.requiresTwoLayerLateShading,
+    {
+      layerGap: input.layerGap,
+      mixSteps: input.mixSteps,
+      mixedStepMaxHeight: input.mixedStepMaxHeight,
+      mixedStepPalette: input.mixedStepPalette,
+      includeTransparentBlocks: input.includeTransparentBlocks,
+      paletteSeed: input.paletteSeed,
+      waterSetting: input.waterSetting,
+      enableWaterConvenience: input.enableWaterConvenience,
+      buildAtWorldMinY: input.buildAtWorldMinY,
+      skipEmptySuppressSteps: input.skipEmptySuppressSteps,
+      minSuppressStepOffset: input.minSuppressStepOffset,
+      uniformSuppressStepSpacing: input.uniformSuppressStepSpacing,
+      keepSuppressExtras: input.keepSuppressExtras,
+      suppress2LayerLatePairY: input.suppress2LayerLatePairY,
+      useCrubTech: input.useCrubTech,
+      collapseStaircaseModes: input.collapseStaircaseModes,
+      includeFlatNorthline: input.includeFlatNorthline,
+      selectedMode: input.buildMode,
+      selectedStepDirection: input.selectedStepDirection,
+      suppressCenterOut: input.suppressCenterOut,
+    },
+  );
+  const northlineShape = shapeMap[BuildMode.StaircaseNorthline] ?? null;
+  const supportShape = input.buildMode === BuildMode.Flat
+    ? northlineShape
+    : getShapeForBuildMode(shapeMap, input.buildMode, input.isFlatShape);
+
+  return {
+    shapeMap,
+    northlineShape,
+    supportShape,
+    fillerNeedStats: supportShape ? analyzeFillerNeeds(supportShape) : null,
+    northRowSingleLine: supportShape ? nooblineIsSingleY(supportShape) : true,
+  };
+}

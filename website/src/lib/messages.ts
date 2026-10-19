@@ -25,7 +25,6 @@
  * - src/components/ToolbarPresetSettings.tsx
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
- * - src/lib/nbtExport.ts
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/lib/tileParsingWorkerTypes.ts
@@ -259,7 +258,6 @@ export type PaletteNotice =
 // - src/components/ToolbarPresetSettings.tsx
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
-// - src/lib/nbtExport.ts
 // - src/lib/tileParsing.worker.ts
 // - src/components/PresetFallbackDialog.tsx
 export const messages = {

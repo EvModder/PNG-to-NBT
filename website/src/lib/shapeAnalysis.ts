@@ -12,11 +12,12 @@
  * - aggregateOverrideCounts()
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysisCache.ts
  * - src/lib/suppressLoadMarkers.ts
- * - src/lib/tileGeometry.worker.ts
+ * - src/lib/tileGeometry.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
 import { Shade, type ColorGrid } from "@/types/color";
@@ -363,7 +364,7 @@ function analyzeRetainedMaterialNeeds(
 
 // Callers:
 // - src/lib/shapeAnalysisCache.ts
-// - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometry.ts
 export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
   const roleCounts = new Map<FillerRole, number>();
 
@@ -427,7 +428,7 @@ export function collectFillerRolePixels(
 
 // Callers:
 // - src/lib/shapeAnalysisCache.ts
-// - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometry.ts
 export function nooblineIsSingleY(shape: GeneratedShape): boolean {
   let northY: number | undefined;
   for (const part of shape.parts) {
@@ -447,7 +448,7 @@ export function nooblineIsSingleY(shape: GeneratedShape): boolean {
 }
 
 // Callers:
-// - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometry.ts
 export function hasNonWaterColorHeightVariance(shape: GeneratedShape): boolean {
   let firstY: number | undefined;
   for (const part of shape.parts) {
@@ -464,7 +465,7 @@ export function hasNonWaterColorHeightVariance(shape: GeneratedShape): boolean {
 }
 
 // Callers:
-// - src/Index.tsx
+// - src/lib/generationPolicy.ts
 export function hasBuildAtWorldMinYOpportunity(
   colorGrid: ColorGrid,
   shape: GeneratedShape,

@@ -7,12 +7,13 @@
  * - MixedStepPalette
  *
  * Callers:
+ * - src/lib/tileGeometry.ts
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/data/defaultSettings.ts
  * - src/data/i18n/en.ts
  * - src/data/i18n/es.ts
- * - src/lib/buildModeShapes.ts
+ * - src/lib/generationPolicy.ts
  * - src/lib/codecPreset.ts
  * - src/lib/fillerRules.ts
  * - src/lib/messages.ts
@@ -24,7 +25,6 @@
  * - src/lib/shapeModel.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/suppressSteps.ts
- * - src/lib/tileGeometry.worker.ts
  * - src/lib/tileGeometryWorkerClient.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  * - src/types/shape.ts
@@ -39,20 +39,20 @@
 // - src/data/defaultSettings.ts
 // - src/data/i18n/en.ts
 // - src/data/i18n/es.ts
-// - src/lib/buildModeShapes.ts
+// - src/lib/generationPolicy.ts
 // - src/lib/codecPreset.ts
 // - src/lib/messages.ts
 // - src/lib/nbtExport.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/types/shape.ts
 // - src/utils/conversion.ts
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/previewImageEdits.ts
+// - src/lib/tileGeometry.ts
 export enum BuildMode {
   Flat = "flat",
   InclineUp = "incline_up",
@@ -104,12 +104,12 @@ export type MixedStepPalette = {
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
-// - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/types/shape.ts
 // - src/utils/conversion.ts
 // - src/lib/colorGridAnalysis.ts
+// - src/lib/tileGeometry.ts
 export enum SuppressStepDirection {
   EastToWest = "east_to_west",
   WestToEast = "west_to_east",

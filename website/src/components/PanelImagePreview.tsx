@@ -12,8 +12,11 @@ import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageCol
 import { getTargetTileDimensions } from "@/lib/colorGridParsing";
 import type { InputPaletteEquivalence } from "@/lib/colorGridParsingCore";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
-import { DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
-import { MUTED_INLINE_TOGGLE_CONTROL_CLASS, PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
+import {
+  DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS,
+  MUTED_INLINE_TOGGLE_CONTROL_CLASS,
+  PANEL_TITLE_TEXT_CLASS,
+} from "@/data/uiClasses";
 
 type PreviewWarning = {
   text: string;

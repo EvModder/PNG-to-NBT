@@ -19,7 +19,7 @@ import { isFragileBlock } from "@/data/fragileBlocks";
 import { normalizeBlockId } from "@/lib/blockId";
 import { messages } from "@/lib/messages";
 import { getFillerFloorAttachmentFix } from "@/lib/fillerRules";
-import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
+import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/data/uiClasses";
 
 type FillerFieldProps = {
   label: string;

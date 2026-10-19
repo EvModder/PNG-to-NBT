@@ -3,7 +3,7 @@
  * - generateShapeMap()
  *
  * Callers:
- * - src/lib/tileGeometry.worker.ts
+ * - src/lib/tileGeometry.ts
  */
 import {
   buildModeUsesLayerGap,
@@ -3223,7 +3223,7 @@ function getGeneratedShape(
 }
 
 // Callers:
-// - src/lib/tileGeometry.worker.ts
+// - src/lib/tileGeometry.ts
 export function generateShapeMap(
   colorGrid: ColorGrid,
   allSameShade: Shade | undefined,

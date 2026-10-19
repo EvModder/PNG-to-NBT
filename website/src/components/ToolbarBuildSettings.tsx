@@ -16,8 +16,7 @@ import {
   cycleSuppressStepDirection,
   isSuppressStepsBuildMode,
 } from "@/utils/conversion";
-import { INPUT_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
-import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
+import { INPUT_SQUARE_ICON_BUTTON_CLASS, ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/data/uiClasses";
 
 type WaterDropShade = Shade.Dark | Shade.Flat | Shade.Light;
 

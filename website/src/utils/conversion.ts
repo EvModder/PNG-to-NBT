@@ -15,9 +15,9 @@
  * - cycleSuppressStepDirection()
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
- * - src/lib/buildModeShapes.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/messages.ts
  * - src/lib/nbtExport.ts
@@ -105,7 +105,7 @@ export function getBuildModeDownloadSuffix(
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/buildModeShapes.ts
+// - src/lib/generationPolicy.ts
 // - src/lib/shapeGeneration.ts
 export function isStaircaseBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
@@ -172,6 +172,7 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 // - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/generationPolicy.ts
 export function isCrubTechBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Suppress2Layer:

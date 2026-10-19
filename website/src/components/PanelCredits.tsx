@@ -7,7 +7,7 @@
  */
 import type { RefObject } from "react";
 import { messages } from "@/lib/messages";
-import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
+import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/data/uiClasses";
 
 type PanelCreditsProps = {
   creditsRef: RefObject<HTMLDivElement | null>;

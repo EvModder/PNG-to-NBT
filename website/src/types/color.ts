@@ -8,6 +8,7 @@
  * - ColorRgbBase
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/data/i18n/en.ts
@@ -51,6 +52,7 @@
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/utils/color.ts
+// - src/lib/generationPolicy.ts
 export enum Shade {
   Dark = 0,
   Flat = 1,
@@ -94,6 +96,7 @@ export interface ShadedColorRef extends ColorRef {
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/lib/tileParsingWorkerTypes.ts
+// - src/lib/generationPolicy.ts
 export type ColorGrid = ShadedColorRef[][];
 
 // Callers:

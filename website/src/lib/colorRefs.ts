@@ -6,6 +6,7 @@
  * - getColorRefCount()
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
@@ -29,6 +30,7 @@ import type { ColorRef } from "@/types/color";
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/generationPolicy.ts
 export type ColorRefKey = number;
 
 // Callers:
@@ -38,6 +40,7 @@ export type ColorRefKey = number;
 // - src/components/PanelCustomColors.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/generationPolicy.ts
 export function getColorRefKey(color: Pick<ColorRef, "id" | "isCustom">): ColorRefKey {
   return color.id * 2 + (color.isCustom ? 1 : 0);
 }

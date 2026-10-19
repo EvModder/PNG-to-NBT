@@ -1,4 +1,7 @@
 /**
+ * Public API:
+ * - ByteWriter
+ *
  * Callers:
  * - src/utils/nbtWriter.ts
  * - src/utils/zip.ts

@@ -37,7 +37,7 @@ import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
 import { normalizeBlockId, sanitizeUserBlockEntry } from "@/lib/blockId";
 import { computeColorGridStats, hasStepMixOpportunity, requiresTwoLayerLateShading } from "@/lib/colorGridAnalysis";
 import { convertImageToColorGridSet } from "@/lib/colorGridParsing";
-import { getPaletteSeedOffset } from "@/lib/paletteSeed";
+import { getPaletteSeedOffset } from "@/lib/generationPolicy";
 import {
   buildModeUsesPaletteSeed,
   isSuppressStepsBuildMode,

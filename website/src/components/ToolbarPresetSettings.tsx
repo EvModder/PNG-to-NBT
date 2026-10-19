@@ -15,8 +15,8 @@ import {
   DESTRUCTIVE_SQUARE_ICON_BUTTON_CLASS,
   MUTED_SQUARE_ICON_BUTTON_CLASS,
   PRIMARY_SQUARE_ICON_BUTTON_CLASS,
-} from "@/utils/uiButtons";
-import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/utils/uiTypography";
+  ACCENT_SMALL_LABEL_TEXT_CLASS,
+} from "@/data/uiClasses";
 
 type ToolbarPresetSettingsProps = {
   toolbarRef: RefObject<HTMLElement | null>;

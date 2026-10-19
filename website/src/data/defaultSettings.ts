@@ -14,6 +14,7 @@
  * - SuppressLoadSpotMarkerBlock
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/ImageColorNotice.tsx
  * - src/components/PanelImagePreview.tsx
@@ -53,6 +54,7 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 // - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
 export const DEFAULT_SUPPORT_MODE = SupportMode.None;

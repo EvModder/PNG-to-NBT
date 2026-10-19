@@ -10,8 +10,7 @@ import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 import { getBlockIconAsset } from "@/lib/blockIconAtlas";
 import { messages } from "@/lib/messages";
 import { getBlockFallbackVersion } from "@/lib/minecraftVersion";
-import { MUTED_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
-import { PANEL_TITLE_TEXT_CLASS } from "@/utils/uiTypography";
+import { MUTED_SQUARE_ICON_BUTTON_CLASS, PANEL_TITLE_TEXT_CLASS } from "@/data/uiClasses";
 
 type PresetFallbackDialogProps = {
   preferred: string;
