@@ -102,12 +102,11 @@ export type TileFinalGeometryWorkerResult = {
 // - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerClient.ts
 export type TileGeometryWorkerRequest =
-  | { id: number; type: "base"; input: TileBaseGeometryWorkerInput }
-  | { id: number; type: "final"; input: TileFinalGeometryWorkerInput };
+  | { id: number; tileCacheKey: string; type: "base"; input: TileBaseGeometryWorkerInput }
+  | { id: number; tileCacheKey: string; type: "final"; input: TileFinalGeometryWorkerInput };
 
 // Callers:
 // - src/lib/tileGeometry.worker.ts
-// - src/lib/tileGeometryWorkerClient.ts
 export type TileGeometryWorkerResponse =
   | { id: number; type: "base"; result: TileBaseGeometryWorkerResult }
   | { id: number; type: "final"; result: TileFinalGeometryWorkerResult }

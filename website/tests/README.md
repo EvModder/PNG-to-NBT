@@ -16,3 +16,12 @@ bun run test:images-browser
 
 Checks exact palette PNGs and color-managed photos in Chromium and WebKit using
 generated PNGs with gamma/chromaticity metadata.
+
+Worker checks:
+```bash
+bun run test:workers
+bun run test:geometry-browser
+```
+
+Checks pool scheduling/failure recovery and compares reused-worker geometry with
+fresh calculations in Chromium and WebKit.

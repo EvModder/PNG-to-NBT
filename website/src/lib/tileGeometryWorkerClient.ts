@@ -8,35 +8,26 @@
  */
 import { buildModeUsesLayerGap, isSuppressStepsBuildMode } from "@/utils/conversion";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { createWorkerPool } from "@/utils/workerPool";
 import type {
   TileBaseGeometryWorkerInput,
   TileBaseGeometryWorkerResult,
   TileFinalGeometryWorkerInput,
   TileFinalGeometryWorkerResult,
   TileGeometryWorkerRequest,
-  TileGeometryWorkerResponse,
   TileWaterSetting,
 } from "@/lib/tileGeometryWorkerTypes";
-
-type WorkerSlot = {
-  worker: Worker;
-  inFlightCount: number;
-};
 
 // Large multi-tile images can exceed 512 tiles on their own, so a smaller cap defeats
 // repeated-mode caching for exactly the workloads this client exists to accelerate.
 const MAX_CACHE_ENTRIES = 4096;
-const workerSlots: WorkerSlot[] = [];
-const pendingRequests = new Map<number, {
-  resolve: (value: TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult) => void;
-  reject: (reason?: unknown) => void;
-  slot: WorkerSlot;
-}>();
+const pool = createWorkerPool<Omit<TileGeometryWorkerRequest, "id">, TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult>(
+  () => new Worker(new URL("./tileGeometry.worker.ts", import.meta.url), { type: "module" }),
+);
 const baseGeometryCache = new Map<string, TileBaseGeometryWorkerResult>();
 const finalGeometryCache = new Map<string, TileFinalGeometryWorkerResult>();
 const baseGeometryInflight = new Map<string, Promise<TileBaseGeometryWorkerResult>>();
 const finalGeometryInflight = new Map<string, Promise<TileFinalGeometryWorkerResult>>();
-let nextRequestId = 1;
 
 function touchBoundedCache<T>(cache: Map<string, T>, key: string, value: T): void {
   if (cache.has(key)) cache.delete(key);
@@ -52,61 +43,14 @@ function serializeWaterSetting(waterSetting: TileWaterSetting): string {
   return `below:${waterSetting.drops.join(",")}`;
 }
 
-function createWorkerSlot(): WorkerSlot {
-  const worker = new Worker(new URL("./tileGeometry.worker.ts", import.meta.url), { type: "module" });
-  const slot: WorkerSlot = { worker, inFlightCount: 0 };
-  worker.onmessage = (event: MessageEvent<TileGeometryWorkerResponse>) => {
-    const pending = pendingRequests.get(event.data.id);
-    if (!pending) return;
-    pendingRequests.delete(event.data.id);
-    pending.slot.inFlightCount = Math.max(0, pending.slot.inFlightCount - 1);
-    if ("error" in event.data) {
-      pending.reject(new Error(event.data.error));
-      return;
-    }
-    pending.resolve(event.data.result);
-  };
-  worker.onerror = event => {
-    for (const [id, pending] of pendingRequests) {
-      if (pending.slot !== slot) continue;
-      pendingRequests.delete(id);
-      pending.reject(event.error ?? new Error(event.message || "Tile geometry worker crashed"));
-    }
-    slot.inFlightCount = 0;
-  };
-  return slot;
-}
-
-function getWorkerSlots(): WorkerSlot[] {
-  if (workerSlots.length > 0) return workerSlots;
-  const hardwareConcurrency = typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 2;
-  const workerCount = Math.max(2, Math.min(4, (hardwareConcurrency || 2) - 1 || 2));
-  for (let i = 0; i < workerCount; ++i) workerSlots.push(createWorkerSlot());
-  return workerSlots;
-}
-
-function getLeastBusyWorkerSlot(): WorkerSlot {
-  const slots = getWorkerSlots();
-  let best = slots[0];
-  for (let i = 1; i < slots.length; ++i) {
-    if (slots[i].inFlightCount < best.inFlightCount) best = slots[i];
-  }
-  return best;
-}
-
-function runWorkerRequest(request: { type: "base"; input: TileBaseGeometryWorkerInput }): Promise<TileBaseGeometryWorkerResult>;
-function runWorkerRequest(request: { type: "final"; input: TileFinalGeometryWorkerInput }): Promise<TileFinalGeometryWorkerResult>;
+function runWorkerRequest(request: { type: "base"; input: TileBaseGeometryWorkerInput }, tileCacheKey: string): Promise<TileBaseGeometryWorkerResult>;
+function runWorkerRequest(request: { type: "final"; input: TileFinalGeometryWorkerInput }, tileCacheKey: string): Promise<TileFinalGeometryWorkerResult>;
 function runWorkerRequest(request:
   | { type: "base"; input: TileBaseGeometryWorkerInput }
   | { type: "final"; input: TileFinalGeometryWorkerInput },
+  tileCacheKey: string,
 ): Promise<TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult> {
-  const slot = getLeastBusyWorkerSlot();
-  const id = nextRequestId++;
-  slot.inFlightCount += 1;
-  return new Promise((resolve, reject) => {
-    pendingRequests.set(id, { resolve, reject, slot });
-    slot.worker.postMessage({ ...request, id } satisfies TileGeometryWorkerRequest);
-  });
+  return pool.run({ ...request, tileCacheKey }, { affinity: request.input.colorGrid });
 }
 
 function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeometryWorkerInput): string {
@@ -178,7 +122,7 @@ export function getTileBaseGeometry(
   onPending();
   const inFlight = baseGeometryInflight.get(cacheKey);
   if (inFlight) return inFlight;
-  const next = runWorkerRequest({ type: "base", input })
+  const next = runWorkerRequest({ type: "base", input }, tileCacheKey)
     .then(result => {
       baseGeometryInflight.delete(cacheKey);
       touchBoundedCache(baseGeometryCache, cacheKey, result);
@@ -208,7 +152,7 @@ export function getTileFinalGeometry(
   onPending();
   const inFlight = finalGeometryInflight.get(cacheKey);
   if (inFlight) return inFlight;
-  const next = runWorkerRequest({ type: "final", input })
+  const next = runWorkerRequest({ type: "final", input }, tileCacheKey)
     .then(result => {
       finalGeometryInflight.delete(cacheKey);
       touchBoundedCache(finalGeometryCache, cacheKey, result);

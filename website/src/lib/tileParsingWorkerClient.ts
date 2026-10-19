@@ -10,7 +10,6 @@ import type { PaletteNotice } from "@/lib/messages";
 import type {
   TileParsingWorkerImagePatch,
   TileParsingWorkerRequest,
-  TileParsingWorkerResponse,
   TileParsingWorkerResult,
   TileParsingWorkerTile,
   TileParsingWorkerTileResult,
@@ -18,19 +17,7 @@ import type {
 import type { ColorRgb } from "@/types/color";
 import { MAP_SIZE } from "@/utils/color";
 import type { InputColorPalette } from "@/lib/colorGridParsingCore";
-
-type WorkerSlot = {
-  worker: Worker;
-  inFlightCount: number;
-};
-
-type PendingRequest = {
-  resolve: (value: TileParsingWorkerResult) => void;
-  reject: (reason?: unknown) => void;
-  slot: WorkerSlot;
-  onProgressDelta?: (delta: number) => void;
-  completed: number;
-};
+import { createWorkerPool } from "@/utils/workerPool";
 
 type TileBatch = {
   originX: number;
@@ -47,79 +34,23 @@ type TileParsingWorkerAggregateResult = {
   hasBlockingIssue: boolean;
 };
 
-const workerSlots: WorkerSlot[] = [];
-const pendingRequests = new Map<number, PendingRequest>();
-let nextRequestId = 1;
-
-function createWorkerSlot(): WorkerSlot {
-  const worker = new Worker(new URL("./tileParsing.worker.ts", import.meta.url), { type: "module" });
-  const slot: WorkerSlot = { worker, inFlightCount: 0 };
-  worker.onmessage = (event: MessageEvent<TileParsingWorkerResponse>) => {
-    const pending = pendingRequests.get(event.data.id);
-    if (!pending) return;
-    if ("error" in event.data) {
-      pendingRequests.delete(event.data.id);
-      pending.slot.inFlightCount = Math.max(0, pending.slot.inFlightCount - 1);
-      pending.reject(new Error(event.data.error));
-      return;
-    }
-    if (event.data.type === "progress") {
-      const delta = Math.max(0, event.data.completed - pending.completed);
-      pending.completed = event.data.completed;
-      if (delta > 0) pending.onProgressDelta?.(delta);
-      return;
-    }
-    pendingRequests.delete(event.data.id);
-    pending.slot.inFlightCount = Math.max(0, pending.slot.inFlightCount - 1);
-    pending.resolve(event.data.result);
-  };
-  worker.onerror = event => {
-    for (const [id, pending] of pendingRequests) {
-      if (pending.slot !== slot) continue;
-      pendingRequests.delete(id);
-      pending.reject(event.error ?? new Error(event.message || "Tile parsing worker crashed"));
-    }
-    slot.inFlightCount = 0;
-  };
-  return slot;
-}
-
-function getWorkerSlots(): WorkerSlot[] {
-  if (workerSlots.length > 0) return workerSlots;
-  const hardwareConcurrency = typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 2;
-  const workerCount = Math.max(2, Math.min(4, (hardwareConcurrency || 2) - 1 || 2));
-  for (let index = 0; index < workerCount; ++index) {
-    workerSlots.push(createWorkerSlot());
-  }
-  return workerSlots;
-}
-
-function getLeastBusyWorkerSlot(): WorkerSlot {
-  const slots = getWorkerSlots();
-  let best = slots[0];
-  for (let index = 1; index < slots.length; ++index) {
-    if (slots[index].inFlightCount < best.inFlightCount) best = slots[index];
-  }
-  return best;
-}
+const pool = createWorkerPool<Omit<TileParsingWorkerRequest, "id">, TileParsingWorkerResult>(
+  () => new Worker(new URL("./tileParsing.worker.ts", import.meta.url), { type: "module" }),
+);
 
 function runWorkerRequest(
   input: TileParsingWorkerRequest["input"],
   onProgressDelta?: (delta: number) => void,
 ): Promise<TileParsingWorkerResult> {
-  const slot = getLeastBusyWorkerSlot();
-  const id = nextRequestId++;
-  slot.inFlightCount += 1;
-  return new Promise<TileParsingWorkerResult>((resolve, reject) => {
-    pendingRequests.set(id, {
-      resolve,
-      reject,
-      slot,
-      onProgressDelta,
-      completed: 0,
-    });
-    // Each request owns an extracted batch; the source image remains available for fallback.
-    slot.worker.postMessage({ id, input } satisfies TileParsingWorkerRequest, [input.imageData.data.buffer]);
+  let completed = 0;
+  // Each request owns an extracted batch; the source image remains available for fallback.
+  return pool.run({ input }, {
+    transfer: [input.imageData.data.buffer],
+    onProgress: next => {
+      const delta = Math.max(0, next - completed);
+      completed = next;
+      if (delta > 0) onProgressDelta?.(delta);
+    },
   });
 }
 
@@ -194,7 +125,7 @@ export async function parseColorGridTilesInWorkers(
   allowedColors?: InputColorPalette,
 ): Promise<TileParsingWorkerAggregateResult> {
   const totalTiles = tileRows * tileCols;
-  const workerCount = Math.min(getWorkerSlots().length, totalTiles);
+  const workerCount = Math.min(pool.size, totalTiles);
   const tileBatches = buildTileBatches(tileRows, tileCols, workerCount);
   let completed = 0;
 

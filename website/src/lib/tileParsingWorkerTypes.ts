@@ -79,7 +79,6 @@ export type TileParsingWorkerRequest = {
 
 // Callers:
 // - src/lib/tileParsing.worker.ts
-// - src/lib/tileParsingWorkerClient.ts
 export type TileParsingWorkerResponse =
   | { id: number; type: "progress"; completed: number }
   | { id: number; type: "result"; result: TileParsingWorkerResult }

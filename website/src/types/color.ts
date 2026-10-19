@@ -34,6 +34,7 @@
  * - src/lib/tileParsingWorkerClient.ts
  * - src/lib/tileParsingWorkerTypes.ts
  * - src/types/shape.ts
+ * - src/lib/tileGeometry.worker.ts
  */
 
 // Index 0=dark, 1=flat, 2=light, 3=darkest (not obtainable)
@@ -97,6 +98,7 @@ export interface ShadedColorRef extends ColorRef {
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/lib/tileParsingWorkerTypes.ts
 // - src/lib/generationPolicy.ts
+// - src/lib/tileGeometry.worker.ts
 export type ColorGrid = ShadedColorRef[][];
 
 // Callers:
