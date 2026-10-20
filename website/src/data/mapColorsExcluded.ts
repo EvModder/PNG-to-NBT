@@ -85,6 +85,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "birch_slab", "birch_stairs",
     "birch_trapdoor",
   ],
+  5: ["chiseled_packed_ice", "packed_ice_brick_slab", "packed_ice_brick_stairs", "packed_ice_brick_wall"],
   6: ["brewing_stand", "grindstone[face=floor]", "heavy_core", "iron_trapdoor"],
   7: ["dandelion", "golden_dandelion", "blue_orchid", "allium", "azure_bluet", "red_tulip", "orange_tulip", "white_tulip", "pink_tulip", "oxeye_daisy", "cornflower", "lily_of_the_valley", "wither_rose", "torchflower", "lily_pad"],
   8: ["white_wool_slab", "white_wool_stairs", "white_concrete_slab", "white_concrete_stairs", "white_shulker_box"],

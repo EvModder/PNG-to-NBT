@@ -133,7 +133,7 @@ export const WATER_BASE_INDEX = 12;
 // - src/utils/colorTableLayout.ts
 // - src/utils/customColors.ts
 // - src/lib/minecraftVersion.ts
-// Latest catalog (26.4 Snapshot 3); lib/minecraftVersion.ts derives older catalogs without changing these colors.
+// Latest catalog (26.4 Snapshot 5); lib/minecraftVersion.ts derives older catalogs without changing these colors.
 // Shared preset URLs use alphabetical indices filtered to their Minecraft DataVersion.
 // Register new-version blocks in BLOCK_INTRODUCTIONS before adding them here.
 // Display reordering is safe. Adding/removing/renaming already-available blocks or
@@ -144,7 +144,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "SAND", r: 247, g: 233, b: 163, blocks: ["sand", "sandstone", "cut_sandstone", "smooth_sandstone", "candle", "ochre_froglight", "glowstone", "end_stone", "end_stone_bricks", "bone_block", "scaffolding", "birch_log", "stripped_birch_log", "birch_wood", "stripped_birch_wood", "birch_planks", "birch_pressure_plate", "turtle_egg"] },
   { name: "WOOL", r: 199, g: 199, b: 199, blocks: ["mushroom_stem", "cobweb", "white_candle"] },
   { name: "FIRE", r: 255, g: 0, b: 0, blocks: ["redstone_block", "tnt", "lava", "fire"] },
-  { name: "ICE", r: 160, g: 160, b: 255, blocks: ["ice", "packed_ice", "blue_ice", "frosted_ice", "ice_crystal"] },
+  { name: "ICE", r: 160, g: 160, b: 255, blocks: ["ice", "packed_ice", "packed_ice_bricks", "blue_ice", "frosted_ice", "brittle_ice", "ice_crystal"] },
   { name: "METAL", r: 167, g: 167, b: 167, blocks: ["iron_block", "heavy_weighted_pressure_plate", "lodestone", "pale_oak_leaves", "anvil", "closed_eyeblossom", "lantern", "soul_lantern", "waxed_copper_lantern", "waxed_exposed_copper_lantern", "waxed_weathered_copper_lantern", "waxed_oxidized_copper_lantern", "oxidized_copper_lantern"] },
   { name: "PLANT", r: 0, g: 124, b: 0, blocks: ["bamboo_block[axis=x]", "oak_leaves", "spruce_leaves", "birch_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "mangrove_leaves", "azalea_leaves", "flowering_azalea_leaves", "big_dripleaf", "fern", "short_grass", "bush", "firefly_bush", "pink_petals", "wildflowers", "poppy"] },
   { name: "SNOW", r: 255, g: 255, b: 255, blocks: ["white_wool", "white_carpet", "white_concrete", "white_concrete_powder", "white_glazed_terracotta", "white_stained_glass", "powder_snow", "snow_block", "snow"] },

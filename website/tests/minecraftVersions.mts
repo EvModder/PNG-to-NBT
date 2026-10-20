@@ -40,13 +40,22 @@ for (const block of [...added, ...addedHidden]) {
   assert(isBlockAvailable(block, 5023), block);
   for (const version of versions.filter(version => MINECRAFT_VERSIONS[version].dataVersion < 5023)) assert(!isBlockAvailable(block, version), `${version}: ${block}`);
 }
-assert.deepEqual(latest.blocks.flat().filter(block => !wilderness.blocks.flat().includes(block)), ["ice_crystal", "icicle[attached=true]"]);
-assert.deepEqual(latest.excluded, wilderness.excluded);
+assert.deepEqual(latest.blocks.flat().filter(block => !wilderness.blocks.flat().includes(block)), ["packed_ice_bricks", "brittle_ice", "ice_crystal", "icicle[attached=true]"]);
+const snapshotIce = ["chiseled_packed_ice", "packed_ice_brick_slab", "packed_ice_brick_stairs", "packed_ice_brick_wall"];
+assert.deepEqual(latest.excluded.flat().filter(block => !wilderness.excluded.flat().includes(block)), snapshotIce);
+for (const block of ["brittle_ice", "packed_ice_bricks", ...snapshotIce]) {
+  const introduced = MINECRAFT_VERSIONS["26.4"].dataVersion;
+  assert(!isBlockAvailable(block, introduced - 1));
+  assert(isBlockAvailable(block, introduced));
+  assert.equal(getVersionedSelections({ 5: block }, "26.3")[5], "");
+  assert.equal(getVersionedSelections({ 5: block }, "26.4")[5], block);
+  assert([...latest.blocks[5], ...latest.excluded[5]].includes(block));
+}
 for (const [id, block] of [[5, "ice_crystal"], [17, "icicle[attached=true]"]] as const) {
   assert.equal(latest.blocks[id].at(-1), block);
   assert(isFragileBlock(block));
-  assert(!isBlockAvailable(block, 5121));
-  assert(isBlockAvailable(block, 5122));
+  assert(!isBlockAvailable(block, MINECRAFT_VERSIONS["26.4"].dataVersion - 1));
+  assert(isBlockAvailable(block, "26.4"));
   assert.equal(getVersionedSelections({ [id]: block }, "26.3")[id], "");
   assert.equal(getVersionedSelections({ [id]: block }, "26.4")[id], block);
 }
@@ -260,7 +269,7 @@ await assert.rejects(exportBytes("26.2", { 0: "glass", 6: "red_shrub" }), /unava
 const shrub = await exportBytes("26.3", { 0: "glass", 6: "red_shrub" }, "stone");
 assert(shrub.includes(Buffer.from("minecraft:red_shrub")));
 assert(shrub.includes(Buffer.from("minecraft:dirt")), "Red shrub needs a soil support replacement");
-for (const block of ["ice_crystal", "icicle[attached=true]"]) {
+for (const block of ["ice_crystal", "icicle[attached=true]", "brittle_ice", "packed_ice_bricks", ...snapshotIce]) {
   await assert.rejects(exportBytes("26.3", { 6: block }), /unavailable/);
   const bytes = await exportBytes("26.4", { 6: block }, "glass");
   assert(bytes.includes(Buffer.from(`minecraft:${block.split("[")[0]}`)));

@@ -31,7 +31,7 @@ export const MINECRAFT_VERSIONS = {
   "1.21.9": { label: "1.21.9–26.1.2", dataVersion: 4790 },
   "26.2": { label: "26.2", dataVersion: 4903 },
   "26.3": { label: "26.3", dataVersion: 5023 },
-  "26.4": { label: "26.4 Snapshot 3", dataVersion: 5122 },
+  "26.4": { label: "26.4.s5", dataVersion: 5125 },
 } as const;
 
 // Callers:
@@ -49,7 +49,8 @@ export type MinecraftVersion = keyof typeof MINECRAFT_VERSIONS;
 
 // Only post-1.21.4 additions need entries; patterns also cover hidden catalog blocks.
 // These exact cutoffs also protect preset URL indices: register new blocks before
-// inserting them into either catalog list. Do not round cutoffs to UI ranges.
+// inserting them into either catalog list. Do not round release cutoffs to UI ranges.
+// Snapshot refreshes can shift preset URL indices, selecting different blocks or invalidating older links.
 // Callers:
 // - src/lib/minecraftVersion.ts
 export const BLOCK_INTRODUCTIONS: readonly (readonly [pattern: RegExp, dataVersion: number, release: string])[] = [
@@ -63,5 +64,5 @@ export const BLOCK_INTRODUCTIONS: readonly (readonly [pattern: RegExp, dataVersi
   [/(^|_)poplar(_|$)/, 5023, "26.3"],
   [/_(wool|concrete)_(slab|stairs)$/, 5023, "26.3"],
   [/^(red_shrub|shelf_mushroom|straw_bed)$/, 5023, "26.3"],
-  [/^(ice_crystal|icicle)$/, 5122, "26.4 Snapshot 3"],
+  [/^(ice_crystal|icicle|brittle_ice|chiseled_packed_ice|packed_ice_bricks|packed_ice_brick_(slab|stairs|wall))$/, 5125, "26.4.s5"],
 ];
