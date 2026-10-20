@@ -26,7 +26,6 @@ export function measureNoWrapSectionWidth(el: HTMLElement): number {
 export function measureToolbarWidths(
   presetEl: HTMLElement | null,
   fillerEl: HTMLElement | null,
-  colorTableWidth: number,
 ): { presetWidth: number; fillerWidth: number } {
   const presetWidth = presetEl ? measureNoWrapSectionWidth(presetEl) : 0;
   if (!fillerEl) return { presetWidth, fillerWidth: 0 };
@@ -34,7 +33,8 @@ export function measureToolbarWidths(
   // Keep the compact width as the layout threshold, regardless of input expansion.
   fillerEl.style.removeProperty("--filler-input-width");
   const fillerWidth = measureNoWrapSectionWidth(fillerEl);
-  const availableWidth = Math.min(Math.max(presetWidth, colorTableWidth), fillerEl.getBoundingClientRect().width);
+  // Expand into actual free space, not the other sections' minimum widths.
+  const availableWidth = fillerEl.getBoundingClientRect().width;
   if (fillerWidth < availableWidth) {
     fillerEl.style.setProperty("--filler-input-width", "160px");
     if (measureNoWrapSectionWidth(fillerEl) > availableWidth) {

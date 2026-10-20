@@ -3600,11 +3600,11 @@ const Index = () => {
 
   const measureToolbarMinWidths = useCallback(() => {
     const { presetWidth, fillerWidth } = measureToolbarWidths(
-      presetToolbarSectionRef.current, fillerToolbarSectionRef.current, colorTableMinWidthPx,
+      presetToolbarSectionRef.current, fillerToolbarSectionRef.current,
     );
     setPresetToolbarMinWidthPx(prev => (Math.abs(prev - presetWidth) > 1 ? presetWidth : prev));
     setFillerToolbarMinWidthPx(prev => (Math.abs(prev - fillerWidth) > 1 ? fillerWidth : prev));
-  }, [colorTableMinWidthPx]);
+  }, []);
 
   const recalcCreditsFloatGap = useCallback(() => {
     // Keep simple flow order for stacked/mobile layouts.
