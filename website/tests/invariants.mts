@@ -21,7 +21,9 @@ import { createFillerAssignments, getSupportModeFillerRoles } from "@/lib/filler
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
+import { getMixedStepSettings, getMixedStepReuse } from "@/lib/mixedStepHeights";
 import { analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
+import { normalizeBlockId } from "@/lib/blockId";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
@@ -1452,6 +1454,164 @@ function assertDefaultLatePairYInvariant(): void {
   if (tooHighCount > 0) throw new Error("Default late-pair cells were placed above layer gap + 1");
 }
 
+async function assertMixedStepSupportInvariants(): Promise<void> {
+  const selections = { selectedBlocks: { 2: "scaffolding", 11: "stone" }, selectedBlocksCustom: {}, customColors: [] };
+  const settings = (block: string, jumpable = true, support = "resin_block", mode = SupportMode.Fragile) =>
+    getMixedStepSettings([], { ...selections, selectedBlocks: { ...selections.selectedBlocks, 2: block } },
+      mode, "scaffolding", support, true, 1, jumpable);
+  for (const [block, reachable, sturdy] of [
+    ["scaffolding", true, true], ["scaffolding[waterlogged=true]", false, true],
+    ["stone_pressure_plate", true, false], ["candle", true, false],
+    ["sea_pickle[waterlogged=false]", true, false], ["sea_pickle[waterlogged=true]", false, false],
+    ["snow[layers=3]", true, false], ["snow[layers=4]", false, false],
+    ["oak_trapdoor[half=bottom]", true, false], ["oak_trapdoor[half=top]", false, false],
+    ["oak_trapdoor[open=true]", false, false], ["resin_clump[down=true]", true, false],
+    ["resin_clump[north=true]", false, false], ["amethyst_cluster[facing=up]", true, false],
+    ["amethyst_cluster[facing=north]", false, false], ["honey_block", false, false],
+  ] as const) {
+    const palette = settings(block).palette;
+    if (!palette || palette.canRaise[2] !== reachable || palette.canSupport[2] !== sturdy) {
+      throw new Error(`Unexpected mixed-step collision/support eligibility: ${block}`);
+    }
+  }
+  const { palette } = settings("scaffolding");
+  if (!palette?.needsSupport[2] || !palette.shadeNeedsSupport || !palette.shadeCanSupport) {
+    throw new Error("Scaffolding must both require support and provide a sturdy top");
+  }
+  if (!settings("scaffolding", false).palette?.canRaise[2]
+    || settings("scaffolding", true, "scaffolding").maxHeight !== 0
+    || settings("scaffolding", false, "resin_block", SupportMode.None).maxHeight !== 0) {
+    throw new Error("Scaffolding must not bypass fragile-support requirements");
+  }
+  const north = { id: 2, isCustom: false, shade: Shade.Light };
+  const south = { id: 11, isCustom: false, shade: Shade.Dark };
+  const resinShade = getMixedStepSettings([], selections, SupportMode.Fragile,
+    "resin_clump[down=true]", "resin_block", true, 1, true).palette!;
+  if (getMixedStepReuse(north, 0, south, 0, palette) !== "color-support"
+    || getMixedStepReuse(north, 0, south, 0, resinShade) !== "color-support"
+    || getMixedStepReuse(north, 1, south, 0, palette) !== "color"
+    || getMixedStepReuse(north, 1, { ...south, shade: Shade.Flat }, 0, palette) !== "support") {
+    throw new Error("Scaffolding must support all three mixed-step reuse roles");
+  }
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array(MAP_SIZE).fill(TRANSPARENT_COLOR));
+  grid[64][2] = north;
+  grid[64][3] = south;
+  grid[64][7] = south;
+  for (const mixedStepPalette of [palette, settings("scaffolding", false).palette!]) for (const mode of [BuildMode.SuppressStepPairs, BuildMode.SuppressStepChecker]) {
+    for (const direction of [SuppressStepDirection.EastToWest, SuppressStepDirection.WestToEast]) {
+      const shape = generateShapeMap(grid, undefined, false, true, false, {
+        selectedMode: mode, selectedStepDirection: direction, layerGap: 1,
+        mixSteps: true, mixedStepMaxHeight: 1, mixedStepPalette,
+      })[mode]!;
+      const options = { ...selections, buildMode: mode, suppressStepDirection: direction,
+        fillerAssignments: createFillerAssignments("resin_block", "scaffolding", "moss_block", "resin_block",
+          "slime_block", "slime_block", "resin_block", SupportMode.Fragile, false, true, false),
+        applySupportFloorYs: true, forceXZ128: true, forceZ129: true,
+        markSuppressLoadSpotsInSchematic: false, baseName: "scaffolding",
+      };
+      const counts = analyzeMaterialNeeds(grid, shape, options).blockCounts;
+      const maximum: Record<string, number> = {};
+      let hasStack = false, hasSupport = false;
+      for (const part of shape.parts) {
+        const phase = await convertToNbt({ ...shape, parts: [part] }, options);
+        const cells = parseStructureBlocks(new Uint8Array(gunzipSync(phase.data)));
+        const at = new Map(cells.map(block => [`${block.x},${block.y},${block.z}`, block.blockName]));
+        for (const block of cells) if (block.blockName === "minecraft:scaffolding") {
+          const below = at.get(`${block.x},${block.y - 1},${block.z}`);
+          hasStack ||= below === "minecraft:scaffolding";
+          hasSupport ||= below === "minecraft:resin_block";
+        }
+        for (const id of ["scaffolding", "resin_block"]) {
+          maximum[id] = Math.max(maximum[id] ?? 0, cells.filter(block => block.blockName === `minecraft:${id}`).length);
+        }
+      }
+      if (!hasStack || !hasSupport) throw new Error("Expected both reused scaffolding and explicit fragile support in export");
+      for (const id of ["scaffolding", "resin_block"]) {
+        if (counts[id] !== maximum[id]) {
+          throw new Error(`Scaffolding reuse material count mismatch: ${id}`);
+        }
+      }
+    }
+  }
+}
+
+async function assertMixedStepSupportPairs(): Promise<void> {
+  const north = { id: 50, isCustom: false, shade: Shade.Light };
+  const south = { id: 11, isCustom: false, shade: Shade.Dark };
+  const selections = { selectedBlocks: { 50: "decorated_pot", 11: "stone" }, selectedBlocksCustom: {}, customColors: [] };
+  const settings = (block: string, shade: string, support = "resin_block", jumpable = true, colorId = 50) =>
+    getMixedStepSettings([], { ...selections, selectedBlocks: { ...selections.selectedBlocks, [colorId]: block } },
+      SupportMode.Fragile, shade, support, true, 1, jumpable);
+  for (const [block, shade, compatible] of [
+    ["decorated_pot", "heavy_weighted_pressure_plate", true],
+    ["decorated_pot", "candle", true], ["decorated_pot", "sea_pickle[waterlogged=false]", true],
+    ["decorated_pot", "resin_clump[down=true]", false],
+    ["decorated_pot", "dead_tube_coral_fan[waterlogged=false]", false],
+    ["decorated_pot", "scaffolding", false], ["decorated_pot", "snow", false],
+    ["ice", "snow", false], ["packed_ice", "snow", false],
+    ["blue_ice", "snow", true], ["scaffolding", "snow", true],
+    ["stone", "resin_clump[down=true]", true],
+  ] as const) for (const jumpable of [false, true]) {
+    const palette = settings(block, shade, "resin_block", jumpable).palette;
+    if (!palette || palette.canSupport[50] !== compatible
+      || (getMixedStepReuse(north, 0, south, 0, palette) === "color-support") !== compatible) {
+      throw new Error(`Incorrect mixed-step support pair: ${block} below ${shade}`);
+    }
+  }
+  const partial = settings("dead_tube_coral_fan[waterlogged=false]", "candle", "decorated_pot").palette;
+  if (!partial || partial.canRaise[50] || !settings("candle", "candle", "decorated_pot").palette?.canRaise[50]
+    || settings("snow", "candle", "ice").palette?.canRaise[50]
+    || settings("snow", "snow", "ice").maxHeight !== 0
+    || settings("amethyst_cluster[facing=north]", "candle", "resin_block", false).palette?.canRaise[50]) {
+    throw new Error("Raised blocks must have compatible below-only support, including configured supports");
+  }
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array(MAP_SIZE).fill(TRANSPARENT_COLOR));
+  grid[64][3] = south;
+  for (const [block, shade, reused] of [
+    ["decorated_pot", "heavy_weighted_pressure_plate", true],
+    ["decorated_pot", "resin_clump[down=true]", false],
+    ["ice", "snow", false], ["packed_ice", "snow", false],
+  ] as const) for (const mode of [BuildMode.SuppressStepChecker, BuildMode.SuppressStepPairs]) {
+    const colorId = block === "decorated_pot" ? 50 : 5;
+    grid[64][2] = { ...north, id: colorId };
+    for (const direction of [SuppressStepDirection.EastToWest, SuppressStepDirection.WestToEast]) for (const centerOut of [false, true]) {
+      const shape = generateShapeMap(grid, undefined, false, true, false, {
+        selectedMode: mode, selectedStepDirection: direction, suppressCenterOut: centerOut,
+        layerGap: 1, mixSteps: true, mixedStepMaxHeight: 1, mixedStepPalette: settings(block, shade, "resin_block", true, colorId).palette,
+      })[mode]!;
+      const options = { ...selections, selectedBlocks: { ...selections.selectedBlocks, [colorId]: block },
+        buildMode: mode, suppressStepDirection: direction, suppressCenterOut: centerOut,
+        fillerAssignments: createFillerAssignments("resin_block", shade, "moss_block", "resin_block",
+          "slime_block", "slime_block", "resin_block", SupportMode.Fragile, false, true, false),
+        applySupportFloorYs: true, forceXZ128: true, forceZ129: true,
+        markSuppressLoadSpotsInSchematic: false, baseName: "support-pairs",
+      };
+      const counts = analyzeMaterialNeeds(grid, shape, options).blockCounts;
+      const maximum: Record<string, number> = {};
+      let foundReuse = false;
+      for (const part of shape.parts) {
+        const phase = await convertToNbt({ ...shape, parts: [part] }, options);
+        const cells = parseStructureBlocks(new Uint8Array(gunzipSync(phase.data)));
+        const at = new Map(cells.map(cell => [`${cell.x},${cell.y},${cell.z}`, normalizeBlockId(cell.blockName)]));
+        const phaseCounts: Record<string, number> = {};
+        for (const cell of cells) {
+          const id = normalizeBlockId(cell.blockName);
+          phaseCounts[id] = (phaseCounts[id] ?? 0) + 1;
+          if (id === normalizeBlockId(shade) && at.get(`${cell.x},${cell.y - 1},${cell.z}`) === block) {
+            if (!reused) throw new Error(`Export contains unsupported ${shade} on ${block}`);
+            foundReuse = true;
+          }
+        }
+        for (const [id, count] of Object.entries(phaseCounts)) maximum[id] = Math.max(maximum[id] ?? 0, count);
+      }
+      if (reused && !foundReuse) throw new Error("Expected compatible decorated-pot support reuse in export");
+      for (const [id, count] of Object.entries(maximum)) if (counts[id] !== count) {
+        throw new Error(`Support pair material count mismatch: ${id}`);
+      }
+    }
+  }
+}
+
 function assertMixedStepMarkerInvariants(): void {
   const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array(MAP_SIZE).fill(TRANSPARENT_COLOR));
   // Water-only phases borrow the northern color from another phase when mixing is enabled.
@@ -1782,6 +1942,8 @@ async function main(): Promise<number> {
   assertZipMetadata();
   await assertSharedSupportMaterialCounts();
   assertVsSparseMarkerInvariants();
+  await assertMixedStepSupportInvariants();
+  await assertMixedStepSupportPairs();
   assertMixedStepMarkerInvariants();
   await assertCenterOutInvariants();
   await assertCenterOutTwoLayerInvariants();

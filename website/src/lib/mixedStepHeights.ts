@@ -55,10 +55,37 @@ const STEP_SUPPORT_BLOCKS = new Set([
   "ice", "packed_ice", "blue_ice", "glass", "tnt", "scaffolding", "mushroom_stem", "crimson_stem", "warped_stem",
 ]);
 
-function canSupportStepBlock(block: string): boolean {
+function hasFullStepTop(block: string): boolean {
   const id = normalizeBlockId(block);
   return STEP_SUPPORT_BLOCKS.has(id) || (!id.includes(":") && id !== "honey_block"
     && /_(block|wool|concrete|terracotta|planks|log|wood|hyphae|ore|bricks|tiles|nylium|froglight|stained_glass)$/.test(id));
+}
+
+function getStepBlockProperties(block: string): Map<string, string> {
+  return new Map([...block.matchAll(/(\w+)\s*=\s*([^,\]]+)/g)].map(([, key, value]) => [key, value.trim()]));
+}
+
+// Check the actual pair, not just the lower block's solidity. Unknown attachment
+// rules stay out of raised reuse; these checks run once per palette, not per pixel.
+function canSupportStepBlock(support: string, block: string): boolean {
+  const id = normalizeBlockId(block);
+  if (!isFragileBlock(id)) return true;
+  const below = normalizeBlockId(support);
+  const full = hasFullStepTop(support);
+  const center = full || below === "decorated_pot" || below === "soul_sand";
+  const props = getStepBlockProperties(block);
+  if (id.endsWith("_carpet")) return props.get("bottom") !== "false" && (center || below === "honey_block");
+  if (id.endsWith("_pressure_plate") || id === "candle" || id.endsWith("_candle") || id === "sea_pickle") return center;
+  // Packed ice rejects snow in older supported versions. Keep the shared policy conservative.
+  if (id === "snow") return (full && below !== "ice" && below !== "packed_ice") || below === "honey_block" || below === "soul_sand";
+  if (id === "resin_clump" || id === "glow_lichen" || id === "sculk_vein") return full && getFillerFloorAttachmentFix(block) === null;
+  if (id === "amethyst_cluster" || /^(small|medium|large)_amethyst_bud$/.test(id) || id === "ice_crystal") return full && (props.get("facing") ?? "up") === "up";
+  if (id.endsWith("_trapdoor")) return center && props.get("open") !== "true" && (props.get("half") ?? "bottom") === "bottom";
+  if (id.endsWith("_lantern") || id === "lantern") return center && props.get("hanging") !== "true";
+  if (id === "lever" || id.endsWith("_button")) return full && props.get("face") === "floor";
+  return full && (id === "scaffolding" || id === "turtle_egg" || id === "sculk_sensor" || id === "calibrated_sculk_sensor"
+    || id.endsWith("_sign") || /^(soul_|redstone_|copper_)?torch$/.test(id)
+    || /^dead_(tube|brain|bubble|fire|horn)_coral(_fan)?$/.test(id));
 }
 
 // Verified floor-supported shapes: jump directly onto <=1/4-height tops, or
@@ -66,8 +93,10 @@ function canSupportStepBlock(block: string): boolean {
 function canRaiseReachableBlock(block: string): boolean {
   const id = normalizeBlockId(block);
   if (!isFragileBlock(id)) return false;
-  const props = new Map([...block.matchAll(/(\w+)\s*=\s*([^,\]]+)/g)].map(([, key, value]) => [key, value.trim()]));
+  const props = getStepBlockProperties(block);
   if (props.get("waterlogged") === "true") return false;
+  // Passable from the side despite its sturdy top; still requires support.
+  if (id === "scaffolding") return true;
   if (id === "resin_clump" || id === "glow_lichen" || id === "sculk_vein") return getFillerFloorAttachmentFix(block) === null;
   if (id === "sea_pickle" || /^dead_(tube|brain|bubble|fire|horn)_coral_fan$/.test(id)) return props.get("waterlogged") === "false";
   if (id.endsWith("_carpet")) return props.get("bottom") !== "false";
@@ -97,7 +126,7 @@ export function getMixedStepSettings(
   if (maxColorBlockLift < 1
     || supportMode !== SupportMode.Fragile || !assumeFloor
     || !normalizeBlockId(supportFiller) || isFillerDisabled(supportFiller)
-    || isFragileBlock(normalizeBlockId(supportFiller)) || !canSupportStepBlock(supportFiller)
+    || isFragileBlock(normalizeBlockId(supportFiller))
     || (!reachableTop && !canRaiseStepBlocks([], selections, supportFiller))) return { maxHeight: 0 };
   const shade = resolveExportBlockName(shadeFiller);
   const support = resolveExportBlockName(supportFiller);
@@ -109,18 +138,18 @@ export function getMixedStepSettings(
   const fillerColor = (name: string) => BASE_COLORS.findIndex((color, id) => id > 0 && id !== WATER_BASE_INDEX
     && color.blocks.some(block => resolveExportBlockName(block) === name));
   const supportRules = getVersionedSupportRules(selections.minecraftVersion);
-  const canRaiseBlock = (block: string) => reachableTop ? canRaiseReachableBlock(block)
+  const canRaiseBlock = (block: string) => canSupportStepBlock(support, block) && (reachableTop ? canRaiseReachableBlock(block)
     : canRaiseStepBlocks([], selections, block) || (isFragileBlock(normalizeBlockId(block))
-      && !supportRules.has(normalizeBlockId(block)) && fillerColor(block) > 0);
+      && !supportRules.has(normalizeBlockId(block)) && fillerColor(block) > 0));
   if (isFillerDisabled(shade) || !canRaiseBlock(shade)) return { maxHeight: 0 };
   const canRaise = blocks.map(canRaiseBlock);
-  const canSupport = blocks.map(canSupportStepBlock);
+  const canSupport = blocks.map(block => canSupportStepBlock(block, shade));
   const needsSupport = blocks.map(block => isFragileBlock(normalizeBlockId(block)));
   const shadeColor = fillerColor(shade);
   const supportColor = fillerColor(support);
   const supportCanShade = supportColor > 0;
   const shadeNeedsSupport = isFragileBlock(normalizeBlockId(shade));
-  const shadeCanSupport = canSupportStepBlock(shade);
+  const shadeCanSupport = canSupportStepBlock(shade, shade);
   return { maxHeight: maxColorBlockLift, palette: {
     blocks, canRaise, canSupport, needsSupport, reachableTop, shadeNeedsSupport, shadeCanSupport,
     supportCanShade, shadeColor, supportColor, shade, support,

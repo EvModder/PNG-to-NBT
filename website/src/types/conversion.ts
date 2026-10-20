@@ -79,6 +79,7 @@ export enum BuildMode {
 export type MixedStepPalette = {
   blocks: readonly string[];
   canRaise: readonly boolean[];
+  // Compatibility with this palette's shade filler, not a universal sturdy-top flag.
   canSupport: readonly boolean[];
   needsSupport: readonly boolean[];
   reachableTop: boolean;
