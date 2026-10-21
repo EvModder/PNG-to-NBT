@@ -2,10 +2,7 @@
  * Public API:
  * - OMITTED_BLOCK_PATTERNS
  * - EXCLUDED_BLOCK_PATTERNS
- * - EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL
- * - EXCLUDED_BLOCK_IDS_UNOBTAINABLE
  * - EXCLUDED_BLOCK_IDS
- * - isExcludedBlockPattern()
  *
  * Callers:
  * - scripts/audit-mapcolors.mjs
@@ -76,10 +73,7 @@ export const EXCLUDED_BLOCK_PATTERNS = [
   /copper_grate$/,
 ];
 
-// Callers:
-// - scripts/audit-mapcolors.mjs
-// - scripts/build-block-icon-files.mjs
-export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
+const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "rail", "powered_rail", "detector_rail", "activator_rail", "lever", "torch", "soul_torch", "copper_torch", "redstone_torch", "redstone_wire", "repeater", "comparator",
   "dragon_egg",
   "nether_portal",
@@ -137,10 +131,7 @@ export const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "cornflower", "lily_of_the_valley", "wither_rose", "torchflower",
 ]);
 
-// Callers:
-// - scripts/audit-mapcolors.mjs
-// - scripts/build-block-icon-files.mjs
-export const EXCLUDED_BLOCK_IDS_UNOBTAINABLE = new Set([
+const EXCLUDED_BLOCK_IDS_UNOBTAINABLE = new Set([
   "petrified_oak_slab",
   "barrier",
   "structure_void",
@@ -181,9 +172,3 @@ export const EXCLUDED_BLOCK_IDS = new Set([
   ...EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL,
   ...EXCLUDED_BLOCK_IDS_UNOBTAINABLE,
 ]);
-
-// Callers:
-// - scripts/audit-mapcolors.mjs
-export function isExcludedBlockPattern(blockId) {
-  return EXCLUDED_BLOCK_PATTERNS.some(rx => rx.test(blockId));
-}

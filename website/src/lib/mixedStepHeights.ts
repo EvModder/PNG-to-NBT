@@ -13,14 +13,36 @@ import { MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defa
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
-import { canRaiseStepBlocks, getFillerFloorAttachmentFix, isFillerDisabled } from "@/lib/fillerRules";
+import { getFillerFloorAttachmentFix, isFillerDisabled } from "@/lib/fillerRules";
 import { getVersionedSupportRules } from "@/lib/minecraftVersion";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { FillerRole, type MixedStepPalette } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
-import type { ColorRefKey } from "@/lib/colorRefs";
+import { parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import type { ShapeColorRef } from "@/types/shape";
+
+function needsRaisedStepSupport(block: string): boolean {
+  const id = normalizeBlockId(block);
+  return isFragileBlock(id)
+    || /^(sand|red_sand|gravel|suspicious_sand|suspicious_gravel|anvil|chipped_anvil|damaged_anvil|dragon_egg|shelf_mushroom)$/.test(id)
+    || id.endsWith("_concrete_powder");
+}
+
+// Raised reuse must not add supports or leave unsupported blocks. Custom colors
+// stay on the existing layout because their placement requirements are unknown.
+function canRaiseStepBlocks(
+  usedColorKeys: Iterable<ColorRefKey>,
+  selections: ColorBlockSelections,
+  shadeFillerBlock: string,
+): boolean {
+  if (needsRaisedStepSupport(shadeFillerBlock)) return false;
+  for (const key of usedColorKeys) {
+    const color = parseColorRefKey(key);
+    if (color.isCustom || needsRaisedStepSupport(resolveAssignedColorBlock(color, selections))) return false;
+  }
+  return true;
+}
 
 // Sturdy top faces verified across block states; do not infer this from solidity.
 const STEP_SUPPORT_BLOCKS = new Set([

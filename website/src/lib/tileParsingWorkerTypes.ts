@@ -3,7 +3,6 @@
  * - TileParsingWorkerTile
  * - TileParsingWorkerTileResult
  * - TileParsingWorkerImagePatch
- * - TileParsingWorkerInput
  * - TileParsingWorkerResult
  * - TileParsingWorkerRequest
  * - TileParsingWorkerResponse
@@ -50,10 +49,7 @@ export type TileParsingWorkerImagePatch = {
   data: Uint8ClampedArray<ArrayBuffer>;
 };
 
-// Callers:
-// - src/lib/tileParsing.worker.ts
-// - src/lib/tileParsingWorkerClient.ts
-export type TileParsingWorkerInput = {
+type TileParsingWorkerInput = {
   imageData: ImageData;
   originX: number;
   originZ: number;

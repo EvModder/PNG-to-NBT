@@ -2,7 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { blockIdOnly, normalizeBlockEntry } from "./block-entry-utils.mjs";
-import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, OMITTED_BLOCK_PATTERNS, isExcludedBlockPattern } from "./excluded-blocks.mjs";
+import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, OMITTED_BLOCK_PATTERNS } from "./excluded-blocks.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MAP_COLORS_PATH = path.join(ROOT, "website", "src", "data", "mapColors.ts");
@@ -11,6 +11,10 @@ const REPORT_DIR = path.join(ROOT, "work_files", "reports", "mapcolors");
 
 const ASSET_HOST = "https://assets.mcasset.cloud";
 const ASSET_VERSION = "latest";
+
+function isExcludedBlockPattern(blockId) {
+  return EXCLUDED_BLOCK_PATTERNS.some(rx => rx.test(blockId));
+}
 
 function parseMapColors(tsText) {
   const rows = [];

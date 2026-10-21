@@ -1,18 +1,18 @@
 /**
+ * Pixel-to-map-color operations shared by synchronous parsing and workers.
+ * Keep browser image loading and worker dispatch in colorGridParsing.ts.
+ *
  * Public API:
- * - ColorGridRegionScanResult
- * - PaletteConversionSummary
  * - InputColorPalette
  * - buildInputColorPalette()
  * - presetCoversAllColors()
  * - compareInputColorPalettes()
  * - InputPaletteEquivalence
- * - createEmptyColorGrid()
  * - getBaseColorLookup()
  * - buildCustomShadeLookup()
  * - scanImageRegionToColorGrid()
  * - cloneImageData()
- * - convertUnsupportedToNearestPalette()
+ * - extractImageRegionPixels()
  * - convertUnsupportedRegionToNearestPalette()
  * - buildConversionNotices()
  *
@@ -34,20 +34,14 @@ import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { findMatchingBaseColorIndex } from "@/utils/customColors";
 import { getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 
-// Callers:
-// - src/lib/colorGridParsing.ts
-// - src/lib/tileParsing.worker.ts
-export type ColorGridRegionScanResult = {
+type ColorGridRegionScanResult = {
   colorGrid: ColorGrid;
   unsupportedColors: number[];
   imageStats: ColorGridStats;
   cacheKey: string;
 };
 
-// Callers:
-// - src/lib/colorGridParsing.ts
-// - src/lib/tileParsing.worker.ts
-export type PaletteConversionSummary = {
+type PaletteConversionSummary = {
   convertedCount: number;
   totalInputColorCount: number;
   fewerOutputColorCount: number;
@@ -59,6 +53,22 @@ const nearestBasePaletteColors = new WeakMap<Map<number, ShadedColorRef>, { r: n
 const STANDARD_SHADES = [Shade.Dark, Shade.Flat, Shade.Light] as const;
 // Retain only the latest crop for an immutable upload; released with that image.
 const inputPaletteColors = new WeakMap<ImageData, { width: number; height: number; colors: Set<number> }>();
+
+function findNearestPaletteColor(r: number, g: number, b: number, colors: readonly { r: number; g: number; b: number }[]) {
+  let nearest: (typeof colors)[number] | undefined;
+  let distance = Infinity;
+  for (const color of colors) {
+    const dr = r - color.r;
+    const dg = g - color.g;
+    const db = b - color.b;
+    const next = dr * dr + dg * dg + db * db;
+    if (next < distance) {
+      distance = next;
+      nearest = color;
+    }
+  }
+  return nearest;
+}
 
 // Callers:
 // - src/Index.tsx
@@ -98,16 +108,9 @@ export function compareInputColorPalettes(
     const refs = lookups.map(({ base, custom, colors }) => {
       const exact = base.get(key) ?? custom.get(key);
       if (exact) return exact;
-      let nearest = key;
-      let distance = Infinity;
-      for (const color of colors) {
-        const next = (r - color.r) ** 2 + (g - color.g) ** 2 + (b - color.b) ** 2;
-        if (next < distance) {
-          distance = next;
-          nearest = packRgb(color.r, color.g, color.b);
-        }
-      }
-      return base.get(nearest) ?? custom.get(nearest);
+      const nearest = findNearestPaletteColor(r, g, b, colors);
+      const nearestKey = nearest ? packRgb(nearest.r, nearest.g, nearest.b) : key;
+      return base.get(nearestKey) ?? custom.get(nearestKey);
     });
     equal.fullPreset &&= sameRef(refs[0], refs[1]);
     equal.fullFlat &&= sameRef(refs[0], refs[2]);
@@ -217,9 +220,7 @@ function getNearestPaletteColors(
   });
 }
 
-// Callers:
-// - src/lib/colorGridParsing.ts
-export function createEmptyColorGrid(): ColorGrid {
+function createEmptyColorGrid(): ColorGrid {
   return Array.from({ length: MAP_SIZE }, () => Array<ShadedColorRef>(MAP_SIZE).fill(TRANSPARENT_COLOR));
 }
 
@@ -396,64 +397,29 @@ export function scanImageRegionToColorGrid(
 
 // Callers:
 // - src/lib/colorGridParsing.ts
+// - src/lib/tileParsing.worker.ts
 // - src/lib/tileParsingWorkerClient.ts
-export function cloneImageData(imageData: ImageData): ImageData {
-  return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
+export function extractImageRegionPixels(
+  imageData: ImageData,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): Uint8ClampedArray<ArrayBuffer> {
+  const data = new Uint8ClampedArray(width * height * 4);
+  const rowWidth = width * 4;
+  for (let row = 0; row < height; ++row) {
+    const sourceStart = ((top + row) * imageData.width + left) * 4;
+    data.set(imageData.data.subarray(sourceStart, sourceStart + rowWidth), row * rowWidth);
+  }
+  return data;
 }
 
 // Callers:
 // - src/lib/colorGridParsing.ts
-export function convertUnsupportedToNearestPalette(
-  imageData: ImageData,
-  baseLookup: Map<number, ShadedColorRef>,
-  customLookup: Map<number, ShadedColorRef>,
-): PaletteConversionSummary {
-  const availableColors = getNearestPaletteColors(baseLookup, customLookup);
-  if (availableColors.length === 0) return { convertedCount: 0, totalInputColorCount: 0, fewerOutputColorCount: 0, allInputColorsValid: false };
-  const inputColors = new Set<number>();
-  const outputColors = new Set<number>();
-  const convertedColors = new Set<number>();
-  const d = imageData.data;
-
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] === 0) continue;
-    const key = packRgb(d[i], d[i + 1], d[i + 2]);
-    inputColors.add(key);
-    if (baseLookup.has(key) || customLookup.has(key)) {
-      outputColors.add(key);
-      continue;
-    }
-
-    let bestDist = Infinity;
-    let bestR = 0;
-    let bestG = 0;
-    let bestB = 0;
-    for (const color of availableColors) {
-      const dr = d[i] - color.r;
-      const dg = d[i + 1] - color.g;
-      const db = d[i + 2] - color.b;
-      const dist = dr * dr + dg * dg + db * db;
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestR = color.r;
-        bestG = color.g;
-        bestB = color.b;
-      }
-    }
-
-    convertedColors.add(key);
-    outputColors.add(packRgb(bestR, bestG, bestB));
-    d[i] = bestR;
-    d[i + 1] = bestG;
-    d[i + 2] = bestB;
-  }
-
-  return {
-    convertedCount: convertedColors.size,
-    allInputColorsValid: inputColors.values().every(key => getBaseColorLookup().has(key)),
-    totalInputColorCount: inputColors.size,
-    fewerOutputColorCount: inputColors.size - outputColors.size,
-  };
+// - src/lib/tileParsingWorkerClient.ts
+export function cloneImageData(imageData: ImageData): ImageData {
+  return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
 }
 
 // Callers:
@@ -484,28 +450,13 @@ export function convertUnsupportedRegionToNearestPalette(
         continue;
       }
 
-      let bestDist = Infinity;
-      let bestR = 0;
-      let bestG = 0;
-      let bestB = 0;
-      for (const color of availableColors) {
-        const dr = d[offset] - color.r;
-        const dg = d[offset + 1] - color.g;
-        const db = d[offset + 2] - color.b;
-        const dist = dr * dr + dg * dg + db * db;
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestR = color.r;
-          bestG = color.g;
-          bestB = color.b;
-        }
-      }
+      const nearest = findNearestPaletteColor(d[offset], d[offset + 1], d[offset + 2], availableColors)!;
 
       convertedColors.add(key);
-      outputColors.add(packRgb(bestR, bestG, bestB));
-      d[offset] = bestR;
-      d[offset + 1] = bestG;
-      d[offset + 2] = bestB;
+      outputColors.add(packRgb(nearest.r, nearest.g, nearest.b));
+      d[offset] = nearest.r;
+      d[offset + 1] = nearest.g;
+      d[offset + 2] = nearest.b;
     }
   }
 

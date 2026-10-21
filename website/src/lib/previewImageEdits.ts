@@ -21,13 +21,13 @@ import { getMinecraftCatalog } from "@/lib/minecraftVersion";
 import { normalizeBlockId, toDisplayName, type ColorBlockSelections } from "@/lib/blockId";
 import { parseColorRefKey } from "@/lib/colorRefs";
 import { Shade, type ColorRef } from "@/types/color";
-import { FillerRole, type BuildMode, type FillerAssignment } from "@/types/conversion";
+import { FillerRole, BuildMode, type FillerAssignment } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 import { buildFillerAssignmentMap, isShadeFillerDisabled } from "@/lib/fillerRules";
 import { collectFillerRolePixels, type analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { isShapeColorCell, parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { getShadedRgb, MAP_SIZE } from "@/utils/color";
-import { getBuildModeRangeMax, isSuppressStepsBuildMode } from "@/utils/conversion";
+import { isSuppressStepsBuildMode } from "@/utils/conversion";
 import type { ParsedColorGridTile } from "@/lib/colorGridParsing";
 
 // Callers:
@@ -152,6 +152,17 @@ export function buildSelectedTileVisibleMask(
   }
 
   return mask;
+}
+
+function getBuildModeRangeMax(buildMode: BuildMode, centerOut = false): number {
+  switch (buildMode) {
+    case BuildMode.SuppressStepPairs:
+      return centerOut ? 64 : 128;
+    case BuildMode.SuppressStepChecker:
+      return centerOut ? 32 : 64;
+    default:
+      return 127;
+  }
 }
 
 // Callers:

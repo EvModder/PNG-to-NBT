@@ -3,7 +3,6 @@
  * - ColorRefKey
  * - getColorRefKey()
  * - parseColorRefKey()
- * - addColorRefCount()
  * - getColorRefCount()
  *
  * Callers:
@@ -12,7 +11,6 @@
  * - src/components/PanelCustomColors.tsx
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsingCore.ts
- * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -30,7 +28,6 @@ import type { ColorRef } from "@/types/color";
 // - src/components/PanelCustomColors.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
-// - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 export type ColorRefKey = number;
 
@@ -48,21 +45,10 @@ export function getColorRefKey(color: Pick<ColorRef, "id" | "isCustom">): ColorR
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridAnalysis.ts
-// - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts
 export function parseColorRefKey(key: ColorRefKey): ColorRef {
   return { isCustom: (key & 1) === 1, id: Math.floor(key / 2) };
-}
-
-// Callers:
-// - src/lib/shapeAnalysis.ts
-export function addColorRefCount(
-  counts: Record<string, number>,
-  color: Pick<ColorRef, "id" | "isCustom">,
-  amount = 1,
-): void {
-  const key = getColorRefKey(color);
-  counts[key] = (counts[key] ?? 0) + amount;
 }
 
 // Callers:

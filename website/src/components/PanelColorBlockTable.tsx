@@ -36,6 +36,7 @@ import {
   getSwatchRequiredAccentText,
 } from "@/utils/colorSwatch";
 import { formatStacks } from "@/utils/minecraft";
+import { measureNoWrapSectionWidth } from "@/utils/toolbarLayout";
 import {
   MUTED_INLINE_TOGGLE_CONTROL_CLASS,
   PANEL_TITLE_TEXT_CLASS,
@@ -148,20 +149,6 @@ function normalizeColumnDropTarget(
 function wouldReorderColumnOrder(order: ColumnId[], from: ColumnId, indicator: ColumnDragIndicator): boolean {
   const next = reorderColumnOrder(order, from, indicator.target, indicator.side);
   return next.length === order.length && next.some((col, index) => col !== order[index]);
-}
-
-function measureNoWrapSectionWidth(el: HTMLElement): number {
-  const { width, minWidth, maxWidth, flexWrap } = el.style;
-  el.style.width = "max-content";
-  el.style.minWidth = "max-content";
-  el.style.maxWidth = "none";
-  el.style.flexWrap = "nowrap";
-  const measured = Math.ceil(el.getBoundingClientRect().width);
-  el.style.width = width;
-  el.style.minWidth = minWidth;
-  el.style.maxWidth = maxWidth;
-  el.style.flexWrap = flexWrap;
-  return measured;
 }
 
 // Callers:

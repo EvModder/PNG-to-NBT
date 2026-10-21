@@ -9,7 +9,6 @@
  * - isCrubTechBreakableValid()
  * - isCrubTechPushableValid()
  * - isWaterSideSupportFillerValid()
- * - canRaiseStepBlocks()
  * - buildFillerAssignmentMap()
  * - resolveAssignedFillerName()
  * - resolveCellAssignedRole()
@@ -25,9 +24,7 @@
  * - src/lib/shapeModel.ts
  */
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "../data/mapColors";
-import { isFragileBlock } from "@/data/fragileBlocks";
-import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
-import { parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
+import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 
@@ -240,30 +237,6 @@ function isTransparentMapColorBlock(fillerBlock: string): boolean {
 // - src/Index.tsx
 export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
   return !isFillerDisabled(fillerBlock) && isTransparentMapColorBlock(fillerBlock);
-}
-
-function needsRaisedStepSupport(block: string): boolean {
-  const id = normalizeBlockId(block);
-  return isFragileBlock(id)
-    || /^(sand|red_sand|gravel|suspicious_sand|suspicious_gravel|anvil|chipped_anvil|damaged_anvil|dragon_egg|shelf_mushroom)$/.test(id)
-    || id.endsWith("_concrete_powder");
-}
-
-// Raised reuse must not add supports or leave unsupported blocks. Custom colors
-// stay on the existing layout because their placement requirements are unknown.
-// Callers:
-// - src/lib/mixedStepHeights.ts
-export function canRaiseStepBlocks(
-  usedColorKeys: Iterable<ColorRefKey>,
-  selections: ColorBlockSelections,
-  shadeFillerBlock: string,
-): boolean {
-  if (needsRaisedStepSupport(shadeFillerBlock)) return false;
-  for (const key of usedColorKeys) {
-    const color = parseColorRefKey(key);
-    if (color.isCustom || needsRaisedStepSupport(resolveAssignedColorBlock(color, selections))) return false;
-  }
-  return true;
 }
 
 // Callers:

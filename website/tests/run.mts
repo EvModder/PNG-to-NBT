@@ -36,7 +36,7 @@ import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersi
 import { getBuiltinPreset, type BlockPreset } from "@/data/presets";
 import { normalizeBlockId, sanitizeUserBlockEntry } from "@/lib/blockId";
 import { computeColorGridStats, hasStepMixOpportunity, requiresTwoLayerLateShading } from "@/lib/colorGridAnalysis";
-import { convertImageToColorGrid } from "@/lib/colorGridParsing";
+import { convertImageToColorGridSet } from "@/lib/colorGridParsing";
 import { getPaletteSeedOffset } from "@/lib/paletteSeed";
 import {
   buildModeUsesPaletteSeed,
@@ -763,12 +763,13 @@ async function runFixtureCase(
   options: { updateExpected: boolean },
 ): Promise<{ ok: true; updated?: boolean } | { ok: false; reason: string; artifactsDir?: string }> {
   const imageData = await loadImageData(testCase.inputPath);
-  const analysis = convertImageToColorGrid(
+  const analysis = convertImageToColorGridSet(
     imageData,
     testCase.settings.customColors,
     testCase.settings.autoFixInvalidColors,
   );
-  if (analysis.hasBlockingIssue) {
+  // Each fixture describes one output tile; never silently discard additional tiles.
+  if (analysis.hasBlockingIssue || analysis.tiles.length !== 1) {
     const artifactsDir = await persistFailureArtifacts(testCase.discovered.caseName, {
       title: `Blocking image parsing issue in ${testCase.discovered.caseName}`,
       report: {
@@ -776,7 +777,7 @@ async function runFixtureCase(
         inputPath: toRepoRelativePath(testCase.inputPath),
         outputPath: toRepoRelativePath(testCase.outputPath),
         paletteNotices: analysis.paletteNotices,
-        hasBlockingIssue: analysis.hasBlockingIssue,
+        hasBlockingIssue: true,
         settings: testCase.settings,
       },
     });
@@ -787,8 +788,7 @@ async function runFixtureCase(
     };
   }
 
-  const colorGrid = analysis.colorGrid;
-  const imageStats = computeColorGridStats(colorGrid);
+  const { colorGrid, imageStats } = analysis.tiles[0];
   const derivedImageStats = deriveImageStatsViews(imageStats);
   const usedWaterShades = derivedImageStats.usedWaterShades;
   const imageHasWater = derivedImageStats.imageHasWater;

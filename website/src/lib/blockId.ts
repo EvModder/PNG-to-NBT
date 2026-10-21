@@ -81,7 +81,6 @@ export function sanitizeUserBlockEntry(raw: string): string {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
@@ -133,7 +132,6 @@ export function resolveExportBlockName(block: string): string {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeModel.ts
 export function resolveAssignedColorBlock(

@@ -24,7 +24,7 @@ import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName, resolveCellAssignedRole, resolveCellFillerName } from "./fillerRules";
 import { normalizeBlockId, resolveExportBlockName, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
-import { addColorRefCount, getColorRefKey } from "./colorRefs";
+import { getColorRefKey } from "./colorRefs";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { forEachSuppressClearanceCell, getSuppressClearancePlan } from "./suppressClearance";
 import {
@@ -140,7 +140,10 @@ function analyzePartMaterialNeeds(
       const waterColumnKey = isWaterColorCell ? (x * 128 + z) : -1;
       if (!materials && (!isWaterColorCell || !countedVisibleWaterColumns.has(waterColumnKey))) {
         if (isWaterColorCell) countedVisibleWaterColumns.add(waterColumnKey);
-        if (!cell.fillerRole) addColorRefCount(colorCounts, cell);
+        if (!cell.fillerRole) {
+          const key = getColorRefKey(cell);
+          colorCounts[key] = (colorCounts[key] ?? 0) + 1;
+        }
         const visibleKey = getVisibleColorShadeKey(colorGrid, x, z);
         if (visibleKey !== null) visibleColorKeys.add(visibleKey);
       }

@@ -12,6 +12,7 @@ import {
   buildConversionNotices,
   buildCustomShadeLookup,
   convertUnsupportedRegionToNearestPalette,
+  extractImageRegionPixels,
   getBaseColorLookup,
   scanImageRegionToColorGrid,
 } from "@/lib/colorGridParsingCore";
@@ -31,21 +32,12 @@ function extractImagePatch(
   absoluteStartX: number,
   absoluteStartZ: number,
 ): TileParsingWorkerImagePatch {
-  const data = new Uint8ClampedArray(MAP_SIZE * MAP_SIZE * 4);
-  const rowWidth = MAP_SIZE * 4;
-
-  for (let row = 0; row < MAP_SIZE; ++row) {
-    const sourceStart = ((startZ + row) * imageData.width + startX) * 4;
-    const sourceEnd = sourceStart + rowWidth;
-    data.set(imageData.data.subarray(sourceStart, sourceEnd), row * rowWidth);
-  }
-
   return {
     startX: absoluteStartX,
     startZ: absoluteStartZ,
     width: MAP_SIZE,
     height: MAP_SIZE,
-    data,
+    data: extractImageRegionPixels(imageData, startX, startZ, MAP_SIZE, MAP_SIZE),
   };
 }
 

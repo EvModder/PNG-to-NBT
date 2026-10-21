@@ -11,6 +11,9 @@ import { INVALID_COLORS_PALETTE_OPTIONS, type InvalidColorsPalette } from "@/dat
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
 import type { InputPaletteEquivalence } from "@/lib/colorGridParsingCore";
 
+// Notices owned by this component rather than the generic preview banners.
+// Callers:
+// - src/components/PanelImagePreview.tsx
 export function isColorCorrectionNotice(notice: PaletteNotice): boolean {
   return notice.kind === PaletteNoticeKind.UnsupportedPaletteColors ||
     notice.kind === PaletteNoticeKind.ConvertedPaletteColors ||

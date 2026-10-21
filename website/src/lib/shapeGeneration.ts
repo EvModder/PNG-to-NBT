@@ -15,6 +15,7 @@ import { FillerRole, BuildMode, SuppressStepDirection, type MixedStepPalette } f
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
+import { createHashState, getHashId, mixUint32 } from "@/utils/hash";
 import { PixelParity, getPixelParity, type WaterDrops } from "./colorGridAnalysis";
 import { parseShapeCoordKey, toShapeCoordKey } from "./shapeModel";
 import { buildSuppressStepPhases, type SuppressStepPhase } from "./suppressSteps";
@@ -196,24 +197,10 @@ function getGridShapeCache(colorGrid: ColorGrid): GridShapeCache {
   return cache;
 }
 
-type HashState = [number, number, number, number];
-
 // Signatures need role identity, not the same role-name characters for every cell.
 const FILLER_ROLE_SIGNATURE_IDS = new Map(Object.values(FillerRole).map((role, index) => [role, index]));
 
-function createHashState(): HashState {
-  return [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];
-}
-
-function mixUint32(state: HashState, value: number): void {
-  const v = value >>> 0;
-  state[0] = Math.imul((state[0] ^ v) >>> 0, 0x01000193) >>> 0;
-  state[1] = Math.imul((state[1] + v + 0x7f4a7c15) >>> 0, 0x27d4eb2d) >>> 0;
-  state[2] = Math.imul((state[2] ^ ((v << 16) | (v >>> 16))) >>> 0, 0x165667b1) >>> 0;
-  state[3] = Math.imul((state[3] + (v ^ 0x9e3779b9)) >>> 0, 0x85ebca77) >>> 0;
-}
-
-function mixString(state: HashState, value: string): void {
+function mixString(state: ReturnType<typeof createHashState>, value: string): void {
   for (let i = 0; i < value.length; ++i) mixUint32(state, value.charCodeAt(i));
   mixUint32(state, 0xff);
 }
@@ -258,7 +245,7 @@ function getGeneratedShapeSignatureId(shape: GeneratedShape): GeneratedShapeSign
     }
   }
 
-  return state.map(part => part.toString(16).padStart(8, "0")).join("") as GeneratedShapeSignatureId;
+  return getHashId(state) as GeneratedShapeSignatureId;
 }
 
 function getCachedColumnPixelInfo(

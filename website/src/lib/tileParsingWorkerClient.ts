@@ -1,12 +1,11 @@
 /**
  * Public API:
- * - TileParsingWorkerAggregateResult
  * - parseColorGridTilesInWorkers()
  *
  * Callers:
  * - src/lib/colorGridParsing.ts
  */
-import { cloneImageData } from "@/lib/colorGridParsingCore";
+import { cloneImageData, extractImageRegionPixels } from "@/lib/colorGridParsingCore";
 import type { PaletteNotice } from "@/lib/messages";
 import type {
   TileParsingWorkerImagePatch,
@@ -41,9 +40,7 @@ type TileBatch = {
   tiles: TileParsingWorkerTile[];
 };
 
-// Callers:
-// - src/lib/colorGridParsing.ts
-export type TileParsingWorkerAggregateResult = {
+type TileParsingWorkerAggregateResult = {
   imageData: ImageData;
   tiles: TileParsingWorkerTileResult[];
   paletteNotices: PaletteNotice[];
@@ -136,25 +133,6 @@ function applyImagePatch(imageData: ImageData, patch: TileParsingWorkerImagePatc
   }
 }
 
-function extractImageRegionData(
-  imageData: ImageData,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-): ImageData {
-  const data = new Uint8ClampedArray(width * height * 4);
-  const targetRowWidth = width * 4;
-
-  for (let row = 0; row < height; ++row) {
-    const sourceStart = ((top + row) * imageData.width + left) * 4;
-    const sourceEnd = sourceStart + targetRowWidth;
-    data.set(imageData.data.subarray(sourceStart, sourceEnd), row * targetRowWidth);
-  }
-
-  return new ImageData(data, width, height);
-}
-
 function buildTileBatches(tileRows: number, tileCols: number, batchCount: number): TileBatch[] {
   if (tileRows <= 0 || tileCols <= 0 || batchCount <= 0) return [];
 
@@ -223,7 +201,7 @@ export async function parseColorGridTilesInWorkers(
   const results = await Promise.all(tileBatches.map(batch =>
     runWorkerRequest(
       {
-        imageData: extractImageRegionData(imageData, batch.originX, batch.originZ, batch.width, batch.height),
+        imageData: new ImageData(extractImageRegionPixels(imageData, batch.originX, batch.originZ, batch.width, batch.height), batch.width, batch.height),
         originX: batch.originX,
         originZ: batch.originZ,
         customColors,

@@ -1,9 +1,11 @@
 /**
+ * Image loading, sizing, worker dispatch and tile-result aggregation.
+ * Shared pixel operations live in colorGridParsingCore.ts, also used by workers.
+ *
  * Public API:
  * - ParsedColorGridTile
  * - ColorGridSetParseResult
  * - getTargetTileDimensions()
- * - convertImageToColorGrid()
  * - convertImageToColorGridSet()
  * - loadImageDataFromFile()
  * - convertImageToColorGridSetAsync()
@@ -22,21 +24,13 @@ import {
   buildConversionNotices,
   buildCustomShadeLookup,
   cloneImageData,
+  extractImageRegionPixels,
   convertUnsupportedRegionToNearestPalette,
-  convertUnsupportedToNearestPalette,
-  createEmptyColorGrid,
   getBaseColorLookup,
   scanImageRegionToColorGrid,
   type InputColorPalette,
 } from "@/lib/colorGridParsingCore";
 import { parseColorGridTilesInWorkers } from "@/lib/tileParsingWorkerClient";
-
-interface ColorGridParseResult {
-  imageData: ImageData;
-  colorGrid: ColorGrid;
-  paletteNotices: PaletteNotice[];
-  hasBlockingIssue: boolean;
-}
 
 type ImagePreprocessResult = {
   imageData: ImageData;
@@ -65,25 +59,6 @@ export interface ColorGridSetParseResult {
   tileCols: number;
   paletteNotices: PaletteNotice[];
   hasBlockingIssue: boolean;
-}
-
-function cropImageData(
-  imageData: ImageData,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-): ImageData {
-  const croppedData = new Uint8ClampedArray(width * height * 4);
-  const targetRowWidth = width * 4;
-
-  for (let row = 0; row < height; ++row) {
-    const sourceStart = ((top + row) * imageData.width + left) * 4;
-    const sourceEnd = sourceStart + targetRowWidth;
-    croppedData.set(imageData.data.subarray(sourceStart, sourceEnd), row * targetRowWidth);
-  }
-
-  return new ImageData(croppedData, width, height);
 }
 
 function padImageData(
@@ -155,7 +130,7 @@ function resizeImageToTileMultiples(
   const right = imageData.width - target.width - left;
   const bottom = imageData.height - target.height - top;
   return {
-    imageData: cropImageData(imageData, left, top, target.width, target.height),
+    imageData: new ImageData(extractImageRegionPixels(imageData, left, top, target.width, target.height), target.width, target.height),
     paletteNotices: [
       messages.parsing.croppedImageNotice(target.width, target.height),
       messages.parsing.croppedImageRemovedPixelsNotice(left, right, top, bottom),
@@ -282,59 +257,6 @@ function aggregatePaletteNotices(tileNotices: readonly PaletteNotice[], input: I
   }
   notices.push(...lossyFormatNotices, ...freeformNotices);
   return notices;
-}
-
-export function convertImageToColorGrid(
-  imageData: ImageData,
-  customColors: ColorRgb[],
-  autoFixInvalidColors = false,
-  invalidDimensionsMode: InvalidDimensionsMode = "reject",
-  allowedColors?: InputColorPalette,
-): ColorGridParseResult {
-  const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
-  const workingImageData = preprocessed.imageData;
-  const baseLookup = getBaseColorLookup(allowedColors);
-  const customLookup = buildCustomShadeLookup(customColors, allowedColors);
-  const hasSizeError = workingImageData.width !== MAP_SIZE || workingImageData.height !== MAP_SIZE;
-
-  if (hasSizeError) {
-    return {
-      imageData: workingImageData,
-      colorGrid: createEmptyColorGrid(),
-      paletteNotices: [
-        ...preprocessed.paletteNotices,
-        ...getInvalidDimensionNotices(workingImageData, customColors, autoFixInvalidColors, allowedColors),
-      ],
-      hasBlockingIssue: true,
-    };
-  }
-
-  const initial = scanImageRegionToColorGrid(workingImageData, 0, 0, baseLookup, customLookup);
-  if (initial.unsupportedColors.length === 0 || !autoFixInvalidColors) {
-    return {
-      imageData: workingImageData,
-      colorGrid: initial.colorGrid,
-      paletteNotices: initial.unsupportedColors.length > 0
-        ? [...preprocessed.paletteNotices, messages.parsing.unsupportedPaletteColorsNotice(initial.unsupportedColors, !!allowedColors)]
-        : preprocessed.paletteNotices,
-      hasBlockingIssue: initial.unsupportedColors.length > 0,
-    };
-  }
-
-  const convertedImageData = cloneImageData(workingImageData);
-  const conversionSummary = convertUnsupportedToNearestPalette(convertedImageData, baseLookup, customLookup);
-  const converted = scanImageRegionToColorGrid(convertedImageData, 0, 0, baseLookup, customLookup);
-  return {
-    imageData: convertedImageData,
-    colorGrid: converted.colorGrid,
-    paletteNotices: [
-      ...preprocessed.paletteNotices,
-      ...(converted.unsupportedColors.length === 0
-        ? buildConversionNotices(conversionSummary)
-        : [messages.parsing.unsupportedPaletteColorsNotice(converted.unsupportedColors, !!allowedColors)]),
-    ],
-    hasBlockingIssue: converted.unsupportedColors.length > 0,
-  };
 }
 
 // Callers:

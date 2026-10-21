@@ -14,7 +14,6 @@ import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import {
   buildModeUsesLayerGap,
   cycleSuppressStepDirection,
-  getSuppressStepDirectionRotationDegrees,
   isSuppressStepsBuildMode,
 } from "@/utils/conversion";
 import { INPUT_SQUARE_ICON_BUTTON_CLASS } from "@/utils/uiButtons";
@@ -77,6 +76,19 @@ export type ToolbarBuildSettingsProps = {
   suppressModeOptions: ToolbarBuildModeOption[];
   shadingMethodTooltip: string;
 };
+
+function getSuppressStepDirectionRotationDegrees(direction: SuppressStepDirection): number {
+  switch (direction) {
+    case SuppressStepDirection.SouthToNorth:
+      return 0;
+    case SuppressStepDirection.WestToEast:
+      return 90;
+    case SuppressStepDirection.NorthToSouth:
+      return 180;
+    case SuppressStepDirection.EastToWest:
+      return 270;
+  }
+}
 
 function SuppressStepDirectionIcon({ direction, rotate, centerOut, isDirectionSelectable }: {
   direction: SuppressStepDirection;

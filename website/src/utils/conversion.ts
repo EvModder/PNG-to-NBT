@@ -8,12 +8,10 @@
  * - buildModeSupportsCenterOut()
  * - buildModeUsesPaletteSeed()
  * - shouldIncludeTransparentBlocks()
- * - getBuildModeRangeMax()
  * - getVisibleSuppressBuildModes()
  * - resolveBuildModeSelection()
  * - isSuppressStepDirection()
  * - getBuildModeDownloadSuffix()
- * - getSuppressStepDirectionRotationDegrees()
  * - cycleSuppressStepDirection()
  *
  * Callers:
@@ -102,21 +100,6 @@ export function getBuildModeDownloadSuffix(
     case BuildMode.Suppress2LayerLatePairs:
     case BuildMode.Suppress2Layer:
       return crubTech ? "-suppress_crubtech" : `-suppress_2layer_${getDirectionSuffix(direction)}`;
-  }
-}
-
-// Callers:
-// - src/components/ToolbarBuildSettings.tsx
-export function getSuppressStepDirectionRotationDegrees(direction: SuppressStepDirection): number {
-  switch (direction) {
-    case SuppressStepDirection.SouthToNorth:
-      return 0;
-    case SuppressStepDirection.WestToEast:
-      return 90;
-    case SuppressStepDirection.NorthToSouth:
-      return 180;
-    case SuppressStepDirection.EastToWest:
-      return 270;
   }
 }
 
@@ -222,19 +205,6 @@ export function shouldIncludeTransparentBlocks(
   return hasTransparency &&
     !isSuppressBuildMode(buildMode) &&
     (blockMapping[TRANSPARENCY_BASE_INDEX] ?? "").trim() !== "";
-}
-
-// Callers:
-// - src/lib/previewImageEdits.ts
-export function getBuildModeRangeMax(buildMode: BuildMode, centerOut = false): number {
-  switch (buildMode) {
-    case BuildMode.SuppressStepPairs:
-      return centerOut ? 64 : 128;
-    case BuildMode.SuppressStepChecker:
-      return centerOut ? 32 : 64;
-    default:
-      return 127;
-  }
 }
 
 // Callers:

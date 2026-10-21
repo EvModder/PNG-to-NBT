@@ -1,11 +1,15 @@
 /**
  * Public API:
+ * - measureNoWrapSectionWidth()
  * - measureToolbarWidths()
  *
  * Callers:
+ * - src/components/PanelColorBlockTable.tsx
  * - src/Index.tsx
  */
-function measureNoWrapSectionWidth(el: HTMLElement): number {
+// Callers:
+// - src/components/PanelColorBlockTable.tsx
+export function measureNoWrapSectionWidth(el: HTMLElement): number {
   const { width, minWidth, maxWidth, flexWrap } = el.style;
   el.style.width = "max-content";
   el.style.minWidth = "max-content";
