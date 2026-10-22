@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - createFillerAssignments()
+ * - isCoralSupportValid()
  * - CRUBTECH_NOOBLINE_FILLER_BLOCK
  * - getSupportModeFillerRoles()
  * - getFillerFloorAttachmentFix()
@@ -29,6 +30,14 @@ import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 import { DEFAULT_GROWTH_COVER_BLOCK } from "@/data/defaultSettings";
+import { getBlockSupport } from "./blockSupport";
+
+export function isCoralSupportValid(block: string): boolean {
+  const { id, props, full } = getBlockSupport(block);
+  // Only known waterloggable bases; a custom waterlogged tag alone proves nothing.
+  return full && props.get("waterlogged") === "true" && (id === "mangrove_roots" || id === "scaffolding" || id.endsWith("_grate")
+    || id.endsWith("_stairs") || id.endsWith("_trapdoor") || id.endsWith("_slab") && props.get("type") === "top");
+}
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(["chain", ...BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId)]);
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);

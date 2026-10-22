@@ -135,6 +135,7 @@ export enum SuppressStepDirection {
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeBlocks.ts

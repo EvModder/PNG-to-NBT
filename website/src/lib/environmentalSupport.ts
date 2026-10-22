@@ -4,10 +4,12 @@
  * - getEnvironmentalSettings()
  * - scopeEnvironmentalPalette()
  * - isGrowthCoverValid()
+ * - environmentalRole()
  *
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/placementWarnings.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  */
@@ -18,7 +20,7 @@ import { parseColorRefKey, type ColorRefKey } from "./colorRefs";
 import { isFillerDisabled, isWaterSideSupportFillerValid } from "./fillerRules";
 import { FillerRole } from "@/types/conversion";
 
-function environmentalRole(id: string): FillerRole | undefined {
+export function environmentalRole(id: string): FillerRole | undefined {
   // Bonemeal-only plants (azaleas, fungi) and potted saplings do not grow on their own.
   if ((id.endsWith("_sapling") && !id.startsWith("potted_")) || id === "mangrove_propagule" || id === "twisting_vines") return FillerRole.GrowthCover;
   if (/^(tube|brain|bubble|fire|horn)_coral(_block|_fan)?$/.test(id)) return FillerRole.CoralSupport;
@@ -67,4 +69,3 @@ export function isGrowthCoverValid(block: string): boolean {
   return isWaterSideSupportFillerValid(block) && !isFragileBlock(normalizeBlockId(block))
     && !/waterlogged\s*=\s*true/.test(block);
 }
-

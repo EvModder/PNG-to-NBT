@@ -18,7 +18,7 @@ import { getBuildModeDownloadSuffix } from "@/utils/conversion";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAnalysis";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbt } from "@/lib/nbtExport";
-import { buildFillerAssignmentMap, createFillerAssignments, getFillerFloorAttachmentFix, getSupportModeFillerRoles } from "@/lib/fillerRules";
+import { buildFillerAssignmentMap, createFillerAssignments, getFillerFloorAttachmentFix, getSupportModeFillerRoles, isCoralSupportValid } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
@@ -2244,6 +2244,32 @@ function assertFragileSupportEligibility(): void {
 
 
 async function assertEnvironmentalSupport(): Promise<void> {
+  // Fresh shape objects: these checks edit cells in place, and results are cached per shape.
+  const getEnvironmentalWarnings = (shapes: GeneratedShape[], ...settings: [ColorBlockSelections, FillerAssignment[], boolean]) => {
+    const kinds = getPlacementWarnings(shapes.map(shape => ({ ...shape })), ...settings, BuildMode.StaircaseGroup).map(w => w.kind);
+    return { growth: kinds.includes("growthCover") || kinds.includes("missingCover"),
+      missingCover: kinds.includes("missingCover"), dryCoral: kinds.includes("coralSupport") };
+  };
+  const coral: GeneratedShape = { partType: ShapePartType.SingleColumn, splitExportNames: null,
+    suppressedTransparentVsCollisionCount: 0, parts: [{ cells: new Map([
+      [toShapeCoordKey(0, 1, 0), { id: 25, isCustom: false }],
+      [toShapeCoordKey(0, 0, 0), [FillerRole.CoralSupport]],
+    ]), bounds: { minY: 0, maxY: 1, minZ: 0, maxZ: 0 }, supportFloorYs: new Set([0]) }] };
+  const coralSelections = { selectedBlocks: { 25: "tube_coral_block", 10: "mangrove_roots[waterlogged=true]" }, selectedBlocksCustom: {}, customColors: [] };
+  const wetSupport = [{ role: FillerRole.CoralSupport, block: "mangrove_roots[waterlogged=true]" }];
+  assert(getEnvironmentalWarnings([coral], coralSelections, wetSupport, true).dryCoral, "Omitted platform fillers require a reminder");
+  assert.deepEqual(getPlacementWarnings([coral], coralSelections, wetSupport, true, BuildMode.Flat).map(w => w.kind), ["coralSupport"]);
+  assert(!getEnvironmentalWarnings([coral], coralSelections, wetSupport, false).dryCoral, "Generated waterlogged support needs no reminder");
+  coral.parts[0].cells.set(toShapeCoordKey(0, 0, 0), { id: 10, isCustom: false });
+  assert(!getEnvironmentalWarnings([coral], coralSelections, wetSupport, true).dryCoral, "An actual waterlogged color block is not an omitted platform");
+  coral.parts[0].cells.set(toShapeCoordKey(0, 0, 0), [FillerRole.SupportFragile]);
+  assert(getEnvironmentalWarnings([coral], coralSelections, [{ ...wetSupport[0], role: FillerRole.SupportFragile }], false).dryCoral,
+    "Optional supports omitted beneath non-fragile coral blocks cannot hydrate them");
+  coral.parts[0].cells.clear();
+  coral.parts[0].cells.set(toShapeCoordKey(0, 1, 0), { id: 7, isCustom: false });
+  coral.parts[0].cells.set(toShapeCoordKey(0, 2, 0), [FillerRole.SupportFragile]);
+  assert(getEnvironmentalWarnings([coral], { ...coralSelections, selectedBlocks: { 7: "oak_sapling" } },
+    [{ role: FillerRole.SupportFragile, block: "glass" }], false).missingCover, "Unexported optional fillers cannot prevent growth");
   const environmentalSelections = { selectedBlocks: { 7: "oak_sapling", 13: "bamboo_sapling", 25: "tube_coral_fan[waterlogged=false]" },
     selectedBlocksCustom: {}, customColors: [], minecraftVersion: "26.2" as const };
   const environmentalPalette = getEnvironmentalSettings([14, 26, 50], environmentalSelections).palette!;
@@ -2267,8 +2293,15 @@ async function assertEnvironmentalSupport(): Promise<void> {
         cover === "tripwire" ? { 26: FillerRole.GrowthCover } : undefined,
         `${block}: a neighboring growing plant must not add covers to stable plants`);
     }
+    assert.deepEqual(getEnvironmentalWarnings([coral], selections, [], false),
+      { growth: false, missingCover: false, dryCoral: false }, `${block}: no growth warning`);
   }
   const vineSelections = { ...environmentalSelections, selectedBlocks: { 7: "oak_sapling", 23: "twisting_vines[age=25]" } };
+  coral.parts[0].cells.clear();
+  coral.parts[0].cells.set(toShapeCoordKey(0, 1, 0), { id: 23, isCustom: false });
+  assert(!getEnvironmentalWarnings([coral], vineSelections, [], false).missingCover, "Vine covers are optional");
+  coral.parts[0].cells.set(toShapeCoordKey(1, 1, 0), { id: 7, isCustom: false });
+  assert(getEnvironmentalWarnings([coral], vineSelections, [], false).missingCover, "Saplings still require covers alongside vines");
   assert.equal(getEnvironmentalSettings([46], vineSelections).palette?.roles[46], FillerRole.GrowthCover, "Vines default to covers");
   for (const cover of ["", "  ", "air", "minecraft:air", "none", "n/a", "na"]) {
     assert.deepEqual(getEnvironmentalSettings([46], vineSelections, isGrowthCoverEnabled(cover)), { growthCover: "optional", palette: undefined });
@@ -2289,6 +2322,8 @@ async function assertEnvironmentalSupport(): Promise<void> {
   assert(isGrowthCoverValid("tripwire"));
   assert(isGrowthCoverValid("glass"));
   for (const invalid of ["air", "oak_leaves", "torch", "cake", "glass[waterlogged = true]"]) assert(!isGrowthCoverValid(invalid));
+  for (const valid of ["mangrove_roots[waterlogged=true]", "oak_slab[type=top,waterlogged=true]"]) assert(isCoralSupportValid(valid));
+  for (const invalid of ["mangrove_roots", "oak_leaves[waterlogged=true]", "oak_slab[waterlogged=true]", "oak_slab[type=double,waterlogged=true]", "oak_fence[waterlogged=true]"]) assert(!isCoralSupportValid(invalid));
   const environmentGrid: ColorGrid = Array.from({ length: MAP_SIZE }, (_, x) => Array.from({ length: MAP_SIZE }, (_, z) =>
     ({ id: [7, 13, 25][(x + z) % 3], shade: Shade.Flat, isCustom: false })));
   const environmentalAssignments = createFillerAssignments("mangrove_roots[waterlogged=true]", "resin_block", "moss_block", "resin_block",
@@ -2328,6 +2363,9 @@ async function assertEnvironmentalSupport(): Promise<void> {
       }
       assert(covers > 0 && coralSupports > 0);
       const analysisOptions = { ...environmentalSelections, fillerAssignments: environmentalAssignments, applySupportFloorYs: true };
+      const warnings = getEnvironmentalWarnings([shape], environmentalSelections, environmentalAssignments, true);
+      assert(warnings.growth && !warnings.missingCover && warnings.dryCoral);
+      assert(!getEnvironmentalWarnings([shape], environmentalSelections, environmentalAssignments, false).dryCoral);
       const counts = analyzeMaterialNeeds(environmentGrid, shape, analysisOptions);
       assert(counts.blockCounts.tripwire > 0, "Growth covers must count toward materials");
       const withFloor = analyzeMaterialNeeds(environmentGrid, shape, { ...analysisOptions, applySupportFloorYs: false });
@@ -2345,7 +2383,16 @@ async function assertEnvironmentalSupport(): Promise<void> {
       }
     }
   }
-
+  const shadedGrid: ColorGrid = environmentGrid.map((column, x) => column.map((pixel, z) => ({ ...pixel, shade: (x + z) % 3 })));
+  for (const mode of [BuildMode.Suppress2Layer, BuildMode.Suppress2LayerLateFillers, BuildMode.Suppress2LayerLatePairs]) {
+    for (const direction of Object.values(SuppressStepDirection)) {
+      const shape = generateShapeMap(shadedGrid, undefined, false, false, mode !== BuildMode.Suppress2Layer, {
+        layerGap: 2, selectedMode: mode, selectedStepDirection: direction, environmentalPalette,
+      })[mode]!;
+      const warnings = getEnvironmentalWarnings([shape], environmentalSelections, environmentalAssignments, false);
+      assert(!warnings.missingCover && !warnings.dryCoral, "Environmental supports must raise insufficient layer gaps");
+    }
+  }
 }
 
 
@@ -2454,7 +2501,7 @@ async function assertContextualSupport(): Promise<void> {
   const warnings = (shape: GeneratedShape, support: string, assumeFloor = true) => getPlacementWarnings([shape], selections,
     [{ role: FillerRole.SupportFragile, block: support }], assumeFloor, BuildMode.SuppressStepChecker);
   for (const support of ["sand", "gravel", "white_concrete_powder", "azalea", "flowering_azalea", "snow[layers=8]", "scaffolding"]) {
-    assert.deepEqual(warnings(make(), support), [], `${support}: wildcard floor supports the support material`);
+    assert.deepEqual(warnings(make(), support).filter(warning => warning.kind !== "snowRisk"), [], `${support}: wildcard floor supports the support material`);
     assert(warnings(make(2), support).some(warning => warning.invalid), `${support}: support material cannot float`);
     assert(warnings(make(), support, false).some(warning => warning.invalid), `${support}: no assumed floor means no free support`);
     for (const jumpable of [false, true]) {
@@ -2539,6 +2586,11 @@ function assertPlacementWarnings(): void {
   };
   const kinds = (placements: Placement[], assumeFloor = false, mode = BuildMode.StaircaseGroup) =>
     check(placements, assumeFloor, mode).warnings.map(warning => warning.kind);
+  const coveredPlant = check([[0, 1, 0, "oak_sapling"], [0, 2, 0, "tripwire"]], true);
+  assert.deepEqual(getPlacementWarnings([coveredPlant.shape], coveredPlant.selections, [], true, BuildMode.Suppress2Layer, true)
+    .map(warning => warning.kind), ["growthCover"], "CrubTech covers need the growth reminder, not a blanket machine warning");
+  assert.deepEqual(kinds([[0, 1, 0, "oak_sapling"], [1, 1, 0, "tube_coral_fan"], [2, 1, 0, "tnt"],
+    [3, 1, 0, "redstone_block"]], true, BuildMode.Flat), ["coralSupport", "tntIgnition"], "Assumed floors do not remove actual ignition or hydration hazards");
   assert(kinds([[0, 1, 0, "stone_pressure_plate"]], false, BuildMode.Flat).includes("missingSupport"));
   assert(!kinds([[0, 1, 0, "stone_pressure_plate"]], true).includes("missingSupport"));
   assert(kinds([[0, 2, 0, "stone_pressure_plate"]], true).includes("missingSupport"));
@@ -2625,10 +2677,131 @@ function assertPlacementWarnings(): void {
       assert(kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`], [x, 1, z, support]]).includes("shelfSupport"), support);
     }
   }
+  for (const source of ["redstone_block", "oak_pressure_plate", "lava", "fire"]) {
+    assert(kinds([[0, 1, 0, "tnt"], [1, 1, 0, source]]).includes(source === "oak_pressure_plate" ? "tnt" : "tntIgnition"));
+    assert(!kinds([[0, 1, 0, "tnt"], [4, 1, 0, source]]).some(kind => kind.startsWith("tnt")));
+  }
+  assert(kinds([[0, 1, 0, "tnt"], [1, 1, 0, "stone"], [1, 2, 0, "lever[face=floor]"]]).includes("tnt"));
+  assert(!kinds([[0, 1, 0, "tnt"], [1, 1, 0, "torch"]]).includes("tnt"), "Ordinary torches do not ignite TNT");
+  assert(kinds([[0, 1, 0, "lava"], [1, 1, 0, "oak_planks"]]).includes("fireSpread"));
+  assert(kinds([[0, 1, 0, "fire"], [1, 1, 0, "oak_planks"]]).includes("fireSpread"));
+  assert(!kinds([[0, 1, 0, "lava"], [1, 1, 0, "crimson_planks"]]).includes("fireSpread"));
+  for (const source of ["glowstone", "redstone_lamp[lit=true]", "waxed_oxidized_copper_lantern", "conduit", "respawn_anchor[charges=4]"]) {
+    assert(kinds([[0, 1, 0, "ice"], [4, 1, 0, source]]).includes("iceMelt"));
+    assert(!kinds([[0, 1, 0, "ice"], [5, 1, 0, source]]).includes("iceMelt"));
+    assert(!kinds([[0, 1, 0, "packed_ice"], [1, 1, 0, source]]).some(kind => kind.endsWith("Melt")));
+    assert(!kinds([[0, 1, 0, "snow"], [4, 1, 0, source]]).includes("snowMelt"));
+    assert(kinds([[0, 1, 0, "snow"], [3, 1, 0, source]]).includes("snowMelt"));
+  }
+  for (const source of ["redstone_lamp", "furnace[lit=false]", "soul_torch", "redstone_torch", "campfire[lit=false]", "respawn_anchor[charges=3]"]) {
+    assert(!kinds([[0, 1, 0, "ice"], [1, 1, 0, source]]).includes("iceMelt"));
+  }
+  assert(!kinds([[0, 1, 0, "red_concrete_powder"], [1, 1, 0, "water"]]).some(kind => String(kind) === "powderWater"));
+  assert.deepEqual(kinds([[0, 1, 0, "sponge"], [1, 1, 0, "mangrove_roots[waterlogged=true]"]]), []);
+  assert(kinds([[0, 1, 0, "grass_block"], [1, 2, 0, "dirt"]]).includes("grassSpread"));
+  assert(kinds([[0, 4, 0, "mycelium"], [1, 1, 1, "dirt"]]).includes("grassSpread"));
+  for (const placements of [[[2, 1, 0, "dirt"]], [[1, 3, 0, "dirt"]], [[1, 1, 0, "coarse_dirt"]], [[1, 1, 0, "dirt"], [1, 2, 0, "stone"]]] as Placement[][]) {
+    assert(!kinds([[0, 1, 0, "grass_block"], ...placements]).includes("grassSpread"), "Grass spreads only to nearby uncovered dirt");
+  }
+  const shadeDirt = check([[0, 1, 0, "grass_block"], [20, 1, 0, "dirt"], [1, 2, 1, "white_carpet"]]);
+  shadeDirt.shape.parts[0].cells.set(toShapeCoordKey(1, 1, 0), [FillerRole.ShadeNorthRow]);
+  shadeDirt.shape.parts[0].cells.set(toShapeCoordKey(0, 1, 1), { id: 2, isCustom: false, fillerRole: FillerRole.ShadeSuppress });
+  shadeDirt.shape.parts[0].cells.set(toShapeCoordKey(1, 1, 1), [FillerRole.SupportFragile]);
+  shadeDirt.shape.parts[0].cells.set(toShapeCoordKey(0, 1, -1), { id: 2, isCustom: false, fillerRole: FillerRole.SupportRetained });
+  const dirtFillers = [FillerRole.ShadeNorthRow, FillerRole.ShadeSuppress, FillerRole.SupportFragile, FillerRole.SupportRetained].map(role => ({ role, block: "dirt" }));
+  assert(!getPlacementWarnings([shadeDirt.shape], shadeDirt.selections, dirtFillers, false, BuildMode.StaircaseGroup).some(w => w.kind === "grassSpread"),
+    "Dirt placed as a shade or support filler does not count");
+  assert.deepEqual(kinds([[0, 1, 0, "oak_leaves[persistent=false]"]]), [], "Export already forces persistent leaves");
+  assert(!kinds([[0, 1, 0, "twisting_vines[age=25]"]]).includes("missingCover"));
+  for (const [source, red] of [["redstone_block", true], ["oak_pressure_plate", false],
+    ["oak_pressure_plate[powered=true]", true], ["sculk_sensor", false], ["lightning_rod[facing=east]", false],
+    ["lightning_rod[facing=east,powered=true]", true]] as const) {
+    assert.deepEqual(kinds([[0, 1, 0, "tnt"], [1, 1, 0, source]]).filter(kind => kind.startsWith("tnt")), [red ? "tntIgnition" : "tnt"]);
+  }
+  assert(!kinds([[0, 1, 0, "tnt"], [1, 1, 0, "stone"], [2, 1, 0, "redstone_block"]]).some(kind => kind.startsWith("tnt")), "Redstone blocks do not strongly power the intervening cube");
+  const active = check([[0, 1, 0, "tnt"], [1, 1, 0, "redstone_block"]]);
+  const potential = check([[0, 1, 0, "tnt"], [1, 1, 0, "oak_pressure_plate"]]);
+  // Separate tile palettes can differ only in custom tests; use shared IDs here.
+  potential.shape.parts[0].cells.set(toShapeCoordKey(1, 1, 0), { id: 3, isCustom: false });
+  const combinedSelections = { ...active.selections, selectedBlocks: { ...active.selections.selectedBlocks, 3: "oak_pressure_plate" } };
+  for (const shapes of [[active.shape, potential.shape], [potential.shape, active.shape]]) {
+    assert.deepEqual(getPlacementWarnings(shapes, combinedSelections, [], false, BuildMode.StaircaseGroup)
+      .filter(w => w.kind.startsWith("tnt")).map(w => `${w.kind}:${w.blocks}:${w.invalid}`).sort(),
+      ["tntIgnition:redstone_block:true"], "Active ignition displaces a potential source, in either tile order");
+  }
+  assert(check([[0, 1, 0, "tnt"], [1, 1, 0, "stone"], [1, 2, 0, "lever[face=floor,powered=true]"]])
+    .warnings.some(w => w.kind === "tntIgnition" && w.invalid), "A correctly mounted control can strongly power an adjacent cube");
+  assert(kinds([[0, 1, 0, "tnt"], [1, 1, 0, "shulker_box"], [1, 2, 0, "lever[face=floor,powered=true]"]]).includes("tntIgnition"),
+    "Shulker boxes conduct redstone");
+  assert(!kinds([[0, 1, 0, "tnt"], [1, 1, 0, "glass"], [1, 2, 0, "lever[face=floor,powered=true]"]]).some(kind => kind.startsWith("tnt")),
+    "Glass does not conduct redstone");
+  assert(!kinds([[0, 1, 0, "tnt"], [1, 1, 0, "stone"], [1, 2, 0, "lever[face=ceiling]"]]).some(kind => kind.startsWith("tnt")));
+  assert(kinds([[0, 1, 0, "fire"], [2, 5, 1, "oak_planks"]]).includes("fireSpread"));
+  assert(!kinds([[0, 1, 0, "fire"], [3, 5, 1, "oak_planks"]]).includes("fireSpread"));
+  assert(kinds([[0, 1, 0, "lava"], [3, 3, 2, "oak_planks"]]).includes("fireSpread"));
+  assert(!kinds([[0, 1, 0, "lava"], [4, 3, 2, "oak_planks"]]).includes("fireSpread"));
+  assert(!kinds([[0, 1, 0, "fire"], [1, 1, 0, "oak_leaves[waterlogged=true]"]]).includes("fireSpread"));
+  assert(check([[0, 1, 0, "ice"], [4, 1, 0, "glowstone"]]).warnings.some(w => w.kind === "iceMelt" && w.invalid));
+  assert.deepEqual(check([[0, 1, 0, "ice"], [1, 1, 0, "glowstone"], [0, 1, 1, "sea_lantern"]]).warnings.find(w => w.kind === "iceMelt")?.blocks,
+    ["glowstone", "sea_lantern"], "A melt error names every responsible light source");
+  assert(!kinds([[0, 1, 0, "ice"], [2, 1, 0, "stone"], [4, 1, 0, "glowstone"]]).includes("iceMelt"));
+  assert(kinds([[0, 1, 0, "ice"]], true, BuildMode.Flat).includes("meltRisk"));
+  assert(kinds([[0, 1, 0, "snow"], [0, 0, 0, "stone"]]).includes("snowRisk"));
+  // A melt error already covers its block type's light reminder.
+  for (const [block, below, source, error, reminder] of [["ice", "stone", "glowstone", "iceMelt", "meltRisk"], ["snow", "stone", "glowstone", "snowMelt", "snowRisk"]] as const) {
+    const found = kinds([[0, 1, 0, block], [0, 0, 0, below], [1, 1, 0, source]]);
+    assert(found.includes(error) && !found.includes(reminder), `${error} hides ${reminder}`);
+  }
+  const cold = kinds([[0, 1, 0, "ice"], [0, 0, 0, "stone"], [2, 1, 0, "snow"], [2, 0, 0, "stone"]]);
+  assert(cold.includes("iceSnowRisk") && !cold.includes("meltRisk") && !cold.includes("snowRisk"), "Ice and snow share one reminder");
+  const melting = check([[0, 1, 0, "ice"], [0, 0, 0, "stone"], [1, 1, 0, "glowstone"], [2, 1, 0, "snow"], [2, 0, 0, "stone"], [3, 1, 0, "sea_lantern"]]).warnings;
+  assert.deepEqual(melting.filter(w => /Melt|Risk/.test(w.kind)).map(w => [w.kind, w.blocks]), [["iceSnowMelt", ["glowstone", "sea_lantern"]]],
+    "Ice and snow share one melt error");
+  assert(!kinds([[0, 1, 0, "fire"], [1, 1, 0, "moss_carpet"]]).includes("fireSpread"), "Moss carpet is not flammable");
+  assert(kinds([[0, 1, 0, "fire"], [1, 1, 0, "white_carpet"]]).includes("fireSpread"));
+  const waterIce = check([[0, 1, 0, "ice"], [1, 1, 0, "glowstone"]]);
+  waterIce.shape.parts[0].cells.set(toShapeCoordKey(0, 1, 0), { id: WATER_BASE_INDEX, isCustom: false });
+  assert(!getPlacementWarnings([{ ...waterIce.shape }], { ...waterIce.selections,
+    selectedBlocks: { ...waterIce.selections.selectedBlocks, [WATER_BASE_INDEX]: "ice" } }, [], false, BuildMode.StaircaseGroup)
+    .some(w => w.kind === "iceMelt" || w.kind === "meltRisk"), "Ice exported for water color is intended to be converted");
+  assert(kinds([[0, 1, 0, "frosted_ice"]]).includes("frostedIce"));
+  const { shape, selections } = check([[0, 1, 0, "tnt"], [1, 1, 0, "redstone_block"]]);
+  shape.parts[0].cells.delete(toShapeCoordKey(1, 1, 0));
+  shape.parts.push({ ...shape.parts[0], cells: new Map([[toShapeCoordKey(1, 1, 0), { id: 2, isCustom: false }]]) });
+  assert(!getPlacementWarnings([{ ...shape }], selections, [], false, BuildMode.SuppressStepChecker).some(w => w.kind.startsWith("tnt")),
+    "Separate phases must not be treated as simultaneous neighbors");
+  shape.parts.pop();
+  shape.parts[0].cells.set(toShapeCoordKey(1, 1, 0), [FillerRole.ShadeSuppress]);
+  assert(getPlacementWarnings([{ ...shape }], selections, [{ role: FillerRole.ShadeSuppress, block: "redstone_block" }], false,
+    BuildMode.SuppressStepChecker).some(w => w.kind === "tntIgnition"), "Hazards include exported fillers");
+  assert(!getPlacementWarnings([{ ...shape }], selections, [{ role: FillerRole.ShadeSuppress, block: "none" }], false,
+    BuildMode.SuppressStepChecker).some(w => w.kind.startsWith("tnt")), "Disabled fillers are not hazards");
+  const cached = check([[0, 1, 0, "ice"], [1, 1, 0, "redstone_lamp[lit=true]"]]);
+  assert(cached.warnings.some(w => w.kind === "iceMelt"));
+  const unlit = { ...cached.selections, selectedBlocks: { ...cached.selections.selectedBlocks, 2: "redstone_lamp[lit=false]" } };
+  assert(!getPlacementWarnings([cached.shape], unlit, [], false, BuildMode.StaircaseGroup).some(w => w.kind === "iceMelt"),
+    "Warning cache must not flatten state tags like the material-count cache");
+  assert.deepEqual(getPlacementWarnings([cached.shape], cached.selections, [], false, BuildMode.StaircaseGroup), cached.warnings);
   const snow = check([[0, 1, 0, "snow"], [0, 0, 0, "packed_ice"]]);
   assert(snow.warnings.some(w => w.kind === "invalidSupport"));
   assert(!getPlacementWarnings([snow.shape], { ...snow.selections, minecraftVersion: "26.4" }, [], false,
     BuildMode.StaircaseGroup).some(w => w.kind === "invalidSupport"));
+  const mushroom = check([[0, 1, 0, "brown_mushroom"], [0, 0, 0, "decorated_pot"]]);
+  assert(mushroom.warnings.some(w => w.kind === "mushroomLight"));
+  // Five of a type within x/z +/-4 and y +/-1 stop each other from spreading; anything sparser can spread.
+  const patch = (cells: [number, number, number][], extra: [number, number, number, string][] = []) =>
+    check([...cells.map(([x, y, z]): [number, number, number, string] => [x, y, z, "brown_mushroom"]), ...extra])
+      .warnings.find(w => w.kind === "mushroomSpread")?.blocks;
+  assert.deepEqual(mushroom.warnings.find(w => w.kind === "mushroomSpread")?.blocks, ["brown_mushroom"]);
+  assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0]]), ["brown_mushroom"]);
+  assert.equal(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [4, 1, 0]]), undefined);
+  assert.equal(patch([[0, 1, 0], [1, 2, 1], [2, 1, 2], [3, 2, 3], [4, 1, 4]]), undefined);
+  assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [5, 1, 0]]), ["brown_mushroom"], "The ends are more than 4 apart");
+  assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [4, 3, 0]]), ["brown_mushroom"], "Two blocks up is out of range");
+  assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0]], [[4, 1, 0, "red_mushroom"]]), ["brown_mushroom", "red_mushroom"],
+    "Other mushroom types do not count");
+  assert.deepEqual(getPlacementWarnings([mushroom.shape], { ...mushroom.selections, minecraftVersion: "26.4" }, [], false,
+    BuildMode.StaircaseGroup).map(w => w.kind), ["mushroomSpread"], "26.4 mushrooms allow center support and no longer need low light");
   const cutoff = MINECRAFT_VERSIONS["26.4"].dataVersion;
   assert(!getBlockSupport("honey_block", cutoff - 1).full);
   assert(getBlockSupport("honey_block", cutoff).full);
@@ -2638,9 +2811,9 @@ function assertPlacementWarnings(): void {
   try {
     const honey = check([[0, 1, 0, "stone_pressure_plate"], [0, 0, 0, "honey_block"]]);
     assert(honey.warnings.some(w => w.kind === "invalidSupport"));
-    for (const { shape, selections } of [snow, honey]) {
+    for (const { shape, selections } of [snow, mushroom, honey]) {
       assert.deepEqual(getPlacementWarnings([shape], { ...selections, minecraftVersion: "future" as MinecraftVersion }, [], false,
-        BuildMode.StaircaseGroup), [], "Later versions retain the 26.4 placement rules");
+        BuildMode.StaircaseGroup).filter(w => w.kind !== "mushroomSpread" && w.kind !== "snowRisk"), [], "Later versions retain the 26.4 placement rules");
     }
   } finally { delete releases.future; }
 }

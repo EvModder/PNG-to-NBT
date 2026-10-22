@@ -9,6 +9,7 @@
  * - canSupportBlock()
  *
  * Callers:
+ * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/placementWarnings.ts
  * - src/lib/shapeAnalysis.ts
@@ -105,7 +106,10 @@ function describe(block: string, modern: boolean) {
     || ["farmland", "dirt_path", "cake", "cactus", "bamboo", "bamboo_sapling", "cobweb", "brewing_stand", "chest", "ender_chest",
       "enchanting_table", "end_portal_frame", "lectern", "daylight_detector"].includes(id));
   const faces = sturdyFaces(id, props, full);
-  return { id, props, full, center, rigid, collision, outline, partial, solid, modern, faces,
+  // Redstone conductors: full cubes, except these see-through or power-handling blocks.
+  const conductor = faces === FACE_LETTERS && !/(^|_)(glass|copper_bulb)$|_grate$/.test(id) && !["beacon", "ice", "frosted_ice",
+    "brittle_ice", "honey_block", "glowstone", "sea_lantern", "observer", "piston", "sticky_piston", "redstone_block", "snow", "tnt"].includes(id);
+  return { id, props, full, center, rigid, collision, outline, partial, solid, modern, faces, conductor,
     water: id === "water" || props.get("waterlogged") === "true",
     fallThrough: !id || FALL_THROUGH_BLOCKS.has(id) };
 }
