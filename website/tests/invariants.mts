@@ -24,6 +24,9 @@ import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppress
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { getMixedStepSettings, getMixedStepReuse } from "@/lib/mixedStepHeights";
 import { analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
+import { canSupportBlock } from "@/lib/blockSupport";
+import { isFragileBlock } from "@/data/fragileBlocks";
+import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
 import { normalizeBlockId } from "@/lib/blockId";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
@@ -1503,7 +1506,7 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
     ["stone_pressure_plate", true, false], ["candle", true, false],
     ["sea_pickle[waterlogged=false]", true, false], ["sea_pickle[waterlogged=true]", false, false],
     ["snow[layers=3]", true, false], ["snow[layers=4]", false, false],
-    ["oak_trapdoor[half=bottom]", true, false], ["oak_trapdoor[half=top]", false, false],
+    ["oak_trapdoor[half=bottom]", true, false], ["oak_trapdoor[half=top]", false, true],
     ["oak_trapdoor[open=true]", false, false], ["resin_clump[down=true]", true, false],
     ["resin_clump[north=true]", false, false], ["amethyst_cluster[facing=up]", true, false],
     ["amethyst_cluster[facing=north]", false, false], ["honey_block", false, false],
@@ -1518,7 +1521,7 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
     throw new Error("Scaffolding must both require support and provide a sturdy top");
   }
   if (!settings("scaffolding", false).palette?.canRaise[2]
-    || settings("scaffolding", true, "scaffolding").maxHeight !== 0
+    || settings("scaffolding", true, "scaffolding").maxHeight !== 1
     || settings("scaffolding", false, "resin_block", SupportMode.None).maxHeight !== 0) {
     throw new Error("Scaffolding must not bypass fragile-support requirements");
   }
@@ -1977,7 +1980,68 @@ function assertZipMetadata(): void {
   assertBytesEqual(archive.subarray(30 + nameSize, central), data, "ZIP payload unchanged");
 }
 
+function assertBlockSupportPairs(): void {
+  const latest = MINECRAFT_VERSIONS["26.4"].dataVersion;
+  // Minecraft support rules distinguish full faces, center posts, rigid rims,
+  // collision faces and non-air/solid bases. These are deliberately not equivalent.
+  const pairs: [string, string, boolean][] = [
+    ["decorated_pot", "stone_pressure_plate", true], ["decorated_pot", "candle", true],
+    ["decorated_pot", "dead_tube_coral_fan[waterlogged=false]", false],
+    ["hopper", "stone_pressure_plate", true], ["hopper", "candle", false],
+    ["hopper", "sea_pickle[waterlogged=false]", true], ["hopper", "rail", true],
+    ["glass_pane", "candle", true], ["glass_pane", "rail", false],
+    ["oak_leaves", "sea_pickle[waterlogged=false]", true], ["oak_leaves", "candle", false],
+    ["oak_leaves", "resin_clump[down=true]", true], ["oak_leaves", "snow", true],
+    ["mud", "snow", true], ["soul_sand", "snow", true],
+    ["scaffolding", "dead_tube_coral_fan[waterlogged=false]", true], ["scaffolding", "cake", false],
+    ["oak_slab", "sea_pickle[waterlogged=false]", false], ["oak_stairs", "sea_pickle[waterlogged=false]", true],
+    ["oak_slab[type=top]", "dead_tube_coral", true], ["oak_trapdoor[half=top,open=true]", "candle", false],
+    ["oak_trapdoor[half=top]", "candle", true], ["water", "white_carpet", true], ["water", "oak_sign", false],
+    ["farmland", "poppy", true], ["farmland", "bamboo_sapling", false],
+    ["red_sand", "dead_bush", true], ["blue_terracotta", "dead_bush", true],
+    ["sand", "short_dry_grass", true], ["sand", "poppy", false], ["clay", "azalea", true],
+    ["soul_sand", "nether_wart", true], ["soul_soil", "nether_wart", false],
+    ["end_stone", "chorus_flower[age=5]", true], ["stone", "chorus_flower[age=5]", false],
+    ["pale_moss_block", "big_dripleaf", false], ["moss_block", "big_dripleaf", true],
+    ["farmland", "cactus_flower", true], ["decorated_pot", "cactus_flower", true],
+    ["decorated_pot", "brown_mushroom", true], ["oak_leaves", "brown_mushroom", false],
+    ["mangrove_roots[waterlogged=true]", "lily_pad", true], ["mangrove_roots", "lily_pad", false],
+  ];
+  for (const [base, block, valid] of pairs) assert.equal(canSupportBlock(base, block, latest), valid, `${block} on ${base}`);
+  for (const block of ["sand", "red_sand", "gravel", "suspicious_sand", "suspicious_gravel", "anvil", "chipped_anvil",
+    "damaged_anvil", "dragon_egg", "red_concrete_powder", "blue_concrete_powder"]) {
+    assert(isFragileBlock(block));
+    assert(!canSupportBlock("air", block));
+    assert(!canSupportBlock("snow[layers=8]", block));
+    assert(canSupportBlock("oak_sign", block));
+  }
+  for (const crop of ["wheat", "carrots", "potatoes", "beetroots", "torchflower_crop"]) {
+    assert(isFragileBlock(`minecraft:${crop}[age=3]`));
+    assert(!canSupportBlock("stone", crop));
+    assert(!canSupportBlock("air", crop));
+    assert(canSupportBlock("farmland", crop));
+  }
+  for (const block of ["copper_lantern", "exposed_copper_lantern", "weathered_copper_lantern", "white_banner", "candle_cake", "red_candle_cake"]) {
+    assert(isFragileBlock(block));
+    assert(!canSupportBlock("air", block));
+    assert(canSupportBlock("stone", block));
+  }
+  assert(canSupportBlock("mud", "snow", 4189));
+  assert(canSupportBlock("mud", "snow", latest));
+  for (const base of ["bamboo", "bamboo_sapling"]) assert(canSupportBlock(base, "oak_sign"));
+}
+
 async function main(): Promise<number> {
+  const [suite, ...extra] = process.argv.slice(2);
+  if (extra.length || suite && !["--rules", "--slope"].includes(suite)) {
+    throw new Error("Choose one of --rules or --slope, or omit flags for the full suite");
+  }
+  if (suite === "--rules") {
+    assertBlockSupportPairs();
+    console.log("Block support rules passed.");
+    return 0;
+  }
+  assertBlockSupportPairs();
   if (process.argv.includes("--slope")) {
     await assertWestEastSlopeExportInvariant();
     console.log("West-east slope export invariants passed.");

@@ -20,6 +20,7 @@
  * - src/components/PanelImagePreview.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/blockSupport.ts
  * - src/lib/colorGridParsing.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/messages.ts
@@ -159,7 +160,9 @@ export type InvalidColorsPalette = typeof INVALID_COLORS_PALETTE_OPTIONS[number]
 export const DEFAULT_INVALID_COLORS_PALETTE: InvalidColorsPalette = "full";
 // Callers:
 // - src/Index.tsx
+// - src/lib/blockSupport.ts
 // - src/lib/minecraftVersion.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // 26.3 changed the NBT block-state format; prefer compatibility with older loaders.

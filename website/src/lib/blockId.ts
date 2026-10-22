@@ -16,6 +16,7 @@
  * - src/components/ToolbarFillerSettings.tsx
  * - src/data/blockWiki.ts
  * - src/lib/blockIconAtlas.ts
+ * - src/lib/blockSupport.ts
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
@@ -44,6 +45,7 @@ export function stripDefaultBlockNamespace(raw: string): string {
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/ToolbarFillerSettings.tsx
 // - src/data/blockWiki.ts
+// - src/lib/blockSupport.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts

@@ -17,6 +17,7 @@
     "test:typecheck": "tsc -p tests",
     "test:fixtures": "bun run tests/run.mts",
     "test:invariants": "bun run tests/invariants.mts",
+    "test:rules": "bun run tests/invariants.mts --rules",
     "test:versions": "bun run tests/minecraftVersions.mts",
     "test:presets": "bun run tests/codecPreset.mts",
     "test:pixel-art": "bun run tests/pixelArtScaling.mts",

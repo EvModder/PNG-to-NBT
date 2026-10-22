@@ -9,8 +9,10 @@
  * - src/components/SecretsSettingsDialog.tsx
  * - src/data/defaultSettings.ts
  * - src/lib/blockId.ts
+ * - src/lib/blockSupport.ts
  * - src/lib/codecPreset.ts
  * - src/lib/minecraftVersion.ts
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
@@ -23,8 +25,10 @@
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/SecretsSettingsDialog.tsx
+// - src/lib/blockSupport.ts
 // - src/lib/codecPreset.ts
 // - src/lib/minecraftVersion.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
 // - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts

@@ -82,7 +82,7 @@ export type MixedStepPalette = {
   // Compatibility with this palette's shade filler, not a universal sturdy-top flag.
   canSupport: readonly boolean[];
   needsSupport: readonly boolean[];
-  reachableTop: boolean;
+  floorOnlySupport: boolean;
   shadeNeedsSupport: boolean;
   shadeCanSupport: boolean;
   supportCanShade: boolean;

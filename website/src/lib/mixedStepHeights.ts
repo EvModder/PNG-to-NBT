@@ -9,9 +9,11 @@
  * - src/Index.tsx
  * - src/lib/shapeGeneration.ts
  */
-import { MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defaultSettings";
+import { DEFAULT_MINECRAFT_VERSION, MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
+import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
+import { canSupportBlock, getBlockSupport } from "./blockSupport";
 import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
 import { getFillerFloorAttachmentFix, isFillerDisabled } from "@/lib/fillerRules";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
@@ -23,9 +25,7 @@ import type { ShapeColorRef } from "@/types/shape";
 
 function needsRaisedStepSupport(block: string): boolean {
   const id = normalizeBlockId(block);
-  return isFragileBlock(id)
-    || /^(sand|red_sand|gravel|suspicious_sand|suspicious_gravel|anvil|chipped_anvil|damaged_anvil|dragon_egg|shelf_mushroom)$/.test(id)
-    || id.endsWith("_concrete_powder");
+  return isFragileBlock(id) || id === "shelf_mushroom";
 }
 
 // Raised reuse must not add supports or leave unsupported blocks. Custom colors
@@ -43,56 +43,11 @@ function canRaiseStepBlocks(
   return true;
 }
 
-// Sturdy top faces verified across block states; do not infer this from solidity.
-const STEP_SUPPORT_BLOCKS = new Set([
-  "stone", "granite", "polished_granite", "diorite", "polished_diorite", "andesite", "polished_andesite",
-  "cobblestone", "mossy_cobblestone", "smooth_stone", "deepslate", "cobbled_deepslate", "polished_deepslate",
-  "tuff", "polished_tuff", "blackstone", "polished_blackstone", "obsidian", "crying_obsidian", "bedrock",
-  "dirt", "coarse_dirt", "rooted_dirt", "podzol", "mycelium", "clay", "mud", "muddy_mangrove_roots",
-  "sand", "red_sand", "gravel", "netherrack", "end_stone", "sandstone", "cut_sandstone", "smooth_sandstone",
-  "red_sandstone", "cut_red_sandstone", "smooth_red_sandstone", "prismarine", "dark_prismarine", "terracotta",
-  "ice", "packed_ice", "blue_ice", "glass", "tnt", "scaffolding", "mushroom_stem", "crimson_stem", "warped_stem",
-]);
-
-function hasFullStepTop(block: string): boolean {
-  const id = normalizeBlockId(block);
-  return STEP_SUPPORT_BLOCKS.has(id) || (!id.includes(":") && id !== "honey_block"
-    && /_(block|wool|concrete|terracotta|planks|log|wood|hyphae|ore|bricks|tiles|nylium|froglight|stained_glass)$/.test(id));
-}
-
-function getStepBlockProperties(block: string): Map<string, string> {
-  return new Map([...block.matchAll(/(\w+)\s*=\s*([^,\]]+)/g)].map(([, key, value]) => [key, value.trim()]));
-}
-
-// Check the actual pair, not just the lower block's solidity. Unknown attachment
-// rules stay out of raised reuse; these checks run once per palette, not per pixel.
-function canSupportStepBlock(support: string, block: string): boolean {
-  const id = normalizeBlockId(block);
-  if (!isFragileBlock(id)) return true;
-  const below = normalizeBlockId(support);
-  const full = hasFullStepTop(support);
-  const center = full || below === "decorated_pot" || below === "soul_sand";
-  const props = getStepBlockProperties(block);
-  if (id.endsWith("_carpet")) return props.get("bottom") !== "false" && (center || below === "honey_block");
-  if (id.endsWith("_pressure_plate") || id === "candle" || id.endsWith("_candle") || id === "sea_pickle") return center;
-  // Packed ice rejects snow in older supported versions. Keep the shared policy conservative.
-  if (id === "snow") return (full && below !== "ice" && below !== "packed_ice") || below === "honey_block" || below === "soul_sand";
-  if (id === "resin_clump" || id === "glow_lichen" || id === "sculk_vein") return full && getFillerFloorAttachmentFix(block) === null;
-  if (id === "amethyst_cluster" || /^(small|medium|large)_amethyst_bud$/.test(id) || id === "ice_crystal") return full && (props.get("facing") ?? "up") === "up";
-  if (id.endsWith("_trapdoor")) return center && props.get("open") !== "true" && (props.get("half") ?? "bottom") === "bottom";
-  if (id.endsWith("_lantern") || id === "lantern") return center && props.get("hanging") !== "true";
-  if (id === "lever" || id.endsWith("_button")) return full && props.get("face") === "floor";
-  return full && (id === "scaffolding" || id === "turtle_egg" || id === "sculk_sensor" || id === "calibrated_sculk_sensor"
-    || id.endsWith("_sign") || /^(soul_|redstone_|copper_)?torch$/.test(id)
-    || /^dead_(tube|brain|bubble|fire|horn)_coral(_fan)?$/.test(id));
-}
-
 // Verified floor-supported shapes: jump directly onto <=1/4-height tops, or
 // land on exposed support and step onto inset tops <=1/2 high. Unknowns stay down.
 function canRaiseReachableBlock(block: string): boolean {
-  const id = normalizeBlockId(block);
+  const { id, props } = getBlockSupport(block);
   if (!isFragileBlock(id)) return false;
-  const props = getStepBlockProperties(block);
   if (props.get("waterlogged") === "true") return false;
   // Passable from the side despite its sturdy top; still requires support.
   if (id === "scaffolding") return true;
@@ -125,10 +80,12 @@ export function getMixedStepSettings(
   if (maxColorBlockLift < 1
     || supportMode !== SupportMode.Fragile || !assumeFloor
     || !normalizeBlockId(supportFiller) || isFillerDisabled(supportFiller)
-    || isFragileBlock(normalizeBlockId(supportFiller))
-    || (!reachableTop && !canRaiseStepBlocks([], selections, supportFiller))) return { maxHeight: 0 };
+    || (maxColorBlockLift !== 1 && isFragileBlock(normalizeBlockId(supportFiller)))
+    || (!reachableTop && maxColorBlockLift !== 1 && !canRaiseStepBlocks([], selections, supportFiller))) return { maxHeight: 0 };
   const shade = resolveExportBlockName(shadeFiller);
   const support = resolveExportBlockName(supportFiller);
+  const dataVersion = MINECRAFT_VERSIONS[selections.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION].dataVersion;
+  const floorOnlySupport = reachableTop || isFragileBlock(support);
   const blocks = BASE_COLORS.map((_, id) => {
     const block = resolveAssignedColorBlock({ id, isCustom: false }, selections);
     return block ? resolveExportBlockName(block) : "";
@@ -136,20 +93,20 @@ export function getMixedStepSettings(
   // Exact catalog states only: arbitrary input tags can change a block's map color.
   const fillerColor = (name: string) => BASE_COLORS.findIndex((color, id) => id > 0 && id !== WATER_BASE_INDEX
     && color.blocks.some(block => resolveExportBlockName(block) === name));
-  const canRaiseBlock = (block: string) => canSupportStepBlock(support, block) && (reachableTop ? canRaiseReachableBlock(block)
+  const canRaiseBlock = (block: string) => canSupportBlock(support, block, dataVersion) && (reachableTop ? canRaiseReachableBlock(block)
     : canRaiseStepBlocks([], selections, block) || (isFragileBlock(normalizeBlockId(block))
       && !FRAGILE_SUPPORT_RULES.has(normalizeBlockId(block)) && fillerColor(block) > 0));
   if (isFillerDisabled(shade) || !canRaiseBlock(shade)) return { maxHeight: 0 };
   const canRaise = blocks.map(canRaiseBlock);
-  const canSupport = blocks.map(block => canSupportStepBlock(block, shade));
+  const canSupport = blocks.map(block => canSupportBlock(block, shade, dataVersion));
   const needsSupport = blocks.map(block => isFragileBlock(normalizeBlockId(block)));
   const shadeColor = fillerColor(shade);
   const supportColor = fillerColor(support);
   const supportCanShade = supportColor > 0;
   const shadeNeedsSupport = isFragileBlock(normalizeBlockId(shade));
-  const shadeCanSupport = canSupportStepBlock(shade, shade);
+  const shadeCanSupport = canSupportBlock(shade, shade, dataVersion);
   return { maxHeight: maxColorBlockLift, palette: {
-    blocks, canRaise, canSupport, needsSupport, reachableTop, shadeNeedsSupport, shadeCanSupport,
+    blocks, canRaise, canSupport, needsSupport, floorOnlySupport, shadeNeedsSupport, shadeCanSupport,
     supportCanShade, shadeColor, supportColor, shade, support,
     key: JSON.stringify([reachableTop, blocks, canRaise, canSupport, needsSupport, shadeNeedsSupport, shadeCanSupport, shadeColor, supportColor, shade, support]),
   } };
@@ -204,9 +161,9 @@ export function getMixedStepColor(
   if (isTransparentColor(color) || (color.id !== palette.supportColor && color.id !== palette.shadeColor)) return color;
   let chosen: ShadedColorRef & ShapeColorRef = color;
   let best = height && !palette.canRaise[color.id] ? Infinity : getMixedStepCost(color, height, south, southHeight, palette);
-  // Only one-jump mode keeps full-height support substitutions on the floor.
+  // Fragile supports must stay grounded even without the one-jump restriction.
   for (const role of [FillerRole.SupportRetained, FillerRole.ShadeSuppress]) {
-    if (role === FillerRole.SupportRetained ? (height !== 0 && palette.reachableTop) || color.id !== palette.supportColor : color.id !== palette.shadeColor) continue;
+    if (role === FillerRole.SupportRetained ? (height !== 0 && palette.floorOnlySupport) || color.id !== palette.supportColor : color.id !== palette.shadeColor) continue;
     const candidate = { ...color, fillerRole: role };
     const cost = getMixedStepCost(candidate, height, south, southHeight, palette);
     if (cost < best) { chosen = candidate; best = cost; }
@@ -237,7 +194,7 @@ export function getSupportedStepHeights(colorGrid: ColorGrid, maxHeight: number,
       || (!isTransparentColor(color) && !palette.blocks[color.id]))) continue;
     if (!column.some(color => color.shade === Shade.Dark && !isTransparentColor(color))) continue;
     const limits = column.map(color => !isTransparentColor(color)
-      && (palette.canRaise[color.id] || color.id === palette.shadeColor || (!palette.reachableTop && color.id === palette.supportColor))
+      && (palette.canRaise[color.id] || color.id === palette.shadeColor || (!palette.floorOnlySupport && color.id === palette.supportColor))
       ? maxHeight - Number(color.shade === Shade.Dark) : 0);
     // Each XZ column has its own color in one phase and its southern pixel's
     // shader in the other. Count shared blocks once, regardless of phase order.
