@@ -3,6 +3,7 @@
  * - getMixedStepSettings()
  * - scopeMixedStepPalette()
  * - getGroundedStepColors()
+ * - countUnsupportedLifts()
  * - getSupportedStepHeights()
  * - getMixedStepReuse()
  * - getMixedStepColor()
@@ -17,7 +18,7 @@ import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
 import { canSupportBlock, getBlockSupport } from "./blockSupport";
-import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
+import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, stripDefaultBlockNamespace, type ColorBlockSelections } from "@/lib/blockId";
 import { getFillerFloorAttachmentFix, isFillerDisabled } from "@/lib/fillerRules";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { FillerRole, type MixedStepPalette } from "@/types/conversion";
@@ -25,6 +26,9 @@ import { SupportMode } from "@/types/ui";
 import { MAP_SIZE, isTransparentColor, isWaterColor } from "@/utils/color";
 import { parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import type { ShapeColorRef } from "@/types/shape";
+
+// Lift plan for a support block that could hold the listed blocks.
+type UnsupportedLifts = { blocks: string[]; maxHeight: number; palette: MixedStepPalette };
 
 function needsRaisedStepSupport(block: string): boolean {
   const id = normalizeBlockId(block);
@@ -98,7 +102,7 @@ export function getMixedStepSettings(
   assumeFloor: boolean,
   maxColorBlockLift = MAX_STEP_COLOR_BLOCK_LIFT,
   reachableTop = MIXED_STEP_REACHABLE_TOP,
-): { maxHeight: number; palette?: MixedStepPalette } {
+): { maxHeight: number; palette?: MixedStepPalette; unsupported?: UnsupportedLifts } {
   reachableTop &&= maxColorBlockLift === 1;
   if (!reachableTop && supportMode === SupportMode.None) return {
     maxHeight: maxColorBlockLift > 0 && canRaiseStepBlocks(usedColorKeys, selections, shadeFiller) ? maxColorBlockLift : 0,
@@ -119,11 +123,14 @@ export function getMixedStepSettings(
   // Exact catalog states only: arbitrary input tags can change a block's map color.
   const fillerColor = (name: string) => BASE_COLORS.findIndex((color, id) => id > 0 && id !== WATER_BASE_INDEX
     && color.blocks.some(block => resolveExportBlockName(block) === name));
-  const canRaiseBlock = (block: string) => canSupportBlock(support, block, dataVersion) && (reachableTop ? canRaiseReachableBlock(block)
+  const fits = (block: string) => reachableTop ? canRaiseReachableBlock(block)
     : canRaiseStepBlocks([], selections, block) || (isFragileBlock(normalizeBlockId(block))
-      && !FRAGILE_SUPPORT_RULES.has(normalizeBlockId(block)) && fillerColor(block) > 0));
-  if (isFillerDisabled(shade) || !canRaiseBlock(shade)) return { maxHeight: 0 };
-  const canRaise = blocks.map(canRaiseBlock);
+      && !FRAGILE_SUPPORT_RULES.has(normalizeBlockId(block)) && fillerColor(block) > 0);
+  if (isFillerDisabled(shade) || !fits(shade)) return { maxHeight: 0 };
+  const holds = (block: string) => canSupportBlock(support, block, dataVersion);
+  const fit = blocks.map(fits);
+  const canRaise = fit.map((ok, id) => ok && holds(blocks[id]));
+  const shadeHeld = holds(shade);
   const canSupport = blocks.map(block => canSupportBlock(block, shade, dataVersion));
   const needsSupport = blocks.map(block => isFragileBlock(normalizeBlockId(block)));
   const shadeColor = fillerColor(shade);
@@ -131,11 +138,33 @@ export function getMixedStepSettings(
   const supportCanShade = supportColor > 0;
   const shadeNeedsSupport = isFragileBlock(normalizeBlockId(shade));
   const shadeCanSupport = canSupportBlock(shade, shade, dataVersion);
-  return { maxHeight: maxColorBlockLift, palette: {
+  const palette = (canRaise: boolean[]): MixedStepPalette => ({
     blocks, canRaise, canSupport, needsSupport, floorOnlySupport, shadeNeedsSupport, shadeCanSupport,
     supportCanShade, shadeColor, supportColor, shade, support,
     key: JSON.stringify([reachableTop, blocks, canRaise, canSupport, needsSupport, shadeNeedsSupport, shadeCanSupport, shadeColor, supportColor, shade, support]),
-  } };
+  });
+  // Blocks kept on the floor only because this support block cannot hold them.
+  const kept = [...new Set([...(shadeHeld ? [] : [shade]),
+    ...Array.from(usedColorKeys, key => key & 1 || !fit[key >> 1] || canRaise[key >> 1] ? "" : blocks[key >> 1])])]
+    .filter(Boolean).map(stripDefaultBlockNamespace);
+  const unsupported = kept.length ? { blocks: kept, maxHeight: maxColorBlockLift, palette: palette(fit) } : undefined;
+  return shadeHeld ? { maxHeight: maxColorBlockLift, unsupported, palette: palette(canRaise) } : { maxHeight: 0, unsupported };
+}
+
+// Callers:
+// - src/Index.tsx
+//
+// Pixels that stay on the floor but would be lifted if the support block could hold every block.
+export function countUnsupportedLifts(colorGrid: ColorGrid, palette: MixedStepPalette | undefined, unsupported: UnsupportedLifts): number {
+  // The two plans can only differ on lines holding a block this support cannot hold.
+  const affected = palette && ((line: ColorGrid[number]) => line.some(color => !color.isCustom && unsupported.palette.canRaise[color.id] !== palette.canRaise[color.id]));
+  const lifted = palette && getSupportedStepHeights(colorGrid, unsupported.maxHeight, palette, affected);
+  let count = 0;
+  for (const [x, heights] of getSupportedStepHeights(colorGrid, unsupported.maxHeight, unsupported.palette, affected)) {
+    const current = lifted?.get(x);
+    for (let z = 0; z < MAP_SIZE; ++z) if (heights[z] && !current?.[z]) ++count;
+  }
+  return count;
 }
 
 // Callers:
@@ -212,7 +241,9 @@ export function getMixedStepColor(
 
 // Callers:
 // - src/lib/shapeGeneration.ts
-export function getSupportedStepHeights(colorGrid: ColorGrid, maxHeight: number, palette: MixedStepPalette): Map<number, Uint8Array> {
+export function getSupportedStepHeights(
+  colorGrid: ColorGrid, maxHeight: number, palette: MixedStepPalette, include?: (line: ColorGrid[number]) => boolean,
+): Map<number, Uint8Array> {
   const result = new Map<number, Uint8Array>();
   const states = maxHeight + 1;
   const previousHeights = new Uint8Array(MAP_SIZE * states);
@@ -229,6 +260,7 @@ export function getSupportedStepHeights(colorGrid: ColorGrid, maxHeight: number,
   const scores = new Uint32Array(palette.blocks.length * 4 * states * states);
   for (let x = 0; x < MAP_SIZE; ++x) {
     const column = colorGrid[x];
+    if (include && !include(column)) continue;
     if (column.some(color => color.isCustom || isWaterColor(color)
       || (!isTransparentColor(color) && !palette.blocks[color.id]))) continue;
     if (!column.some(color => color.shade === Shade.Dark && !isTransparentColor(color))) continue;

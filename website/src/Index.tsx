@@ -59,6 +59,7 @@ import {
   DEFAULT_SHOW_ALIGNMENT_REMINDER,
   DEFAULT_SHOW_NOOBLINE_WARNINGS,
   DEFAULT_SHOW_VS_FILLER_WARNINGS,
+  DEFAULT_SHOW_LIFT_SUPPORT_NOTICE,
   DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
   DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC,
   DEFAULT_SUPPRESS_LOAD_SPOT_MARKER_BLOCK,
@@ -176,7 +177,7 @@ import {
   type WaterDropShade,
   getPaletteSeedOffset,
 } from "@/lib/generationPolicy";
-import { getGroundedStepColors, getMixedStepSettings, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
+import { countUnsupportedLifts, getGroundedStepColors, getMixedStepSettings, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import {
   offsetPreviewPixelReplacements,
   buildPreviewVisibleMask,
@@ -666,6 +667,7 @@ const Index = () => {
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
   const [showNooblineWarnings, setShowNooblineWarnings] = useState(() => loadCached(LS_KEYS.showNooblineWarnings, DEFAULT_SHOW_NOOBLINE_WARNINGS));
   const [showVsFillerWarnings, setShowVsFillerWarnings] = useState(() => loadCached(LS_KEYS.showVsFillerWarnings, DEFAULT_SHOW_VS_FILLER_WARNINGS));
+  const [showLiftSupportNotice, setShowLiftSupportNotice] = useState(() => loadCached(LS_KEYS.showLiftSupportNotice, DEFAULT_SHOW_LIFT_SUPPORT_NOTICE));
   const [showFlatNbtSuppressStepModes, setShowFlatNbtSuppressStepModes] = useState(() => loadCached(
     LS_KEYS.showFlatNbtSuppressStepModes,
     DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES,
@@ -1049,6 +1051,7 @@ const Index = () => {
       [LS_KEYS.showAlignmentReminder]: showAlignmentReminder,
       [LS_KEYS.showNooblineWarnings]: showNooblineWarnings,
       [LS_KEYS.showVsFillerWarnings]: showVsFillerWarnings,
+      [LS_KEYS.showLiftSupportNotice]: showLiftSupportNotice,
       [LS_KEYS.showFlatNbtSuppressStepModes]: showFlatNbtSuppressStepModes,
       [LS_KEYS.mixedStepReachableTop]: mixedStepReachableTop,
       [LS_KEYS.maxStepColorBlockLift]: maxStepColorBlockLift,
@@ -1260,7 +1263,7 @@ const Index = () => {
   );
   // Auto-hiding unused supports must not undo the reuse plan that made them unnecessary.
   const stepReuseSupportMode = supportMode === SupportMode.None && preferredSupportMode === SupportMode.Fragile ? preferredSupportMode : supportMode;
-  const { maxHeight: mixedStepMaxHeight, palette: mixedStepPalette } = useMemo(
+  const { maxHeight: mixedStepMaxHeight, palette: mixedStepPalette, unsupported: liftUnsupported } = useMemo(
     () => getMixedStepSettings(
       usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock,
       applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop,
@@ -2003,6 +2006,12 @@ const Index = () => {
     [effectiveSelectedTileIndices, tileAnalyses],
   );
   const activeOutputTileAnalyses = selectedTileIndices.length > 0 ? selectedTileAnalyses : tileAnalyses;
+  // A setting-level notice, not a placement fault: these blocks stay valid on the floor.
+  const liftSupportWarning = useMemo(() => {
+    if (!showLiftSupportNotice || !imageValid || !liftUnsupported || !mixSteps || !isSuppressStepsBuildMode(effectiveBuildMode) || isNorthSouthSuppressStepDirection) return null;
+    const count = activeOutputTileAnalyses.reduce((sum, { tile }) => sum + countUnsupportedLifts(tile.colorGrid, mixedStepPalette, liftUnsupported), 0);
+    return count ? { ...messages.preview.liftSupportWarning(normalizeBlockId(effectiveSupportFillerBlock), count, liftUnsupported.blocks), invalid: false } : null;
+  }, [showLiftSupportNotice, imageValid, liftUnsupported, mixSteps, effectiveBuildMode, isNorthSouthSuppressStepDirection, activeOutputTileAnalyses, mixedStepPalette, effectiveSupportFillerBlock]);
   const selectionMaterialCountsSum = useMemo(
     () => aggregateMaterialCounts(selectedTileAnalyses.flatMap(tile => (tile.materialNeedStats ? [tile.materialNeedStats] : [])), "sum"),
     [selectedTileAnalyses],
@@ -3517,6 +3526,7 @@ const Index = () => {
       ),
       noFillerWarning,
       suppressNorthSouthWarning,
+      liftSupportWarning,
       waterSideSupportWarning,
       fragileSupportOverrideWarning,
       vsFillerWarning,
@@ -4059,6 +4069,8 @@ const Index = () => {
         setShowNooblineWarnings={setShowNooblineWarnings}
         showVsFillerWarnings={showVsFillerWarnings}
         setShowVsFillerWarnings={setShowVsFillerWarnings}
+        showLiftSupportNotice={showLiftSupportNotice}
+        setShowLiftSupportNotice={setShowLiftSupportNotice}
         showFlatNbtSuppressStepModes={showFlatNbtSuppressStepModes}
         setShowFlatNbtSuppressStepModes={setShowFlatNbtSuppressStepModes}
         mixedStepReachableTop={mixedStepReachableTop}

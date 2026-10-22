@@ -58,6 +58,8 @@ type SecretsSettingsDialogProps = {
   setShowNooblineWarnings: Dispatch<SetStateAction<boolean>>;
   showVsFillerWarnings: boolean;
   setShowVsFillerWarnings: Dispatch<SetStateAction<boolean>>;
+  showLiftSupportNotice: boolean;
+  setShowLiftSupportNotice: Dispatch<SetStateAction<boolean>>;
   showFlatNbtSuppressStepModes: boolean;
   setShowFlatNbtSuppressStepModes: Dispatch<SetStateAction<boolean>>;
   mixedStepReachableTop: boolean;
@@ -196,6 +198,8 @@ export function SecretsSettingsDialog({
   setShowNooblineWarnings,
   showVsFillerWarnings,
   setShowVsFillerWarnings,
+  showLiftSupportNotice,
+  setShowLiftSupportNotice,
   showFlatNbtSuppressStepModes,
   setShowFlatNbtSuppressStepModes,
   mixedStepReachableTop,
@@ -320,6 +324,12 @@ export function SecretsSettingsDialog({
             onChange={setShowVsFillerWarnings}
             label={messages.dialogs.options.showVsFillerWarnings}
             title={messages.dialogs.options.showVsFillerWarningsTooltip}
+          />
+          <OptionRow
+            checked={showLiftSupportNotice}
+            onChange={setShowLiftSupportNotice}
+            label={messages.dialogs.options.showLiftSupportNotice}
+            title={messages.dialogs.options.showLiftSupportNoticeTooltip}
           />
           <OptionRow
             checked={showFlatNbtSuppressStepModes}

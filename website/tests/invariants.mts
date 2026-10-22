@@ -22,7 +22,7 @@ import { buildFillerAssignmentMap, createFillerAssignments, getFillerFloorAttach
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
-import { getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
+import { countUnsupportedLifts, getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { canSupportBlock, getBlockSupport } from "@/lib/blockSupport";
@@ -1616,6 +1616,21 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
       }
     }
   }
+  // Lifts that only the support block prevents are counted and their blocks listed; other causes are not.
+  const lift = (support: string, shade: string, jumpable: boolean) => getMixedStepSettings([4, 6, 22],
+    { ...selections, selectedBlocks: { 2: "candle", 3: "dandelion", 11: "stone" } }, SupportMode.Fragile, shade, support, true, 1, jumpable);
+  const liftGrid: ColorGrid = Array.from({ length: MAP_SIZE }, (_, x) => Array.from({ length: MAP_SIZE }, (_, z) => (
+    { id: x < 2 ? 2 : 11, isCustom: false, shade: x < 2 ? z % 3 as Shade : Shade.Flat })));
+  const blocked = (support: string, shade: string, jumpable: boolean) => {
+    const { palette, unsupported } = lift(support, shade, jumpable);
+    return unsupported && [unsupported.blocks, countUnsupportedLifts(liftGrid, palette, unsupported)];
+  };
+  assert.equal(blocked("resin_block", "scaffolding", true), undefined);
+  assert.equal(lift("oak_slab", "scaffolding", true).maxHeight, 0);
+  assert.deepEqual(blocked("oak_slab", "scaffolding", true), [["scaffolding", "candle"], 84]);
+  assert.deepEqual(lift("oak_slab", "stone", true), { maxHeight: 0 }, "An unreachable shade filler is not a support problem");
+  assert.equal(lift("oak_slab", "stone", false).palette!.canRaise[2], false);
+  assert.deepEqual(blocked("oak_slab", "stone", false), [["candle"], 0], "A lift that would not pay off is not counted");
 }
 
 async function assertMixedStepSupportPairs(): Promise<void> {

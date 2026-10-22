@@ -66,6 +66,7 @@ export const STORAGE_KEYS = {
   showAlignmentReminder: "mapart_secret_show_alignment_reminder",
   showNooblineWarnings: "mapart_secret_show_noobline_warnings",
   showVsFillerWarnings: "mapart_secret_show_vs_filler_warnings",
+  showLiftSupportNotice: "mapart_secret_show_lift_support_notice",
   showFlatNbtSuppressStepModes: "mapart_secret_show_flat_nbt_suppress_step_modes",
   mixedStepReachableTop: "mapart_secret_mixed_step_reachable_top",
   maxStepColorBlockLift: "mapart_secret_max_step_color_block_lift",

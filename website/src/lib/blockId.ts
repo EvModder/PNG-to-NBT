@@ -48,6 +48,7 @@ function withDefaultFace(id: string, props: readonly string[]): readonly string[
 
 // Callers:
 // - src/lib/blockIconAtlas.ts
+// - src/lib/mixedStepHeights.ts
 export function stripDefaultBlockNamespace(raw: string): string {
   return raw.trim().replace(/^minecraft:/i, "");
 }

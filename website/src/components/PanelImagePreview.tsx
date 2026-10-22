@@ -24,6 +24,7 @@ import {
 type PreviewWarning = {
   text: string;
   invalid: boolean;
+  detail?: string;
 };
 
 type PaletteNoticeGroup = {
@@ -56,6 +57,7 @@ type PanelImagePreviewProps = {
   usesEyeblossoms: boolean;
   noFillerWarning: { text: string; blocking: boolean } | null;
   suppressNorthSouthWarning: string | null;
+  liftSupportWarning: PreviewWarning | null;
   waterSideSupportWarning: PreviewWarning | null;
   fragileSupportOverrideWarning: PreviewWarning | null;
   vsFillerWarning: PreviewWarning | null;
@@ -108,11 +110,13 @@ function WarningBanner({
   tone,
   invalid = false,
   warningHeadline = false,
+  detail,
 }: {
   text: string;
   tone: "error" | "warning" | "muted";
   invalid?: boolean;
   warningHeadline?: boolean;
+  detail?: string;
 }) {
   const className =
     tone === "error"
@@ -127,7 +131,7 @@ function WarningBanner({
   const headlineEnd = warningHeadline ? text.indexOf("\n") : -1;
 
   return (
-    <div className={className}>
+    <div className={className} title={detail}>
       <p className={`text-xs font-medium whitespace-pre-line ${textClassName}`}>
         {headlineEnd < 0 ? text : <>
           <span className="text-warning-text">{text.slice(0, headlineEnd)}</span>
@@ -246,6 +250,7 @@ export function PanelImagePreview({
   usesEyeblossoms,
   noFillerWarning,
   suppressNorthSouthWarning,
+  liftSupportWarning,
   waterSideSupportWarning,
   fragileSupportOverrideWarning,
   vsFillerWarning,
@@ -544,6 +549,7 @@ export function PanelImagePreview({
         {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
         {noFillerWarning && <WarningBanner text={noFillerWarning.text} tone={noFillerWarning.blocking ? "error" : "warning"} />}
         {suppressNorthSouthWarning && <WarningBanner text={suppressNorthSouthWarning} tone="warning" />}
+        {liftSupportWarning && <WarningBanner {...liftSupportWarning} tone="muted" />}
         {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
         {fragileSupportOverrideWarning && <WarningBanner text={fragileSupportOverrideWarning.text} tone="warning" invalid={fragileSupportOverrideWarning.invalid} />}
         {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} warningHeadline />}

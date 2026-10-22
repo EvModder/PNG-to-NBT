@@ -482,6 +482,10 @@ export const messages = {
     convertButtonLayerSplitTitle: catalog.upload.convertButtonLayerSplitTitle,
   },
   preview: {
+    liftSupportWarning(support: string, count: number, blocks: readonly string[]) {
+      return { text: formatPlural(catalog.preview.liftSupport, count, { support }),
+        detail: formatTemplate(catalog.preview.liftSupportDetail, { blocks: blocks.join(", ") }) };
+    },
     missingBlockAssignments(count: number): string {
       return formatPlural(catalog.preview.missingBlockAssignments, count);
     },

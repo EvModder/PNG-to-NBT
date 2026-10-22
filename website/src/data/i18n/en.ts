@@ -318,6 +318,11 @@ export const enCatalog = {
     convertButtonLayerSplitTitle: "Download separate schematics for each build layer.",
   },
   preview: {
+    liftSupport: {
+      one: "{support} cannot support {count} lift",
+      other: "{support} cannot support {count} lifts",
+    } as PluralForms,
+    liftSupportDetail: "Liftable on another support: {blocks}",
     missingBlockAssignments: {
       one: "{count} input color has no preset-assigned block",
       other: "{count} input colors have no preset-assigned block",
@@ -435,6 +440,8 @@ export const enCatalog = {
       showNooblineWarningsTooltip: "Shown any time a noobline is needed.",
       showVsFillerWarnings: "Show warnings for VS-Fillers in Staircase maps",
       showVsFillerWarningsTooltip: "Shown when temporary fillers are needed for shading south of transparent pixels.",
+      showLiftSupportNotice: "Show lifts blocked by the support block",
+      showLiftSupportNoticeTooltip: "With a raised E/W lift, count pixels kept on the floor because the support block cannot hold them.",
       showFlatNbtSuppressStepModes: "Show Suppress-step options for Flat maps",
       mixedStepReachableTop: "Jumpable Suppress-step tops",
       mixedStepReachableTopTooltip: "Keep raised blocks reachable with one jump. Requires lift 1, Fragile support and Assume floor.",

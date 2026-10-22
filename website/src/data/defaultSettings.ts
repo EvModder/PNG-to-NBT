@@ -121,6 +121,7 @@ export const DEFAULT_UNIFORM_SUPPRESS_STEP_SPACING = true;
 export const DEFAULT_SHOW_ALIGNMENT_REMINDER = true;
 export const DEFAULT_SHOW_NOOBLINE_WARNINGS = true;
 export const DEFAULT_SHOW_VS_FILLER_WARNINGS = true;
+export const DEFAULT_SHOW_LIFT_SUPPORT_NOTICE = false;
 export const DEFAULT_SHOW_FLAT_NBT_SUPPRESS_STEP_MODES = false;
 export const DEFAULT_MARK_SUPPRESS_LOAD_SPOTS_IN_SCHEMATIC = false;
 export const SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS = ["jigsaw", "barrier"] as const;

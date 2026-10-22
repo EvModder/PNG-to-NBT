@@ -314,6 +314,11 @@ export const esCatalog = {
     convertButtonLayerSplitTitle: "Descarga esquemas separados para cada capa de construcción.",
   },
   preview: {
+    liftSupport: {
+      one: "{support} no puede sostener {count} elevación",
+      other: "{support} no puede sostener {count} elevaciones",
+    },
+    liftSupportDetail: "Elevables con otro soporte: {blocks}",
     missingBlockAssignments: {
       one: "{count} color de entrada sin bloque asignado en el preset",
       other: "{count} colores de entrada sin bloque asignado en el preset",
@@ -431,6 +436,8 @@ export const esCatalog = {
       showNooblineWarningsTooltip: "Se muestran siempre que se necesita una noobline.",
       showVsFillerWarnings: "Mostrar advertencias de VS-Rellenos en mapas Staircase",
       showVsFillerWarningsTooltip: "Se muestran cuando se necesitan rellenos temporales para sombrear al sur de píxeles transparentes.",
+      showLiftSupportNotice: "Mostrar elevaciones bloqueadas por el soporte",
+      showLiftSupportNoticeTooltip: "Con elevación E/O, cuenta los píxeles que quedan en el suelo porque el bloque de soporte no puede sostenerlos.",
       showFlatNbtSuppressStepModes: "Mostrar opciones Suppress-step para mapas planos",
       mixedStepReachableTop: "Suppress-steps de un salto",
       mixedStepReachableTopTooltip: "Mantener los bloques elevados al alcance de un salto. Requiere elevación 1, soporte Frágil y Suponer suelo.",
