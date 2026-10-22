@@ -15,10 +15,9 @@ import {
   DEFAULT_DOMINATE_VOID_SHADE_FILLER_BLOCK,
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
 } from "@/data/defaultSettings";
-import { isFragileBlock } from "@/data/fragileBlocks";
-import { normalizeBlockId } from "@/lib/blockId";
 import { messages } from "@/lib/messages";
-import { getFillerFloorAttachmentFix } from "@/lib/fillerRules";
+import { getFillerFloorAttachmentFix, isSupportFillerFragile } from "@/lib/fillerRules";
+import { isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/data/uiClasses";
 
 type FillerFieldProps = {
@@ -29,12 +28,14 @@ type FillerFieldProps = {
   onCommit?: (value: string) => void;
   placeholder: string;
   isSupport?: boolean;
+  warning?: string;
   showRequiredBadge: boolean;
   requiredTooltip: string;
   requiredCountLabel: ReactNode;
 };
 
 type ToolbarFillerSettingsProps = {
+  growthCover: { visible: boolean; required: boolean; block: string; setBlock: (value: string) => void; count: number };
   toolbarRef: MutableRefObject<HTMLElement | null>;
   isStackedLayout: boolean;
   hasImageData: boolean;
@@ -87,12 +88,13 @@ function FillerField({
   onCommit,
   placeholder,
   isSupport = false,
+  warning,
   showRequiredBadge,
   requiredTooltip,
   requiredCountLabel,
 }: FillerFieldProps) {
   const [draftValue, setDraftValue] = useState(value);
-  const supportRequiresSupport = isSupport && isFragileBlock(normalizeBlockId(value));
+  const supportRequiresSupport = isSupport && isSupportFillerFragile(value);
   const floorAttachmentFix = isSupport ? null : getFillerFloorAttachmentFix(value);
 
   useEffect(() => {
@@ -146,9 +148,9 @@ function FillerField({
           </>
         )}
       </div>
-      {(supportRequiresSupport || floorAttachmentFix) && (
+      {(warning || supportRequiresSupport || floorAttachmentFix) && (
         <div className="col-span-2 w-0 min-w-full bg-warning/20 border-2 border-warning/40 rounded px-2 py-1 text-xs font-medium text-warning-text">
-          {supportRequiresSupport ? (
+          {warning ? <span className="text-destructive-text">{warning}</span> : supportRequiresSupport ? (
             <span className="text-destructive-text">{messages.fillers.supportRequiresSupportWarning}</span>
           ) : floorAttachmentFix && <button
             type="button"
@@ -170,6 +172,7 @@ function FillerField({
 // Callers:
 // - src/Index.tsx
 export function ToolbarFillerSettings({
+  growthCover,
   toolbarRef,
   isStackedLayout,
   hasImageData,
@@ -346,6 +349,14 @@ export function ToolbarFillerSettings({
         />
       ),
     });
+  }
+
+  if (growthCover.visible) {
+    const optionalEmpty = !growthCover.required && !isGrowthCoverEnabled(growthCover.block);
+    groups.push({ key: "growth", node: <FillerField label={messages.fillers.growthCoverLabel} tooltip={messages.fillers.growthCoverTooltip}
+      value={growthCover.block} setValue={growthCover.setBlock} placeholder="air"
+      warning={optionalEmpty || isGrowthCoverValid(growthCover.block) ? undefined : messages.fillers.growthCoverInvalid}
+      showRequiredBadge={hasImageData && growthCover.count > 0} requiredTooltip={messages.fillers.growthCoverTooltip} requiredCountLabel={formatRequiredCount(growthCover.count)} /> });
   }
 
   if (!groups.length) return null;

@@ -159,6 +159,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
   // Ignore inactive settings, especially the large palette key when no blocks can be raised.
   return [
     tileCacheKey,
+    input.environmentalPalette?.key ?? "",
     input.allSameShade ?? "",
     input.hasWater ? 1 : 0,
     input.hasTransparency ? 1 : 0,

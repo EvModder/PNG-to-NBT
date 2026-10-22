@@ -31,7 +31,7 @@ bun run test:invariants --support
 ```
 
 `test:rules` checks block/substrate rules without generating shapes. Use
-`test:invariants --support` or `--slope` for the affected generator
+`test:invariants --support`, `--environment` or `--slope` for the affected generator
 path; omit flags only when intending to run the whole invariant suite.
 
 `test:versions` includes the offline support audit. Rule/catalog/version changes

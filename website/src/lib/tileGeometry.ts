@@ -60,6 +60,7 @@ export function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileF
     input.hasTransparency,
     input.requiresTwoLayerLateShading,
     {
+      environmentalPalette: input.environmentalPalette,
       layerGap: input.layerGap,
       mixSteps: input.mixSteps,
       mixedStepMaxHeight: input.mixedStepMaxHeight,

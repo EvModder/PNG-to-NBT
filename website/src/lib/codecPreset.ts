@@ -21,6 +21,7 @@ import { normalizeBlockFallbacks } from "@/lib/presetFallbacks";
 
 interface SharedSettings {
   supportFiller: string;
+  growthCover: string;
   shadeFiller: string;
   crubTechShadeBreakableFillerBlock: string;
   crubTechShadePushableFillerBlock: string;
@@ -57,6 +58,9 @@ interface FullPreset extends SharedSettings {
 
 const FORMAT_VERSION = 2;
 const FALLBACK_FORMAT_VERSION = 3;
+// An explicit cover is appended after the published payload, including any fallback chains.
+const HAS_GROWTH_COVER = 0x80;
+const IMPLICIT_GROWTH_COVER = "tripwire"; // Wire default, independent of future site defaults.
 // Alphanumeric transport: Z0 = Z, Z1 = -, Z2 = _. Escape Z itself to avoid ambiguity.
 const TRANSPORT_ESCAPES = "Z-_";
 const TEXT_ENCODER = new TextEncoder();
@@ -195,7 +199,7 @@ function enumCodec<T extends string>(values: readonly T[]): ValueCodec<T> {
 }
 
 type BooleanKey = { [K in keyof SharedSettings]: SharedSettings[K] extends boolean ? K : never }[keyof SharedSettings];
-type ValueKey = Exclude<keyof SharedSettings, BooleanKey | "minecraftVersion">;
+type ValueKey = Exclude<keyof SharedSettings, BooleanKey | "minecraftVersion" | "growthCover">;
 
 // Wire schema: retain bit positions, field order and enum order, or bump FORMAT_VERSION.
 const BOOLEAN_BITS: Record<BooleanKey, number> = {
@@ -240,7 +244,6 @@ const VALUE_CODECS: { [K in ValueKey]: ValueCodec<SharedSettings[K]> } = {
 };
 const BOOLEAN_KEYS = Object.keys(BOOLEAN_BITS) as BooleanKey[];
 const VALUE_KEYS = Object.keys(VALUE_CODECS) as ValueKey[];
-const BOOLEAN_MASK = Object.values(BOOLEAN_BITS).reduce((mask, bit) => mask | bit, 0);
 
 function writeSetting<K extends ValueKey>(writer: PresetWriter, preset: SharedSettings, key: K, catalog: PresetCatalog): void {
   VALUE_CODECS[key].write(writer, preset[key], catalog);
@@ -270,7 +273,7 @@ export async function encodeFullPreset(preset: FullPreset): Promise<string> {
     for (const value of color.blocks) writer.text(value);
     writer.block(getSelectedCustomColorBlock(preset.selectedBlocksCustom, id, preset.customColors), color.blocks);
   });
-  let flags = 0;
+  let flags = preset.growthCover === IMPLICIT_GROWTH_COVER ? 0 : HAS_GROWTH_COVER;
   for (const key of BOOLEAN_KEYS) {
     if (typeof preset[key] !== "boolean") throw new Error("Invalid preset boolean");
     if (preset[key]) flags |= BOOLEAN_BITS[key];
@@ -286,6 +289,7 @@ export async function encodeFullPreset(preset: FullPreset): Promise<string> {
       for (const block of blocks) writer.block(block, catalog.blocks[id], catalog.excluded[id]);
     }
   }
+  if (flags & HAS_GROWTH_COVER) block.write(writer, preset.growthCover, catalog);
   const encoded = await encodeUrlParamBytes(Uint8Array.from(writer.bytes));
   return encoded.replace(/[Z_-]/g, char => `Z${TRANSPORT_ESCAPES.indexOf(char)}`);
 }
@@ -324,7 +328,6 @@ async function decodeBinaryPreset(encoded: string): Promise<FullPreset | null> {
       selectedBlocksCustom[id] = selected;
     }
     const flags = reader.byte();
-    if (flags & ~BOOLEAN_MASK) return null;
     // Every required field is assigned by the schema before returning.
     const settings = { minecraftVersion } as SharedSettings;
     for (const key of BOOLEAN_KEYS) settings[key] = !!(flags & BOOLEAN_BITS[key]);
@@ -341,6 +344,7 @@ async function decodeBinaryPreset(encoded: string): Promise<FullPreset | null> {
         blockFallbacks[id] = choices;
       }
     }
+    settings.growthCover = flags & HAS_GROWTH_COVER ? block.read(reader, catalog) : IMPLICIT_GROWTH_COVER;
     if (reader.remaining !== 0) return null;
     return { blockPreset: { name, selectedBlocks, ...(format === FALLBACK_FORMAT_VERSION ? { blockFallbacks } : {}) }, customColors, selectedBlocksCustom, ...settings };
   } catch {

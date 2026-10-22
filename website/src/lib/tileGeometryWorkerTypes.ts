@@ -16,6 +16,7 @@
  * - src/lib/tileGeometryWorkerClient.ts
  */
 import type { ColorGrid, Shade } from "@/types/color";
+import type { getEnvironmentalSettings } from "./environmentalSupport";
 import type { GeneratedShape } from "@/types/shape";
 import { BuildMode, FillerRole, SuppressStepDirection, type MixedStepPalette } from "@/types/conversion";
 import { FlatModeBehavior, type WaterDrops } from "@/lib/colorGridAnalysis";
@@ -60,6 +61,7 @@ export type TileBaseGeometryWorkerResult = {
 // - src/lib/tileGeometry.ts
 // - src/lib/tileGeometryWorkerClient.ts
 export type TileFinalGeometryWorkerInput = {
+  environmentalPalette?: ReturnType<typeof getEnvironmentalSettings>["palette"];
   colorGrid: ColorGrid;
   allSameShade?: Shade;
   hasWater: boolean;

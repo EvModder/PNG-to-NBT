@@ -15,6 +15,7 @@
  * - src/lib/blockId.ts
  * - src/lib/codecPreset.ts
  * - src/lib/colorGridAnalysis.ts
+ * - src/lib/environmentalSupport.ts
  * - src/lib/fillerRules.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/messages.ts
@@ -121,6 +122,7 @@ export enum SuppressStepDirection {
 // Callers:
 // - src/Index.tsx
 // - src/lib/blockId.ts
+// - src/lib/environmentalSupport.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
@@ -132,6 +134,8 @@ export enum SuppressStepDirection {
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/types/shape.ts
 export enum FillerRole {
+  GrowthCover = "growth_cover",
+  CoralSupport = "coral_support",
   ShadeNorthRow = "shade_north_row",
   ShadeSuppress = "shade_suppress",
   ShadeNorthRowBreakable = "shade_north_row_breakable",

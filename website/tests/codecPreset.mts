@@ -30,6 +30,7 @@ const standard: FullPreset = {
   blockPreset: getBuiltinPreset("Fullblock")!,
   customColors: [], selectedBlocksCustom: {},
   supportFiller: "cobblestone", shadeFiller: "resin_block",
+  growthCover: "tripwire",
   crubTechShadeBreakableFillerBlock: "moss_block", crubTechShadePushableFillerBlock: "resin_block",
   suppress2LayerLateFillerBlock: "slime_block", dominateVoidFillerBlock: "slime_block", recessiveVoidFillerBlock: "honey_block",
   supportMode: SupportMode.None, buildMode: BuildMode.StaircaseGroup,
@@ -58,6 +59,7 @@ const hidden: FullPreset = { ...standard, blockPreset: {
   name: "Hidden", selectedBlocks: Object.fromEntries(EXCLUDED_BLOCKS.map((row, id) => [id, row.at(-1) ?? ""])),
 }, supportFiller: "barrier", shadeFiller: "reinforced_deepslate" };
 const standardUrl = await roundTrip(standard);
+for (const growthCover of ["", "air", "glass"]) await roundTrip({ ...standard, growthCover });
 const withFallbacks: FullPreset = { ...standard, blockPreset: {
   ...standard.blockPreset,
   selectedBlocks: { ...standard.blockPreset.selectedBlocks, 18: "yellow_wool_slab" },
@@ -66,6 +68,7 @@ const withFallbacks: FullPreset = { ...standard, blockPreset: {
 // None explicitly disables the chain, so use a real preferred block for color 0.
 withFallbacks.blockPreset.selectedBlocks[0] = "poplar_button[face=floor]";
 const fallbackUrl = await roundTrip(withFallbacks);
+for (const growthCover of ["", "glass"]) await roundTrip({ ...withFallbacks, growthCover });
 console.log(`Fallback example: ${fallbackUrl.length} URL characters (including newer/custom literal blocks)`);
 await roundTrip({ ...standard, blockPreset: {
   ...standard.blockPreset,
@@ -176,7 +179,7 @@ let index = 0;
 for (const buildMode of Object.values(BuildMode)) {
   for (const supportMode of Object.values(SupportMode)) {
     for (const minecraftVersion of versions) {
-      const flags = index % 128;
+      const flags = index % 256;
       await roundTrip({
         ...standard, buildMode, supportMode, minecraftVersion,
         proPaletteSeed: !!(flags & 1), mixSteps: !!(flags & 2), buildAtWorldMinY: !!(flags & 4),
@@ -295,6 +298,15 @@ try {
   else Reflect.deleteProperty(globalThis, "CompressionStream");
 }
 const raw = (bytes: Uint8Array) => `r${Buffer.from(bytes).toString("base64url").replace(/[Z_-]/g, char => `Z${"Z-_".indexOf(char)}`)}`;
+
+// Format 3 fixture from the published encoder; literal blocks keep it independent of catalog order.
+const publishedFallbackBytes = Buffer.from("03a7260001096578616d706c653a61" + "00".repeat(62)
+  + "0600000000000000000700020105000204000001000101096578616d706c653a62", "hex");
+const publishedFallback = { ...empty, blockPreset: { name: "", selectedBlocks: { ...empty.blockPreset.selectedBlocks, 0: "example:a" },
+  blockFallbacks: { 0: ["example:b"] } } };
+assert.deepEqual(await decodeFullPreset(raw(publishedFallbackBytes)), publishedFallback);
+const fallbackEncoded = await roundTrip(publishedFallback);
+assert.deepEqual(await decodeUrlParamBytes(fallbackEncoded.replace(/Z([012])/g, (_, digit) => "Z-_"[Number(digit)])), new Uint8Array(publishedFallbackBytes));
 
 // TEMP: published text URLs remain readable, but never restore their retired
 // import-policy setting or supply values for settings the old format omitted.

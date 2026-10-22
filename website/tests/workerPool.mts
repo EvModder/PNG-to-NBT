@@ -5,6 +5,7 @@ import { analyzeBaseGeometry, analyzeFinalGeometry } from "@/lib/tileGeometry";
 import type { TileBaseGeometryWorkerInput, TileFinalGeometryWorkerInput } from "@/lib/tileGeometryWorkerTypes";
 import { computeColorGridStats, deriveImageStats, FlatModeBehavior } from "@/lib/colorGridAnalysis";
 import { CRUBTECH_WATER_DROPS, resolveTileWaterSetting } from "@/lib/generationPolicy";
+import { getEnvironmentalSettings, scopeEnvironmentalPalette } from "@/lib/environmentalSupport";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { Shade } from "@/types/color";
 
@@ -226,6 +227,20 @@ try {
     await evicted;
   }
   const respond = (result: object) => geometryWorkers.findLast(worker => !worker.terminated)!.respond({ result });
+  const selections = { selectedBlocks: { 7: "oak_sapling", 11: "stone", 25: "tube_coral_block" }, selectedBlocksCustom: {}, customColors: [] };
+  const overlays = [false, true].map(cover => getEnvironmentalSettings([14, 22, 50], selections, cover).palette);
+  for (const color of [14, 22, 50]) {
+    const [off, on] = overlays.map(palette => scopeEnvironmentalPalette(palette, key => key === color));
+    const probe = { ...input, buildMode: BuildMode.SuppressStepChecker, environmentalPalette: off };
+    const first = getTileFinalGeometry(`overlay:${color}`, probe, () => {});
+    respond(result); await first;
+    let pending = false;
+    const next = getTileFinalGeometry(`overlay:${color}`, { ...probe, environmentalPalette: on }, () => { pending = true; });
+    assert.equal(pending, color === 14, "Only the tile with a growing plant needs a new shape");
+    if (pending) respond(result);
+    await next;
+    assert.equal(on?.minimumLayerGap, color === 22 ? undefined : color === 14 ? 2 : 3);
+  }
   const northline = getTileBaseGeometry("northline-seed", waterProbe, () => {});
   respond(waterExpected); await northline;
   assert.equal(await getTileBaseGeometry("northline-seed", { ...waterProbe, paletteSeed: 9 },

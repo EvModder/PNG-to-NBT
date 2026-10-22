@@ -185,6 +185,9 @@ export const enCatalog = {
     selectedFallbackTooltip: "Selected shading method.",
   },
   fillers: {
+    growthCoverLabel: "Cover:",
+    growthCoverTooltip: "Transparent blocks above growing plants. Leave empty for no covers; saplings still need them. Twisting vines always export age=25.",
+    growthCoverInvalid: "Use a stable, transparent cover.",
     heading: "Fillers",
     floorAttachmentWarning: "Only attachment from below is supported.",
     supportRequiresSupportWarning: "Needs support itself.",

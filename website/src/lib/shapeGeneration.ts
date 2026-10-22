@@ -20,6 +20,8 @@ import { PixelParity, getPixelParity, type WaterDrops } from "./colorGridAnalysi
 import { parseShapeCoordKey, toShapeCoordKey } from "./shapeModel";
 import { buildSuppressStepPhases, type SuppressStepPhase } from "./suppressSteps";
 import { getSupportedStepHeights, getMixedStepReuse, getMixedStepColor } from "./mixedStepHeights";
+import { getColorRefKey } from "./colorRefs";
+import type { getEnvironmentalSettings } from "./environmentalSupport";
 
 type PositionedEntry = { x: number; y: number; z: number };
 type ShapeRef =
@@ -2733,6 +2735,7 @@ function finalizeShapePart(part: RawShapePart): ShapePart {
 }
 
 type ShapeOptions = {
+  environmentalPalette?: ReturnType<typeof getEnvironmentalSettings>["palette"];
   buildMode: InternalBuildMode;
   layerGap?: number;
   mixSteps?: boolean;
@@ -3058,7 +3061,44 @@ function buildRawShapeParts(
   }
 }
 
-function spaceSuppressStepParts(parts: RawShapePart[], { minimum, uniform, keepExtras }: SuppressStepSpacing): RawShapePart[] {
+function addEnvironmentalBlocks(part: RawShapePart, palette: NonNullable<ReturnType<typeof getEnvironmentalSettings>["palette"]>): RawShapePart {
+  const additions = new Map<ShapeCoordKey, ShapeBlock>();
+  let needsCollisionCheck = false;
+  for (const block of part.blocks) {
+    if (block.ref.kind !== "color" || block.ref.color.fillerRole) continue;
+    const role = palette.roles[getColorRefKey(block.ref.color)];
+    if (!role) continue;
+    const y = block.y + (role === FillerRole.GrowthCover ? 1 : -1);
+    const coord = toShapeCoordKey(block.x, y, block.z);
+    if (!additions.has(coord)) additions.set(coord, makeFillerBlock(block.x, y, block.z, role));
+    if (y >= part.bounds.minY && y <= part.bounds.maxY) needsCollisionCheck = true;
+  }
+  // An empty phase or placements wholly outside its height range need no collision scan.
+  if (!additions.size) return part;
+  if (needsCollisionCheck) {
+    for (const blocks of [part.blocks, part.loweredWaterBlocks]) for (const block of blocks) {
+      additions.delete(toShapeCoordKey(block.x, block.y, block.z));
+    }
+    if (!additions.size) return part;
+  }
+  const blocks = part.blocks.concat([...additions.values()]);
+  // Original X/Z bounds already include each source column. Only Y can grow.
+  if (![...part.supportFloorYs].some(y => y >= part.bounds.minY && y <= part.bounds.maxY)) {
+    let { minY, maxY } = part.bounds;
+    for (const block of additions.values()) if (!part.supportFloorYs.has(block.y)) {
+      minY = Math.min(minY, block.y);
+      maxY = Math.max(maxY, block.y);
+    }
+    return { ...part, blocks, bounds: { ...part.bounds, minY, maxY } };
+  }
+  return {
+    ...part, blocks,
+    // Assumed platforms are not part of the printing height, just as for ordinary supports.
+    bounds: measureShapeBounds(blocks.filter(block => !part.supportFloorYs.has(block.y)), part.loweredWaterBlocks),
+  };
+}
+
+function spaceSuppressStepParts(parts: RawShapePart[], { minimum, uniform, keepExtras }: SuppressStepSpacing, environmental = false): RawShapePart[] {
   const phases = parts.filter(part => part.suppressStepIndex !== undefined).map(part => {
     const floor = Math.min(...part.supportFloorYs) + 1;
     const hasBlocks = part.blocks.length > 0 || part.loweredWaterBlocks.length > 0;
@@ -3070,7 +3110,7 @@ function spaceSuppressStepParts(parts: RawShapePart[], { minimum, uniform, keepE
   });
   if (!phases.length) return parts;
   const originalOffset = phases.length > 1 ? phases[1].floor - phases[0].floor : phases[0].floor || phases[0].height;
-  const uniformOffset = Math.max(minimum, originalOffset);
+  const uniformOffset = Math.max(minimum, originalOffset, environmental ? Math.max(...phases.map(phase => phase.height)) - Math.min(...phases.map(phase => phase.bottom)) : 0);
   if (uniform && uniformOffset === originalOffset) return parts;
   // Barriers must reach the same clearance ceiling in every phase, including empty ones.
   const clearanceHeight = keepExtras ? Math.max(...phases.map(phase => phase.height)) : 1;
@@ -3107,15 +3147,17 @@ function getGeneratedShape(
   colorGrid: ColorGrid,
   options: ShapeOptions,
 ): CachedGeneratedShape {
-  const { buildMode, stepDirection = SuppressStepDirection.EastToWest, centerOut = false, stepSpacing } = options;
+  const { buildMode, stepDirection = SuppressStepDirection.EastToWest, centerOut = false, stepSpacing, environmentalPalette } = options;
   const cache = getGridShapeCache(colorGrid);
   let cacheKeyId = getShapeCacheKeyId(options);
   if (stepSpacing) cacheKeyId = `${cacheKeyId}|spacing:${stepSpacing.minimum}:${stepSpacing.uniform ? 1 : 0}:${!stepSpacing.uniform && stepSpacing.keepExtras ? 1 : 0}` as ShapeCacheKeyId;
+  if (environmentalPalette) cacheKeyId = `${cacheKeyId}|environment:${environmentalPalette.key}` as ShapeCacheKeyId;
   const cached = cache.shapes.get(cacheKeyId);
   if (cached) return cached;
 
   const rawParts = buildRawShapeParts(colorGrid, cache, options);
-  const parts = (stepSpacing ? spaceSuppressStepParts(rawParts, stepSpacing) : rawParts).map(finalizeShapePart);
+  const environmentalParts = environmentalPalette ? rawParts.map(part => addEnvironmentalBlocks(part, environmentalPalette)) : rawParts;
+  const parts = (stepSpacing ? spaceSuppressStepParts(environmentalParts, stepSpacing, !!environmentalPalette) : environmentalParts).map(finalizeShapePart);
   const splitExportNames =
     buildMode === BuildMode.SuppressSplitRow
       ? ["odd_rows", "even_rows"] as [string, string]
@@ -3150,6 +3192,7 @@ export function generateShapeMap(
   hasTransparency: boolean,
   requiresTwoLayerLateShading: boolean,
   options: {
+    environmentalPalette?: ReturnType<typeof getEnvironmentalSettings>["palette"];
     layerGap: number;
     mixSteps?: boolean;
     suppressCenterOut?: boolean;
@@ -3191,7 +3234,9 @@ export function generateShapeMap(
   if (!Number.isSafeInteger(minimumStepOffset) || minimumStepOffset < 1) {
     throw new RangeError("Minimum step Y offset must be a positive integer");
   }
-  const suppress2LayerLatePairY = options.suppress2LayerLatePairY ?? Math.max(1, options.layerGap) + 1;
+  const layerGap = Math.max(options.layerGap, options.environmentalPalette?.minimumLayerGap ?? 0);
+  const requestedLatePairY = options.suppress2LayerLatePairY ?? Math.max(1, layerGap) + 1;
+  const suppress2LayerLatePairY = options.environmentalPalette ? Math.max(layerGap + 1, requestedLatePairY) : requestedLatePairY;
   const useCrubTech = options.useCrubTech ?? false;
   const includeTransparentBlocks = options.includeTransparentBlocks ?? false;
   const collapseStaircaseModes = options.collapseStaircaseModes ?? true;
@@ -3215,12 +3260,13 @@ export function generateShapeMap(
   for (const buildMode of requestedModes) {
     const internalBuildMode = getCanonicalBuildMode(buildMode);
     const generated = getGeneratedShape(colorGrid, {
-      buildMode: internalBuildMode, layerGap: options.layerGap, mixSteps, mixedStepMaxHeight, stepDirection,
+      environmentalPalette: options.environmentalPalette,
+      buildMode: internalBuildMode, layerGap, mixSteps, mixedStepMaxHeight, stepDirection,
       centerOut: options.suppressCenterOut === true && isSuppressStepsBuildMode(buildMode),
       paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience, buildAtWorldMinY,
       skipEmptySuppressSteps, useCrubTech, includeTransparentBlocks, transparentPlacementMode: buildMode,
       suppress2LayerLatePairY, mixedStepPalette,
-      stepSpacing: isSuppressStepsBuildMode(buildMode) && (minimumStepOffset !== 1 || !uniformStepSpacing)
+      stepSpacing: isSuppressStepsBuildMode(buildMode) && (minimumStepOffset !== 1 || !uniformStepSpacing || !!options.environmentalPalette)
         ? { minimum: minimumStepOffset, uniform: uniformStepSpacing, keepExtras: options.keepSuppressExtras === true }
         : undefined,
     });

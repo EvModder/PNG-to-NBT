@@ -22,6 +22,8 @@
  * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/blockSupport.ts
  * - src/lib/colorGridParsing.ts
+ * - src/lib/environmentalSupport.ts
+ * - src/lib/fillerRules.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/messages.ts
  * - src/lib/minecraftVersion.ts
@@ -39,8 +41,11 @@ import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type S
 // Callers:
 // - src/Index.tsx
 // - src/components/ToolbarFillerSettings.tsx
+// - src/lib/environmentalSupport.ts
+// - src/lib/fillerRules.ts
 export const DEFAULT_ACTIVE_PRESET_NAME = "Fullblock";
 export const DEFAULT_SUPPORT_FILLER_BLOCK = "cobblestone";
+export const DEFAULT_GROWTH_COVER_BLOCK = "tripwire";
 export const DEFAULT_SHADE_FILLER_BLOCK = "resin_block";
 export const DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK = "moss_block";
 export const DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK = "resin_block";

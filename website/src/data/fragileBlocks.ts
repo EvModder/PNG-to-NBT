@@ -6,8 +6,8 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/blockSupport.ts
+ * - src/lib/environmentalSupport.ts
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/shapeModel.ts
@@ -82,8 +82,7 @@ const FRAGILE_BLOCKS = new Set([
   ...DIRT_SUPPORTED_FLOWERS, "wither_rose", "cactus_flower",
 
     // Dry coral plants and floor fans need a sturdy top face, not soil.
-    // Living variants also need adjacent water; a waterlogged support can supply it.
-    // TODO: Generate hydration separately from attachment, preserving assumed platforms.
+    // Living variants also need adjacent water; the generator currently only considers waterlogged support directly below.
   "dead_tube_coral", "dead_brain_coral", "dead_bubble_coral", "dead_fire_coral", "dead_horn_coral",
   "dead_tube_coral_fan", "dead_brain_coral_fan", "dead_bubble_coral_fan", "dead_fire_coral_fan", "dead_horn_coral_fan",
   "tube_coral", "brain_coral", "bubble_coral", "fire_coral", "horn_coral",
@@ -215,8 +214,8 @@ export function isFallingBlock(blockId: string): boolean {
  */
 // Callers:
 // - src/Index.tsx
-// - src/components/ToolbarFillerSettings.tsx
 // - src/lib/blockSupport.ts
+// - src/lib/environmentalSupport.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeModel.ts

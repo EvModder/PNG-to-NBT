@@ -109,6 +109,8 @@ function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
     case FillerRole.ShadeVoidRecessive:
       return "vs_filler";
     case FillerRole.SupportAll:
+    case FillerRole.GrowthCover:
+    case FillerRole.CoralSupport:
     case FillerRole.SupportFragile:
     case FillerRole.SupportRetained:
     case FillerRole.SupportBreakable:

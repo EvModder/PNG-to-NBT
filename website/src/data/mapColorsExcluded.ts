@@ -59,7 +59,7 @@ import { BASE_COLORS } from "./mapColors";
 // filtered by Minecraft DataVersion. Register future blocks in BLOCK_INTRODUCTIONS.
 // Display reordering is safe; additions without a version cutoff, removals, renames
 // and moves between color/visibility lists can still break affected links.
-// TODO: Generate growth-blocking covers and adjacent water for living coral.
+// Saplings receive transparent covers; living coral receives waterlogged support below.
 const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   0: [
     "rail", "powered_rail", "detector_rail", "activator_rail", "lever[face=floor]",

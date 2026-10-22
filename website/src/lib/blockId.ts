@@ -13,10 +13,10 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
- * - src/components/ToolbarFillerSettings.tsx
  * - src/data/blockWiki.ts
  * - src/lib/blockIconAtlas.ts
  * - src/lib/blockSupport.ts
+ * - src/lib/environmentalSupport.ts
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
@@ -43,9 +43,9 @@ export function stripDefaultBlockNamespace(raw: string): string {
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
-// - src/components/ToolbarFillerSettings.tsx
 // - src/data/blockWiki.ts
 // - src/lib/blockSupport.ts
+// - src/lib/environmentalSupport.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts
@@ -76,6 +76,7 @@ export function sanitizeUserBlockEntry(raw: string): string {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/environmentalSupport.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
@@ -126,6 +127,7 @@ export function resolveExportBlockName(block: string): string {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/environmentalSupport.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeModel.ts
 export function resolveAssignedColorBlock(

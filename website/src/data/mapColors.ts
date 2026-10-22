@@ -80,7 +80,7 @@ import type { ColorRgbBase } from "@/types/color";
  * - Twisting vines use `age=25` (sheared) to prevent natural growth from changing shading.
  * - Chorus blocks are hidden; flowers use `age=5` (dead) to prevent growth in pasted schematics.
  * - Saplings need growth-blocking covers; living coral needs waterlogged support below.
- *   Both are hidden by default. Exports do not yet add these covers or water sources.
+ *   Both are hidden by default. Exports add environmental blocks; assumed platforms remain user-provided.
  * - Bamboo stems are omitted; only covered bamboo saplings are offered.
  * - Upright icicles use `attached=true` to match floor placement; a single supported icicle neither grows nor melts.
  */

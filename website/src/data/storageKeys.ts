@@ -20,6 +20,7 @@ export const STORAGE_KEYS = {
 
   activePreset: "mapart_active_preset",
   supportFiller: "mapart_support_filler",
+  growthCover: "mapart_growth_cover",
   shadeFiller: "mapart_shade_filler",
   crubTechShadeBreakableFiller: "mapart_crubtech_shade_breakable_filler",
   crubTechShadePushableFiller: "mapart_crubtech_shade_pushable_filler",

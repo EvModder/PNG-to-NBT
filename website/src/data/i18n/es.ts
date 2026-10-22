@@ -180,6 +180,9 @@ export const esCatalog = {
     selectedFallbackTooltip: "Método de sombreado seleccionado.",
   },
   fillers: {
+    growthCoverLabel: "Cubierta:",
+    growthCoverTooltip: "Bloques transparentes sobre las plantas. Deja vacío para no usar cubiertas; los brotes aún las necesitan. Las enredaderas retorcidas siempre exportan age=25.",
+    growthCoverInvalid: "Usa una cubierta estable y transparente.",
     heading: "Rellenos",
     floorAttachmentWarning: "Solo se admite el soporte desde abajo.",
     supportRequiresSupportWarning: "Necesita soporte.",

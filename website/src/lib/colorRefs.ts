@@ -11,10 +11,12 @@
  * - src/components/PanelCustomColors.tsx
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsingCore.ts
+ * - src/lib/environmentalSupport.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeGeneration.ts
  */
 import type { ColorRef } from "@/types/color";
 
@@ -29,6 +31,7 @@ import type { ColorRef } from "@/types/color";
 // - src/components/PanelCustomColors.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/environmentalSupport.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
 export type ColorRefKey = number;
@@ -41,6 +44,7 @@ export type ColorRefKey = number;
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeGeneration.ts
 export function getColorRefKey(color: Pick<ColorRef, "id" | "isCustom">): ColorRefKey {
   return color.id * 2 + (color.isCustom ? 1 : 0);
 }
@@ -48,6 +52,7 @@ export function getColorRefKey(color: Pick<ColorRef, "id" | "isCustom">): ColorR
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridAnalysis.ts
+// - src/lib/environmentalSupport.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts
 export function parseColorRefKey(key: ColorRefKey): ColorRef {

@@ -16,6 +16,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/environmentalSupport.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
@@ -28,12 +29,14 @@ import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 import { isFragileBlock } from "@/data/fragileBlocks";
+import { DEFAULT_GROWTH_COVER_BLOCK } from "@/data/defaultSettings";
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(["chain", ...BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId)]);
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarFillerSettings.tsx
 export function isSupportFillerFragile(block: string): boolean {
   return isFragileBlock(normalizeBlockId(block));
 }
@@ -132,10 +135,10 @@ export function getSupportModeFillerRoles(
       roles.push(FillerRole.StairStep);
       break;
     case SupportMode.All:
-      roles.push(FillerRole.SupportAll);
+      roles.push(FillerRole.CoralSupport, FillerRole.SupportAll);
       break;
     case SupportMode.Fragile:
-      roles.push(FillerRole.SupportFragile, FillerRole.SupportRetained);
+      roles.push(FillerRole.CoralSupport, FillerRole.SupportFragile, FillerRole.SupportRetained);
       break;
     case SupportMode.Water:
       if (!usesDirectWaterBlock) {
@@ -181,8 +184,10 @@ export function createFillerAssignments(
   useCrubTechSupport: boolean,
   usesDirectWaterBlock: boolean,
   usesIceWaterBlock: boolean,
+  growthCoverBlock = DEFAULT_GROWTH_COVER_BLOCK,
 ): FillerAssignment[] {
   const assignments: FillerAssignment[] = [
+    { role: FillerRole.GrowthCover, block: growthCoverBlock.trim() || "air" },
     { role: FillerRole.ShadeSuppress, block: shadeFillerBlock },
     { role: FillerRole.ShadeNorthRow, block: shadeFillerBlock },
     { role: FillerRole.ShadeSuppressBreakable, block: crubTechBreakableFillerBlock },
@@ -206,6 +211,7 @@ export function createFillerAssignments(
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/environmentalSupport.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
 export function isFillerDisabled(fillerBlock: string): boolean {
@@ -243,6 +249,7 @@ function isTransparentMapColorBlock(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/environmentalSupport.ts
 export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
   return !isFillerDisabled(fillerBlock) && isTransparentMapColorBlock(fillerBlock);
 }

@@ -24,6 +24,7 @@ import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppress
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { getMixedStepSettings, getMixedStepReuse } from "@/lib/mixedStepHeights";
 import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
+import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { canSupportBlock } from "@/lib/blockSupport";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
@@ -2125,14 +2126,125 @@ function assertFragileSupportEligibility(): void {
 }
 
 
+async function assertEnvironmentalSupport(): Promise<void> {
+  const environmentalSelections = { selectedBlocks: { 7: "oak_sapling", 13: "bamboo_sapling", 25: "tube_coral_fan[waterlogged=false]" },
+    selectedBlocksCustom: {}, customColors: [], minecraftVersion: "26.2" as const };
+  const environmentalPalette = getEnvironmentalSettings([14, 26, 50], environmentalSelections).palette!;
+  assert.equal(environmentalPalette.minimumLayerGap, 3);
+  for (const support of Object.values(SupportMode)) {
+    const spacing = getTwoLayerSpacing(support, 2, 63, false, environmentalPalette.minimumLayerGap);
+    assert.equal(spacing.layerGap, 3);
+    assert.equal(spacing.latePairsGap, 61);
+  }
+  assert.equal(environmentalPalette.roles[14], FillerRole.GrowthCover);
+  assert.equal(environmentalPalette.roles[26], FillerRole.GrowthCover);
+  assert.equal(environmentalPalette.roles[50], FillerRole.CoralSupport);
+  assert.deepEqual(getEnvironmentalSettings([22], { ...environmentalSelections, selectedBlocks: { 11: "stone" } }), { growthCover: undefined, palette: undefined });
+  for (const block of ["azalea", "flowering_azalea", "crimson_fungus", "warped_fungus", "torchflower",
+    "sweet_berry_bush[age=3]", "wheat[age=7]", "chorus_flower[age=5]", "potted_oak_sapling", "potted_poplar_sapling"]) {
+    const selections = { ...environmentalSelections, selectedBlocks: { 7: block, 13: "bamboo_sapling" } };
+    for (const cover of ["tripwire", "air", ""]) {
+      assert.deepEqual(getEnvironmentalSettings([14], selections, isGrowthCoverEnabled(cover)), { growthCover: undefined, palette: undefined },
+        `${block}: no cover geometry or input eligibility, even with an unused sapling selected`);
+      assert.deepEqual(getEnvironmentalSettings([14, 26], selections, isGrowthCoverEnabled(cover)).palette?.roles,
+        cover === "tripwire" ? { 26: FillerRole.GrowthCover } : undefined,
+        `${block}: a neighboring growing plant must not add covers to stable plants`);
+    }
+  }
+  const vineSelections = { ...environmentalSelections, selectedBlocks: { 7: "oak_sapling", 23: "twisting_vines[age=25]" } };
+  assert.equal(getEnvironmentalSettings([46], vineSelections).palette?.roles[46], FillerRole.GrowthCover, "Vines default to covers");
+  for (const cover of ["", "  ", "air", "minecraft:air", "none", "n/a", "na"]) {
+    assert.deepEqual(getEnvironmentalSettings([46], vineSelections, isGrowthCoverEnabled(cover)), { growthCover: "optional", palette: undefined });
+    assert.deepEqual(getEnvironmentalSettings([14, 46], vineSelections, isGrowthCoverEnabled(cover)), { growthCover: "required", palette: undefined });
+  }
+  assert.deepEqual(getEnvironmentalSettings([14, 46], vineSelections, true).palette?.roles,
+    { 14: FillerRole.GrowthCover, 46: FillerRole.GrowthCover });
+  assert.equal(getEnvironmentalSettings([46, 14], vineSelections, false).growthCover, "required", "Plant order must not change cover requirements");
+  assert.deepEqual(getEnvironmentalSettings([14, 26, 50], environmentalSelections, false).palette?.roles,
+    { 50: FillerRole.CoralSupport }, "Disabling growth covers preserves coral supports");
+  for (const cover of ["tripwire", "glass"]) assert(isGrowthCoverEnabled(cover));
+  for (const mode of Object.values(SupportMode)) {
+    const fillers = createFillerAssignments("oak_slab[type=top,waterlogged=true]", "stone", "stone", "stone", "stone", "stone", "stone", mode, false, false, false, "glass");
+    assert.equal(fillers.find(f => f.role === FillerRole.GrowthCover)?.block, "glass");
+    assert.equal(fillers.find(f => f.role === FillerRole.CoralSupport)?.block,
+      mode === SupportMode.Fragile || mode === SupportMode.All ? "oak_slab[type=top,waterlogged=true]" : undefined);
+  }
+  assert(isGrowthCoverValid("tripwire"));
+  assert(isGrowthCoverValid("glass"));
+  for (const invalid of ["air", "oak_leaves", "torch", "cake", "glass[waterlogged = true]"]) assert(!isGrowthCoverValid(invalid));
+  const environmentGrid: ColorGrid = Array.from({ length: MAP_SIZE }, (_, x) => Array.from({ length: MAP_SIZE }, (_, z) =>
+    ({ id: [7, 13, 25][(x + z) % 3], shade: Shade.Flat, isCustom: false })));
+  const environmentalAssignments = createFillerAssignments("mangrove_roots[waterlogged=true]", "resin_block", "moss_block", "resin_block",
+    "resin_block", "slime_block", "resin_block", SupportMode.Fragile, false, false, false);
+  for (const mode of [BuildMode.StaircaseNorthline, BuildMode.StaircaseGroup, BuildMode.Suppress2Layer,
+    BuildMode.SuppressStepPairs, BuildMode.SuppressStepChecker]) {
+    const steps = mode === BuildMode.SuppressStepPairs || mode === BuildMode.SuppressStepChecker;
+    const directions = mode === BuildMode.StaircaseNorthline || mode === BuildMode.StaircaseGroup
+      ? [SuppressStepDirection.EastToWest] : Object.values(SuppressStepDirection);
+    for (const direction of directions) for (const centerOut of steps ? [false, true] : [false]) {
+      const options = { layerGap: 5, selectedMode: mode, selectedStepDirection: direction, suppressCenterOut: centerOut,
+        mixSteps: true, collapseStaircaseModes: false };
+      const plain = generateShapeMap(environmentGrid, Shade.Flat, false, false, false, options)[mode]!;
+      const shape = generateShapeMap(environmentGrid, Shade.Flat, false, false, false, { ...options, environmentalPalette })[mode]!;
+      assert(shape);
+      assert.equal(generateShapeMap(environmentGrid, Shade.Flat, false, false, false, options)[mode], plain, "Environmental additions must not mutate cached ordinary shapes");
+      let covers = 0;
+      let coralSupports = 0;
+      for (const [index, part] of shape.parts.entries()) {
+        const floor = Math.min(...part.supportFloorYs) + 1;
+        const oldPart = plain.parts[index];
+        const oldFloor = Math.min(...oldPart.supportFloorYs) + 1;
+        for (const [coord, cell] of part.cells) {
+          if (Array.isArray(cell)) continue;
+          const [x, y, z] = parseShapeCoordKey(coord);
+          assert.deepEqual(oldPart.cells.get(toShapeCoordKey(x, y - floor + oldFloor, z)), cell, "Color geometry must remain unchanged relative to the platform");
+          if (cell.fillerRole) continue;
+          const role = environmentalPalette.roles[cell.id * 2];
+          const neighbor = part.cells.get(toShapeCoordKey(x, y + (role === FillerRole.GrowthCover ? 1 : -1), z));
+          assert(Array.isArray(neighbor) && neighbor.includes(role), `${mode}/${direction}: missing environmental block`);
+          if (role === FillerRole.GrowthCover) ++covers;
+          else ++coralSupports;
+        }
+        if (index > 0 && shape.partType === ShapePartType.SuppressStepPhases) {
+          assert(part.bounds.minY > shape.parts[index - 1].bounds.maxY, "Covers must not overlap the next exported phase");
+        }
+      }
+      assert(covers > 0 && coralSupports > 0);
+      const analysisOptions = { ...environmentalSelections, fillerAssignments: environmentalAssignments, applySupportFloorYs: true };
+      const counts = analyzeMaterialNeeds(environmentGrid, shape, analysisOptions);
+      assert(counts.blockCounts.tripwire > 0, "Growth covers must count toward materials");
+      const withFloor = analyzeMaterialNeeds(environmentGrid, shape, { ...analysisOptions, applySupportFloorYs: false });
+      assert(withFloor.blockCounts.mangrove_roots > 0, "Waterlogged supports must count toward materials");
+      if (mode === BuildMode.StaircaseNorthline && direction === SuppressStepDirection.EastToWest && !centerOut) {
+        for (const applySupportFloorYs of [true, false]) {
+          const result = await convertToNbt(shape, { ...analysisOptions, applySupportFloorYs, buildMode: mode,
+            baseName: "environment", suppressStepDirection: direction });
+          const exported = parseStructureBlocks(new Uint8Array(gunzipSync(result.data)));
+          assert.equal(exported.filter(block => normalizeBlockId(block.blockName) === "tripwire").length, covers);
+          const roots = exported.filter(block => normalizeBlockId(block.blockName) === "mangrove_roots");
+          assert.equal(roots.length, (applySupportFloorYs ? counts : withFloor).blockCounts.mangrove_roots ?? 0, "Never replace assumed platforms");
+          assert(roots.every(block => block.blockName.includes("waterlogged=true")));
+        }
+      }
+    }
+  }
+
+}
+
+
 async function main(): Promise<number> {
   const [suite, ...extra] = process.argv.slice(2);
-  if (extra.length || suite && !["--rules", "--slope", "--support"].includes(suite)) {
-    throw new Error("Choose one of --rules, --slope or --support, or omit flags for the full suite");
+  if (extra.length || suite && !["--rules", "--slope", "--support", "--environment"].includes(suite)) {
+    throw new Error("Choose one of --rules, --slope, --support or --environment, or omit flags for the full suite");
   }
   if (suite === "--rules") {
     assertBlockSupportPairs();
     console.log("Block support rules passed.");
+    return 0;
+  }
+  if (process.argv.includes("--environment")) {
+    await assertEnvironmentalSupport();
+    console.log("Environmental generation invariants passed.");
     return 0;
   }
   if (process.argv.includes("--support")) {
@@ -2167,6 +2279,7 @@ async function main(): Promise<number> {
   await assertTripwireInvariants();
   await assertPaletteCollapseModeInvariants();
   await assertWestEastSlopeExportInvariant();
+  await assertEnvironmentalSupport();
   console.log("Inline invariants passed.");
   return 0;
 }

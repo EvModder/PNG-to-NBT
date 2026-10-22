@@ -209,7 +209,7 @@ function analyzePartMaterialNeeds(
     if (!isWithinShapeBounds({ x, y, z }, part.bounds, NO_SUPPORT_FLOORS)) continue;
     // Demand is independent of the selected support mode/block. Keep floor demand
     // separate: explicit Flat supports override assumed floors for export, not eligibility.
-    if (cell.includes(FillerRole.SupportRetained) || (cell.includes(FillerRole.SupportFragile)
+    if (cell.includes(FillerRole.CoralSupport) || cell.includes(FillerRole.SupportRetained) || (cell.includes(FillerRole.SupportFragile)
       && shouldIncludeFragileSupportCell(part, coord, cell, FillerRole.SupportFragile, options, fillerAssignments))) {
       if (part.supportFloorYs.has(y)) ++supportNeeds.atFloor;
       else ++supportNeeds.aboveFloor;

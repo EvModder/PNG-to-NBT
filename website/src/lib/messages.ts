@@ -350,6 +350,9 @@ export const messages = {
     },
   },
   fillers: {
+    get growthCoverLabel(): string { return catalog.fillers.growthCoverLabel; },
+    get growthCoverTooltip(): string { return catalog.fillers.growthCoverTooltip; },
+    get growthCoverInvalid(): string { return catalog.fillers.growthCoverInvalid; },
     heading: catalog.fillers.heading,
     floorAttachmentWarning: catalog.fillers.floorAttachmentWarning,
     supportRequiresSupportWarning: catalog.fillers.supportRequiresSupportWarning,

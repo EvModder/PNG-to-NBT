@@ -10,6 +10,7 @@ import { Languages, Moon, Sun } from "lucide-react";
 import {
   DEFAULT_ACTIVE_PRESET_NAME,
   DEFAULT_SUPPORT_FILLER_BLOCK,
+  DEFAULT_GROWTH_COVER_BLOCK,
   DEFAULT_SHADE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK,
   DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK,
@@ -81,6 +82,7 @@ import {
 } from "@/data/defaultSettings";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
+import { getEnvironmentalSettings, isGrowthCoverEnabled, scopeEnvironmentalPalette } from "@/lib/environmentalSupport";
 import { getDarkTheme, observeTheme, toggleTheme } from "@/lib/theme";
 import { scalePixelArt } from "@/lib/pixelArtScaling";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbtEntries, getCrubTechLayerSplitSectionCount } from "@/lib/nbtExport";
@@ -571,6 +573,7 @@ const Index = () => {
     return idx >= 0 ? idx : 0;
   });
   const [supportFillerBlock, setSupportFillerBlock] = useState(() => loadCached(LS_KEYS.supportFiller, DEFAULT_SUPPORT_FILLER_BLOCK));
+  const [growthCoverBlock, setGrowthCoverBlock] = useState(() => loadCached(LS_KEYS.growthCover, DEFAULT_GROWTH_COVER_BLOCK));
   const [shadeFillerBlock, setShadeFillerBlock] = useState(() => loadCached(LS_KEYS.shadeFiller, DEFAULT_SHADE_FILLER_BLOCK));
   const [crubTechShadeBreakableFillerBlock, setCrubTechShadeBreakableFillerBlock] = useState(() =>
     loadCached(LS_KEYS.crubTechShadeBreakableFiller, DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK),
@@ -996,6 +999,7 @@ const Index = () => {
     const settings = {
       [LS_KEYS.activePreset]: preset.name,
       [LS_KEYS.supportFiller]: supportFillerBlock,
+      [LS_KEYS.growthCover]: growthCoverBlock,
       [LS_KEYS.shadeFiller]: shadeFillerBlock,
       [LS_KEYS.crubTechShadeBreakableFiller]: crubTechShadeBreakableFillerBlock,
       [LS_KEYS.crubTechShadePushableFiller]: crubTechShadePushableFillerBlock,
@@ -1114,6 +1118,14 @@ const Index = () => {
   const showMaxPerSplitOption = hasMultipleTiles && selectedTileCount !== 1;
   const analysisBusy = isParsingImage || isAnalyzingTiles;
   const previewBusy = analysisBusy || isAnalyzingMaterials;
+  const colorBlockSelections = useMemo<ColorBlockSelections>(
+    () => ({ selectedBlocks: effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion }),
+    [effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion],
+  );
+  const coverEnabled = isGrowthCoverEnabled(growthCoverBlock);
+  const { growthCover: growthCoverRequirement, palette: environmentalPalette } = useMemo(
+    () => getEnvironmentalSettings(usedColorKeys, colorBlockSelections, coverEnabled), [usedColorKeys, colorBlockSelections, coverEnabled],
+  );
   const selectedWaterBlock = effectiveSelectedBlocks[WATER_BASE_INDEX];
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
@@ -1176,9 +1188,9 @@ const Index = () => {
   const crubTechControlsLatePairsGap = crubTechControlsCurrent2LayerSettings;
   const { minLayerGap, layerGap: effectiveLayerGap, maxLatePairsGap: maxSuppress2LayerLatePairsGap,
     latePairsGap: effectiveSuppress2LayerLatePairsGap, latePairY: effectiveSuppress2LayerLatePairY } =
-    getTwoLayerSpacing(supportMode, layerGap, suppress2LayerLatePairsGap, crubTechControlsCurrent2LayerSettings);
+    getTwoLayerSpacing(supportMode, layerGap, suppress2LayerLatePairsGap, crubTechControlsCurrent2LayerSettings, environmentalPalette?.minimumLayerGap);
   const { layerGap: calcEffectiveLayerGap, latePairY: calcEffectiveSuppress2LayerLatePairY } =
-    getTwoLayerSpacing(supportMode, calcLayerGap, calcSuppress2LayerLatePairsGap, crubTechControlsCurrent2LayerSettings);
+    getTwoLayerSpacing(supportMode, calcLayerGap, calcSuppress2LayerLatePairsGap, crubTechControlsCurrent2LayerSettings, environmentalPalette?.minimumLayerGap);
   const blockedWaterDirections = useMemo(() => getBelowPlatformWaterBlockedDirections(
     parsedTiles, belowPlatformWater && isSuppressStepsBuildMode(buildMode) ? normalizedDeferredWaterDrops : undefined,
   ), [parsedTiles, belowPlatformWater, buildMode, normalizedDeferredWaterDrops]);
@@ -1241,10 +1253,6 @@ const Index = () => {
   const transparentBlockMapping = useMemo(
     () => ({ [TRANSPARENCY_BASE_INDEX]: activeTransparentBlock }),
     [activeTransparentBlock],
-  );
-  const colorBlockSelections = useMemo<ColorBlockSelections>(
-    () => ({ selectedBlocks: effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion }),
-    [effectiveSelectedBlocks, selectedBlocksCustom, customColors, minecraftVersion],
   );
   const { maxHeight: mixedStepMaxHeight, palette: mixedStepPalette } = useMemo(
     () => getMixedStepSettings(
@@ -1389,19 +1397,20 @@ const Index = () => {
         const nextUseCrubTechShadeFillers =
           crubTech &&
           isCrubTechBuildMode(nextResolvedBuildMode);
-        const canReuseBaseGeometry =
-          !nextActiveBuildAtWorldMinY &&
-          isStaircaseBuildMode(nextResolvedBuildMode);
-        let nextTileGeometryAnalyses: TileGeometryAnalysis[];
+        const tilePalettes = environmentalPalette && nextBaseAnalyses.map(tile => hasMultipleTiles
+          ? scopeEnvironmentalPalette(environmentalPalette, key => tile.derivedImageStats.usedShadesByColorKey.has(key)) : environmentalPalette);
+        const canReuseBaseGeometry = !nextActiveBuildAtWorldMinY && isStaircaseBuildMode(nextResolvedBuildMode);
+        const needsFinalGeometry = !canReuseBaseGeometry || tilePalettes?.some(Boolean);
+        const nextTileGeometryAnalyses = new Array<TileGeometryAnalysis>(totalTiles);
+        if (showTileAnalysisProgress) {
+          completedSteps = 0;
+          lastProgressUpdateAt = performance.now();
+          setAnalysisPhase(needsFinalGeometry ? "generating" : "fillerAnalysis");
+          setAnalysisProgress({ completed: 0, total: totalTiles });
+        }
         if (canReuseBaseGeometry) {
-          if (showTileAnalysisProgress) {
-            completedSteps = 0;
-            lastProgressUpdateAt = performance.now();
-            setAnalysisPhase("fillerAnalysis");
-            setAnalysisProgress({ completed: 0, total: totalTiles });
-          }
-          nextTileGeometryAnalyses = [];
           for (const [index, tile] of nextBaseAnalyses.entries()) {
+            if (tilePalettes?.[index]) continue;
             const waterSetting = getTileWaterSetting(tile.derivedImageStats, nextResolvedBuildMode);
             const shapeMap = tile.baseShapeMap;
             const northlineShape = tile.baseNorthlineShape;
@@ -1410,7 +1419,7 @@ const Index = () => {
               : getShapeForBuildMode(shapeMap, nextResolvedBuildMode, tile.isFlatShape);
             const fillerNeedStats = supportShape ? getCachedShapeFillerNeeds(supportShape) : null;
             const northRowSingleLine = supportShape ? getCachedShapeNooblineIsSingleY(supportShape) : true;
-            nextTileGeometryAnalyses.push({
+            nextTileGeometryAnalyses[index] = {
               ...tile,
               waterSetting,
               flatModeBehavior: tile.derivedImageStats.flatModeBehavior,
@@ -1419,10 +1428,9 @@ const Index = () => {
               supportShape,
               fillerNeedStats,
               northRowSingleLine,
-            });
+            };
             if (showTileAnalysisProgress) {
-              const completed = index + 1;
-              completedSteps = completed;
+              const completed = ++completedSteps;
               const now = performance.now();
               if (shouldUpdateMainThreadProgress(completed, totalTiles, lastProgressUpdateAt, now)) {
                 lastProgressUpdateAt = now;
@@ -1435,14 +1443,10 @@ const Index = () => {
               }
             }
           }
-        } else {
-          if (showTileAnalysisProgress) {
-            completedSteps = 0;
-            lastProgressUpdateAt = performance.now();
-            setAnalysisPhase("generating");
-            setAnalysisProgress({ completed: 0, total: totalTiles });
-          }
-          nextTileGeometryAnalyses = await Promise.all(nextBaseAnalyses.map(async (tile, index) => {
+        }
+        if (needsFinalGeometry) {
+          await Promise.all(nextBaseAnalyses.map(async (tile, index) => {
+            if (nextTileGeometryAnalyses[index]) return;
             const includeTransparentBlocks = shouldIncludeTransparentBlocks(
               transparentBlockMapping,
               tile.derivedImageStats.hasTransparency,
@@ -1450,6 +1454,7 @@ const Index = () => {
             );
             const waterSetting = getTileWaterSetting(tile.derivedImageStats, nextResolvedBuildMode);
             const finalGeometry = await getTileFinalGeometry(tile.tile.cacheKey, {
+              environmentalPalette: tilePalettes?.[index],
               colorGrid: tile.tile.colorGrid,
               allSameShade: tile.derivedImageStats.allSameShade,
               hasWater: tile.hasWater,
@@ -1478,12 +1483,12 @@ const Index = () => {
               selectedStepDirection: effectiveSuppressStepDirection,
             }, startAnalysis, controller.signal, getDisplayedGeometry(index)?.shapeMap);
             advanceProgress();
-            return {
+            nextTileGeometryAnalyses[index] = {
               ...tile,
               waterSetting,
               flatModeBehavior: tile.derivedImageStats.flatModeBehavior,
               ...finalGeometry,
-            } satisfies TileGeometryAnalysis;
+            };
           }));
         }
 
@@ -1545,6 +1550,7 @@ const Index = () => {
     supportMode,
     mixedStepMaxHeight,
     mixedStepPalette,
+    environmentalPalette,
     skipEmptySuppressSteps,
     minSuppressStepOffset,
     uniformSuppressStepSpacing,
@@ -1606,6 +1612,7 @@ const Index = () => {
       crubTechControlsActive2LayerSettings,
       usesWaterForWater,
       usesIceForWater,
+      growthCoverBlock,
     ),
     [
       effectiveSupportFillerBlock,
@@ -1619,6 +1626,7 @@ const Index = () => {
       crubTechControlsActive2LayerSettings,
       usesWaterForWater,
       usesIceForWater,
+      growthCoverBlock,
     ],
   );
   const usedMaterialColorAssignments = useMemo(
@@ -2132,6 +2140,7 @@ const Index = () => {
           return [...prev, decodedBlockPreset];
         });
         if (decodedPreset.supportFiller !== undefined) setSupportFillerBlock(decodedPreset.supportFiller);
+        if (decodedPreset.growthCover !== undefined) setGrowthCoverBlock(decodedPreset.growthCover);
         if (decodedPreset.shadeFiller !== undefined) setShadeFillerBlock(decodedPreset.shadeFiller);
         if (decodedPreset.crubTechShadeBreakableFillerBlock !== undefined) {
           setCrubTechShadeBreakableFillerBlock(decodedPreset.crubTechShadeBreakableFillerBlock);
@@ -2453,6 +2462,7 @@ const Index = () => {
         await encodeFullPreset({
           blockPreset: preset,
           supportFiller: supportFillerBlock,
+          growthCover: growthCoverBlock,
           shadeFiller: shadeFillerBlock,
           supportMode,
           buildMode: effectiveBuildMode,
@@ -2491,6 +2501,7 @@ const Index = () => {
   }, [
     preset,
     supportFillerBlock,
+    growthCoverBlock,
     shadeFillerBlock,
     supportMode,
     effectiveBuildMode,
@@ -3114,6 +3125,7 @@ const Index = () => {
   const fillerUiVisibilityState = useHeldValueWhilePending(
     useMemo(
       () => ({
+        growthCover: growthCoverRequirement !== undefined,
         showSupportFillerInput,
         showShadeFillerInput,
         showShadeBreakableFillerInput: showCrubTechFillerInputs,
@@ -3123,6 +3135,7 @@ const Index = () => {
         showRecessiveVoidFillerInput,
       }),
       [
+        growthCoverRequirement,
         showSupportFillerInput,
         showShadeFillerInput,
         showCrubTechFillerInputs,
@@ -3777,6 +3790,8 @@ const Index = () => {
 
           {/* Filler Block + Support + Shading Method */}
           <ToolbarFillerSettings
+            growthCover={{ visible: fillerUiVisibilityState.growthCover, required: growthCoverRequirement === "required", block: growthCoverBlock,
+              setBlock: value => setGrowthCoverBlock(sanitizeUserBlockEntry(value)), count: getRequiredFillerRoleCount(FillerRole.GrowthCover) }}
             toolbarRef={fillerToolbarSectionRef}
             isStackedLayout={isStackedLayout}
             hasImageData={!!displayImageData}
