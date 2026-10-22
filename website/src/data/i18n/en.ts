@@ -187,7 +187,7 @@ export const enCatalog = {
   fillers: {
     growthCoverLabel: "Cover:",
     growthCoverTooltip: "Transparent blocks above growing plants. Leave empty for no covers; saplings still need them. Twisting vines always export age=25.",
-    growthCoverInvalid: "Use a stable, transparent cover",
+    growthCoverInvalid: "Use a valid cover",
     heading: "Fillers",
     floorAttachmentWarning: "Only attachment from below is supported",
     supportRequiresSupportWarning: "Needs support itself",
@@ -326,7 +326,7 @@ export const enCatalog = {
       "Note: Align 128x128 color area to the map grid\nExpect 1 extra top north row (NBT is 128x129)",
     iceConversionInfo:
       "Note: Ice has been selected for water-color\nConvert it to water in-game for colors to be accurate",
-    eyeblossomWarning: "Overworld: eyeblossom colors cycle day/night",
+    eyeblossomWarning: "Eyeblossom colors cycle day/night in Overworld",
     noFillerNorthRowLine: "North-row shading requires filler placements",
     noFillerSuppressLine: "Suppress-shading requires filler placements",
     noFillerInGridLine: "Some shading-critical fillers are required inside the 128x128 grid",
@@ -419,7 +419,7 @@ export const enCatalog = {
       forceZ129: "Z-width always 129",
       forceZ129Tooltip: "Always include space for the extra north shading row, even when unused.",
       assumeFloor: "Assume floor",
-      assumeFloorTooltip: "Treat build platforms as already present; omit support blocks at the floor level.",
+      assumeFloorTooltip: "Treat build platforms as already present; omit floor-level supports except when explicitly selected for flat maps.",
       belowPlatformWater: "Below-platform water",
       belowPlatformWaterTooltip: "Assume water placements below the platform, with adjustable surface heights for each shade.",
       skipEmptySuppressSteps: "Skip empty Suppress-steps",

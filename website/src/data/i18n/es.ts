@@ -182,7 +182,7 @@ export const esCatalog = {
   fillers: {
     growthCoverLabel: "Cubierta:",
     growthCoverTooltip: "Bloques transparentes sobre las plantas. Deja vacío para no usar cubiertas; los brotes aún las necesitan. Las enredaderas retorcidas siempre exportan age=25.",
-    growthCoverInvalid: "Usa una cubierta estable y transparente",
+    growthCoverInvalid: "Cubierta inválida",
     heading: "Rellenos",
     floorAttachmentWarning: "Solo se admite el soporte desde abajo",
     supportRequiresSupportWarning: "Necesita soporte",
@@ -322,7 +322,7 @@ export const esCatalog = {
       "Nota: Alinea el área de color 128x128 con la cuadrícula del mapa\nEspera 1 fila norte adicional arriba (el NBT es 128x129)",
     iceConversionInfo:
       "Nota: Se ha seleccionado hielo para el color del agua\nConviértelo en agua dentro del juego para que los colores sean correctos",
-    eyeblossomWarning: "Overworld: flores de ojo cambian de color día/noche",
+    eyeblossomWarning: "Flores de ojo del Overworld cambian día/noche",
     noFillerNorthRowLine: "El sombreado de la fila norte requiere colocaciones de relleno",
     noFillerSuppressLine: "El sombreado de supresión requiere colocaciones de relleno",
     noFillerInGridLine: "Se requieren algunos rellenos críticos de sombreado dentro de la cuadrícula de 128x128",
@@ -415,7 +415,7 @@ export const esCatalog = {
       forceZ129: "Ancho Z siempre 129",
       forceZ129Tooltip: "Incluir siempre espacio para la fila extra de sombreado al norte, aunque no se use.",
       assumeFloor: "Suponer suelo",
-      assumeFloorTooltip: "Tratar las plataformas de construcción como ya existentes; omitir los bloques de soporte al nivel del suelo.",
+      assumeFloorTooltip: "Tratar las plataformas como ya existentes; omitir soportes al nivel del suelo salvo cuando se eligen para mapas planos.",
       belowPlatformWater: "Agua bajo la plataforma",
       belowPlatformWaterTooltip: "Suponer colocaciones de agua bajo la plataforma, con alturas de superficie ajustables para cada tono.",
       skipEmptySuppressSteps: "Omitir Suppress-steps vacíos",
