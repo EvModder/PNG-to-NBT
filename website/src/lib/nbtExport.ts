@@ -122,6 +122,29 @@ function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
   return exhaustiveCheck;
 }
 
+const TRIPWIRE = "minecraft:tripwire";
+const WIRE_NEIGHBORS = [
+  ["north", 0, -1, "south"], ["east", 1, 0, "west"], ["south", 0, 1, "north"], ["west", -1, 0, "east"],
+] as const;
+
+// Resolve after clipping, splitting and slopes: only neighbors in this NBT can be predicted.
+function connectTripwires(byCoord: ReadonlyMap<string, PaletteSourceBlock>): void {
+  for (const wire of byCoord.values()) {
+    const name = wire.blockName;
+    if (name !== TRIPWIRE && !name.startsWith("minecraft:tripwire[")) continue;
+    const props = name === TRIPWIRE ? [] : name.slice(TRIPWIRE.length + 1, -1).split(",")
+      .filter(prop => !/^\s*(north|east|south|west)\s*=/.test(prop));
+    for (const [direction, dx, dz, opposite] of WIRE_NEIGHBORS) {
+      const neighbor = byCoord.get(`${wire.x + dx},${wire.y},${wire.z + dz}`)?.blockName;
+      if (!neighbor) continue;
+      if (neighbor === TRIPWIRE || neighbor.startsWith("minecraft:tripwire[")
+        || (neighbor === "minecraft:tripwire_hook" || neighbor.startsWith("minecraft:tripwire_hook["))
+          && (neighbor.match(/(?:\[|,)\s*facing\s*=\s*(\w+)/)?.[1] ?? "north") === opposite) props.push(`${direction}=true`);
+    }
+    wire.blockName = props.length ? `${TRIPWIRE}[${props.join(",")}]` : TRIPWIRE;
+  }
+}
+
 function buildStructurePaletteStateEntries(
   blocks: readonly PaletteSourceBlock[],
   collapseDuplicatePaletteStates: boolean,
@@ -138,9 +161,13 @@ function buildStructurePaletteStateEntries(
   const stateByBlockIndex = new Array<number>(blocks.length);
   const sharedPaletteIndexByBlockName = collapseDuplicatePaletteStates ? new Map<string, number>() : null;
 
+  let tripwires: Map<string, PaletteSourceBlock> | undefined;
   for (let index = 0; index < blocks.length; index += 1) {
-    blockIndexesByRole[blocks[index].paletteRole ?? "visible"].push(index);
+    const block = blocks[index];
+    blockIndexesByRole[block.paletteRole ?? "visible"].push(index);
+    if (block.blockName.startsWith(TRIPWIRE)) (tripwires ??= new Map()).set(`${block.x},${block.y},${block.z}`, block);
   }
+  if (tripwires) connectTripwires(tripwires);
 
   for (const paletteRole of EXPORT_PALETTE_ROLE_ORDER) {
     const paletteIndexByBlockName = sharedPaletteIndexByBlockName ?? new Map<string, number>();

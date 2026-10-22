@@ -58,25 +58,20 @@ export function normalizeBlockId(raw: string): string {
 // Callers:
 // - src/Index.tsx
 export function sanitizeUserBlockEntry(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
+  const entry = stripDefaultBlockNamespace(raw);
+  const bracketIdx = entry.indexOf("[");
+  const id = (bracketIdx < 0 ? entry : entry.slice(0, bracketIdx).trimEnd()).toLowerCase();
+  const name = id === "string" ? "tripwire" : id;
+  if (bracketIdx < 0) return name;
+  if (!entry.endsWith("]")) return name + entry.slice(bracketIdx).toLowerCase();
 
-  const bracketIdx = trimmed.indexOf("[");
-  if (bracketIdx < 0 || !trimmed.endsWith("]")) return stripDefaultBlockNamespace(trimmed).toLowerCase();
-
-  const name = stripDefaultBlockNamespace(trimmed.slice(0, bracketIdx)).toLowerCase();
-  const props = trimmed
+  const isLog = name.endsWith("_log");
+  const props = entry
     .slice(bracketIdx + 1, -1)
     .split(",")
     .map(part => part.trim())
-    .filter(Boolean);
-
-  if (!normalizeBlockId(name).endsWith("_log")) {
-    return props.length > 0 ? `${name}[${props.join(",")}]` : name;
-  }
-
-  const filteredProps = props.filter(part => part.toLowerCase() !== "axis=y");
-  return filteredProps.length > 0 ? `${name}[${filteredProps.join(",")}]` : name;
+    .filter(part => part && !(isLog && part.toLowerCase() === "axis=y"));
+  return props.length ? `${name}[${props.join(",")}]` : name;
 }
 
 // Callers:

@@ -27,7 +27,7 @@ import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { canSupportBlock } from "@/lib/blockSupport";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
-import { normalizeBlockId, type ColorBlockSelections } from "@/lib/blockId";
+import { normalizeBlockId, sanitizeUserBlockEntry, type ColorBlockSelections } from "@/lib/blockId";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
@@ -367,6 +367,30 @@ function assertVsSparseMarkerCoverage(
 function assertVsSparseMarkerInvariants(): void {
   assertVsSparseMarkerCoverage(0, FillerRole.ShadeVoidRecessive, [14, 40, 64, 88, 112]);
   assertVsSparseMarkerCoverage(1, FillerRole.ShadeVoidRecessive, [15, 41, 65, 89, 113]);
+}
+
+async function assertTripwireInvariants(): Promise<void> {
+  for (const [input, expected] of [
+    ["string", "tripwire"], [" MINECRAFT:STRING ", "tripwire"],
+    ["string[powered=false]", "tripwire[powered=false]"],
+    ["minecraft:string[attached=true]", "tripwire[attached=true]"],
+    ["mod:string", "mod:string"], ["string_block", "string_block"], ["tripwire", "tripwire"],
+  ]) assert.equal(sanitizeUserBlockEntry(input), expected);
+  const wireCells: TestExportCell[] = [
+    { x: 1, y: 0, z: 1, cell: [FillerRole.SupportAll] },
+    { x: 2, y: 0, z: 1, cell: { id: 1, isCustom: false } },
+    { x: 3, y: 1, z: 1, cell: [FillerRole.SupportAll] },
+    { x: 1, y: 0, z: 0, cell: { id: 2, isCustom: false } },
+    { x: 0, y: 0, z: 1, cell: { id: 2, isCustom: false } },
+    { x: 1, y: 0, z: 2, cell: { id: 3, isCustom: false } },
+  ];
+  const wireBlocks = parseStructureBlocks(await exportTestStructureNbt(wireCells,
+    { 1: "tripwire", 2: "tripwire_hook[facing=south]", 3: "tripwire_hook" },
+    [{ role: FillerRole.SupportAll, block: "tripwire[west=true,disarmed=true]" }], true));
+  const wireAt = (x: number, y: number) => wireBlocks.find(b => b.x === x && b.y === y && b.z === 1)?.blockName;
+  assert.equal(wireAt(1, 0), "minecraft:tripwire[disarmed=true,north=true,east=true,south=true]");
+  assert.equal(wireAt(2, 0), "minecraft:tripwire[west=true]");
+  assert.equal(wireAt(3, 1), "minecraft:tripwire[disarmed=true]", "A different height must not connect");
 }
 
 async function assertPaletteCollapseModeInvariants(): Promise<void> {
@@ -2140,6 +2164,7 @@ async function main(): Promise<number> {
   await assertCrubTechWaterPlatformInvariant();
   await assertCrubTechLatePairPauseMarkerInvariants();
   assertDefaultLatePairYInvariant();
+  await assertTripwireInvariants();
   await assertPaletteCollapseModeInvariants();
   await assertWestEastSlopeExportInvariant();
   console.log("Inline invariants passed.");
