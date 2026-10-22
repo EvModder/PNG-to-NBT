@@ -9,16 +9,21 @@
  * - analyzeMaterialNeeds()
  * - aggregateMaterialCounts()
  * - aggregateOverrideCounts()
+ * - analyzeScaffoldingSupport()
  *
  * Callers:
  * - src/Index.tsx
  * - src/lib/generationPolicy.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysisCache.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/tileGeometry.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "../data/mapColors";
+import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
+import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
+import { getBlockSupport } from "./blockSupport";
 import { Shade, type ColorGrid } from "@/types/color";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
@@ -124,6 +129,77 @@ function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): nu
   return getColorRefKey(color) * 4 + color.shade;
 }
 
+// Check resolved placements, not optional support cells or their unfiltered roles.
+export function analyzeScaffoldingSupport(
+  shapes: Iterable<GeneratedShape>, selections: ColorBlockSelections,
+  assignments: readonly FillerAssignment[], assumeFloor: boolean,
+) {
+  const result = { roles: new Set<FillerRole>(), colors: false };
+  if (![...assignments.map(({ block }) => block), ...Object.values(selections.selectedBlocks),
+    ...Object.values(selections.selectedBlocksCustom)].some(block => normalizeBlockId(block) === "scaffolding")) return result;
+  const fillers = buildFillerAssignmentMap(assignments);
+  const bases = new Map<string, boolean>();
+  const dataVersion = MINECRAFT_VERSIONS[selections.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION].dataVersion;
+  const connections = [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+  for (const shape of shapes) for (const part of shape.parts) {
+    const resolved = new Map<number, { blockName: string; role?: FillerRole } | null>();
+    const floors = assumeFloor ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+    const at = (coord: number) => {
+      if (resolved.has(coord)) return resolved.get(coord)!;
+      const cell = part.cells.get(coord);
+      let value: { blockName: string; role?: FillerRole } | null = null;
+      if (cell && isShapeColorCell(cell)) {
+        const blockName = resolveShapeColorBlockName(cell, selections, fillers);
+        if (blockName) value = { blockName, role: cell.fillerRole };
+      } else if (cell) {
+        const [x, y, z] = parseShapeCoordKey(coord);
+        if (isWithinShapeBounds({ x, y, z }, part.bounds, floors)) {
+          const filler = resolveShapeFiller(part, coord, cell, selections, fillers);
+          if (filler?.blockName) value = { blockName: filler.blockName, role: filler.role };
+        }
+      }
+      resolved.set(coord, value);
+      return value;
+    };
+    const scaffolds = new Map<number, FillerRole | undefined>();
+    for (const coord of part.cells.keys()) {
+      const value = at(coord);
+      if (value && normalizeBlockId(value.blockName) === "scaffolding") scaffolds.set(coord, value.role);
+    }
+    if (!scaffolds.size) continue;
+    const distances = new Map<number, number>();
+    const queue: number[] = [];
+    for (const coord of scaffolds.keys()) {
+      const [x, y, z] = parseShapeCoordKey(coord);
+      const below = toShapeCoordKey(x, y - 1, z);
+      const block = at(below)?.blockName ?? "";
+      if (!bases.has(block)) bases.set(block, getBlockSupport(block, dataVersion).full);
+      if ((!block && floors.has(y - 1)) || (!scaffolds.has(below) && bases.get(block))) {
+        distances.set(coord, 0);
+        queue.push(coord);
+      }
+    }
+    // Vertical scaffold connections preserve distance; horizontal ones cost one.
+    // No connection propagates downward. Seven horizontal blocks is unsupported.
+    for (let i = 0; i < queue.length && distances.size < scaffolds.size; i++) {
+      const coord = queue[i];
+      const distance = distances.get(coord)!;
+      const [x, y, z] = parseShapeCoordKey(coord);
+      for (const [dx, dy, dz] of connections) {
+        const next = toShapeCoordKey(x + dx, y + dy, z + dz);
+        const nextDistance = distance + (dy ? 0 : 1);
+        if (!scaffolds.has(next) || nextDistance >= (distances.get(next) ?? 7)) continue;
+        distances.set(next, nextDistance);
+        queue.push(next);
+      }
+    }
+    for (const [coord, role] of scaffolds) if (!distances.has(coord)) {
+      if (role) result.roles.add(role);
+      else result.colors = true;
+    }
+  }
+  return result;
+}
 
 // Retained blocks are counted during replay; collecting them skips unused per-part totals.
 function analyzePartMaterialNeeds(

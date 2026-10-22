@@ -16,7 +16,7 @@ import {
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
 } from "@/data/defaultSettings";
 import { messages } from "@/lib/messages";
-import { getFillerFloorAttachmentFix, isSupportFillerFragile } from "@/lib/fillerRules";
+import { getFillerFloorAttachmentFix } from "@/lib/fillerRules";
 import { isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/data/uiClasses";
 
@@ -95,7 +95,6 @@ function FillerField({
 }: FillerFieldProps) {
   // Null unless editing, so the field always falls back to the committed, sanitized value.
   const [draftValue, setDraftValue] = useState<string | null>(null);
-  const supportRequiresSupport = isSupport && isSupportFillerFragile(value);
   const floorAttachmentFix = isSupport ? null : getFillerFloorAttachmentFix(value);
 
   const commitValue = (nextValue: string) => {
@@ -147,11 +146,9 @@ function FillerField({
           </>
         )}
       </div>
-      {(warning || supportRequiresSupport || floorAttachmentFix) && (
+      {(warning || floorAttachmentFix) && (
         <div className="col-span-2 w-0 min-w-full bg-warning/20 border-2 border-warning/40 rounded px-2 py-1 text-xs font-medium text-warning-text">
-          {warning ? <span className="text-destructive-text">{warning}</span> : supportRequiresSupport ? (
-            <span className="text-destructive-text">{messages.fillers.supportRequiresSupportWarning}</span>
-          ) : floorAttachmentFix && <button
+          {warning ? <span className="text-destructive-text">{warning}</span> : floorAttachmentFix && <button
             type="button"
             title={`${messages.fillers.floorAttachmentWarning}\n${floorAttachmentFix}`}
             className="underline underline-offset-2 hover:text-foreground"

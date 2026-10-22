@@ -185,7 +185,6 @@ export const esCatalog = {
     growthCoverInvalid: "Cubierta inválida",
     heading: "Rellenos",
     floorAttachmentWarning: "Solo se admite el soporte desde abajo",
-    supportRequiresSupportWarning: "Necesita soporte",
     fixFloorAttachment: "Fijar abajo",
     headingTooltip: "Asignaciones de bloques de relleno para soporte, sombreado y colocaciones de casos especiales.",
     supportLabel: "Soporte:",
@@ -314,11 +313,20 @@ export const esCatalog = {
     convertButtonLayerSplitTitle: "Descarga esquemas separados para cada capa de construcción.",
   },
   preview: {
+    invalidSupportDetail: "No puede apoyarse sobre {support}",
     liftSupport: {
       one: "{support} no puede sostener {count} elevación",
       other: "{support} no puede sostener {count} elevaciones",
     },
     liftSupportDetail: "Elevables con otro soporte: {blocks}",
+    placementWarnings: {
+      missingSupport: "Falta soporte debajo: {blocks}",
+      invalidSupport: "Soporte no válido debajo: {blocks}",
+      transparentSupport: "Una plataforma transparente no puede sostener: {blocks}",
+      attachmentSupport: "Soporte de fijación ausente o inválido: {blocks}",
+      shelfSupport: "Pon apoyo lateral a los hongos de repisa",
+      falling: "Bloques con gravedad sin soporte: {blocks}",
+    },
     missingBlockAssignments: {
       one: "{count} color de entrada sin bloque asignado en el preset",
       other: "{count} colores de entrada sin bloque asignado en el preset",
@@ -352,10 +360,10 @@ export const esCatalog = {
       "El relleno de soporte no es válido ({value})\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán",
     waterSideSupportNotColorIdZero:
       "El relleno de soporte no es color_id=0 ({value})\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán",
-    fragileSupportOverrideWarningSingle:
-      "El soporte para {blockId} debe ser {support}",
-    fragileSupportOverrideWarning:
-      "El soporte para {blockId} debe ser uno de:\n{supports}",
+    fragileSupportOverrideWarning: "Soporte válido para {blockId}: {supports}",
+    fragileSupportOverrideWarningShared: "Soporte válido para {count} bloques: {supports}",
+    fragileSupportOverrideWarningMixed: "Se requieren soportes específicos para {blockId}",
+    supportBlockListCount: "{count} bloques",
     vsFillerInvalid: {
       one: "{label} no es válido ({value})\n{count} píxel tendrá sombreado claro incorrecto",
       other: "{label} no es válido ({value})\n{count} píxeles tendrán sombreado claro incorrecto",

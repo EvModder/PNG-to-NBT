@@ -10,6 +10,8 @@
  *
  * Callers:
  * - src/lib/mixedStepHeights.ts
+ * - src/lib/placementWarnings.ts
+ * - src/lib/shapeAnalysis.ts
  */
 import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/blockFragility";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
@@ -47,6 +49,28 @@ const FALL_THROUGH_BLOCKS = new Set([
   "light", "structure_void", "warped_roots", "nether_sprouts", "crimson_roots", "leaf_litter", "hanging_roots",
 ]);
 
+const FACE_LETTERS = "dunswe";
+const OPPOSITE: Record<string, string> = { d: "u", u: "d", n: "s", s: "n", w: "e", e: "w" };
+const CLOCKWISE: Record<string, string> = { n: "e", e: "s", s: "w", w: "n" };
+
+// Sturdy faces as letters; a block with all six returns FACE_LETTERS itself.
+function sturdyFaces(id: string, props: ReadonlyMap<string, string>, full: boolean): string {
+  const facing = (props.get("facing") ?? "north")[0];
+  if (id.endsWith("_slab")) return { double: FACE_LETTERS, top: "u" }[props.get("type") ?? ""] ?? "d";
+  if (id.endsWith("_stairs")) {
+    // The back faces the stair's facing; inner corners add a side, outer corners have none.
+    const shape = props.get("shape") ?? "straight";
+    return (props.get("half") === "top" ? "u" : "d") + (shape.startsWith("outer") ? ""
+      : facing + (shape === "inner_right" ? CLOCKWISE[facing] : shape === "inner_left" ? OPPOSITE[CLOCKWISE[facing]] : ""));
+  }
+  if (id.endsWith("_trapdoor")) return props.get("open") === "true" ? OPPOSITE[facing] : props.get("half") === "top" ? "u" : "d";
+  // An extended base is shorter than a block, so only its back stays full.
+  if (id === "piston" || id === "sticky_piston") return props.get("extended") === "true" ? OPPOSITE[facing] : FACE_LETTERS;
+  if (id === "piston_head") return facing;
+  if (["azalea", "flowering_azalea", "scaffolding"].includes(id)) return full ? "u" : "";
+  return full ? FACE_LETTERS : "";
+}
+
 function describe(block: string, modern: boolean) {
   const id = normalizeBlockId(block);
   // Export names carry implicit states, such as down=true on multiface blocks.
@@ -80,7 +104,8 @@ function describe(block: string, modern: boolean) {
     || center || rigid || leaves || /_(slab|stairs|trapdoor|door|sign|shelf|pressure_plate|bed)$/.test(id)
     || ["farmland", "dirt_path", "cake", "cactus", "bamboo", "bamboo_sapling", "cobweb", "brewing_stand", "chest", "ender_chest",
       "enchanting_table", "end_portal_frame", "lectern", "daylight_detector"].includes(id));
-  return { id, props, full, center, rigid, collision, outline, partial, solid, modern,
+  const faces = sturdyFaces(id, props, full);
+  return { id, props, full, center, rigid, collision, outline, partial, solid, modern, faces,
     water: id === "water" || props.get("waterlogged") === "true",
     fallThrough: !id || FALL_THROUGH_BLOCKS.has(id) };
 }

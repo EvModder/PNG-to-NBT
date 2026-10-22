@@ -22,14 +22,18 @@ import { buildFillerAssignmentMap, createFillerAssignments, getFillerFloorAttach
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
-import { countUnsupportedLifts, getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
-import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
+import { countUnsupportedLifts, getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, getMixedStepColor, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
-import { canSupportBlock, getBlockSupport } from "@/lib/blockSupport";
-import { isFragileBlock } from "@/data/blockFragility";
-import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
+import { analyzeFillerNeeds, analyzeMaterialNeeds, analyzeScaffoldingSupport } from "@/lib/shapeAnalysis";
+import { getBlockSupport, canSupportBlock } from "@/lib/blockSupport";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
+import { getPlacementWarnings } from "@/lib/placementWarnings";
+import { messages } from "@/lib/messages";
+import { enCatalog } from "@/data/i18n/en";
+import { esCatalog } from "@/data/i18n/es";
 import { normalizeBlockId, resolveExportBlockName, sanitizeUserBlockEntry, toDisplayName, type ColorBlockSelections } from "@/lib/blockId";
-import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
+import { parseShapeCoordKey, resolveShapeBlockName, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 import { SupportMode } from "@/types/ui";
@@ -287,6 +291,16 @@ async function assertSharedSupportMaterialCounts(): Promise<void> {
     for (const id of new Set([...Object.keys(counts), ...Object.keys(expected)])) {
       if (counts[id] !== expected[id]) throw new Error(`Shared support count mismatch for ${block}/${support}: ${id} ${counts[id]} != ${expected[id]}`);
     }
+    const part = buildTestShape(cells).parts[0];
+    const warningBlocks: Record<string, number> = {};
+    for (const coord of part.cells.keys()) {
+      const resolved = resolveShapeBlockName(part, coord, { selectedBlocks, selectedBlocksCustom: {}, customColors: [] },
+        buildFillerAssignmentMap(fillerAssignments), false);
+      if (!resolved) continue;
+      const id = normalizeBlockId(resolved);
+      warningBlocks[id] = (warningBlocks[id] ?? 0) + 1;
+    }
+    assert.deepEqual(warningBlocks, expected, "Warnings must resolve the same support priority and replacements as exports");
   }
 
   let seed = 123456789;
@@ -2151,6 +2165,7 @@ function assertBlockSupportPairs(): void {
   for (const base of ["bamboo", "bamboo_sapling"]) assert(canSupportBlock(base, "oak_sign"));
 }
 
+
 function assertFragileSupportEligibility(): void {
   for (const block of ["air", "none", "", "minecraft:air"]) assert(shouldAssumeSupportFloor(true, BuildMode.Flat, SupportMode.All, block));
   assert(shouldAssumeSupportFloor(true, BuildMode.Flat, SupportMode.None, "sand"));
@@ -2334,10 +2349,312 @@ async function assertEnvironmentalSupport(): Promise<void> {
 }
 
 
+function assertScaffoldingSupportWarnings(): void {
+  const role = FillerRole.SupportAll;
+  const selections = { selectedBlocks: { 7: "poppy", 11: "stone", 13: "scaffolding" }, selectedBlocksCustom: {}, customColors: [], minecraftVersion: "26.2" as const };
+  const assignments = [{ role, block: "scaffolding" }, { role: FillerRole.ShadeSuppress, block: "stone" }];
+  const shape: GeneratedShape = { partType: ShapePartType.SingleColumn, splitExportNames: null,
+    suppressedTransparentVsCollisionCount: 0, parts: [{ cells: new Map(),
+      bounds: { minY: 0, maxY: 10, minZ: 0, maxZ: 127 }, supportFloorYs: new Set([0]) }] };
+  const part = shape.parts[0];
+  const put = (x: number, y: number, cell: ShapeCell = [role]) => part.cells.set(toShapeCoordKey(x, y, 0), cell);
+  const warn = (floor = true, blocks = assignments, palette = selections) =>
+    analyzeScaffoldingSupport([shape], palette, blocks, floor).roles.has(role);
+  put(0, 1);
+  assert(!warn(), "Assumed floor supports scaffolding");
+  assert(warn(false), "Without an assumed floor, air cannot support scaffolding");
+  put(0, 2);
+  assert(!warn(), "Grounded vertical scaffold stacks are valid");
+  part.cells.delete(toShapeCoordKey(0, 1, 0));
+  assert(warn(), "An assumed floor does not bridge a vertical air gap");
+  put(0, 1, { id: 11, isCustom: false });
+  assert(!warn(), "Actual sturdy color blocks support scaffolding");
+  for (const block of ["glass", "soul_sand", "oak_slab[type=top]", "oak_slab[type=double]", "oak_stairs[half=top]", "oak_trapdoor[half=top]", "snow[layers=8]"]) {
+    assert(!warn(true, assignments, { ...selections, selectedBlocks: { ...selections.selectedBlocks, 11: block } }), block);
+  }
+  for (const block of ["oak_leaves", "water", "resin_clump[down=true]", "oak_slab", "oak_stairs", "oak_trapdoor[half=top,open=true]", "snow[layers=7]"]) {
+    assert(warn(true, assignments, { ...selections, selectedBlocks: { ...selections.selectedBlocks, 11: block } }), block);
+  }
+  assert(warn(true, assignments, { ...selections, selectedBlocks: { ...selections.selectedBlocks, 11: "honey_block" } }));
+  assert(analyzeScaffoldingSupport([shape], { ...selections, minecraftVersion: undefined, selectedBlocks: { 11: "honey_block" } },
+    assignments, true).roles.has(role), "Omitted version preserves the site-default honey support rule");
+  assert.equal(analyzeScaffoldingSupport([shape], { ...selections, minecraftVersion: "26.4", selectedBlocks: { 11: "honey_block" } }, assignments, true).roles.size, 0);
+  part.cells.clear();
+  put(0, 1, { id: 11, isCustom: false });
+  for (let x = 0; x <= 6; x++) put(x, 2);
+  put(6, 3);
+  assert(!warn(false), "Six horizontal extensions and a vertical continuation remain supported");
+  put(7, 2);
+  assert(warn(false), "The seventh horizontal extension falls");
+  part.cells.delete(toShapeCoordKey(7, 2, 0));
+  part.cells.delete(toShapeCoordKey(0, 1, 0));
+  assert(warn(false), "A disconnected scaffold cluster cannot support itself");
+  part.cells.clear();
+  put(0, 0);
+  assert(!warn(), "Omitted floor-level filler must not produce warnings");
+  part.cells.clear();
+  put(0, 1, [FillerRole.SupportFragile]);
+  put(0, 2, { id: 11, isCustom: false });
+  assert.equal(analyzeScaffoldingSupport([shape], selections, [{ role: FillerRole.SupportFragile, block: "scaffolding" }], false).roles.size, 0,
+    "Unneeded fragile support is not exported");
+  part.cells.clear();
+  put(0, 1);
+  put(0, 2, { id: 7, isCustom: false });
+  assert(!warn(false, assignments, { ...selections, selectedBlocks: { 7: "poppy", 11: "stone", 13: "scaffolding" } }),
+    "Soil replacement is not scaffolding");
+  assert.equal(analyzeScaffoldingSupport([shape], selections, [{ role, block: "stone" }], false).roles.size, 0);
+  part.cells.clear();
+  put(0, 2, [FillerRole.ShadeSuppress, role]);
+  assert(!warn(false, [assignments[1], assignments[0]]), "The winning non-scaffold assignment suppresses the warning");
+  assert(warn(false, [{ role: FillerRole.ShadeSuppress, block: "air" }, assignments[0]]), "Disabled fillers do not hide unsupported scaffolding");
+  part.cells.clear();
+  put(0, 2);
+  put(0, 1, { id: 13, isCustom: false });
+  assert(!warn(), "Scaffolding color blocks can connect supports to the platform");
+  assert(warn(false), "Floating scaffolding color blocks are not sturdy anchors");
+
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => ({ id: 11, shade: Shade.Flat, isCustom: false })));
+  for (const mode of [BuildMode.Flat, BuildMode.StaircaseClassic, BuildMode.SuppressStepChecker, BuildMode.SuppressStepPairs]) {
+    const generated = generateShapeMap(grid, Shade.Flat, false, false, false, { selectedMode: mode, layerGap: 5, mixSteps: false,
+      collapseStaircaseModes: false, includeFlatNorthline: true,
+      selectedStepDirection: SuppressStepDirection.EastToWest })[mode === BuildMode.Flat ? BuildMode.StaircaseNorthline : mode]!;
+    assert(generated, mode);
+    assert.equal(analyzeScaffoldingSupport([generated], selections, assignments, true).roles.size, 0, `${mode}: floor-level support is omitted`);
+  }
+}
+
+
+async function assertContextualSupport(): Promise<void> {
+  const supportWarning = (counts: Record<string, number>) => messages.preview.fragileSupportOverrideWarning(counts, FRAGILE_SUPPORT_RULES);
+  assert.equal(supportWarning({ poppy: 0 }), null);
+  const shared = supportWarning({ open_eyeblossom: 5, closed_eyeblossom: 1 })!.text;
+  assert.match(shared, /\b2\b.*\[dirt, mud, .*\]$/, "Count distinct block types, not placements");
+  assert.doesNotMatch(shared, /eyeblossom|[\r\n]/);
+  assert.match(supportWarning({ wheat: 1 })!.text, /wheat.*farmland/);
+  for (const counts of [{ wheat: 1, lily_pad: 2 }, { azalea: 2, open_eyeblossom: 5 }] as Record<string, number>[]) {
+    const warning = supportWarning({ ...counts, poppy: 0 })!.text;
+    for (const id of Object.keys(counts)) assert(warning.includes(id));
+    assert(!/[\r\n]|poppy|farmland|dirt|water/.test(warning), "Different support sets need one warning, not a shared list of options");
+  }
+  // The fitted list replaces the text, so its parts must rebuild it exactly.
+  const listed = [supportWarning({ azalea: 2, open_eyeblossom: 5 })!, supportWarning({ wheat: 1, lily_pad: 2 })!,
+    ...Object.keys(enCatalog.preview.placementWarnings).map(kind =>
+      messages.preview.placementWarning(kind as keyof typeof enCatalog.preview.placementWarnings, ["wheat", "lily_pad"]))];
+  for (const { text, listedBlocks } of listed) if (listedBlocks) {
+    assert.equal(`${listedBlocks.before}[${listedBlocks.blocks.join(", ")}]${listedBlocks.after}`, text);
+  }
+  for (const catalog of [enCatalog, esCatalog]) for (const [kind, template] of Object.entries(catalog.preview.placementWarnings)) {
+    assert((template.match(/\{\w+\}/g) ?? []).length <= 1, `${catalog.locale} ${kind}: only the list is a placeholder`);
+  }
+  const selections = { selectedBlocks: { 1: "stone_pressure_plate", 12: "water" }, selectedBlocksCustom: {}, customColors: [] };
+  const make = (height = 1): GeneratedShape => ({ partType: ShapePartType.SingleColumn, splitExportNames: null,
+    suppressedTransparentVsCollisionCount: 0, parts: [{ bounds: { minY: -3, maxY: 8, minZ: 0, maxZ: 127 }, supportFloorYs: new Set([0]),
+      cells: new Map([[toShapeCoordKey(0, height + 1, 0), { id: 1, isCustom: false } as ShapeCell],
+        [toShapeCoordKey(0, height, 0), [FillerRole.SupportFragile]]]) }] });
+  const warnings = (shape: GeneratedShape, support: string, assumeFloor = true) => getPlacementWarnings([shape], selections,
+    [{ role: FillerRole.SupportFragile, block: support }], assumeFloor, BuildMode.SuppressStepChecker);
+  for (const support of ["sand", "gravel", "white_concrete_powder", "azalea", "flowering_azalea", "snow[layers=8]", "scaffolding"]) {
+    assert.deepEqual(warnings(make(), support), [], `${support}: wildcard floor supports the support material`);
+    assert(warnings(make(2), support).some(warning => warning.invalid), `${support}: support material cannot float`);
+    assert(warnings(make(), support, false).some(warning => warning.invalid), `${support}: no assumed floor means no free support`);
+    for (const jumpable of [false, true]) {
+      const mixed = getMixedStepSettings([], selections, SupportMode.Fragile, "resin_clump[down=true]", support, true, 1, jumpable);
+      assert.equal(mixed.maxHeight, 1, `${support}: lift-one supports rest on the platform`);
+      assert(mixed.palette?.floorOnlySupport);
+      if (mixed.palette.supportColor > 0) {
+        const color = { id: mixed.palette.supportColor, shade: Shade.Light, isCustom: false };
+        assert.notEqual(getMixedStepColor(color, 1, undefined, 0, mixed.palette).fillerRole, FillerRole.SupportRetained,
+          "A fragile support may not substitute for a raised color without its own base");
+      }
+      assert.equal(getMixedStepSettings([], selections, SupportMode.Fragile, "resin_clump[down=true]", support, true, 2, jumpable).maxHeight, 0);
+    }
+  }
+  const upper = make(5);
+  upper.parts[0].supportFloorYs = new Set([0, 4]);
+  assert(warnings(upper, "azalea").some(warning => warning.kind === "transparentSupport"));
+  assert.deepEqual(warnings(upper, "sand"), [], "Transparent upper floors still hold gravity blocks");
+  const lily = make(5);
+  lily.parts[0].supportFloorYs = new Set([0, 4]);
+  lily.parts[0].cells = new Map([[toShapeCoordKey(0, 5, 0), { id: 1, isCustom: false }]]);
+  assert.deepEqual(getPlacementWarnings([lily], { ...selections, selectedBlocks: { 1: "lily_pad" } }, [], true,
+    BuildMode.Suppress2Layer), [], "Transparent platforms can provide waterlogged lily-pad supports");
+  const submerged = make();
+  submerged.parts[0].cells.set(toShapeCoordKey(4, -2, 4), { id: 12, isCustom: false });
+  assert(warnings(submerged, "azalea").some(warning => warning.kind === "transparentSupport" && warning.blocks.includes("azalea")));
+  assert(!warnings(submerged, "sand").some(warning => warning.kind === "falling"));
+  assert(getPlacementWarnings([submerged], selections, [{ role: FillerRole.SupportFragile, block: "azalea" }],
+    true, BuildMode.Flat).some(warning => warning.kind === "transparentSupport"), "Flat mode cannot bypass transparent-water-floor constraints");
+
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => ({ id: 2, shade: Shade.Flat, isCustom: false })));
+  const shape = generateShapeMap(grid, Shade.Flat, false, false, false, {
+    selectedMode: BuildMode.Flat, layerGap: 5, selectedStepDirection: SuppressStepDirection.EastToWest,
+    collapseStaircaseModes: false,
+  })[BuildMode.StaircaseNorthline]!;
+  for (const block of ["sand", "gravel", "red_sand", "white_concrete_powder", "anvil"]) {
+    const colors = { ...selections, selectedBlocks: { 2: block } };
+    const assignments = [{ role: FillerRole.SupportFragile, block: "stone" }];
+    const counts = analyzeMaterialNeeds(grid, shape, { ...colors, fillerAssignments: assignments, applySupportFloorYs: false });
+    assert.equal(counts.blockCounts.stone, MAP_SIZE ** 2, `${block}: Fragile supplies supports for falling colors`);
+    assert.equal(analyzeMaterialNeeds(grid, shape, { ...colors, fillerAssignments: assignments, applySupportFloorYs: true }).blockCounts.stone, undefined);
+    assert(getPlacementWarnings([shape], colors, [], false, BuildMode.Flat).some(warning => warning.kind === "falling"));
+    assert.deepEqual(getPlacementWarnings([shape], colors, assignments, false, BuildMode.Flat), []);
+    const nbt = await convertToNbt(shape, { ...colors, fillerAssignments: assignments, applySupportFloorYs: false,
+      forceXZ128: true, forceZ129: false, baseName: "support", buildMode: BuildMode.Flat, suppressStepDirection: SuppressStepDirection.EastToWest });
+    const blocks = parseStructureBlocks(new Uint8Array(gunzipSync(nbt.data)));
+    assert.equal(blocks.filter(entry => entry.blockName === "minecraft:stone").length, counts.blockCounts.stone);
+  }
+  const stepGrid: ColorGrid = Array.from({ length: MAP_SIZE }, (_, x) => Array.from({ length: MAP_SIZE }, (_, z) =>
+    ({ id: (x + z) % 2 ? 1 : 11, shade: (z % 3) as Shade, isCustom: false })));
+  const stepSelections = { ...selections, selectedBlocks: { 1: "stone_pressure_plate", 11: "stone" } };
+  for (const support of ["sand", "azalea", "scaffolding"]) for (const reachable of [false, true]) {
+    const mixed = getMixedStepSettings([2, 22], stepSelections, SupportMode.Fragile, "resin_clump[down=true]", support, true, 1, reachable);
+    const assignments = createFillerAssignments(support, "resin_clump[down=true]", "moss_block", "resin_block", "resin_block",
+      "slime_block", "resin_block", SupportMode.Fragile, false, false, false);
+    for (const mode of [BuildMode.SuppressStepChecker, BuildMode.SuppressStepPairs]) {
+      const generated = generateShapeMap(stepGrid, undefined, false, false, false, {
+        selectedMode: mode, selectedStepDirection: SuppressStepDirection.EastToWest, layerGap: 5,
+        mixSteps: true, mixedStepMaxHeight: mixed.maxHeight, mixedStepPalette: mixed.palette,
+      })[mode]!;
+      assert.deepEqual(getPlacementWarnings([generated], stepSelections, assignments, true, mode).filter(warning => warning.invalid), [],
+        `${mode}/${support}/${reachable}: raised reuse leaves no unsupported blocks`);
+    }
+  }
+}
+
+
+function assertPlacementWarnings(): void {
+  type Placement = [number, number, number, string];
+  const check = (placements: Placement[], assumeFloor = false, mode = BuildMode.StaircaseGroup) => {
+    const selectedBlocks: Record<number, string> = {};
+    const cells = new Map<number, ShapeCell>();
+    placements.forEach(([x, y, z, block], i) => {
+      selectedBlocks[i + 1] = block;
+      cells.set(toShapeCoordKey(x, y, z), { id: i + 1, isCustom: false });
+    });
+    const shape: GeneratedShape = { partType: ShapePartType.SingleColumn, splitExportNames: null,
+      suppressedTransparentVsCollisionCount: 0,
+      parts: [{ cells, bounds: { minY: -10, maxY: 20, minZ: -10, maxZ: 130 }, supportFloorYs: new Set([0]) }] };
+    const selections = { selectedBlocks, selectedBlocksCustom: {}, customColors: [] };
+    return { warnings: getPlacementWarnings([shape], selections, [], assumeFloor, mode), shape, selections };
+  };
+  const kinds = (placements: Placement[], assumeFloor = false, mode = BuildMode.StaircaseGroup) =>
+    check(placements, assumeFloor, mode).warnings.map(warning => warning.kind);
+  assert(kinds([[0, 1, 0, "stone_pressure_plate"]], false, BuildMode.Flat).includes("missingSupport"));
+  assert(!kinds([[0, 1, 0, "stone_pressure_plate"]], true).includes("missingSupport"));
+  assert(kinds([[0, 2, 0, "stone_pressure_plate"]], true).includes("missingSupport"));
+  assert(kinds([[0, 2, 0, "scaffolding"]], true).includes("missingSupport"));
+  assert(!kinds([[0, 1, 0, "scaffolding"], [1, 1, 0, "scaffolding"]], true).includes("missingSupport"));
+  assert(kinds([[0, 1, 0, "sand"]]).includes("falling"));
+  assert(!kinds([[0, 1, 0, "sand"], [0, 0, 0, "stone"]]).includes("falling"));
+  assert(!kinds([[0, 1, 0, "stone_pressure_plate"], [0, 0, 0, "hopper"]]).includes("invalidSupport"));
+  assert(kinds([[0, 1, 0, "candle"], [0, 0, 0, "hopper"]]).includes("invalidSupport"));
+  assert(!kinds([[0, 1, 0, "sea_pickle[waterlogged=false]"], [0, 0, 0, "oak_leaves"]]).includes("invalidSupport"));
+  assert(!kinds([[0, 1, 0, "resin_clump[down=true]"], [0, 0, 0, "oak_leaves"]]).includes("attachmentSupport"));
+  assert(!kinds([[0, 1, 0, "snow"], [0, 0, 0, "mud"]]).includes("invalidSupport"));
+  assert(kinds([[0, 1, 0, "rail"]]).includes("missingSupport"));
+  for (const base of ["resin_clump[down=true]", "snow[layers=8]", "fern", "water"]) {
+    assert(kinds([[0, 1, 0, "sand"], [0, 0, 0, base]]).includes("falling"), `${base}: falling blocks pass through replaceable bases`);
+  }
+  assert(kinds([[0, 1, 0, "oak_sapling"], [0, 0, 0, "stone"]]).includes("invalidSupport"));
+  assert(!kinds([[0, 1, 0, "oak_sapling"], [0, 0, 0, "dirt"]]).includes("invalidSupport"));
+  for (const mode of [BuildMode.Flat, BuildMode.StaircaseNorthline, BuildMode.SuppressStepChecker]) {
+    assert.deepEqual(kinds([[0, 1, 0, "poppy"]], true, mode), [], "Assumed platforms do not imply invalid soil");
+    assert.deepEqual(kinds([[0, 1, 0, "poppy"], [0, 0, 0, "dirt"]], false, mode), [], "Dirt supports poppies");
+    assert(kinds([[0, 1, 0, "poppy"]], false, mode).includes("missingSupport"));
+  }
+  assert(kinds([[0, 2, 0, "poppy"]], true).includes("missingSupport"), "Assumed floors do not support raised floating flowers");
+  const flower = check([[0, 2, 0, "poppy"]]);
+  flower.shape.parts[0].cells.set(toShapeCoordKey(0, 1, 0), [FillerRole.SupportFragile]);
+  for (const assumeFloor of [false, true]) {
+    assert.deepEqual(getPlacementWarnings([flower.shape], flower.selections,
+      [{ role: FillerRole.SupportFragile, block: "dirt" }], assumeFloor, BuildMode.StaircaseGroup), [],
+    "Fragile-mode dirt support is valid, including above an assumed floor");
+  }
+  const wrongSupports = check([[0, 1, 0, "poppy"], [0, 0, 0, "stone"],
+    [1, 1, 0, "poppy"], [1, 0, 0, "oak_slab[type=top]"]]);
+  assert.deepEqual(wrongSupports.warnings.map(({ kind, blocks, support }) => ({ kind, blocks, support })), [
+    { kind: "invalidSupport", blocks: ["poppy"], support: "stone" },
+    { kind: "invalidSupport", blocks: ["poppy"], support: "oak_slab[type=top]" },
+  ], "Each warning identifies the actual incompatible support, retaining its state");
+  assert.equal(getPlacementWarnings([wrongSupports.shape, wrongSupports.shape], wrongSupports.selections,
+    [], false, BuildMode.StaircaseGroup).length, 2, "Merge repeated pairs without mixing different supports");
+  assert(wrongSupports.warnings.every(warning => warning.invalid), "Incompatible supports use red advisory text");
+  for (const block of ["poppy", "lantern[hanging=true]", "shelf_mushroom"]) {
+    assert(check([[0, 2, 0, block]]).warnings.every(warning => warning.invalid), "Missing supports use red advisory text");
+  }
+  assert(kinds([[0, 1, 0, "dead_tube_coral_fan"], [0, 0, 0, "decorated_pot"]]).includes("invalidSupport"));
+  assert(!kinds([[0, 1, 0, "sea_pickle[waterlogged=false]"], [0, 0, 0, "decorated_pot"]]).includes("invalidSupport"));
+  assert(!kinds([[0, 1, 0, "dead_tube_coral_fan"], [0, 0, 0, "oak_slab[type=top]"]]).includes("invalidSupport"));
+  assert(kinds([[0, 1, 0, "dead_tube_coral_fan"], [0, 0, 0, "oak_slab[type=bottom]"]]).includes("invalidSupport"));
+  assert(kinds([[0, 1, 0, "lantern[hanging=true]"]]).includes("attachmentSupport"));
+  assert(!kinds([[0, 1, 0, "lantern[hanging=true]"], [0, 2, 0, "stone"]]).includes("attachmentSupport"));
+  assert(kinds([[0, 1, 0, "amethyst_cluster[facing=north]"]]).includes("attachmentSupport"));
+  assert(!kinds([[0, 1, 0, "amethyst_cluster[facing=north]"], [0, 1, 1, "stone"]]).includes("attachmentSupport"));
+  assert(!kinds([[0, 1, 0, "resin_clump[down=true]"], [0, 0, 0, "stone"]]).includes("attachmentSupport"));
+  assert(kinds([[0, 1, 0, "resin_clump[down=true,east=true]"], [0, 0, 0, "stone"]]).includes("attachmentSupport"));
+  for (const id of ["resin_clump", "glow_lichen", "sculk_vein"]) {
+    const block = `${id}[down=true]`;
+    assert.deepEqual(kinds([[0, 2, 0, block], [0, 1, 0, "scaffolding"]], true), [],
+      `${id} attaches to the top of supported scaffolding`);
+    const floating = kinds([[0, 3, 0, block], [0, 2, 0, "scaffolding"]], true);
+    assert(floating.includes("missingSupport") && !floating.includes("attachmentSupport"),
+      "Unsupported scaffolding remains a separate failure, not an invalid attachment");
+    assert(kinds([[0, 2, 0, `${id}[east=true]`], [1, 2, 0, "scaffolding"]]).includes("attachmentSupport"),
+      "Scaffolding sides do not provide full attachment faces");
+    assert(kinds([[0, 2, 0, `${id}[up=true]`], [0, 3, 0, "scaffolding"]]).includes("attachmentSupport"),
+      "Do not treat scaffolding as a full cube");
+    assert(kinds([[0, 2, 0, `${id}[down=true,east=true]`], [0, 1, 0, "scaffolding"]], true).includes("attachmentSupport"),
+      "A valid bottom attachment must not hide another unsupported face");
+    assert(kinds([[0, 2, 0, block], [0, 1, 0, "decorated_pot"]], true).includes("attachmentSupport"));
+    assert(kinds([[0, 2, 0, block]], true).includes("attachmentSupport"));
+    const filler = check([[0, 2, 0, block]]);
+    filler.shape.parts[0].cells.set(toShapeCoordKey(0, 1, 0), [FillerRole.SupportFragile]);
+    assert.deepEqual(getPlacementWarnings([filler.shape], filler.selections,
+      [{ role: FillerRole.SupportFragile, block: "scaffolding" }], true, BuildMode.SuppressStepChecker), [],
+    "Configured scaffolding support is valid for down-facing attachments");
+  }
+  for (const [facing, x, z] of [["north", 0, 1], ["south", 0, -1], ["west", 1, 0], ["east", -1, 0]] as const) {
+    assert(kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`]]).includes("shelfSupport"));
+    assert(!kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`], [x, 1, z, "stone"]]).includes("shelfSupport"));
+    assert(kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`], [x, 1, z, "oak_slab[type=top]"]]).includes("shelfSupport"));
+    // Vanilla checks the supporting block's sturdy face toward the shelf.
+    for (const support of ["mud", "copper_grate", `oak_stairs[facing=${facing}]`]) {
+      assert(!kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`], [x, 1, z, support]]).includes("shelfSupport"), support);
+    }
+    for (const support of ["oak_leaves", "scaffolding", `oak_stairs[facing=${facing === "north" ? "south" : "north"},shape=outer_left]`]) {
+      assert(kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`], [x, 1, z, support]]).includes("shelfSupport"), support);
+    }
+  }
+  const snow = check([[0, 1, 0, "snow"], [0, 0, 0, "packed_ice"]]);
+  assert(snow.warnings.some(w => w.kind === "invalidSupport"));
+  assert(!getPlacementWarnings([snow.shape], { ...snow.selections, minecraftVersion: "26.4" }, [], false,
+    BuildMode.StaircaseGroup).some(w => w.kind === "invalidSupport"));
+  const cutoff = MINECRAFT_VERSIONS["26.4"].dataVersion;
+  assert(!getBlockSupport("honey_block", cutoff - 1).full);
+  assert(getBlockSupport("honey_block", cutoff).full);
+  assert(getBlockSupport("honey_block", cutoff + 1).full);
+  const releases = MINECRAFT_VERSIONS as Record<string, { label: string; dataVersion: number }>;
+  releases.future = { label: "Future", dataVersion: cutoff + 100 };
+  try {
+    const honey = check([[0, 1, 0, "stone_pressure_plate"], [0, 0, 0, "honey_block"]]);
+    assert(honey.warnings.some(w => w.kind === "invalidSupport"));
+    for (const { shape, selections } of [snow, honey]) {
+      assert.deepEqual(getPlacementWarnings([shape], { ...selections, minecraftVersion: "future" as MinecraftVersion }, [], false,
+        BuildMode.StaircaseGroup), [], "Later versions retain the 26.4 placement rules");
+    }
+  } finally { delete releases.future; }
+}
+
+
 async function main(): Promise<number> {
   const [suite, ...extra] = process.argv.slice(2);
-  if (extra.length || suite && !["--rules", "--slope", "--support", "--environment"].includes(suite)) {
-    throw new Error("Choose one of --rules, --slope, --support or --environment, or omit flags for the full suite");
+  if (extra.length || suite && !["--rules", "--slope", "--support", "--environment", "--placement"].includes(suite)) {
+    throw new Error("Choose one of --rules, --slope, --support, --environment or --placement, or omit flags for the full suite");
+  }
+  if (suite === "--placement") {
+    assertPlacementWarnings();
+    console.log("Placement warning invariants passed.");
+    return 0;
   }
   if (suite === "--rules") {
     assertBlockSupportPairs();
@@ -2349,19 +2666,22 @@ async function main(): Promise<number> {
     console.log("Environmental generation invariants passed.");
     return 0;
   }
-  if (process.argv.includes("--support")) {
-    assertBlockSupportPairs();
-    assertFragileSupportEligibility();
-    console.log("Support eligibility invariants passed.");
-    return 0;
-  }
-  assertFragileSupportEligibility();
   assertBlockSupportPairs();
   if (process.argv.includes("--slope")) {
     await assertWestEastSlopeExportInvariant();
     console.log("West-east slope export invariants passed.");
     return 0;
   }
+  assertFragileSupportEligibility();
+  if (process.argv.includes("--support")) {
+    await assertContextualSupport();
+    await assertSharedSupportMaterialCounts();
+    console.log("Support eligibility and placement invariants passed.");
+    return 0;
+  }
+  assertScaffoldingSupportWarnings();
+  assertPlacementWarnings();
+  await assertContextualSupport();
   assertZipMetadata();
   await assertSharedSupportMaterialCounts();
   assertVsSparseMarkerInvariants();

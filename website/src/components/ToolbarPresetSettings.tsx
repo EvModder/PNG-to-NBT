@@ -41,7 +41,6 @@ type ToolbarPresetSettingsProps = {
   enableStepsSupportOption: boolean;
   enableWaterSupportOption: boolean;
   enableFragileSupportOption: boolean;
-  supportFillerIsFragile: boolean;
   buildSettingsProps: ToolbarBuildSettingsProps | null;
 };
 
@@ -70,7 +69,6 @@ export function ToolbarPresetSettings({
   enableStepsSupportOption,
   enableWaterSupportOption,
   enableFragileSupportOption,
-  supportFillerIsFragile,
   buildSettingsProps,
 }: ToolbarPresetSettingsProps) {
   const canDeletePreset = activeIdx >= builtInPresetCount && presets.length > builtInPresetCount;
@@ -169,7 +167,7 @@ export function ToolbarPresetSettings({
                 </option>
                 <option
                   value={SupportMode.Fragile}
-                  disabled={supportFillerIsFragile || !enableFragileSupportOption}
+                  disabled={!enableFragileSupportOption}
                   title={messages.supportMode.tooltip(SupportMode.Fragile)}
                 >
                   {messages.supportMode.optionLabel(SupportMode.Fragile)}

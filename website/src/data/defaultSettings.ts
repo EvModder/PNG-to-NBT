@@ -30,7 +30,9 @@
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/pixelArtScaling.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/previewImageEdits.ts
+ * - src/lib/shapeAnalysis.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/utils/colorTableLayout.ts
  */
@@ -167,6 +169,8 @@ export const DEFAULT_INVALID_COLORS_PALETTE: InvalidColorsPalette = "full";
 // - src/lib/minecraftVersion.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysis.ts
 // 26.3 changed the NBT block-state format; prefer compatibility with older loaders.
 export const DEFAULT_MINECRAFT_VERSION: MinecraftVersion = "26.2";

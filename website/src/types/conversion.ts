@@ -21,6 +21,7 @@
  * - src/lib/messages.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeBlocks.ts
@@ -48,6 +49,7 @@
 // - src/lib/generationPolicy.ts
 // - src/lib/messages.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeBlocksSuppress.ts
@@ -173,6 +175,7 @@ export enum FillerRole {
 // Callers:
 // - src/lib/fillerRules.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 export interface FillerAssignment {

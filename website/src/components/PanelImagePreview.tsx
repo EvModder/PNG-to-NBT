@@ -5,7 +5,7 @@
  * Callers:
  * - src/Index.tsx
  */
-import { Fragment, useRef, type MouseEvent, type MutableRefObject, type RefObject } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type MouseEvent, type MutableRefObject, type RefObject } from "react";
 import { Trash2 } from "lucide-react";
 import type { InvalidDimensionsStrategy, InvalidColorsPalette } from "@/data/defaultSettings";
 import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
@@ -21,10 +21,13 @@ import {
   PREVIEW_WARNING_FRAME_CLASS,
 } from "@/data/uiClasses";
 
+type ListedBlocks = { before: string; blocks: readonly string[]; after: string; summary: string };
+
 type PreviewWarning = {
   text: string;
   invalid: boolean;
   detail?: string;
+  listedBlocks?: ListedBlocks;
 };
 
 type PaletteNoticeGroup = {
@@ -60,6 +63,7 @@ type PanelImagePreviewProps = {
   liftSupportWarning: PreviewWarning | null;
   waterSideSupportWarning: PreviewWarning | null;
   fragileSupportOverrideWarning: PreviewWarning | null;
+  placementWarnings: PreviewWarning[];
   vsFillerWarning: PreviewWarning | null;
   lateFillerWarning: PreviewWarning | null;
   showNorthRowAlignmentInfo: boolean;
@@ -105,18 +109,62 @@ type PanelImagePreviewProps = {
   setWestEastSlopeRise: (value: number) => void;
 };
 
+// Shows as many blocks as fit on one line, then +N to expand. A list that cannot show any block collapses to the summary.
+function FittedBlockList({ before, blocks, after, summary }: ListedBlocks) {
+  const line = useRef<HTMLSpanElement>(null);
+  const probe = useRef<HTMLSpanElement>(null);
+  const [count, setCount] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const container = line.current!, sample = probe.current!;
+    const measure = () => {
+      const width = container.getBoundingClientRect().width;
+      const fits = (n: number) => {
+        const rest = n < blocks.length ? `${n ? ", " : ""}+${blocks.length - n}` : "";
+        sample.textContent = `${before}[${blocks.slice(0, n).join(", ")}${rest}]${after}`;
+        return sample.getBoundingClientRect().width <= width;
+      };
+      if (fits(blocks.length)) { setCount(blocks.length); return; }
+      let lo = 0, hi = blocks.length - 1;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (fits(mid)) lo = mid;
+        else hi = mid - 1;
+      }
+      setCount(lo);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    document.fonts.addEventListener("loadingdone", measure);
+    return () => { observer.disconnect(); document.fonts.removeEventListener("loadingdone", measure); };
+  }, [before, after, blocks, expanded]);
+  const visible = expanded ? blocks.length : count;
+  return <span ref={line} className="relative block">
+    {!expanded && <span aria-hidden="true" className="pointer-events-none invisible absolute inset-0 overflow-hidden">
+      <span ref={probe} className="inline-block whitespace-nowrap" />
+    </span>}
+    {before}[{blocks.slice(0, visible).join(", ")}{visible < blocks.length && <>{visible > 0 && ", "}<button type="button"
+      className={`hover:text-foreground ${visible ? "" : "underline underline-offset-2"}`}
+      onClick={() => setExpanded(true)}>{visible ? `+${blocks.length - visible}` : summary}</button></>}]{after}
+  </span>;
+}
+
 function WarningBanner({
   text,
   tone,
   invalid = false,
   warningHeadline = false,
   detail,
+  listedBlocks,
 }: {
   text: string;
   tone: "error" | "warning" | "muted";
   invalid?: boolean;
   warningHeadline?: boolean;
   detail?: string;
+  listedBlocks?: ListedBlocks;
 }) {
   const className =
     tone === "error"
@@ -132,8 +180,8 @@ function WarningBanner({
 
   return (
     <div className={className} title={detail}>
-      <p className={`text-xs font-medium whitespace-pre-line ${textClassName}`}>
-        {headlineEnd < 0 ? text : <>
+      <p className={`text-xs font-medium whitespace-pre-line break-words ${textClassName}`}>
+        {listedBlocks ? <FittedBlockList key={text} {...listedBlocks} /> : headlineEnd < 0 ? text : <>
           <span className="text-warning-text">{text.slice(0, headlineEnd)}</span>
           {text.slice(headlineEnd)}
         </>}
@@ -253,6 +301,7 @@ export function PanelImagePreview({
   liftSupportWarning,
   waterSideSupportWarning,
   fragileSupportOverrideWarning,
+  placementWarnings,
   vsFillerWarning,
   lateFillerWarning,
   showNorthRowAlignmentInfo,
@@ -551,7 +600,8 @@ export function PanelImagePreview({
         {suppressNorthSouthWarning && <WarningBanner text={suppressNorthSouthWarning} tone="warning" />}
         {liftSupportWarning && <WarningBanner {...liftSupportWarning} tone="muted" />}
         {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
-        {fragileSupportOverrideWarning && <WarningBanner text={fragileSupportOverrideWarning.text} tone="warning" invalid={fragileSupportOverrideWarning.invalid} />}
+        {fragileSupportOverrideWarning && <WarningBanner {...fragileSupportOverrideWarning} tone="warning" />}
+        {placementWarnings.map(warning => <WarningBanner key={`${warning.text}|${warning.detail ?? ""}`} {...warning} tone="warning" />)}
         {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} warningHeadline />}
         {lateFillerWarning && <WarningBanner text={lateFillerWarning.text} tone="warning" invalid={lateFillerWarning.invalid} />}
         {showNorthRowAlignmentInfo && <WarningBanner text={messages.preview.northRowAlignmentInfo} tone="muted" />}

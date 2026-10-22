@@ -190,7 +190,6 @@ export const enCatalog = {
     growthCoverInvalid: "Use a valid cover",
     heading: "Fillers",
     floorAttachmentWarning: "Only attachment from below is supported",
-    supportRequiresSupportWarning: "Needs support itself",
     fixFloorAttachment: "Attach below",
     headingTooltip: "Filler block assignments for support, shading, and special-case placements.",
     supportLabel: "Support:",
@@ -318,11 +317,20 @@ export const enCatalog = {
     convertButtonLayerSplitTitle: "Download separate schematics for each build layer.",
   },
   preview: {
+    invalidSupportDetail: "Cannot be supported by {support}",
     liftSupport: {
       one: "{support} cannot support {count} lift",
       other: "{support} cannot support {count} lifts",
     } as PluralForms,
     liftSupportDetail: "Liftable on another support: {blocks}",
+    placementWarnings: {
+      missingSupport: "Missing support below: {blocks}",
+      invalidSupport: "Invalid support below: {blocks}",
+      transparentSupport: "Cannot be supported by a transparent platform: {blocks}",
+      attachmentSupport: "Missing or invalid attachment support: {blocks}",
+      shelfSupport: "Shelf mushrooms need manual side-support",
+      falling: "Unsupported falling blocks: {blocks}",
+    },
     missingBlockAssignments: {
       one: "{count} input color has no preset-assigned block",
       other: "{count} input colors have no preset-assigned block",
@@ -356,10 +364,10 @@ export const enCatalog = {
       "Support filler is invalid ({value})\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported",
     waterSideSupportNotColorIdZero:
       "Support filler is not color_id=0 ({value})\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported",
-    fragileSupportOverrideWarningSingle:
-      "Support for {blockId} must be {support}",
-    fragileSupportOverrideWarning:
-      "Support for {blockId} must be one of:\n{supports}",
+    fragileSupportOverrideWarning: "Valid support for {blockId}: {supports}",
+    fragileSupportOverrideWarningShared: "Valid support for {count} blocks: {supports}",
+    fragileSupportOverrideWarningMixed: "Specific support requirements for {blockId}",
+    supportBlockListCount: "{count} blocks",
     vsFillerInvalid: {
       one: "{label} is invalid ({value})\n{count} pixel will be incorrectly light-shaded",
       other: "{label} is invalid ({value})\n{count} pixels will be incorrectly light-shaded",

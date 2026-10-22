@@ -14,8 +14,8 @@
  * - src/Index.tsx
  * - src/lib/blockSupport.ts
  * - src/lib/environmentalSupport.ts
- * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/shapeModel.ts
  */
 const DIRT_SUPPORTED_FLOWERS = [
@@ -146,6 +146,7 @@ type FragileSupportRule = Readonly<FragileSupportRuleValue>;
 // - src/Index.tsx
 // - src/lib/blockSupport.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/shapeModel.ts
 // Modern substrate rules are used for every target version.
 export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
@@ -202,6 +203,7 @@ function getBaseBlockId(blockId: string): string {
 
 // Callers:
 // - src/lib/blockSupport.ts
+// - src/lib/placementWarnings.ts
 export function isFallingBlock(blockId: string): boolean {
   const id = getBaseBlockId(blockId);
   return FALLING_BLOCKS.has(id) || id.endsWith("_concrete_powder");
@@ -215,8 +217,8 @@ export function isFallingBlock(blockId: string): boolean {
 // - src/Index.tsx
 // - src/lib/blockSupport.ts
 // - src/lib/environmentalSupport.ts
-// - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/shapeModel.ts
 export function isFragileBlock(blockId: string): boolean {
   const id = getBaseBlockId(blockId);

@@ -5,7 +5,6 @@
  * - getSupportModeFillerRoles()
  * - getFillerFloorAttachmentFix()
  * - isFillerDisabled()
- * - isSupportFillerFragile()
  * - isShadeFillerDisabled()
  * - isCrubTechBreakableValid()
  * - isCrubTechPushableValid()
@@ -20,6 +19,7 @@
  * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeModel.ts
@@ -28,18 +28,10 @@ import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "../data/mapColors";
 import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
-import { isFragileBlock } from "@/data/blockFragility";
 import { DEFAULT_GROWTH_COVER_BLOCK } from "@/data/defaultSettings";
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(["chain", ...BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId)]);
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
-
-// Callers:
-// - src/Index.tsx
-// - src/components/ToolbarFillerSettings.tsx
-export function isSupportFillerFragile(block: string): boolean {
-  return isFragileBlock(normalizeBlockId(block));
-}
 
 // Callers:
 // - src/components/ToolbarFillerSettings.tsx
@@ -248,6 +240,7 @@ export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
 
 // Callers:
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[]): Map<FillerRole, string> {

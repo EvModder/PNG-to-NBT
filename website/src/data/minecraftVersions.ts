@@ -15,8 +15,10 @@
  * - src/lib/minecraftVersion.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
+ * - src/lib/shapeAnalysis.ts
  */
 
 // Breakpoints reflect default-visible blocks only. Each range targets its newest listed build.
@@ -32,8 +34,10 @@
 // - src/lib/minecraftVersion.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysis.ts
 export const MINECRAFT_VERSIONS = {
   "1.21.4": { label: "1.21.4", dataVersion: 4189 },
   "1.21.5": { label: "1.21.5–1.21.8", dataVersion: 4440 },

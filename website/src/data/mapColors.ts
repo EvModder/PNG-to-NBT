@@ -24,6 +24,7 @@
  * - src/lib/minecraftVersion.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -109,6 +110,7 @@ export const TRANSPARENCY_BASE_INDEX = 0;
 // - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/suppressLoadMarkers.ts

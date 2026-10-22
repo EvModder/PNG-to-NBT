@@ -13,6 +13,7 @@
  * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeAnalysisCache.ts
@@ -43,6 +44,7 @@ export enum ShapePartType {
 // - src/Index.tsx
 // - src/lib/generationPolicy.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeAnalysisCache.ts
@@ -72,6 +74,7 @@ export type ShapeCell = ShapeColorRef | FillerRole[];
 // - src/lib/blockId.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/shapeBlocks.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
@@ -87,6 +90,7 @@ export type ShapeCoordKey = number;
 
 // Callers:
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts

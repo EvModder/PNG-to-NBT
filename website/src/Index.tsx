@@ -84,6 +84,7 @@ import {
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@/data/mapColors";
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, scopeEnvironmentalPalette } from "@/lib/environmentalSupport";
+import { getPlacementWarnings } from "@/lib/placementWarnings";
 import { getDarkTheme, observeTheme, toggleTheme } from "@/lib/theme";
 import { scalePixelArt } from "@/lib/pixelArtScaling";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbtEntries, getCrubTechLayerSplitSectionCount } from "@/lib/nbtExport";
@@ -144,7 +145,6 @@ import {
   isCrubTechBreakableValid,
   isCrubTechPushableValid,
   isFillerDisabled,
-  isSupportFillerFragile,
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
 } from "@/lib/fillerRules";
@@ -1209,7 +1209,6 @@ const Index = () => {
   const effectiveSuppressStepDirection = crubTechControlsCurrent2LayerSettings ? SuppressStepDirection.EastToWest
     : isSuppressDirectionSelectable(suppressStepDirection) ? suppressStepDirection
     : cycleSuppressStepDirection(suppressStepDirection, isSuppressDirectionSelectable);
-  const supportFillerIsFragile = isSupportFillerFragile(effectiveSupportFillerBlock);
   const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(effectiveSupportFillerBlock);
   const flatAssumeSupportFloor = shouldAssumeSupportFloor(applySupportFloorYs, BuildMode.Flat, supportMode, effectiveSupportFillerBlock);
   const sanitizeCommittedBlockEntry = useCallback((value: string) => sanitizeUserBlockEntry(value), []);
@@ -2061,7 +2060,7 @@ const Index = () => {
     enableAllSupportOption ||
     enableStepsSupportOption ||
     enableWaterSupportOption ||
-    (!supportFillerIsFragile && enableFragileSupportOption)
+    enableFragileSupportOption
   );
   const materialCountsView = useMemo(
     () => {
@@ -2232,7 +2231,7 @@ const Index = () => {
     const selectable =
       preferredSupportMode === SupportMode.None ||
       (preferredSupportMode === SupportMode.All && enableAllSupportOption) ||
-      (preferredSupportMode === SupportMode.Fragile && !supportFillerIsFragile && enableFragileSupportOption) ||
+      (preferredSupportMode === SupportMode.Fragile && enableFragileSupportOption) ||
       (preferredSupportMode === SupportMode.Steps && enableStepsSupportOption) ||
       (preferredSupportMode === SupportMode.Water && enableWaterSupportOption);
     setResolvedSupportMode(selectable ? preferredSupportMode : SupportMode.None);
@@ -2246,7 +2245,6 @@ const Index = () => {
     enableFragileSupportOption,
     enableWaterSupportOption,
     preferredSupportMode,
-    supportFillerIsFragile,
   ]);
 
   const customBlocksByBase = useMemo(() => buildCustomBlocksByBase(customColors), [customColors]);
@@ -3416,23 +3414,18 @@ const Index = () => {
   }, [showWaterSideSupportWarning, effectiveSupportFillerBlock, supportFillerDisabled]);
   const fragileSupportOverrideWarning = useMemo<ShapeWarning | null>(() => {
     if (!imageValid || !fragileSupportOverrideNeedStatsDisplay || crubTechControlsActive2LayerSettings) return null;
+    if (effectiveBuildMode === BuildMode.Flat && effectiveApplySupportFloorYs) return null;
     if (supportMode === SupportMode.None) return null;
 
-    const warningLines: string[] = [];
-
-    for (const [blockId, rule] of FRAGILE_SUPPORT_RULES) {
-      if ((fragileSupportOverrideNeedStatsDisplay.overrideCounts[blockId] ?? 0) <= 0) continue;
-      warningLines.push(messages.preview.fragileSupportOverrideWarning(blockId, rule.validSupportBlocks));
-    }
-
-    return warningLines.length > 0
-      ? { text: warningLines.join("\n\n"), invalid: false }
-      : null;
+    const warning = messages.preview.fragileSupportOverrideWarning(fragileSupportOverrideNeedStatsDisplay.overrideCounts, FRAGILE_SUPPORT_RULES);
+    return warning ? { ...warning, invalid: false } : null;
   }, [
     fragileSupportOverrideNeedStatsDisplay,
     imageValid,
     crubTechControlsActive2LayerSettings,
     supportMode,
+    effectiveBuildMode,
+    effectiveApplySupportFloorYs,
   ]);
   const vsFillerWarning = useMemo<ShapeWarning | null>(() => {
     type VsEntry = {
@@ -3517,6 +3510,13 @@ const Index = () => {
     effectiveShadeFillerBlock,
   ]);
 
+  const placementWarnings = useMemo(() => {
+    if (!imageValid) return [];
+    return getPlacementWarnings(activeOutputTileAnalyses.flatMap(tile => tile.supportShape ? [tile.supportShape] : []),
+      colorBlockSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings)
+      .map(({ kind, blocks, invalid, support }) => ({ ...messages.preview.placementWarning(kind, blocks, support), invalid }));
+  }, [imageValid, activeOutputTileAnalyses, colorBlockSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings]);
+
   // Keep small-image notices and counts together; larger jobs use their live loading state.
   const previewAnalysisDisplay = useHeldValueWhilePending(
     {
@@ -3529,6 +3529,7 @@ const Index = () => {
       liftSupportWarning,
       waterSideSupportWarning,
       fragileSupportOverrideWarning,
+      placementWarnings,
       vsFillerWarning,
       lateFillerWarning,
       showNorthRowAlignmentInfo,
@@ -3806,7 +3807,6 @@ const Index = () => {
             enableStepsSupportOption={enableStepsSupportOption}
             enableWaterSupportOption={enableWaterSupportOption}
             enableFragileSupportOption={enableFragileSupportOption}
-            supportFillerIsFragile={supportFillerIsFragile}
             buildSettingsProps={toolbarBuildSettingsProps}
           />
 

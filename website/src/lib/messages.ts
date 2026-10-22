@@ -149,10 +149,18 @@ function getLookupValue<T extends string>(lookup: Record<T, string>, key: T | st
 }
 
 function formatBlockIdList(blockIds: readonly string[]): string {
-  const formatted = [...blockIds];
-  if (formatted.length === 0) return "[]";
-  if (formatted.length <= 3) return `[${formatted.join(", ")}]`;
-  return `[${formatted[0]}, ${formatted[1]}, ... +${formatted.length - 2}]`;
+  return `[${blockIds.join(", ")}]`;
+}
+
+// Returns the text around the block list too, so the banner can fit the list to its width.
+function formatListedBlocks(template: string, key: string, blocks: readonly string[], values: TemplateValues = {}) {
+  const text = formatTemplate(template, { ...values, [key]: blocks.length === 1 ? blocks[0] : formatBlockIdList(blocks) });
+  const at = template.indexOf(`{${key}}`);
+  if (blocks.length < 2 || at < 0) return { text };
+  return { text, listedBlocks: {
+    before: formatTemplate(template.slice(0, at), values), blocks, after: formatTemplate(template.slice(at + key.length + 2), values),
+    summary: formatTemplate(catalog.preview.supportBlockListCount, { count: blocks.length }),
+  } };
 }
 
 function formatDimensionChangeAxis(
@@ -355,7 +363,6 @@ export const messages = {
     get growthCoverInvalid(): string { return catalog.fillers.growthCoverInvalid; },
     heading: catalog.fillers.heading,
     floorAttachmentWarning: catalog.fillers.floorAttachmentWarning,
-    supportRequiresSupportWarning: catalog.fillers.supportRequiresSupportWarning,
     fixFloorAttachment: catalog.fillers.fixFloorAttachment,
     headingTooltip: catalog.fillers.headingTooltip,
     supportLabel: catalog.fillers.supportLabel,
@@ -482,6 +489,14 @@ export const messages = {
     convertButtonLayerSplitTitle: catalog.upload.convertButtonLayerSplitTitle,
   },
   preview: {
+    placementWarning(kind: keyof MessageCatalog["preview"]["placementWarnings"], blocks: readonly string[], support?: string) {
+      return {
+        ...formatListedBlocks(catalog.preview.placementWarnings[kind], "blocks", blocks),
+        detail: [
+          support && formatTemplate(catalog.preview.invalidSupportDetail, { support }),
+        ].filter(Boolean).join("\n") || undefined,
+      };
+    },
     liftSupportWarning(support: string, count: number, blocks: readonly string[]) {
       return { text: formatPlural(catalog.preview.liftSupport, count, { support }),
         detail: formatTemplate(catalog.preview.liftSupportDetail, { blocks: blocks.join(", ") }) };
@@ -519,17 +534,17 @@ export const messages = {
         { value },
       );
     },
-    fragileSupportOverrideWarning(blockId: string, validSupportBlocks: readonly string[]): string {
-      if (validSupportBlocks.length === 1) {
-        return formatTemplate(catalog.preview.fragileSupportOverrideWarningSingle, {
-          blockId,
-          support: validSupportBlocks[0],
-        });
+    fragileSupportOverrideWarning(counts: Readonly<Record<string, number>>, rules: ReadonlyMap<string, { validSupportBlocks: readonly string[] }>) {
+      const affected = rules.entries().filter(([id]) => counts[id] > 0).toArray();
+      if (!affected.length) return null;
+      const [blockId, { validSupportBlocks: supports }] = affected[0];
+      if (affected.some(([, { validSupportBlocks: other }]) => other !== supports &&
+        (other.length !== supports.length || !other.every(id => supports.includes(id))))) {
+        const blocks = affected.map(([id]) => id);
+        return formatListedBlocks(catalog.preview.fragileSupportOverrideWarningMixed, "blockId", blocks);
       }
-      return formatTemplate(catalog.preview.fragileSupportOverrideWarning, {
-        blockId,
-        supports: formatBlockIdList(validSupportBlocks),
-      });
+      return formatListedBlocks(affected.length === 1 ? catalog.preview.fragileSupportOverrideWarning : catalog.preview.fragileSupportOverrideWarningShared,
+        "supports", supports, { blockId, count: affected.length });
     },
     vsFillerInvalid(label: string, value: string, noobPixels: number): string {
       return formatPlural(catalog.preview.vsFillerInvalid, noobPixels, {

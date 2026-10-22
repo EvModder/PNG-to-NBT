@@ -8,9 +8,11 @@
  * - isWithinShapeBounds()
  * - shouldIncludeFragileSupportCell()
  * - resolveShapeFiller()
+ * - resolveShapeBlockName()
  *
  * Callers:
  * - src/lib/nbtExport.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeBlocksStaircase.ts
@@ -24,7 +26,22 @@ import { resolveAssignedFillerName } from "@/lib/fillerRules";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
+import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, resolveShapeColorBlockName, type ColorBlockSelections } from "@/lib/blockId";
+
+// Resolve actual exports, including omitted floors, optional supports and soil overrides.
+// Callers:
+// - src/lib/placementWarnings.ts
+export function resolveShapeBlockName(
+  part: ShapePart, coord: number, selections: ColorBlockSelections,
+  fillers: Map<FillerRole, string>, assumeFloor: boolean,
+): string {
+  const cell = part.cells.get(coord);
+  if (!cell) return "";
+  if (isShapeColorCell(cell)) return resolveShapeColorBlockName(cell, selections, fillers) ?? "";
+  const [x, y, z] = parseShapeCoordKey(coord);
+  if (!isWithinShapeBounds({ x, y, z }, part.bounds, assumeFloor ? part.supportFloorYs : NO_SUPPORT_FLOORS)) return "";
+  return resolveShapeFiller(part, coord, cell, selections, fillers)?.blockName ?? "";
+}
 
 // Callers:
 // - src/lib/nbtExport.ts
@@ -52,6 +69,7 @@ export function resolveShapeFiller(
 
 // Callers:
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/suppressLoadMarkers.ts
@@ -73,6 +91,7 @@ const SHAPE_COORD_Y_SIZE = 8192;
 
 // Callers:
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeBlocksStaircase.ts
@@ -85,6 +104,7 @@ export function toShapeCoordKey(x: number, y: number, z: number): ShapeCoordKey 
 
 // Callers:
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeBlocksSuppress.ts

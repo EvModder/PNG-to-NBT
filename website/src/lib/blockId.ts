@@ -21,6 +21,7 @@
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
+ * - src/lib/placementWarnings.ts
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -93,6 +94,7 @@ export function sanitizeUserBlockEntry(raw: string): string {
 // - src/lib/environmentalSupport.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
@@ -181,7 +183,9 @@ export function toDisplayName(blockName: string): string {
 
 // Callers:
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeModel.ts
 export function resolveShapeColorBlockName(
   color: ShapeColorRef,
   selections: ColorBlockSelections,
