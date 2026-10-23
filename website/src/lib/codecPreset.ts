@@ -8,7 +8,6 @@
  * - src/Index.tsx
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { STORAGE_KEYS } from "@/data/storageKeys";
 import { BUILTIN_PRESET_NAMES, getBuiltinPreset, type BlockPreset } from "@/data/presets";
@@ -17,7 +16,7 @@ import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 import { decodeUrlParamBytes, encodeUrlParamBytes } from "@/lib/codecUrlParam";
 import { getSelectedCustomColorBlock } from "@/utils/customColors";
-import { isBlockAvailable } from "@/lib/minecraftVersion";
+import { getMinecraftCatalog } from "@/lib/minecraftVersion";
 import { normalizeBlockFallbacks } from "@/lib/presetFallbacks";
 
 interface SharedSettings {
@@ -68,8 +67,8 @@ const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 // future-version additions cannot shift older indices. Renames, removals, same-version
 // additions and moves between color/visibility lists can still break affected links.
 function getPresetCatalog(dataVersion: number) {
-  const filter = (row: readonly string[]) => row.filter(block => isBlockAvailable(block, dataVersion)).sort();
-  return { blocks: BASE_COLORS.map(color => filter(color.blocks)), excluded: EXCLUDED_BLOCKS.map(filter) };
+  const catalog = getMinecraftCatalog(dataVersion);
+  return { blocks: catalog.blocks.map(row => row.toSorted()), excluded: catalog.excluded.map(row => row.toSorted()) };
 }
 type PresetCatalog = ReturnType<typeof getPresetCatalog>;
 

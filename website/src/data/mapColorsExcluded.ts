@@ -3,13 +3,12 @@
  * - EXCLUDED_BLOCKS
  *
  * Callers:
- * - src/lib/codecPreset.ts
  * - src/lib/minecraftVersion.ts
  */
 import { BASE_COLORS } from "./mapColors";
 
-/* Exclusion documentation:
- * - Pattern-excluded obtainable omissions:
+/* Hidden choices (available through "Show excluded blocks") and full omissions:
+ * - Pattern-based exclusions:
  *   - Chiseled and cracked variants (including waxed/oxidized copper).
  *   - `.*_stairs`, `.*_slab`
  *   - `.*_shulker_box`, except `purple_shulker_box`
@@ -21,7 +20,7 @@ import { BASE_COLORS } from "./mapColors";
  *   - Standing signs only; wall/hanging signs are omitted entirely because their support is not generated.
  *   - `.*_stained_glass_pane`
  *   - `.*lightning_rod`
- * - Explicit unobtainable/admin-only exclusions:
+ * - Unobtainable blocks intentionally excluded from the default list:
  *   - `barrier`, `structure_void`, `light`, `bedrock`
  *   - `jigsaw`, `structure_block`
  *   - `test_block`, `test_instance_block`, `end_gateway`, `suspicious_sand`, `suspicious_gravel`
@@ -30,7 +29,7 @@ import { BASE_COLORS } from "./mapColors";
  *   - `spawner`, `trial_spawner`, `vault`
  *   - `budding_amethyst`, and small/medium/large amethyst buds
  *   - `infested_*`
- * - Explicit obtainable but intentionally omitted exclusions:
+ * - Obtainable blocks intentionally excluded from the default list:
  *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`, `lily_pad`, `shulker_box`, `end_portal_frame`
  *   - `grindstone`, `brewing_stand`, `heavy_core`
  *   - `player_head`, `zombie_head`, `skeleton_skull`, `wither_skeleton_skull`, `creeper_head`, `dragon_head`, `piglin_head`
@@ -40,14 +39,14 @@ import { BASE_COLORS } from "./mapColors";
  *   - `enchanting_table`, `respawn_anchor`, `creaking_heart`
  *   - Copper bulbs/chests/statues, gilded blackstone, calibrated sculk sensors, and upward pistons.
  *   - Conventional one-block flowers other than poppy (all share plant map color).
- *   - Fully grown wheat (`age=7` only), and dried ghast.
+ *   - Mature wheat, sweet berry bushes, azaleas, and dried ghast.
+ *   - Living coral, saplings, damaged anvils and shelves.
  *   - Chorus plants and dead chorus flowers (`age=5`; survival placement starts at age=0).
  *   - Shelf mushroom is a rare-color placeholder; its required side support is not generated.
  *   - Rails, lever, torches, redstone wire, repeaters and comparators (require support).
- * - Doors, banners, potted plants, candle-cakes, and living coral are omitted entirely.
- * - Saplings, azaleas, mangrove propagules, other unrepresented crops, and filled cauldrons are omitted entirely.
- * - Damaged anvils, bamboo, cactus, sugar cane, kelp, seagrass, and frogspawn are omitted entirely.
- * - Shelves are omitted entirely; ordinary wood blocks provide the same map colors.
+ * - Doors, banners, potted plants, candle-cakes, fruit stems, torchflower crops and filled cauldrons are omitted entirely.
+ * - Cactus, sugar cane, kelp, seagrass and frogspawn are omitted entirely.
+ * - Carrots, potatoes and beetroots are omitted entirely; their placement/harvesting costs offer no useful advantage.
  * - Weathering copper is omitted entirely unless waxed or fully oxidized; ores, raw copper and torches do not oxidize.
  *
  * These categories are enforced by `scripts/excluded-blocks.mjs` and audited by
@@ -60,6 +59,7 @@ import { BASE_COLORS } from "./mapColors";
 // filtered by Minecraft DataVersion. Register future blocks in BLOCK_INTRODUCTIONS.
 // Display reordering is safe; additions without a version cutoff, removals, renames
 // and moves between color/visibility lists can still break affected links.
+// TODO: Generate growth-blocking covers and adjacent water for living coral.
 const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   0: [
     "rail", "powered_rail", "detector_rail", "activator_rail", "lever[face=floor]",
@@ -84,10 +84,11 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "birch_sign",
     "birch_slab", "birch_stairs",
     "birch_trapdoor",
+    "birch_shelf",
   ],
   5: ["chiseled_packed_ice", "packed_ice_brick_slab", "packed_ice_brick_stairs", "packed_ice_brick_wall"],
-  6: ["brewing_stand", "grindstone[face=floor]", "heavy_core", "iron_trapdoor"],
-  7: ["dandelion", "golden_dandelion", "blue_orchid", "allium", "azure_bluet", "red_tulip", "orange_tulip", "white_tulip", "pink_tulip", "oxeye_daisy", "cornflower", "lily_of_the_valley", "wither_rose", "torchflower", "lily_pad"],
+  6: ["chipped_anvil", "damaged_anvil", "brewing_stand", "grindstone[face=floor]", "heavy_core", "iron_trapdoor", "pale_oak_sapling", "poplar_sapling"],
+  7: ["oak_sapling", "spruce_sapling", "birch_sapling", "jungle_sapling", "acacia_sapling", "dark_oak_sapling", "mangrove_propagule[waterlogged=false]", "azalea", "flowering_azalea", "dandelion", "golden_dandelion", "blue_orchid", "allium", "azure_bluet", "red_tulip", "orange_tulip", "white_tulip", "pink_tulip", "oxeye_daisy", "cornflower", "lily_of_the_valley", "wither_rose", "torchflower", "lily_pad", "sweet_berry_bush[age=3]"],
   8: ["white_wool_slab", "white_wool_stairs", "white_concrete_slab", "white_concrete_stairs", "white_shulker_box"],
   9: [
     "infested_chiseled_stone_bricks",
@@ -109,6 +110,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "jungle_sign",
     "jungle_slab", "jungle_stairs",
     "jungle_trapdoor",
+    "jungle_shelf",
   ],
   11: [
     "crafter",
@@ -140,6 +142,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "vault",
   ],
   13: [
+    "bamboo_sapling",
     "crafting_table",
     "cartography_table",
     "fletching_table",
@@ -157,6 +160,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "oak_slab",
     "petrified_oak_slab", "oak_stairs",
     "oak_trapdoor",
+    "oak_shelf",
   ],
   14: [
     "chiseled_quartz_block", "quartz_slab", "quartz_stairs",
@@ -169,6 +173,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "pale_oak_sign",
     "pale_oak_slab", "pale_oak_stairs",
     "pale_oak_trapdoor",
+    "pale_oak_shelf",
   ],
   15: [
     "orange_wool_slab", "orange_wool_stairs", "orange_concrete_slab", "orange_concrete_stairs", "orange_shulker_box",
@@ -177,6 +182,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "acacia_sign",
     "acacia_slab", "acacia_stairs",
     "acacia_trapdoor",
+    "acacia_shelf",
     "chiseled_red_sandstone", "red_sandstone_slab", "cut_red_sandstone_slab", "red_sandstone_stairs",
     "red_sandstone_wall",
     "smooth_red_sandstone_slab", "smooth_red_sandstone_stairs",
@@ -190,29 +196,29 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   ],
   16: ["magenta_wool_slab", "magenta_wool_stairs", "magenta_concrete_slab", "magenta_concrete_stairs", "magenta_shulker_box", "purpur_slab", "purpur_stairs"],
   17: ["light_blue_wool_slab", "light_blue_wool_stairs", "light_blue_concrete_slab", "light_blue_concrete_stairs", "light_blue_shulker_box"],
-  18: ["yellow_wool_slab", "yellow_wool_stairs", "yellow_concrete_slab", "yellow_concrete_stairs", "yellow_shulker_box", "bamboo_fence", "bamboo_fence_gate", "bamboo_sign", "bamboo_slab", "bamboo_stairs", "bamboo_mosaic", "bamboo_mosaic_slab", "bamboo_mosaic_stairs", "bamboo_trapdoor", "sulfur_slab", "sulfur_stairs", "sulfur_wall", "polished_sulfur_slab", "polished_sulfur_stairs", "polished_sulfur_wall", "sulfur_brick_slab", "sulfur_brick_stairs", "sulfur_brick_wall", "chiseled_sulfur", "wheat[age=7]"],
+  18: ["yellow_wool_slab", "yellow_wool_stairs", "yellow_concrete_slab", "yellow_concrete_stairs", "yellow_shulker_box", "horn_coral_block", "horn_coral[waterlogged=false]", "horn_coral_fan[waterlogged=false]", "bamboo_fence", "bamboo_fence_gate", "bamboo_sign", "bamboo_slab", "bamboo_stairs", "bamboo_mosaic", "bamboo_mosaic_slab", "bamboo_mosaic_stairs", "bamboo_trapdoor", "bamboo_shelf", "sulfur_slab", "sulfur_stairs", "sulfur_wall", "polished_sulfur_slab", "polished_sulfur_stairs", "polished_sulfur_wall", "sulfur_brick_slab", "sulfur_brick_stairs", "sulfur_brick_wall", "chiseled_sulfur", "wheat[age=7]"],
   19: ["lime_wool_slab", "lime_wool_stairs", "lime_concrete_slab", "lime_concrete_stairs", "lime_shulker_box"],
-  20: ["pink_wool_slab", "pink_wool_stairs", "pink_concrete_slab", "pink_concrete_stairs", "pink_shulker_box"],
+  20: ["pink_wool_slab", "pink_wool_stairs", "pink_concrete_slab", "pink_concrete_stairs", "pink_shulker_box", "brain_coral_block", "brain_coral[waterlogged=false]", "brain_coral_fan[waterlogged=false]", "cherry_sapling"],
   21: ["dried_ghast", "gray_wool_slab", "gray_wool_stairs", "gray_concrete_slab", "gray_concrete_stairs", "gray_shulker_box"],
-  22: ["light_gray_wool_slab", "light_gray_wool_stairs", "light_gray_concrete_slab", "light_gray_concrete_stairs", "light_gray_shulker_box", "poplar_fence", "poplar_fence_gate", "poplar_sign", "poplar_slab", "poplar_stairs", "poplar_trapdoor", "jigsaw", "structure_block", "test_block"],
+  22: ["light_gray_wool_slab", "light_gray_wool_stairs", "light_gray_concrete_slab", "light_gray_concrete_stairs", "light_gray_shulker_box", "poplar_fence", "poplar_fence_gate", "poplar_sign", "poplar_slab", "poplar_stairs", "poplar_trapdoor", "poplar_shelf", "jigsaw", "structure_block", "test_block"],
   23: ["calibrated_sculk_sensor", "cyan_wool_slab", "cyan_wool_stairs", "cyan_concrete_slab", "cyan_concrete_stairs", "cyan_shulker_box", "prismarine_slab", "prismarine_stairs", "prismarine_wall"],
-  24: ["large_amethyst_bud", "medium_amethyst_bud", "small_amethyst_bud", "budding_amethyst", "chorus_plant", "chorus_flower[age=5]", "purple_wool_slab", "purple_wool_stairs", "purple_concrete_slab", "purple_concrete_stairs", "shulker_box", "repeating_command_block"],
-  25: ["blue_wool_slab", "blue_wool_stairs", "blue_concrete_slab", "blue_concrete_stairs", "blue_shulker_box"],
-  26: ["brown_wool_slab", "brown_wool_stairs", "brown_concrete_slab", "brown_concrete_stairs", "brown_shulker_box", "command_block", "dark_oak_fence", "dark_oak_fence_gate", "dark_oak_sign", "dark_oak_slab", "dark_oak_stairs", "dark_oak_trapdoor"],
+  24: ["large_amethyst_bud", "medium_amethyst_bud", "small_amethyst_bud", "budding_amethyst", "chorus_plant", "chorus_flower[age=5]", "purple_wool_slab", "purple_wool_stairs", "purple_concrete_slab", "purple_concrete_stairs", "shulker_box", "bubble_coral_block", "bubble_coral[waterlogged=false]", "bubble_coral_fan[waterlogged=false]", "repeating_command_block"],
+  25: ["blue_wool_slab", "blue_wool_stairs", "blue_concrete_slab", "blue_concrete_stairs", "blue_shulker_box", "tube_coral_block", "tube_coral[waterlogged=false]", "tube_coral_fan[waterlogged=false]"],
+  26: ["brown_wool_slab", "brown_wool_stairs", "brown_concrete_slab", "brown_concrete_stairs", "brown_shulker_box", "command_block", "dark_oak_fence", "dark_oak_fence_gate", "dark_oak_sign", "dark_oak_slab", "dark_oak_stairs", "dark_oak_trapdoor", "dark_oak_shelf"],
   27: ["green_wool_slab", "green_wool_stairs", "green_concrete_slab", "green_concrete_stairs", "green_shulker_box", "end_portal_frame", "chain_command_block"],
-  28: ["cinnabar_slab", "cinnabar_stairs", "cinnabar_wall", "polished_cinnabar_slab", "polished_cinnabar_stairs", "polished_cinnabar_wall", "cinnabar_brick_slab", "cinnabar_brick_stairs", "cinnabar_brick_wall", "chiseled_cinnabar", "enchanting_table", "red_wool_slab", "red_wool_stairs", "red_concrete_slab", "red_concrete_stairs", "red_shulker_box", "mangrove_fence", "mangrove_fence_gate", "mangrove_sign", "mangrove_slab", "mangrove_stairs", "mangrove_trapdoor", "brick_slab", "brick_stairs", "brick_wall"],
+  28: ["cinnabar_slab", "cinnabar_stairs", "cinnabar_wall", "polished_cinnabar_slab", "polished_cinnabar_stairs", "polished_cinnabar_wall", "cinnabar_brick_slab", "cinnabar_brick_stairs", "cinnabar_brick_wall", "chiseled_cinnabar", "enchanting_table", "red_wool_slab", "red_wool_stairs", "red_concrete_slab", "red_concrete_stairs", "red_shulker_box", "fire_coral_block", "fire_coral[waterlogged=false]", "fire_coral_fan[waterlogged=false]", "mangrove_fence", "mangrove_fence_gate", "mangrove_sign", "mangrove_slab", "mangrove_stairs", "mangrove_trapdoor", "mangrove_shelf", "brick_slab", "brick_stairs", "brick_wall"],
   29: ["gilded_blackstone", "blackstone_slab", "blackstone_stairs", "blackstone_wall", "polished_blackstone_slab", "polished_blackstone_stairs", "polished_blackstone_wall", "chiseled_polished_blackstone", "cracked_polished_blackstone_bricks", "polished_blackstone_brick_slab", "polished_blackstone_brick_stairs", "polished_blackstone_brick_wall", "black_wool_slab", "black_wool_stairs", "black_concrete_slab", "black_concrete_stairs", "black_shulker_box", "dragon_egg", "end_portal", "end_gateway", "respawn_anchor"],
   31: ["prismarine_brick_slab", "prismarine_brick_stairs", "dark_prismarine_slab", "dark_prismarine_stairs"],
-  34: ["spruce_fence", "spruce_fence_gate", "spruce_sign", "spruce_slab", "spruce_stairs", "spruce_trapdoor"],
+  34: ["spruce_fence", "spruce_fence_gate", "spruce_sign", "spruce_slab", "spruce_stairs", "spruce_trapdoor", "spruce_shelf"],
   35: ["cracked_nether_bricks", "chiseled_nether_bricks", "nether_brick_fence", "nether_brick_slab", "nether_brick_stairs", "nether_brick_wall", "red_nether_brick_slab", "red_nether_brick_stairs", "red_nether_brick_wall"],
-  36: ["cherry_fence", "cherry_fence_gate", "cherry_sign", "cherry_slab", "cherry_stairs", "cherry_trapdoor"],
+  36: ["cherry_fence", "cherry_fence_gate", "cherry_sign", "cherry_slab", "cherry_stairs", "cherry_trapdoor", "cherry_shelf"],
   37: ["chiseled_resin_bricks", "resin_brick_slab", "resin_brick_stairs", "resin_brick_wall"],
   // TODO: Generate shelf mushroom's sturdy side support. Intentionally offered as
   // a rare-color placeholder; exported placements do not yet ensure its survival.
   40: ["shelf_mushroom"],
   43: ["polished_tuff_slab", "polished_tuff_stairs", "polished_tuff_wall", "chiseled_tuff_bricks", "tuff_brick_slab", "tuff_brick_stairs", "tuff_brick_wall", "chiseled_tuff", "tuff_slab", "tuff_stairs", "tuff_wall"],
   44: ["mud_brick_slab", "mud_brick_stairs", "mud_brick_wall", "waxed_exposed_chiseled_copper", "waxed_exposed_cut_copper_slab", "waxed_exposed_cut_copper_stairs", "waxed_exposed_copper_grate", "waxed_exposed_copper_trapdoor", "waxed_exposed_copper_bulb", "waxed_exposed_lightning_rod", "waxed_exposed_copper_chest", "waxed_exposed_copper_golem_statue"],
-  53: ["crimson_fence", "crimson_fence_gate", "crimson_sign", "crimson_slab", "crimson_stairs", "crimson_trapdoor"],
+  53: ["crimson_fence", "crimson_fence_gate", "crimson_sign", "crimson_slab", "crimson_stairs", "crimson_trapdoor", "crimson_shelf"],
   55: ["waxed_oxidized_chiseled_copper", "waxed_oxidized_cut_copper_slab", "waxed_oxidized_cut_copper_stairs", "waxed_oxidized_copper_grate", "waxed_oxidized_copper_trapdoor", "waxed_oxidized_copper_bulb", "waxed_oxidized_lightning_rod", "waxed_oxidized_copper_chest", "waxed_oxidized_copper_golem_statue", "oxidized_chiseled_copper", "oxidized_cut_copper_slab", "oxidized_cut_copper_stairs", "oxidized_copper_grate", "oxidized_copper_trapdoor", "oxidized_copper_bulb", "oxidized_lightning_rod", "oxidized_copper_chest", "oxidized_copper_golem_statue"],
   56: [
     "warped_fence",
@@ -220,6 +226,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
     "warped_sign",
     "warped_slab", "warped_stairs",
     "warped_trapdoor",
+    "warped_shelf",
     "waxed_weathered_chiseled_copper", "waxed_weathered_cut_copper_slab", "waxed_weathered_cut_copper_stairs",
     "waxed_weathered_copper_grate",
     "waxed_weathered_copper_trapdoor", "waxed_weathered_copper_bulb",

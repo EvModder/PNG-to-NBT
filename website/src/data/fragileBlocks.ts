@@ -19,6 +19,11 @@ const DIRT_SUPPORTED_FLOWERS = [
   "cornflower", "lily_of_the_valley", "torchflower",
 ] as const;
 
+const SAPLINGS = [
+  "oak_sapling", "spruce_sapling", "birch_sapling", "jungle_sapling", "acacia_sapling",
+  "dark_oak_sapling", "cherry_sapling", "pale_oak_sapling", "poplar_sapling",
+] as const;
+
 const FRAGILE_BLOCKS = new Set([
     // Carpets
   "white_carpet", "orange_carpet", "magenta_carpet", "light_blue_carpet",
@@ -58,7 +63,8 @@ const FRAGILE_BLOCKS = new Set([
 
     // Plants / vegetation with placement conditions
   "pink_petals", "wildflowers", "fern", "short_grass", "short_dry_grass", "tall_dry_grass", "dead_bush", "wheat",
-  "lily_pad",
+  "lily_pad", "azalea", "flowering_azalea", "sweet_berry_bush",
+  ...SAPLINGS, "mangrove_propagule", "bamboo_sapling",
   "bush", "firefly_bush", "red_shrub", "big_dripleaf",
   "crimson_roots", "warped_roots", "nether_sprouts",
   "twisting_vines",
@@ -69,8 +75,12 @@ const FRAGILE_BLOCKS = new Set([
   ...DIRT_SUPPORTED_FLOWERS, "wither_rose", "cactus_flower",
 
     // Dry coral plants and floor fans need a sturdy top face, not soil.
+    // Living variants also need adjacent water; a waterlogged support can supply it.
+    // TODO: Generate hydration separately from attachment, preserving assumed platforms.
   "dead_tube_coral", "dead_brain_coral", "dead_bubble_coral", "dead_fire_coral", "dead_horn_coral",
   "dead_tube_coral_fan", "dead_brain_coral_fan", "dead_bubble_coral_fan", "dead_fire_coral_fan", "dead_horn_coral_fan",
+  "tube_coral", "brain_coral", "bubble_coral", "fire_coral", "horn_coral",
+  "tube_coral_fan", "brain_coral_fan", "bubble_coral_fan", "fire_coral_fan", "horn_coral_fan",
 
     // Other blocks with placement conditions
   "fire", "soul_fire", "snow", "pointed_dripstone", "lantern", "soul_lantern",
@@ -124,6 +134,12 @@ export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ["soul_fire", { validSupportBlocks: ["soul_sand", "soul_soil"], replacementBlock: "soul_soil" }],
   ["nether_wart", { validSupportBlocks: ["soul_sand"], replacementBlock: "soul_sand" }],
   ["wheat", { validSupportBlocks: ["farmland"], replacementBlock: "farmland" }],
+  ["azalea", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "clay", "farmland"], replacementBlock: "dirt" }],
+  ["flowering_azalea", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "clay", "farmland"], replacementBlock: "dirt" }],
+  ["sweet_berry_bush", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "farmland"], replacementBlock: "dirt" }],
+  ...SAPLINGS.map(block => [block, { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "farmland"], replacementBlock: "dirt" }] as const),
+  ["mangrove_propagule", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "farmland", "clay"], replacementBlock: "dirt" }],
+  ["bamboo_sapling", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "sand", "red_sand", "gravel", "suspicious_sand", "suspicious_gravel", "bamboo", "bamboo_sapling"], replacementBlock: "dirt" }],
   // Low-light-capable substrates only. This intentionally does not try to model every possible
   // full-top support block mushrooms can use at low light.
   ["brown_mushroom", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],

@@ -11,6 +11,7 @@ import { encodeFullPreset, decodeFullPreset, loadPresets } from "@/lib/codecPres
 import { decodeUrlParamBytes, encodeUrlParamBytes } from "@/lib/codecUrlParam";
 import { decodeColorGrid, encodeColorGrid } from "@/lib/codecColorGrid";
 import { resolveAssignedColorBlock } from "@/lib/blockId";
+import { getMinecraftCatalog } from "@/lib/minecraftVersion";
 import { Shade, type ColorGrid } from "@/types/color";
 import { removeCustomColorBlock } from "@/utils/customColors";
 
@@ -106,6 +107,23 @@ const savedVersions = await Promise.all(versions.flatMap(minecraftVersion => [st
 for (const minecraftVersion of versions) {
   const expected = { ...withFallbacks, minecraftVersion };
   savedVersions.push({ expected, url: await roundTrip(expected) });
+}
+// Historical color rows use the same indexed catalog as their version's UI.
+for (const minecraftVersion of versions) {
+  const catalog = getMinecraftCatalog(MINECRAFT_VERSIONS[minecraftVersion].dataVersion);
+  const displayOrder = structuredClone(catalog);
+  for (const [id, row] of catalog.excluded.entries()) {
+    for (const block of row.filter(block => block.endsWith("_shelf") || block === "pale_oak_sapling")) {
+      const expected = { ...standard, minecraftVersion, blockPreset: {
+        name: "Historical colors", selectedBlocks: { ...standard.blockPreset.selectedBlocks, [id]: block },
+      } };
+      const url = await roundTrip(expected);
+      const bytes = await decodeUrlParamBytes(url.replace(/Z([012])/g, (_, digit) => "Z-_"[Number(digit)]));
+      assert(!new TextDecoder().decode(bytes!).includes(block), `${minecraftVersion}: ${block} must use an index`);
+      savedVersions.push({ expected, url });
+    }
+  }
+  assert.deepEqual(catalog, displayOrder, "Preset sorting must not change cached UI order");
 }
 // Cover every indexed block, not just the built-in presets' selections.
 for (const rows of [originalRows, originalExcluded]) {

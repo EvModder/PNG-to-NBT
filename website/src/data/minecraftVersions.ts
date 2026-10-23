@@ -61,7 +61,9 @@ export const BLOCK_INTRODUCTIONS: readonly (readonly [pattern: RegExp, dataVersi
   [/^dried_ghast$/, 4435, "1.21.6"],
   [/copper_(bars|chain|chest|golem_statue|lantern)$/, 4554, "1.21.9"],
   [/^(copper_torch|copper_wall_torch)$/, 4554, "1.21.9"],
-  [/_(lightning_rod|shelf)$/, 4554, "1.21.9"],
+  [/_lightning_rod$/, 4554, "1.21.9"],
+  // Shelves are offered only from 1.21.11, when they gained species-specific map colors.
+  [/_shelf$/, 4671, "1.21.11"],
   [/^(potted_)?golden_dandelion$/, 4786, "26.1"],
   [/(^|_)(cinnabar|sulfur)(_|$)/, 4903, "26.2"],
   [/(^|_)poplar(_|$)/, 5023, "26.3"],

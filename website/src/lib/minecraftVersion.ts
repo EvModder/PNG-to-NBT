@@ -36,7 +36,6 @@ export function getVersionedBlockName(block: string, dataVersion: number): strin
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/nbtExport.ts
-// - src/lib/codecPreset.ts
 export function isBlockAvailable(block: string, dataVersion: number): boolean {
   const id = blockId(block);
   if (id.includes(":")) return true; // Custom namespaces are outside the vanilla catalog.
@@ -45,14 +44,20 @@ export function isBlockAvailable(block: string, dataVersion: number): boolean {
   );
 }
 
+const PRE_1_21_5_COLORS: Readonly<Record<string, number>> = {
+  pale_oak_leaves: 49,
+  closed_eyeblossom: 49,
+  pale_oak_sapling: 14,
+};
+
 function buildCatalog(dataVersion: number): { blocks: readonly (readonly string[])[]; excluded: readonly (readonly string[])[] } {
   const adapt = (rows: readonly (readonly string[])[]) => {
     const result = rows.map(row => row.filter(block => isBlockAvailable(block, dataVersion))
       .map(block => getVersionedBlockName(block, dataVersion)));
     if (dataVersion < 4325) {
-      const moved = result[6].filter(block => /^(pale_oak_leaves|closed_eyeblossom)$/.test(block));
+      const moved = result[6].filter(block => PRE_1_21_5_COLORS[block] !== undefined);
       result[6] = result[6].filter(block => !moved.includes(block));
-      result[49].push(...moved);
+      for (const block of moved) result[PRE_1_21_5_COLORS[block]].push(block);
     }
     return result;
   };
@@ -67,6 +72,7 @@ const catalogs = new Map<number, ReturnType<typeof buildCatalog>>(Object.values(
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
 // - src/lib/previewImageEdits.ts
+// - src/lib/codecPreset.ts
 export function getMinecraftCatalog(dataVersion: number = MINECRAFT_VERSIONS[DEFAULT_MINECRAFT_VERSION].dataVersion) {
   return catalogs.get(dataVersion) ?? buildCatalog(dataVersion);
 }
@@ -75,9 +81,9 @@ export function getMinecraftCatalog(dataVersion: number = MINECRAFT_VERSIONS[DEF
 // Callers:
 // - src/lib/presetFallbacks.ts
 export function isBlockCompatible(block: string, id: number, dataVersion: number): boolean {
-  const changedColor = /^(pale_oak_leaves|closed_eyeblossom)$/.test(blockId(block))
-    && !block.includes("waterlogged=true");
-  return isBlockAvailable(block, dataVersion) && (!changedColor || id === (dataVersion < 4325 ? 49 : 6));
+  const previousColor = PRE_1_21_5_COLORS[blockId(block)];
+  const changedColor = previousColor !== undefined && !block.includes("waterlogged=true");
+  return isBlockAvailable(block, dataVersion) && (!changedColor || id === (dataVersion < 4325 ? previousColor : 6));
 }
 
 // Callers:

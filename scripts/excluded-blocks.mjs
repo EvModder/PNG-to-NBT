@@ -14,19 +14,17 @@
 // - scripts/audit-mapcolors.mjs
 // - scripts/build-block-icon-files.mjs
 export const OMITTED_BLOCK_PATTERNS = [
-  /_shelf$/, // Block entities with no map-art advantage over their simpler wood alternatives.
-  /^(chipped|damaged)_anvil$/,
-  /^(bamboo|cactus|sugar_cane)$/, // Uncontrolled growth changes column height and shading.
+  /^(cactus|sugar_cane)$/, // Substrate, clearance and hydration requirements outweigh their utility.
+  /^bamboo$/, // Isolated stems require temporary bamboo placements; use covered saplings instead.
+  /^(carrots|potatoes|beetroots)$/, // Farmland and harvesting costs offer no useful map-art advantage.
   /^(kelp|seagrass|frogspawn)$/, // Water-colored alternatives needing extra placement work.
-  // Tree starts and unrepresented crops; wheat is offered only as wheat[age=7].
-  /_sapling$/,
-  /^(mangrove_propagule|azalea|flowering_azalea)$/,
-  /^(carrots|potatoes|beetroots|melon_stem|pumpkin_stem|torchflower_crop|sweet_berry_bush)$/,
+  // No good reliable way to prevent horizontal fruit growth.
+  /^(melon_stem|pumpkin_stem)$/,
+  /^torchflower_crop$/, // Matures into a different block even with a cover.
   /^(water|lava|powder_snow)_cauldron$/,
-  // Redundant transparent choices, or live coral needing unmodeled adjacent water.
+  // Redundant transparent choices.
   /^potted_/,
   /(^|_)candle_cake$/,
-  /^(tube|brain|bubble|fire|horn)_coral($|_)/,
   // Side/ceiling support is not generated, including hanging plant body blocks.
   /(^|_)wall_/,
   /_hanging_sign$/,
@@ -53,6 +51,9 @@ export const OMITTED_BLOCK_PATTERNS = [
 // - scripts/audit-mapcolors.mjs
 // - scripts/build-block-icon-files.mjs
 export const EXCLUDED_BLOCK_PATTERNS = [
+  /_shelf$/,
+  /_sapling$/,
+  /^(tube|brain|bubble|fire|horn)_coral(_block|_fan)?$/,
   /(^|_)chiseled_/,
   /(^|_)cracked_/,
   /^bamboo_mosaic($|_)/,
@@ -74,6 +75,7 @@ export const EXCLUDED_BLOCK_PATTERNS = [
 ];
 
 const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
+  "chipped_anvil", "damaged_anvil", "mangrove_propagule",
   "rail", "powered_rail", "detector_rail", "activator_rail", "lever", "torch", "soul_torch", "copper_torch", "redstone_torch", "redstone_wire", "repeater", "comparator",
   "dragon_egg",
   "nether_portal",
@@ -81,6 +83,7 @@ const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "cauldron",
   "farmland",
   "dirt_path",
+  "lily_pad",
   "shulker_box",
   "end_portal_frame",
   "grindstone",
@@ -121,6 +124,8 @@ const EXCLUDED_BLOCK_IDS_OBTAINABLE_INTENTIONAL = new Set([
   "piston",
   "sticky_piston",
   "wheat", // The catalog contains only the fully grown age=7 state.
+  "sweet_berry_bush",
+  "azalea", "flowering_azalea",
   "dried_ghast",
   "chorus_plant",
   "chorus_flower", // Exported at age=5; survival placement starts at age=0.

@@ -183,6 +183,8 @@ class Assets:
             icon = Image.new("RGBA", (16, 16))
             icon.alpha_composite(self.texture("block/chorus_plant").crop((4, 0, 12, 16)), (4, 0))
             return icon
+        if block == "bamboo_sapling":
+            return self.render("block/bamboo_sapling")
         if block in {"hopper", "cauldron"}:
             return self.render(f"block/{block}")
         if block == "heavy_core":
@@ -191,15 +193,18 @@ class Assets:
             return icon
         if block == "grindstone[face=floor]":
             return self.render("block/grindstone", "east")
-        if block == "anvil":
+        if block in {"anvil", "chipped_anvil", "damaged_anvil"}:
             # Remove interior pixels, preserving the base rim and a symmetric stem.
-            source = self.render("block/anvil", "east")
+            source = self.render(f"block/{block}", "east")
             icon = Image.new("RGBA", (16, 16))
             rows = [y for y in range(16) if y not in (2, 8)]
             columns = [x for x in range(16) if x not in (7, 8)]
             for y, source_y in enumerate(rows, 1):
                 for x, source_x in enumerate(columns, 1):
                     icon.putpixel((x, y), source.getpixel((source_x, source_y)))
+            if block != "anvil":
+                # Expose the cracked top, which an edge-on side view would hide.
+                icon.alpha_composite(self.texture(f"block/{block}_top").resize((14, 4), NEAREST), (1, 1))
             return icon
         if block == "sniffer_egg":
             return self.render("block/sniffer_egg_not_cracked", "north")
@@ -218,8 +223,12 @@ class Assets:
         if block == "end_gateway":
             # Shader-rendered block with no item model; use its vanilla portal texture.
             return self.texture("entity/end_portal/end_portal")
-        if block == "wheat[age=7]":
-            return self.render("block/wheat_stage7")
+        crop_models = {
+            "wheat[age=7]": "wheat_stage7",
+            "sweet_berry_bush[age=3]": "sweet_berry_bush_stage3",
+        }
+        if block in crop_models:
+            return self.render(f"block/{crop_models[block]}")
         if block in {"piston[facing=up]", "sticky_piston[facing=up]"}:
             suffix = "_sticky" if block.startswith("sticky_") else ""
             return self.texture(f"block/piston_top{suffix}")
@@ -252,6 +261,8 @@ class Assets:
             return self.render("block/icicle_down_tip_base").transpose(Image.Transpose.ROTATE_180)
         if block.endswith(("_wall", "_fence")):
             return self.render(f"block/{block}_post")
+        if block.endswith("_shelf"):
+            return self.render(f"block/{block}_inventory", "north")
         item = self.json("items", block)["model"]
         while "fallback" in item:
             item = item["fallback"]

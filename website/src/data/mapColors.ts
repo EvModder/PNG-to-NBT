@@ -45,7 +45,7 @@ export { Shade } from "@/types/color";
 import type { ColorRgbBase } from "@/types/color";
 
 /* Intentional omission policy (enforced/audited by `bun run audit:mapcolors`):
- * - Explicitly excluded block IDs (unobtainable):
+ * - Unobtainable blocks intentionally excluded from the default list:
  *   - `command_block`, `chain_command_block`, `repeating_command_block`
  *   - `jigsaw`, `structure_block`
  *   - `end_portal`, `reinforced_deepslate`,
@@ -54,7 +54,7 @@ import type { ColorRgbBase } from "@/types/color";
  *   - `bedrock`
  *   - `budding_amethyst`
  *   - `infested_*`
- * - Explicitly excluded block IDs (obtainable but intentionally omitted):
+ * - Obtainable blocks intentionally excluded from the default list:
  *   - `dragon_egg`, `nether_portal`, `hopper`, `cauldron`, `farmland`, `dirt_path`, `lily_pad`, `shulker_box`, `end_portal_frame`
  *   - `grindstone`, `brewing_stand`, `heavy_core`
  *   - `.*_head` and `.*_skull`
@@ -78,7 +78,9 @@ import type { ColorRgbBase } from "@/types/color";
  * depending on state (for example, `*_log[axis=x]` vs `*_log`).
  * - Twisting vines use `age=25` (sheared) to prevent natural growth from changing shading.
  * - Chorus blocks are hidden; flowers use `age=5` (dead) to prevent growth in pasted schematics.
- * - Bamboo, cactus and sugar cane are omitted entirely because their growth can change shading.
+ * - Saplings need growth-blocking covers; living coral needs waterlogged support below.
+ *   Both are hidden by default. Exports do not yet add these covers or water sources.
+ * - Bamboo stems are omitted; only covered bamboo saplings are offered.
  * - Upright icicles use `attached=true` to match floor placement; a single supported icicle neither grows nor melts.
  */
 // Callers:
@@ -150,10 +152,10 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "SNOW", r: 255, g: 255, b: 255, blocks: ["white_wool", "white_carpet", "white_concrete", "white_concrete_powder", "white_glazed_terracotta", "white_stained_glass", "powder_snow", "snow_block", "snow"] },
   { name: "CLAY", r: 164, g: 168, b: 184, blocks: ["clay"] },
   { name: "DIRT", r: 151, g: 109, b: 77, blocks: ["dirt", "coarse_dirt", "granite", "polished_granite", "packed_mud", "jungle_log", "stripped_jungle_log", "jungle_wood", "stripped_jungle_wood", "jungle_planks", "jungle_pressure_plate", "brown_mushroom_block", "rooted_dirt"] },
-  { name: "STONE", r: 112, g: 112, b: 112, blocks: ["cobblestone", "mossy_cobblestone", "stone", "stone_pressure_plate", "smooth_stone", "stone_bricks", "mossy_stone_bricks", "andesite", "polished_andesite", "gravel", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "redstone_ore", "lapis_ore", "emerald_ore", "diamond_ore", "pale_oak_log[axis=x]", "pale_oak_wood"] },
+  { name: "STONE", r: 112, g: 112, b: 112, blocks: ["cobblestone", "mossy_cobblestone", "stone", "stone_pressure_plate", "smooth_stone", "stone_bricks", "mossy_stone_bricks", "andesite", "polished_andesite", "gravel", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "redstone_ore", "lapis_ore", "emerald_ore", "diamond_ore", "acacia_log[axis=x]", "pale_oak_log[axis=x]", "pale_oak_wood"] },
   { name: "WATER", r: 64, g: 64, b: 255, blocks: ["water", "oak_leaves[waterlogged=true]", "spruce_leaves[waterlogged=true]", "birch_leaves[waterlogged=true]", "jungle_leaves[waterlogged=true]", "acacia_leaves[waterlogged=true]", "dark_oak_leaves[waterlogged=true]", "mangrove_leaves[waterlogged=true]", "azalea_leaves[waterlogged=true]", "flowering_azalea_leaves[waterlogged=true]", "cherry_leaves[waterlogged=true]", "pale_oak_leaves[waterlogged=true]", "red_poplar_leaves[waterlogged=true]", "orange_poplar_leaves[waterlogged=true]", "yellow_poplar_leaves[waterlogged=true]", "ice"] },
   { name: "WOOD", r: 143, g: 119, b: 72, blocks: ["oak_wood", "stripped_oak_wood", "oak_log", "stripped_oak_log", "oak_planks", "oak_pressure_plate", "bookshelf", "beehive", "composter", "daylight_detector", "dead_bush"] },
-  { name: "QUARTZ", r: 255, g: 252, b: 245, blocks: ["quartz_block", "quartz_bricks", "smooth_quartz", "quartz_pillar", "diorite", "polished_diorite", "pale_oak_log", "stripped_pale_oak_log", "pale_oak_planks", "pale_oak_pressure_plate", "stripped_pale_oak_wood", "sea_lantern", "target"] },
+  { name: "QUARTZ", r: 255, g: 252, b: 245, blocks: ["quartz_block", "quartz_bricks", "smooth_quartz", "quartz_pillar", "diorite", "polished_diorite", "birch_log[axis=x]", "pale_oak_log", "stripped_pale_oak_log", "pale_oak_planks", "pale_oak_pressure_plate", "stripped_pale_oak_wood", "sea_lantern", "target"] },
   { name: "COLOR_ORANGE", r: 216, g: 127, b: 51, blocks: ["orange_wool", "orange_carpet", "orange_concrete", "orange_concrete_powder", "orange_glazed_terracotta", "orange_stained_glass", "orange_candle", "orange_poplar_leaves", "acacia_log", "stripped_acacia_log", "stripped_acacia_wood", "acacia_planks", "acacia_pressure_plate", "terracotta", "pumpkin", "carved_pumpkin", "jack_o_lantern", "red_sand", "red_sandstone", "cut_red_sandstone", "smooth_red_sandstone", "honey_block", "honeycomb_block", "raw_copper_block", "waxed_copper_block", "waxed_cut_copper", "open_eyeblossom"] },
   { name: "COLOR_MAGENTA", r: 178, g: 76, b: 216, blocks: ["magenta_wool", "magenta_carpet", "magenta_concrete", "magenta_concrete_powder", "magenta_glazed_terracotta", "magenta_stained_glass", "magenta_candle", "purpur_block", "purpur_pillar"] },
   { name: "COLOR_LIGHT_BLUE", r: 102, g: 153, b: 216, blocks: ["light_blue_wool", "light_blue_carpet", "light_blue_concrete", "light_blue_concrete_powder", "light_blue_glazed_terracotta", "light_blue_stained_glass", "light_blue_candle", "soul_fire", "icicle[attached=true]"] },
@@ -173,7 +175,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "DIAMOND", r: 92, g: 219, b: 213, blocks: ["diamond_block", "prismarine_bricks", "dark_prismarine", "beacon", "conduit[waterlogged=false]"] },
   { name: "LAPIS", r: 74, g: 128, b: 255, blocks: ["lapis_block"] },
   { name: "EMERALD", r: 0, g: 217, b: 58, blocks: ["emerald_block"] },
-  { name: "PODZOL", r: 129, g: 86, b: 49, blocks: ["podzol", "spruce_log", "stripped_spruce_log", "spruce_wood", "stripped_spruce_wood", "spruce_planks", "spruce_pressure_plate", "oak_log[axis=x]", "jungle_log[axis=x]", "poplar_log[axis=x]", "poplar_wood", "mangrove_roots", "muddy_mangrove_roots", "campfire", "soul_campfire"] },
+  { name: "PODZOL", r: 129, g: 86, b: 49, blocks: ["podzol", "spruce_log", "stripped_spruce_log", "spruce_wood", "stripped_spruce_wood", "spruce_planks", "spruce_pressure_plate", "oak_log[axis=x]", "jungle_log[axis=x]", "mangrove_log[axis=x]", "poplar_log[axis=x]", "poplar_wood", "mangrove_roots", "muddy_mangrove_roots", "campfire", "soul_campfire"] },
   { name: "NETHER", r: 112, g: 2, b: 0, blocks: ["netherrack", "nether_bricks", "red_nether_bricks", "nether_gold_ore", "nether_quartz_ore", "magma_block", "crimson_roots", "crimson_fungus"] },
   { name: "TERRACOTTA_WHITE", r: 209, g: 177, b: 161, blocks: ["white_terracotta", "calcite", "cherry_log", "stripped_cherry_log", "cherry_planks", "cherry_pressure_plate"] },
   { name: "TERRACOTTA_ORANGE", r: 159, g: 82, b: 36, blocks: ["orange_terracotta", "redstone_lamp", "resin_block", "resin_bricks", "resin_clump[down=true]"] },
@@ -181,8 +183,8 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "TERRACOTTA_LIGHT_BLUE", r: 112, g: 108, b: 138, blocks: ["light_blue_terracotta"] },
   { name: "TERRACOTTA_YELLOW", r: 186, g: 133, b: 36, blocks: ["yellow_terracotta"] },
   { name: "TERRACOTTA_LIGHT_GREEN", r: 103, g: 117, b: 53, blocks: ["lime_terracotta"] },
-  { name: "TERRACOTTA_PINK", r: 160, g: 77, b: 78, blocks: ["pink_terracotta", "stripped_cherry_wood"] },
-  { name: "TERRACOTTA_GRAY", r: 57, g: 41, b: 35, blocks: ["gray_terracotta", "cherry_wood", "tuff", "polished_tuff", "tuff_bricks"] },
+  { name: "TERRACOTTA_PINK", r: 160, g: 77, b: 78, blocks: ["pink_terracotta", "stripped_cherry_log[axis=x]", "stripped_cherry_wood"] },
+  { name: "TERRACOTTA_GRAY", r: 57, g: 41, b: 35, blocks: ["gray_terracotta", "cherry_log[axis=x]", "cherry_wood", "tuff", "polished_tuff", "tuff_bricks"] },
   { name: "TERRACOTTA_LIGHT_GRAY", r: 135, g: 107, b: 98, blocks: ["light_gray_terracotta", "waxed_exposed_copper", "waxed_exposed_cut_copper", "mud_bricks"] },
   { name: "TERRACOTTA_CYAN", r: 87, g: 92, b: 92, blocks: ["cyan_terracotta", "mud"] },
   { name: "TERRACOTTA_PURPLE", r: 122, g: 73, b: 88, blocks: ["purple_terracotta", "purple_shulker_box"] },
