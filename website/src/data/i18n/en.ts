@@ -435,7 +435,7 @@ export const enCatalog = {
       showFlatNbtSuppressStepModes: "Show Suppress-step options for Flat maps",
       mixedStepReachableTop: "Jumpable Suppress-step tops",
       mixedStepReachableTopTooltip: "Keep raised blocks reachable with one jump. Requires lift 1, Fragile support and Assume floor.",
-      maxStepColorBlockLift: "Max. lift ({printerNuker}):",
+      maxStepColorBlockLift: "Max. lift {printerNuker}:",
       maxStepColorBlockLiftTooltip: "Requires Printer+Nuker. Raise blocks to improve reuse between E/W Suppress-steps, reducing placement and mining. 0 keeps color blocks on the floor; shading fillers may reach +1. Higher values cap both above the floor.",
       markSuppressLoadSpotsInSchematic: "Mark Suppress-step load-spots in exports",
       markSuppressLoadSpotsInSchematicTooltip: "Add the selected marker block at positions where the player should load the map during suppression.",

@@ -372,8 +372,8 @@ export function SecretsSettingsDialog({
               className="flex items-center justify-end gap-1"
               title={messages.dialogs.options.maxStepColorBlockLiftTooltip}
             >
-              <span className="inline-flex items-center gap-0.5">
-                {liftLabelBefore}
+              <span className="inline-flex items-center">
+                <span className="mr-0.5">{liftLabelBefore}</span>
                 <span aria-hidden="true" className="inline-flex items-center gap-px">
                   <Printer className="h-4 w-4" />
                   <span className="-mr-px">+</span>

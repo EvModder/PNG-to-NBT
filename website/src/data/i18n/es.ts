@@ -431,7 +431,7 @@ export const esCatalog = {
       showFlatNbtSuppressStepModes: "Mostrar opciones Suppress-step para mapas planos",
       mixedStepReachableTop: "Suppress-steps de un salto",
       mixedStepReachableTopTooltip: "Mantener los bloques elevados al alcance de un salto. Requiere elevación 1, soporte Frágil y Suponer suelo.",
-      maxStepColorBlockLift: "Elevación ({printerNuker}):",
+      maxStepColorBlockLift: "Elevación {printerNuker}:",
       maxStepColorBlockLiftTooltip: "Requiere Printer+Nuker. Elevar bloques mejora su reutilización entre Suppress-steps E/O y reduce la colocación y el minado. 0 mantiene los bloques de color en el suelo; los rellenos de sombreado pueden alcanzar +1. Los valores mayores limitan ambos sobre el suelo.",
       markSuppressLoadSpotsInSchematic: "Exportar marcas de carga de Suppress-step",
       markSuppressLoadSpotsInSchematicTooltip: "Añadir el bloque marcador seleccionado en las posiciones donde el jugador debe cargar el mapa durante la supresión.",
