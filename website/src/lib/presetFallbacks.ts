@@ -8,7 +8,7 @@
  * - src/lib/codecPreset.ts
  */
 import { BASE_COLORS } from "@/data/mapColors";
-import type { MinecraftVersion } from "@/data/minecraftVersions";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import type { BlockPreset } from "@/data/presets";
 import { getVersionedBlockName, isBlockCompatible } from "@/lib/minecraftVersion";
 
@@ -47,20 +47,21 @@ export function updatePresetBlockSelection(
   preset: BlockPreset, id: number, block: string, version: MinecraftVersion,
   choice?: "replace" | "fallback",
 ): Pick<BlockPreset, "selectedBlocks" | "blockFallbacks"> | null {
+  const dataVersion = MINECRAFT_VERSIONS[version].dataVersion;
   const preferred = preset.selectedBlocks[id] ?? "";
-  if (!choice && preferred && block && isBlockCompatible(block, id, version)
-    && !isBlockCompatible(preferred, id, version)) return null;
+  if (!choice && preferred && block && isBlockCompatible(block, id, dataVersion)
+    && !isBlockCompatible(preferred, id, dataVersion)) return null;
   const selectedBlocks = { ...preset.selectedBlocks, [id]: choice === "fallback" ? preferred : block };
   let choices: string[] = [];
   if (choice === "fallback") {
     // The new choice supersedes every alternative selectable in this version.
-    choices = (preset.blockFallbacks?.[id] ?? []).filter(candidate => !isBlockCompatible(candidate, id, version));
+    choices = (preset.blockFallbacks?.[id] ?? []).filter(candidate => !isBlockCompatible(candidate, id, dataVersion));
     choices.push(block);
   }
   // Renames such as chain/iron_chain are one preference, not separate fallbacks.
-  const seen = new Set([getVersionedBlockName(selectedBlocks[id], version)]);
+  const seen = new Set([getVersionedBlockName(selectedBlocks[id], dataVersion)]);
   choices = choices.filter(candidate => {
-    const name = getVersionedBlockName(candidate, version);
+    const name = getVersionedBlockName(candidate, dataVersion);
     if (!name || seen.has(name)) return false;
     seen.add(name);
     return true;

@@ -126,7 +126,7 @@ function getExportPaletteRoleForFiller(role: FillerRole): ExportPaletteRole {
 function buildStructurePaletteStateEntries(
   blocks: readonly PaletteSourceBlock[],
   collapseDuplicatePaletteStates: boolean,
-  version: MinecraftVersion,
+  dataVersion: number,
 ): { paletteBlockIds: string[]; stateBlocks: PaletteIndexedBlock[] } {
   const paletteBlockIds: string[] = [];
   const blockIndexesByRole: Record<ExportPaletteRole, number[]> = {
@@ -149,7 +149,7 @@ function buildStructurePaletteStateEntries(
       const sourceName = blocks[blockIndex].blockName;
       let state = paletteIndexByBlockName.get(sourceName);
       if (state === undefined) {
-        const blockName = getVersionedBlockName(sourceName, version);
+        const blockName = getVersionedBlockName(sourceName, dataVersion);
         state = paletteIndexByBlockName.get(blockName);
         if (state === undefined) {
           state = paletteBlockIds.length;
@@ -490,17 +490,18 @@ async function writeExportBlocksToNbt(
 ): Promise<Uint8Array> {
   const { sizeX, sizeY, sizeZ } = normalizeAndMeasure(blocks, options);
   const version = options.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION;
+  const dataVersion = MINECRAFT_VERSIONS[version].dataVersion;
   const { paletteBlockIds, stateBlocks } = buildStructurePaletteStateEntries(
     blocks,
     options.collapseDuplicatePaletteStates !== false,
-    version,
+    dataVersion,
   );
   for (const block of paletteBlockIds) {
-    if (!isBlockAvailable(block, version)) {
+    if (!isBlockAvailable(block, dataVersion)) {
       throw new Error(options.blockUnavailableMessage?.(block, version) ?? `${block} is unavailable in Minecraft ${version}`);
     }
   }
-  return gzipCompress(writeStructureNbt(stateBlocks, paletteBlockIds, sizeX, sizeY, sizeZ, MINECRAFT_VERSIONS[version].dataVersion, DEFAULT_NBT_AUTHOR));
+  return gzipCompress(writeStructureNbt(stateBlocks, paletteBlockIds, sizeX, sizeY, sizeZ, dataVersion, DEFAULT_NBT_AUTHOR));
 }
 
 async function buildSplitEntries(

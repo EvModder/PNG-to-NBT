@@ -6,7 +6,6 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
- * - src/lib/minecraftVersion.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/shapeModel.ts
  *
@@ -116,7 +115,10 @@ type FragileSupportRuleValue = {
 type FragileSupportRule = Readonly<FragileSupportRuleValue>;
 
 // Callers:
-// - src/lib/minecraftVersion.ts
+// - src/Index.tsx
+// - src/lib/mixedStepHeights.ts
+// - src/lib/shapeModel.ts
+// Modern substrate rules are used for every target version.
 export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ["fire", { validSupportBlocks: ["netherrack"], replacementBlock: "netherrack" }],
   ["soul_fire", { validSupportBlocks: ["soul_sand", "soul_soil"], replacementBlock: "soul_soil" }],

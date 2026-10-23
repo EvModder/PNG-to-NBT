@@ -46,7 +46,7 @@ export type PreviewPixelMask = Uint8Array;
 
 const BLOCK_BASE_COLOR_INDEX = new Map(Object.keys(MINECRAFT_VERSIONS).map(key => {
   const version = key as MinecraftVersion;
-  const catalog = getMinecraftCatalog(version);
+  const catalog = getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion);
   return [version, new Map(catalog.blocks.flatMap((blocks, id) =>
     [...blocks, ...catalog.excluded[id]].map(block => [block, id] as const),
   ))] as const;

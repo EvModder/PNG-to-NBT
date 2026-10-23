@@ -205,9 +205,9 @@ import {
 import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
 import { BuildMode, SuppressStepDirection, FillerRole } from "@/types/conversion";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
-import { getVersionedSelections, getVersionedSupportRules } from "@/lib/minecraftVersion";
+import { getVersionedSelections } from "@/lib/minecraftVersion";
 import { areBlockFallbacksEqual, normalizeBlockFallbacks, updatePresetBlockSelection } from "@/lib/presetFallbacks";
 import {
   arePresetBlocksEqual,
@@ -802,7 +802,6 @@ const Index = () => {
   const [tileSelectionAnchorIndex, setTileSelectionAnchorIndex] = useState<number | null>(null);
   const [imageLossyFormatLabel, setImageLossyFormatLabel] = useState<string | null>(null);
   const previousMaterialInputsRef = useRef<{
-    minecraftVersion: MinecraftVersion;
     signature: string;
     colorAssignmentsByKey: Map<ColorRefKey, string>;
     fillerAssignmentsByRole: Map<FillerRole, string>;
@@ -1730,7 +1729,6 @@ const Index = () => {
       if (previousTile.tile.cacheKey !== tile.tile.cacheKey || previousTile.supportShape !== tile.supportShape) return false;
       if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== effectiveApplySupportFloorYs) return false;
       if (previousMaterialInputs.keepSuppressExtras !== activeKeepSuppressExtras) return false;
-      if (getVersionedSupportRules(previousMaterialInputs.minecraftVersion) !== getVersionedSupportRules(minecraftVersion)) return false;
       if (hasAnySharedValue(tile.derivedImageStats.usedShadesByColorKey.keys(), changedColorKeys)) return false;
       if (hasAnySharedValue(tile.fillerNeedStats?.roleCounts.keys() ?? [], changedFillerRoles)) return false;
       return true;
@@ -1774,7 +1772,6 @@ const Index = () => {
       )
     ) {
       previousMaterialInputsRef.current = {
-        minecraftVersion,
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
@@ -1847,7 +1844,6 @@ const Index = () => {
 
       if (cancelled) return;
       previousMaterialInputsRef.current = {
-        minecraftVersion,
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
@@ -3462,7 +3458,7 @@ const Index = () => {
 
     const warningLines: string[] = [];
 
-    for (const [blockId, rule] of getVersionedSupportRules(minecraftVersion)) {
+    for (const [blockId, rule] of FRAGILE_SUPPORT_RULES) {
       if ((fragileSupportOverrideNeedStatsDisplay.overrideCounts[blockId] ?? 0) <= 0) continue;
       warningLines.push(messages.preview.fragileSupportOverrideWarning(blockId, rule.validSupportBlocks));
     }
@@ -3472,7 +3468,6 @@ const Index = () => {
       : null;
   }, [
     fragileSupportOverrideNeedStatsDisplay,
-    minecraftVersion,
     imageValid,
     crubTechControlsActive2LayerSettings,
     supportMode,

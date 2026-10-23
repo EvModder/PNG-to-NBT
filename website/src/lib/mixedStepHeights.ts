@@ -11,10 +11,9 @@
  */
 import { MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
 import { getFillerFloorAttachmentFix, isFillerDisabled } from "@/lib/fillerRules";
-import { getVersionedSupportRules } from "@/lib/minecraftVersion";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { FillerRole, type MixedStepPalette } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
@@ -137,10 +136,9 @@ export function getMixedStepSettings(
   // Exact catalog states only: arbitrary input tags can change a block's map color.
   const fillerColor = (name: string) => BASE_COLORS.findIndex((color, id) => id > 0 && id !== WATER_BASE_INDEX
     && color.blocks.some(block => resolveExportBlockName(block) === name));
-  const supportRules = getVersionedSupportRules(selections.minecraftVersion);
   const canRaiseBlock = (block: string) => canSupportStepBlock(support, block) && (reachableTop ? canRaiseReachableBlock(block)
     : canRaiseStepBlocks([], selections, block) || (isFragileBlock(normalizeBlockId(block))
-      && !supportRules.has(normalizeBlockId(block)) && fillerColor(block) > 0));
+      && !FRAGILE_SUPPORT_RULES.has(normalizeBlockId(block)) && fillerColor(block) > 0));
   if (isFillerDisabled(shade) || !canRaiseBlock(shade)) return { maxHeight: 0 };
   const canRaise = blocks.map(canRaiseBlock);
   const canSupport = blocks.map(block => canSupportStepBlock(block, shade));

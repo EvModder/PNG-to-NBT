@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
 import { BASE_COLORS } from "@/data/mapColors";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { BUILTIN_PRESET_NAMES, getBuiltinPreset } from "@/data/presets";
-import { getBlockFallbackVersion, getMinecraftCatalog, getVersionedSelections, getVersionedSupportRules, isBlockAvailable } from "@/lib/minecraftVersion";
+import { getBlockFallbackVersion, getMinecraftCatalog, getVersionedSelections, isBlockAvailable, isBlockCompatible } from "@/lib/minecraftVersion";
 import { areBlockFallbacksEqual, normalizeBlockFallbacks, updatePresetBlockSelection } from "@/lib/presetFallbacks";
 import { getBlockIconAsset, getBlockIconAtlasEntry } from "@/lib/blockIconAtlas";
 import { convertToNbt } from "@/lib/nbtExport";
@@ -20,7 +20,23 @@ import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 
 const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
-const latest = getMinecraftCatalog(versions.at(-1)!);
+if (false) {
+  // @ts-expect-error Named UI versions must be resolved at the caller.
+  isBlockAvailable("stone", "1.21.4");
+  // @ts-expect-error Catalog lookup uses the same numeric boundary.
+  getMinecraftCatalog("1.21.4");
+  // @ts-expect-error Block compatibility uses numeric cutoffs too.
+  isBlockCompatible("stone", 11, "1.21.4");
+}
+for (const dataVersion of [4189, 4324, 4325, 4440]) {
+  const legacy = dataVersion < 4325;
+  for (const block of ["pale_oak_leaves", "closed_eyeblossom"]) {
+    assert.equal(isBlockCompatible(block, 49, dataVersion), legacy);
+    assert.equal(isBlockCompatible(block, 6, dataVersion), !legacy);
+  }
+  assert(isBlockCompatible("pale_oak_leaves[waterlogged=true]", 12, dataVersion));
+}
+const latest = getMinecraftCatalog(MINECRAFT_VERSIONS[versions.at(-1)!].dataVersion);
 assert.equal(DEFAULT_MINECRAFT_VERSION, "26.2");
 assert.deepEqual(getBlockFallbackVersion("poplar_pressure_plate", 22), { operator: "<", version: "26.3" });
 assert.deepEqual(getBlockFallbackVersion("dried_ghast", 8), { operator: "<", version: "1.21.6" });
@@ -29,8 +45,8 @@ assert.deepEqual(getBlockFallbackVersion("closed_eyeblossom", 6), { operator: "<
 assert.deepEqual(getBlockFallbackVersion("closed_eyeblossom", 49), { operator: ">", version: "1.21.4" });
 assert.deepEqual(latest.blocks, BASE_COLORS.map(color => color.blocks));
 assert.deepEqual(latest.excluded, EXCLUDED_BLOCKS);
-const previous = getMinecraftCatalog("26.2");
-const wilderness = getMinecraftCatalog("26.3");
+const previous = getMinecraftCatalog(MINECRAFT_VERSIONS["26.2"].dataVersion);
+const wilderness = getMinecraftCatalog(MINECRAFT_VERSIONS["26.3"].dataVersion);
 const added = wilderness.blocks.flat().filter(block => !previous.blocks.flat().includes(block));
 const addedHidden = wilderness.excluded.flat().filter(block => !previous.excluded.flat().includes(block));
 assert.equal(added.length, 14);
@@ -38,7 +54,7 @@ assert.equal(addedHidden.length, 72);
 for (const block of [...added, ...addedHidden]) {
   assert(!isBlockAvailable(block, 5022), block);
   assert(isBlockAvailable(block, 5023), block);
-  for (const version of versions.filter(version => MINECRAFT_VERSIONS[version].dataVersion < 5023)) assert(!isBlockAvailable(block, version), `${version}: ${block}`);
+  for (const version of versions.filter(version => MINECRAFT_VERSIONS[version].dataVersion < 5023)) assert(!isBlockAvailable(block, MINECRAFT_VERSIONS[version].dataVersion), `${version}: ${block}`);
 }
 assert.deepEqual(latest.blocks.flat().filter(block => !wilderness.blocks.flat().includes(block)), ["packed_ice_bricks", "brittle_ice", "ice_crystal", "icicle[attached=true]"]);
 const snapshotIce = ["chiseled_packed_ice", "packed_ice_brick_slab", "packed_ice_brick_stairs", "packed_ice_brick_wall"];
@@ -55,12 +71,12 @@ for (const [id, block] of [[5, "ice_crystal"], [17, "icicle[attached=true]"]] as
   assert.equal(latest.blocks[id].at(-1), block);
   assert(isFragileBlock(block));
   assert(!isBlockAvailable(block, MINECRAFT_VERSIONS["26.4"].dataVersion - 1));
-  assert(isBlockAvailable(block, "26.4"));
+  assert(isBlockAvailable(block, MINECRAFT_VERSIONS["26.4"].dataVersion));
   assert.equal(getVersionedSelections({ [id]: block }, "26.3")[id], "");
   assert.equal(getVersionedSelections({ [id]: block }, "26.4")[id], block);
 }
 for (const [id, color] of Object.entries({ 8: "white", 15: "orange", 16: "magenta", 17: "light_blue", 18: "yellow", 19: "lime", 20: "pink", 21: "gray", 22: "light_gray", 23: "cyan", 24: "purple", 25: "blue", 26: "brown", 27: "green", 28: "red", 29: "black" })) {
-  const row = latest.excluded[Number(id)];
+  const row: readonly string[] = latest.excluded[Number(id)];
   const start = row.indexOf(`${color}_wool_slab`);
   assert(start >= 0);
   assert.deepEqual(row.slice(start, start + 5), [
@@ -78,20 +94,21 @@ for (const block of ["poplar_door", "poplar_hanging_sign", "poplar_wall_hanging_
   assert(!catalogIds.has(block), `Fully omitted: ${block}`);
 }
 for (const block of ["red_shrub", "poplar_pressure_plate", "poplar_sign", "poplar_button[face=floor]", "poplar_trapdoor"]) assert(isFragileBlock(block), block);
-assert.deepEqual(getVersionedSupportRules().get("red_shrub"), getVersionedSupportRules().get("bush"));
+assert.deepEqual(FRAGILE_SUPPORT_RULES.get("red_shrub"), FRAGILE_SUPPORT_RULES.get("bush"));
 // A below-block rule cannot implement shelf mushroom's side attachment.
-assert(!getVersionedSupportRules().has("shelf_mushroom"));
+assert(!FRAGILE_SUPPORT_RULES.has("shelf_mushroom"));
 for (const version of versions) {
-  const catalog = getMinecraftCatalog(version);
+  const catalog = getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion);
+  assert.equal(getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion), catalog, "Known DataVersions reuse cached catalogs");
   assert.equal(catalog.blocks[7][0], "bamboo_block[axis=x]");
   const plantLeaves = ["oak_leaves", "spruce_leaves", "birch_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "mangrove_leaves", "azalea_leaves", "flowering_azalea_leaves"];
   assert.deepEqual(catalog.blocks[7].filter(block => block.endsWith("_leaves")), plantLeaves);
   const otherLeaves = { cherry_leaves: 20, pale_oak_leaves: version === "1.21.4" ? 49 : 6, red_poplar_leaves: 28, orange_poplar_leaves: 15, yellow_poplar_leaves: 18 };
   for (const [block, id] of Object.entries(otherLeaves)) {
-    assert.equal(catalog.blocks[id].includes(block), isBlockAvailable(block, version));
+    assert.equal(catalog.blocks[id].includes(block), isBlockAvailable(block, MINECRAFT_VERSIONS[version].dataVersion));
   }
   assert.deepEqual(catalog.blocks[12].filter(block => block.includes("_leaves[")),
-    [...plantLeaves, ...Object.keys(otherLeaves)].filter(block => isBlockAvailable(block, version))
+    [...plantLeaves, ...Object.keys(otherLeaves)].filter(block => isBlockAvailable(block, MINECRAFT_VERSIONS[version].dataVersion))
       .map(block => `${block}[waterlogged=true]`));
   const stone = catalog.excluded[11];
   assert.equal(stone.indexOf("cauldron") + 1, stone.indexOf("hopper"));
@@ -111,7 +128,7 @@ for (const version of versions) {
   }
   for (const row of [...catalog.blocks, ...catalog.excluded]) {
     for (const block of row) {
-      assert(isBlockAvailable(block, version), `${version}: ${block}`);
+      assert(isBlockAvailable(block, MINECRAFT_VERSIONS[version].dataVersion), `${version}: ${block}`);
       const asset = getBlockIconAsset(block);
       assert(getBlockIconAtlasEntry(asset.atlasName, asset.atlasKey), `Missing icon: ${version} ${block}`);
     }
@@ -121,26 +138,26 @@ for (const version of versions) {
     const before = structuredClone(raw);
     const effective = getVersionedSelections(raw, version);
     assert.deepEqual(raw, before, "Version selection mutated a preset");
-    assert(Object.values(effective).every(block => isBlockAvailable(block, version)));
+    assert(Object.values(effective).every(block => isBlockAvailable(block, MINECRAFT_VERSIONS[version].dataVersion)));
     assert.deepEqual(getVersionedSelections(raw, "26.2"), getVersionedSelections(before, "26.2"));
   }
 }
-assert(getMinecraftCatalog("1.21.4").blocks[49].includes("pale_oak_leaves"));
-assert(getMinecraftCatalog("1.21.4").blocks[49].includes("closed_eyeblossom"));
-assert(!getMinecraftCatalog("1.21.4").blocks[6].includes("pale_oak_leaves"));
-assert(getMinecraftCatalog("1.21.5").blocks[6].includes("pale_oak_leaves"));
-assert(getMinecraftCatalog("1.21.4").blocks[0].includes("chain"));
-assert(getMinecraftCatalog("1.21.9").blocks[0].includes("iron_chain"));
-assert(!isBlockAvailable("waxed_copper_lantern", "1.21.5"));
-assert(!isBlockAvailable("sulfur", "1.21.9"));
+assert(getMinecraftCatalog(MINECRAFT_VERSIONS["1.21.4"].dataVersion).blocks[49].includes("pale_oak_leaves"));
+assert(getMinecraftCatalog(MINECRAFT_VERSIONS["1.21.4"].dataVersion).blocks[49].includes("closed_eyeblossom"));
+assert(!getMinecraftCatalog(MINECRAFT_VERSIONS["1.21.4"].dataVersion).blocks[6].includes("pale_oak_leaves"));
+assert(getMinecraftCatalog(MINECRAFT_VERSIONS["1.21.5"].dataVersion).blocks[6].includes("pale_oak_leaves"));
+assert(getMinecraftCatalog(MINECRAFT_VERSIONS["1.21.4"].dataVersion).blocks[0].includes("chain"));
+assert(getMinecraftCatalog(MINECRAFT_VERSIONS["1.21.9"].dataVersion).blocks[0].includes("iron_chain"));
+assert(!isBlockAvailable("waxed_copper_lantern", MINECRAFT_VERSIONS["1.21.5"].dataVersion));
+assert(!isBlockAvailable("sulfur", MINECRAFT_VERSIONS["1.21.9"].dataVersion));
 assert.equal(MINECRAFT_VERSIONS["1.21.5"].dataVersion, 4440);
 assert.equal(MINECRAFT_VERSIONS["1.21.9"].dataVersion, 4790);
-assert(!isBlockAvailable("dried_ghast", "1.21.4"));
-assert(isBlockAvailable("dried_ghast", "1.21.5"));
-assert(!isBlockAvailable("golden_dandelion", "1.21.5"));
-assert(isBlockAvailable("golden_dandelion", "1.21.9"));
-assert(isBlockAvailable("lightning_rod", "1.21.4"));
-assert(isBlockAvailable("some_mod:custom_block", "1.21.4"));
+assert(!isBlockAvailable("dried_ghast", MINECRAFT_VERSIONS["1.21.4"].dataVersion));
+assert(isBlockAvailable("dried_ghast", MINECRAFT_VERSIONS["1.21.5"].dataVersion));
+assert(!isBlockAvailable("golden_dandelion", MINECRAFT_VERSIONS["1.21.5"].dataVersion));
+assert(isBlockAvailable("golden_dandelion", MINECRAFT_VERSIONS["1.21.9"].dataVersion));
+assert(isBlockAvailable("lightning_rod", MINECRAFT_VERSIONS["1.21.4"].dataVersion));
+assert(isBlockAvailable("some_mod:custom_block", MINECRAFT_VERSIONS["1.21.4"].dataVersion));
 const selected = { 0: "iron_chain", 6: "pale_oak_leaves", 12: "pale_oak_leaves[waterlogged=true]", 18: "sulfur" };
 const stored = structuredClone(selected);
 const old = getVersionedSelections(selected, "1.21.4");
@@ -197,10 +214,8 @@ assert.equal(getVersionedSelections(cleared.selectedBlocks, "26.3")[18], "");
 assert.deepEqual(normalizeBlockFallbacks({ 18: ["yellow_wool_slab", "yellow_carpet", "yellow_carpet", "", 3], 999: ["stone"] }, chained.selectedBlocks), { 18: ["yellow_carpet"] });
 assert.equal(getVersionedSelections({ 6: "pale_oak_leaves" }, "1.21.4", { 6: ["closed_eyeblossom", "iron_block"] })[6], "iron_block");
 assert.equal(getVersionedSelections({ 0: "poplar_button[face=floor]" }, "1.21.4", { 0: ["iron_chain"] })[0], "chain");
-assert(getVersionedSupportRules("1.21.4").get("big_dripleaf")!.validSupportBlocks.includes("pale_moss_block"));
-assert(!getVersionedSupportRules("1.21.5").get("big_dripleaf")!.validSupportBlocks.includes("pale_moss_block"));
-assert(!getVersionedSupportRules("1.21.4").get("dead_bush")!.validSupportBlocks.includes("farmland"));
-assert(getVersionedSupportRules("1.21.5").get("dead_bush")!.validSupportBlocks.includes("farmland"));
+assert(!FRAGILE_SUPPORT_RULES.get("big_dripleaf")!.validSupportBlocks.includes("pale_moss_block"));
+assert(FRAGILE_SUPPORT_RULES.get("dead_bush")!.validSupportBlocks.includes("farmland"));
 
 const shape: GeneratedShape = {
   parts: [{
@@ -249,8 +264,10 @@ for (const version of versions) {
   const split = await exportBytes(version, { 0: "chain", 6: "iron_block" }, "iron_chain", false);
   assert.equal(split.toString().split(chain).length - 1, 2, "Uncollapsed chain states must remain separate by role");
   const support = await exportBytes(version, { 0: "", 6: "big_dripleaf" }, "pale_moss_block");
-  assert(support.includes(Buffer.from(version === "1.21.4" ? "minecraft:pale_moss_block" : "minecraft:dirt")));
-  const catalog = getMinecraftCatalog(version);
+  assert(support.includes(Buffer.from("minecraft:dirt")), "All versions use modern dripleaf support rules");
+  const deadBush = await exportBytes(version, { 0: "", 6: "dead_bush" }, "farmland");
+  assert(deadBush.includes(Buffer.from("minecraft:farmland")), "All versions use modern dead bush support rules");
+  const catalog = getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion);
   for (const block of [...catalog.blocks, ...catalog.excluded].flat()) {
     if (!/^(sea_pickle|conduit|dead_\w+_coral(_fan|_wall_fan)?)(\[|$)/.test(block)) continue;
     assert(block.includes("waterlogged=false"), `${block} must specify its dry state`);

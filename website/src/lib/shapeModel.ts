@@ -20,8 +20,7 @@
  * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
  */
-import { isFragileBlock } from "@/data/fragileBlocks";
-import { getVersionedSupportRules } from "@/lib/minecraftVersion";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
 import { resolveAssignedFillerName } from "@/lib/fillerRules";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
@@ -162,7 +161,7 @@ export function getFragileSupportOverride(
   ) return null;
   const fragileBlockId = getSupportedBlockIdAbove(part, coord, options, fillerAssignments);
   if (!fragileBlockId) return null;
-  const fragileSupportRule = getVersionedSupportRules(options.minecraftVersion).get(fragileBlockId);
+  const fragileSupportRule = FRAGILE_SUPPORT_RULES.get(fragileBlockId);
   if (!fragileSupportRule) return null;
   const assignedSupportBlockId = assignedSupportBlockName ? normalizeBlockId(assignedSupportBlockName) : "";
   if (assignedSupportBlockId && fragileSupportRule.validSupportBlocks.includes(assignedSupportBlockId)) {

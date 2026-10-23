@@ -15,6 +15,7 @@
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
  */
+
 // Breakpoints reflect default-visible blocks only. Each range targets its newest listed build.
 // Keep ranges chronological; preset decoding locates ranges by DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
@@ -22,6 +23,8 @@
 // - src/Index.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/lib/minecraftVersion.ts
+// - src/components/PanelColorBlockTable.tsx
+// - src/lib/presetFallbacks.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/codecPreset.ts

@@ -62,7 +62,7 @@ async function main() {
   const ids = new Set();
   const versions = Object.keys(MINECRAFT_VERSIONS);
   for (const version of versions) {
-    const catalog = getMinecraftCatalog(version);
+    const catalog = getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion);
     for (const block of [...catalog.blocks.flat(), ...catalog.excluded.flat()]) {
       const id = normalizeBlockId(block);
       ids.add(id);

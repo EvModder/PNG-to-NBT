@@ -19,7 +19,7 @@ import { Glasses, Minus, PanelRightClose, PanelRightOpen, Plus } from "lucide-re
 import { getBlockWikiUrl } from "@/data/blockWiki";
 import { DEFAULT_COLOR_ROW_ORDER } from "@/data/colorSortOrder";
 import { BASE_COLORS, Shade, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
-import type { MinecraftVersion } from "@/data/minecraftVersions";
+import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getMinecraftCatalog, getVersionedBlockName, isBlockAvailable } from "@/lib/minecraftVersion";
 import { getBlockIconAsset } from "@/lib/blockIconAtlas";
 import { getColorRefCount, getColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
@@ -210,7 +210,8 @@ export function PanelColorBlockTable({
   );
   const dragColRef = useRef<ColumnId | null>(null);
   const dragColumnIndicatorRef = useRef<ColumnDragIndicator | null>(null);
-  const catalog = getMinecraftCatalog(minecraftVersion);
+  const dataVersion = MINECRAFT_VERSIONS[minecraftVersion].dataVersion;
+  const catalog = getMinecraftCatalog(dataVersion);
   const [dragColumnIndicator, setDragColumnIndicator] = useState<ColumnDragIndicator | null>(null);
   const [swatchTooltip, setSwatchTooltip] = useState<SwatchTooltip | null>(null);
   const swatchTooltipRafRef = useRef<number | null>(null);
@@ -263,8 +264,8 @@ export function PanelColorBlockTable({
 
   const getBlockGroups = useCallback((idx: number) => {
     const excluded = showExcludedBlocks ? catalog.excluded[idx] : [];
-    const extra = (customBlocksByBase[idx] || []).filter(block => isBlockAvailable(block, minecraftVersion))
-      .map(block => getVersionedBlockName(block, minecraftVersion));
+    const extra = (customBlocksByBase[idx] || []).filter(block => isBlockAvailable(block, dataVersion))
+      .map(block => getVersionedBlockName(block, dataVersion));
     const selected = selectedBlocks[idx] || "";
     const regular = [
       ...catalog.blocks[idx],
@@ -283,7 +284,7 @@ export function PanelColorBlockTable({
       custom,
       all: [...withBelowPlatformWater, ...custom],
     };
-  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks, catalog, minecraftVersion]);
+  }, [belowPlatformWater, customBlocksByBase, selectedBlocks, showExcludedBlocks, catalog, dataVersion]);
 
   const sortedIndices = useMemo(() => {
     const base = showTransparentRow ? [TRANSPARENCY_BASE_INDEX, ...DEFAULT_COLOR_ROW_ORDER] : [...DEFAULT_COLOR_ROW_ORDER];
