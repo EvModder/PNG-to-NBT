@@ -9,6 +9,8 @@ import { Fragment, useRef, type MouseEvent, type MutableRefObject, type RefObjec
 import { Trash2 } from "lucide-react";
 import type { InvalidDimensionsStrategy, InvalidColorsPalette } from "@/data/defaultSettings";
 import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
+import { PreviewCanvas } from "@/components/PreviewCanvas";
+import type { PreviewPixelMask, PreviewPixelReplacement } from "@/lib/previewImageEdits";
 import { getTargetTileDimensions } from "@/lib/colorGridParsing";
 import type { InputPaletteEquivalence } from "@/lib/colorGridParsingCore";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
@@ -32,8 +34,8 @@ type PanelImagePreviewProps = {
   fileRef: RefObject<HTMLInputElement | null>;
   imageData: ImageData | null;
   originalImageDimensions: { width: number; height: number } | null;
-  previewImageUrl: string | null;
-  fallbackPreviewImageUrl: string | null;
+  previewPixelReplacements: readonly PreviewPixelReplacement[];
+  previewVisiblePixelMask: PreviewPixelMask | null;
   imageName: string;
   handleFile: (file: File) => void;
   canCopyImageShareUrl: boolean;
@@ -232,8 +234,8 @@ export function PanelImagePreview({
   fileRef,
   imageData,
   originalImageDimensions,
-  previewImageUrl,
-  fallbackPreviewImageUrl,
+  previewPixelReplacements,
+  previewVisiblePixelMask,
   imageName,
   handleFile,
   canCopyImageShareUrl,
@@ -302,7 +304,6 @@ export function PanelImagePreview({
   const tileGridRef = useRef<HTMLDivElement>(null);
   const hoveredTileRef = useRef<Element | null>(null);
   const previewAspectRatio = imageData ? `${imageData.width} / ${imageData.height}` : "1 / 1";
-  const activePreviewImageUrl = previewImageUrl ?? fallbackPreviewImageUrl;
   // Red detail text (such as cropped pixels) is not itself a blocking error.
   const visiblePaletteNotices = imageValid
     ? paletteNotices
@@ -314,7 +315,7 @@ export function PanelImagePreview({
     ? showVsFillersInPreviewToggle ? "pr-36" : "pr-8"
     : showVsFillersInPreviewToggle ? "pr-28" : "";
 
-  function getPreviewTileIndex(e: MouseEvent<HTMLImageElement>): number {
+  function getPreviewTileIndex(e: MouseEvent<HTMLCanvasElement>): number {
     const rect = e.currentTarget.getBoundingClientRect();
     const col = Math.min(tileCols - 1, Math.max(0, Math.floor((e.clientX - rect.left) * tileCols / rect.width)));
     const row = Math.min(tileRows - 1, Math.max(0, Math.floor((e.clientY - rect.top) * tileRows / rect.height)));
@@ -411,11 +412,13 @@ export function PanelImagePreview({
             if (file) handleFile(file);
           }}
         >
-          {imageData && activePreviewImageUrl ? (
+          {imageData ? (
             <>
-              <img
-                src={activePreviewImageUrl}
-                alt=""
+              <PreviewCanvas
+                imageData={imageData}
+                pixelReplacements={previewPixelReplacements}
+                visiblePixelMask={previewVisiblePixelMask}
+                selectedTileIndices={selectedTileIndices}
                 aria-hidden="true"
                 className="absolute inset-0 w-full h-full"
                 style={{ imageRendering: "pixelated" }}

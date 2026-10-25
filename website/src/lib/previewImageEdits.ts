@@ -3,7 +3,7 @@
  * - PreviewPixelReplacement
  * - PreviewPixelMask
  * - offsetPreviewPixelReplacements()
- * - buildSelectedTileVisibleMask()
+ * - buildPreviewVisibleMask()
  * - getPreviewRangeMax()
  * - collectVsFillerPreviewReplacements()
  * - useStepPreview()
@@ -11,7 +11,8 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/previewImageStore.ts
+ * - src/components/PreviewCanvas.tsx
+ * - src/components/PanelImagePreview.tsx
  */
 import { useMemo } from "react";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
@@ -31,7 +32,8 @@ import { isSuppressStepsBuildMode } from "@/utils/conversion";
 import type { ParsedColorGridTile } from "@/lib/colorGridParsing";
 
 // Callers:
-// - src/lib/previewImageStore.ts
+// - src/components/PreviewCanvas.tsx
+// - src/components/PanelImagePreview.tsx
 export interface PreviewPixelReplacement {
   x: number;
   z: number;
@@ -41,7 +43,8 @@ export interface PreviewPixelReplacement {
 }
 
 // Callers:
-// - src/lib/previewImageStore.ts
+// - src/components/PreviewCanvas.tsx
+// - src/components/PanelImagePreview.tsx
 export type PreviewPixelMask = Uint8Array;
 
 const BLOCK_BASE_COLOR_INDEX = new Map(Object.keys(MINECRAFT_VERSIONS).map(key => {
@@ -128,24 +131,38 @@ export function offsetPreviewPixelReplacements(
 
 // Callers:
 // - src/Index.tsx
-export function buildSelectedTileVisibleMask(
+export function buildPreviewVisibleMask(
   imageData: ImageData,
-  tile: ParsedColorGridTile,
-  tileVisibleMask?: PreviewPixelMask | null,
-  xColumnRange?: readonly [number, number],
-  zColumnRange?: readonly [number, number],
+  tiles: readonly ParsedColorGridTile[],
+  selectedTileIndices: readonly number[],
+  range?: {
+    tile: ParsedColorGridTile;
+    mask: PreviewPixelMask | null;
+    xColumnRange?: readonly [number, number];
+    zColumnRange?: readonly [number, number];
+  },
 ): PreviewPixelMask | null {
-  if (!tileVisibleMask && !xColumnRange && !zColumnRange) return null;
+  const partialSelection = selectedTileIndices.length > 0 && selectedTileIndices.length < tiles.length;
+  if (!partialSelection && !range?.mask && !range?.xColumnRange && !range?.zColumnRange) return null;
   const mask = new Uint8Array(imageData.width * imageData.height);
-  mask.fill(1);
+  if (!partialSelection) mask.fill(1);
+  else for (const index of selectedTileIndices) {
+    const tile = tiles[index];
+    if (!tile) continue;
+    for (let z = tile.startZ; z < Math.min(imageData.height, tile.startZ + MAP_SIZE); ++z) {
+      mask.fill(1, z * imageData.width + tile.startX, z * imageData.width + Math.min(imageData.width, tile.startX + MAP_SIZE));
+    }
+  }
+  if (!range) return mask;
+  const { tile, mask: tileVisibleMask, xColumnRange, zColumnRange } = range;
 
-  for (let z = 0; z < MAP_SIZE; ++z) {
-    for (let x = 0; x < MAP_SIZE; ++x) {
+  for (let z = 0; z < Math.min(MAP_SIZE, imageData.height - tile.startZ); ++z) {
+    for (let x = 0; x < Math.min(MAP_SIZE, imageData.width - tile.startX); ++x) {
       const visibleByRange = (!xColumnRange || (x >= xColumnRange[0] && x <= xColumnRange[1])) &&
         (!zColumnRange || (z >= zColumnRange[0] && z <= zColumnRange[1]));
       const globalX = tile.startX + x;
       const globalZ = tile.startZ + z;
-      mask[globalZ * imageData.width + globalX] = visibleByRange ? (tileVisibleMask?.[z * MAP_SIZE + x] ?? 1) : 0;
+      mask[globalZ * imageData.width + globalX] &= visibleByRange ? (tileVisibleMask?.[z * MAP_SIZE + x] ?? 1) : 0;
     }
   }
 

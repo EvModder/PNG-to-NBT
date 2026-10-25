@@ -21,6 +21,7 @@
     "test:presets": "bun run tests/codecPreset.mts",
     "test:pixel-art": "bun run tests/pixelArtScaling.mts",
     "test:images-browser": "node tests/imageImportBrowser.mjs",
+    "test:preview-browser": "node tests/previewCanvasBrowser.mjs",
     "test:workers": "bun run tests/workerPool.mts",
     "test:geometry-browser": "node tests/geometryWorkerBrowser.mjs",
     "test:wiki": "bun ../scripts/audit-block-wiki.mjs --offline",

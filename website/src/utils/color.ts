@@ -14,6 +14,7 @@
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
+ * - src/components/PreviewCanvas.tsx
  * - src/lib/codecColorGrid.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsing.ts
@@ -36,6 +37,7 @@ import { BASE_COLORS, SHADE_MULTIPLIERS, TRANSPARENCY_BASE_INDEX, WATER_BASE_IND
 import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRef } from "@/types/color";
 
 // Callers:
+// - src/components/PreviewCanvas.tsx
 // - src/Index.tsx
 // - src/lib/codecColorGrid.ts
 // - src/lib/colorGridAnalysis.ts

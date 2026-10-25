@@ -178,13 +178,12 @@ import {
 import { getMixedStepSettings } from "@/lib/mixedStepHeights";
 import {
   offsetPreviewPixelReplacements,
-  buildSelectedTileVisibleMask,
+  buildPreviewVisibleMask,
   getPreviewRangeMax,
   collectVsFillerPreviewReplacements,
   useStepPreview,
   useVsFillerPreviewReplacements,
 } from "@/lib/previewImageEdits";
-import { usePreviewImageUrl } from "@/lib/previewImageStore";
 import { getSupportedBlockIdAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
 import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type SortKey } from "@/types/ui";
 import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
@@ -754,7 +753,6 @@ const Index = () => {
     () => sourceImageData && scalePixelArt(sourceImageData, autoScalePixelArt ? pixelArtScaleMode : null),
     [sourceImageData, autoScalePixelArt, pixelArtScaleMode],
   );
-  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null);
   const [acceptedUpload, setAcceptedUpload] = useState<ImageData | null>(null);
   const [imageName, setImageName] = useState("");
   const [imageValid, setImageValid] = useState(false);
@@ -846,14 +844,8 @@ const Index = () => {
   const imageColorGrid = tileCount === 1 ? (parsedTiles[0]?.colorGrid ?? null) : null;
   const parseRelevantCustomColorKey = useMemo(() => getParseRelevantCustomColorsKey(customColors), [customColors]);
   const fileRef = useRef<HTMLInputElement>(null);
-  const uploadedPreviewUrlRef = useRef<string | null>(null);
   const fileLoadRequestIdRef = useRef(0);
 
-  const replaceUploadedPreviewUrl = useCallback((nextUrl: string | null) => {
-    if (uploadedPreviewUrlRef.current) URL.revokeObjectURL(uploadedPreviewUrlRef.current);
-    uploadedPreviewUrlRef.current = nextUrl;
-    setUploadedPreviewUrl(nextUrl);
-  }, []);
   const presetToolbarSectionRef = useRef<HTMLElement>(null);
   const fillerToolbarSectionRef = useRef<HTMLElement>(null);
   const leftColumnRef = useRef<HTMLDivElement>(null);
@@ -875,15 +867,6 @@ const Index = () => {
     link.href = `${base}${imageData ? "favicon-active.png" : "favicon.png"}`;
   }, [imageData]);
   useEffect(() => observeTheme(setIsDark), []);
-  useEffect(
-    () => () => {
-      if (uploadedPreviewUrlRef.current) {
-        URL.revokeObjectURL(uploadedPreviewUrlRef.current);
-        uploadedPreviewUrlRef.current = null;
-      }
-    },
-    [],
-  );
 
   const preset = presets[activeIdx] || getBuiltinPreset(DEFAULT_ACTIVE_PRESET_NAME)!;
   const effectiveSelectedBlocks = useMemo(
@@ -2234,7 +2217,6 @@ const Index = () => {
       if (decodedColorGrid) {
         setDecodedColorGrid(decodedColorGrid);
         setSourceImageData(createImageDataFromColorGrid(decodedColorGrid, decodedPreset?.customColors ?? []));
-        replaceUploadedPreviewUrl(null);
         setImageName(messages.upload.sharedImageName);
         setImageValid(true);
         setPaletteNotices([]);
@@ -2252,7 +2234,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [replaceUploadedPreviewUrl]);
+  }, []);
 
   useEffect(() => {
     if (!imageData || previewBusy || crubTechControlsActive2LayerSettings) return;
@@ -2603,7 +2585,6 @@ const Index = () => {
     setDecodedColorGrid(null);
     setParsedImageSetState(null);
     setSourceImageData(null);
-    replaceUploadedPreviewUrl(null);
     setImageName("");
     setImageValid(false);
     setIsParsingImage(false);
@@ -2740,7 +2721,6 @@ const Index = () => {
       loadImageDataFromFile(file)
         .then(nextImageData => {
           if (fileLoadRequestIdRef.current !== requestId) return;
-          replaceUploadedPreviewUrl(URL.createObjectURL(file));
           setHasPendingIncomingImage(true);
           setSourceImageData(nextImageData);
           setImageName(file.name);
@@ -2757,7 +2737,6 @@ const Index = () => {
           setDecodedColorGrid(null);
           setParsedImageSetState(null);
           setSourceImageData(null);
-          replaceUploadedPreviewUrl(null);
           setImageName("");
           setImageValid(false);
           setIsParsingImage(false);
@@ -2770,7 +2749,7 @@ const Index = () => {
           if (fileRef.current) fileRef.current.value = "";
         });
     },
-    [getLossyImageFormatLabel, isLikelyLossyImageFile, replaceUploadedPreviewUrl, sortKey],
+    [getLossyImageFormatLabel, isLikelyLossyImageFile, sortKey],
   );
 
   const handlePaste = useEffectEvent((event: ClipboardEvent) => {
@@ -3261,16 +3240,20 @@ const Index = () => {
   );
   const previewVisiblePixelMask = useMemo(
     () => {
-      if (!displayImageData || !selectedTileAnalysis) return null;
-      return buildSelectedTileVisibleMask(
+      if (!displayImageData) return null;
+      return buildPreviewVisibleMask(
         displayImageData,
-        selectedTileAnalysis.tile,
-        previewPhaseRange ? selectedTileStepPreview.mask : null,
-        previewXColumnRange,
-        previewZColumnRange,
+        parsedTiles,
+        selectedTileIndices,
+        selectedTileAnalysis ? {
+          tile: selectedTileAnalysis.tile,
+          mask: previewPhaseRange ? selectedTileStepPreview.mask : null,
+          xColumnRange: previewXColumnRange,
+          zColumnRange: previewZColumnRange,
+        } : undefined,
       );
     },
-    [displayImageData, selectedTileAnalysis, previewPhaseRange, selectedTileStepPreview.mask, previewXColumnRange, previewZColumnRange],
+    [displayImageData, parsedTiles, selectedTileIndices, selectedTileAnalysis, previewPhaseRange, selectedTileStepPreview.mask, previewXColumnRange, previewZColumnRange],
   );
   const previewStatusText = useMemo(
     () => {
@@ -3312,12 +3295,6 @@ const Index = () => {
       hasMultipleTiles,
     ],
   );
-  const previewImageUrl = usePreviewImageUrl({
-    enabled: !!displayImageData,
-    imageData: displayImageData,
-    pixelReplacements: previewPixelReplacements,
-    visiblePixelMask: previewVisiblePixelMask ?? undefined,
-  });
   const showTileSelection = hasMultipleTiles && !!displayImageData && imageValid;
   const generateButtonLabel = useMemo(
     () => {
@@ -3982,8 +3959,8 @@ const Index = () => {
               fileRef={fileRef}
               imageData={displayImageData}
               originalImageDimensions={imageData}
-              previewImageUrl={previewImageUrl}
-              fallbackPreviewImageUrl={hideUploadedPreview ? null : uploadedPreviewUrl}
+              previewPixelReplacements={previewPixelReplacements}
+              previewVisiblePixelMask={previewVisiblePixelMask}
               imageName={hideUploadedPreview ? "" : imageName}
               handleFile={handleFile}
               canCopyImageShareUrl={canCopyImageShareUrl}
