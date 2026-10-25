@@ -3,6 +3,7 @@
  * - DEFAULT_*
  * - MAX_STEP_COLOR_BLOCK_LIFT
  * - MIXED_STEP_REACHABLE_TOP
+ * - SUPPRESS_STEP_LIMITS
  * - PIXEL_ART_SCALE_MODE_OPTIONS
  * - PixelArtScaleMode
  * - INVALID_DIMENSIONS_STRATEGY_OPTIONS
@@ -81,6 +82,11 @@ export const DEFAULT_CRUBTECH_LIGHT_WATER_DROP = 7;
 export const DEFAULT_CRUBTECH_FLAT_WATER_DROP = 14;
 export const DEFAULT_CRUBTECH_DARK_WATER_DROP = 24;
 export const DEFAULT_BUILD_AT_WORLD_MIN_Y = true;
+
+// Callers:
+// - src/Index.tsx
+// - src/components/SecretsSettingsDialog.tsx
+export const SUPPRESS_STEP_LIMITS = { minOffset: 1, maxOffset: 20, maxLift: 10 } as const;
 
 // Callers:
 // - src/Index.tsx

@@ -24,12 +24,11 @@ import {
   DEFAULT_PALETTE_SEED,
   DEFAULT_LAYER_GAP,
   DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
-  DEFAULT_CRUBTECH_LAYER_GAP,
-  DEFAULT_CRUBTECH_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH,
   DEFAULT_MIX_STEPS,
   DEFAULT_KEEP_SUPPRESS_EXTRAS,
   MAX_STEP_COLOR_BLOCK_LIFT,
+  SUPPRESS_STEP_LIMITS,
   MIXED_STEP_REACHABLE_TOP,
   DEFAULT_LIGHT_WATER_DROP,
   DEFAULT_FLAT_WATER_DROP,
@@ -144,6 +143,7 @@ import {
   isCrubTechBreakableValid,
   isCrubTechPushableValid,
   isFillerDisabled,
+  isSupportFillerFragile,
   isShadeFillerDisabled,
   isWaterSideSupportFillerValid,
 } from "@/lib/fillerRules";
@@ -164,6 +164,7 @@ import { getColorGridCacheKey } from "@/utils/colorGridKey";
 import { measureToolbarWidths } from "@/utils/toolbarLayout";
 import {
   getShapeForBuildMode,
+  getTwoLayerSpacing,
   CRUBTECH_WATER_DROPS,
   WATER_DROP_INPUT_ORDER,
   getUsedWaterShades,
@@ -240,11 +241,6 @@ function loadCached<T>(key: string, fallback: T): T {
     /* ignore */
   }
   return fallback;
-}
-
-function clampLatePairsGap(value: number, maxGap: number): number {
-  const nextValue = Number.isFinite(value) ? Math.trunc(value) : DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP;
-  return Math.max(1, Math.min(maxGap, nextValue));
 }
 
 const DEFAULT_WEST_EAST_SLOPE_RUN = 0;
@@ -664,7 +660,8 @@ const Index = () => {
   const [skipEmptySuppressSteps, setSkipEmptySuppressSteps] = useState(() => loadCached(LS_KEYS.skipEmptySuppressSteps, DEFAULT_SKIP_EMPTY_SUPPRESS_STEPS));
   const [minSuppressStepOffset, setMinSuppressStepOffset] = useState(() => {
     const value = loadCached(LS_KEYS.minSuppressStepOffset, DEFAULT_MIN_SUPPRESS_STEP_OFFSET);
-    return Number.isSafeInteger(value) && value >= 1 ? Math.min(20, value) : DEFAULT_MIN_SUPPRESS_STEP_OFFSET;
+    return Number.isSafeInteger(value) && value >= SUPPRESS_STEP_LIMITS.minOffset
+      ? Math.min(SUPPRESS_STEP_LIMITS.maxOffset, value) : DEFAULT_MIN_SUPPRESS_STEP_OFFSET;
   });
   const [uniformSuppressStepSpacing, setUniformSuppressStepSpacing] = useState(() => loadCached(LS_KEYS.uniformSuppressStepSpacing, DEFAULT_UNIFORM_SUPPRESS_STEP_SPACING));
   const [showAlignmentReminder, setShowAlignmentReminder] = useState(() => loadCached(LS_KEYS.showAlignmentReminder, DEFAULT_SHOW_ALIGNMENT_REMINDER));
@@ -677,7 +674,7 @@ const Index = () => {
   const [mixedStepReachableTop, setMixedStepReachableTop] = useState(() => loadCached(LS_KEYS.mixedStepReachableTop, MIXED_STEP_REACHABLE_TOP));
   const [maxStepColorBlockLift, setMaxStepColorBlockLift] = useState(() => {
     const value = loadCached(LS_KEYS.maxStepColorBlockLift, MAX_STEP_COLOR_BLOCK_LIFT);
-    return Number.isSafeInteger(value) && value >= 0 ? Math.min(10, value) : MAX_STEP_COLOR_BLOCK_LIFT;
+    return Number.isSafeInteger(value) && value >= 0 ? Math.min(SUPPRESS_STEP_LIMITS.maxLift, value) : MAX_STEP_COLOR_BLOCK_LIFT;
   });
   const [sharedBuildMode, setSharedBuildMode] = useState<BuildMode | null>(null);
   const flatSuppressStepsEnabled = showFlatNbtSuppressStepModes ||
@@ -1196,21 +1193,11 @@ const Index = () => {
   );
   const crubTechControlsCurrent2LayerSettings = imageValid && crubTech && isCrubTechBuildMode(buildMode);
   const crubTechControlsLatePairsGap = crubTechControlsCurrent2LayerSettings;
-  const minLayerGap = supportMode === SupportMode.Fragile || supportMode === SupportMode.All ? 3 : 2;
-  const effectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : Math.max(minLayerGap, layerGap);
-  const calcEffectiveLayerGap = crubTechControlsCurrent2LayerSettings ? DEFAULT_CRUBTECH_LAYER_GAP : Math.max(minLayerGap, calcLayerGap);
-  const suppress2LayerUpperY = Math.max(1, effectiveLayerGap);
-  const calcSuppress2LayerUpperY = Math.max(1, calcEffectiveLayerGap);
-  const maxSuppress2LayerLatePairsGap = Math.max(1, 64 - suppress2LayerUpperY);
-  const calcMaxSuppress2LayerLatePairsGap = Math.max(1, 64 - calcSuppress2LayerUpperY);
-  const effectiveSuppress2LayerLatePairsGap = crubTechControlsLatePairsGap
-    ? DEFAULT_CRUBTECH_LATE_PAIRS_GAP
-    : clampLatePairsGap(suppress2LayerLatePairsGap, maxSuppress2LayerLatePairsGap);
-  const calcEffectiveSuppress2LayerLatePairsGap = crubTechControlsLatePairsGap
-    ? DEFAULT_CRUBTECH_LATE_PAIRS_GAP
-    : clampLatePairsGap(calcSuppress2LayerLatePairsGap, calcMaxSuppress2LayerLatePairsGap);
-  const effectiveSuppress2LayerLatePairY = suppress2LayerUpperY + effectiveSuppress2LayerLatePairsGap;
-  const calcEffectiveSuppress2LayerLatePairY = calcSuppress2LayerUpperY + calcEffectiveSuppress2LayerLatePairsGap;
+  const { minLayerGap, layerGap: effectiveLayerGap, maxLatePairsGap: maxSuppress2LayerLatePairsGap,
+    latePairsGap: effectiveSuppress2LayerLatePairsGap, latePairY: effectiveSuppress2LayerLatePairY } =
+    getTwoLayerSpacing(supportMode, layerGap, suppress2LayerLatePairsGap, crubTechControlsCurrent2LayerSettings);
+  const { layerGap: calcEffectiveLayerGap, latePairY: calcEffectiveSuppress2LayerLatePairY } =
+    getTwoLayerSpacing(supportMode, calcLayerGap, calcSuppress2LayerLatePairsGap, crubTechControlsCurrent2LayerSettings);
   const blockedWaterDirections = useMemo(() => getBelowPlatformWaterBlockedDirections(
     parsedTiles, belowPlatformWater && isSuppressStepsBuildMode(buildMode) ? normalizedDeferredWaterDrops : undefined,
   ), [parsedTiles, belowPlatformWater, buildMode, normalizedDeferredWaterDrops]);
@@ -1222,9 +1209,7 @@ const Index = () => {
   const effectiveSuppressStepDirection = crubTechControlsCurrent2LayerSettings ? SuppressStepDirection.EastToWest
     : isSuppressDirectionSelectable(suppressStepDirection) ? suppressStepDirection
     : cycleSuppressStepDirection(suppressStepDirection, isSuppressDirectionSelectable);
-  const normalizedSupportFillerBlockId = normalizeBlockId(effectiveSupportFillerBlock);
-  const supportFillerIsFragile =
-    normalizedSupportFillerBlockId.length > 0 && isFragileBlock(normalizedSupportFillerBlockId);
+  const supportFillerIsFragile = isSupportFillerFragile(effectiveSupportFillerBlock);
   const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(effectiveSupportFillerBlock);
   const sanitizeCommittedBlockEntry = useCallback((value: string) => sanitizeUserBlockEntry(value), []);
   const setCommittedSupportFillerBlock = useCallback(

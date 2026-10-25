@@ -7,6 +7,7 @@
  * - SortDir
  *
  * Callers:
+ * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
@@ -30,6 +31,7 @@
 // - src/lib/fillerRules.ts
 // - src/lib/messages.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/generationPolicy.ts
 export enum SupportMode {
   None = "none",
   All = "all",

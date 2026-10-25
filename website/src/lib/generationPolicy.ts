@@ -12,15 +12,20 @@
  * - getBuildAtWorldMinYEligibleForBuildMode()
  * - getShapeForBuildMode()
  * - getPaletteSeedOffset()
+ * - getTwoLayerSpacing()
  *
  * Callers:
  * - src/Index.tsx
  * - src/lib/tileGeometry.ts
  */
-import { DEFAULT_CRUBTECH_DARK_WATER_DROP, DEFAULT_CRUBTECH_FLAT_WATER_DROP, DEFAULT_CRUBTECH_LIGHT_WATER_DROP } from "@/data/defaultSettings";
+import {
+  DEFAULT_CRUBTECH_DARK_WATER_DROP, DEFAULT_CRUBTECH_FLAT_WATER_DROP, DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
+  DEFAULT_CRUBTECH_LAYER_GAP, DEFAULT_CRUBTECH_LATE_PAIRS_GAP, DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
+} from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { Shade, type ColorGrid } from "@/types/color";
 import { BuildMode } from "@/types/conversion";
+import { SupportMode } from "@/types/ui";
 import type { GeneratedShape } from "@/types/shape";
 import { isCrubTechBuildMode, isStaircaseBuildMode } from "@/utils/conversion";
 import { FlatModeBehavior, type WaterDrops, type deriveImageStats } from "./colorGridAnalysis";
@@ -33,6 +38,21 @@ type TileBaseAnalysis = TileBaseGeometryWorkerResult & {
   flatModeBehavior: FlatModeBehavior;
 };
 const EMPTY_USED_WATER_SHADES: ReadonlySet<Shade> = new Set();
+
+// Callers:
+// - src/Index.tsx
+export function getTwoLayerSpacing(
+  support: SupportMode, layerGap: number, latePairsGap: number, crubTech: boolean, minimumLayerGap = 2,
+) {
+  const minLayerGap = Math.max(minimumLayerGap, support === SupportMode.Fragile || support === SupportMode.All ? 3 : 2);
+  layerGap = crubTech ? DEFAULT_CRUBTECH_LAYER_GAP : Math.max(minLayerGap, layerGap);
+  const upperY = Math.max(1, layerGap);
+  const maxLatePairsGap = Math.max(1, 64 - upperY);
+  const requestedGap = Number.isFinite(latePairsGap) ? Math.trunc(latePairsGap) : DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP;
+  latePairsGap = crubTech ? DEFAULT_CRUBTECH_LATE_PAIRS_GAP : Math.max(1, Math.min(maxLatePairsGap, requestedGap));
+  return { minLayerGap, layerGap, maxLatePairsGap, latePairsGap, latePairY: upperY + latePairsGap };
+}
+
 export const WATER_DROP_INPUT_ORDER = [Shade.Light, Shade.Flat, Shade.Dark] as const;
 export type WaterDropShade = typeof WATER_DROP_INPUT_ORDER[number];
 export const CRUBTECH_WATER_DROPS = [

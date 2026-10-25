@@ -9,6 +9,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { X, Printer, Pickaxe } from "lucide-react";
 import {
   SUPPRESS_LOAD_SPOT_MARKER_BLOCK_OPTIONS,
+  SUPPRESS_STEP_LIMITS,
   PIXEL_ART_SCALE_MODE_OPTIONS,
   INVALID_DIMENSIONS_STRATEGY_OPTIONS,
   INVALID_COLORS_PALETTE_OPTIONS,
@@ -347,14 +348,14 @@ export function SecretsSettingsDialog({
               <span>{messages.dialogs.options.minSuppressStepOffset}</span>
               <input
                 type="number"
-                min={1}
-                max={20}
+                min={SUPPRESS_STEP_LIMITS.minOffset}
+                max={SUPPRESS_STEP_LIMITS.maxOffset}
                 step={1}
                 value={minSuppressStepOffset}
                 disabled={suppressStepSpacingDisabled}
                 onChange={event => {
                   const value = Number(event.target.value);
-                  if (Number.isSafeInteger(value)) setMinSuppressStepOffset(Math.min(20, Math.max(1, value)));
+                  if (Number.isSafeInteger(value)) setMinSuppressStepOffset(Math.min(SUPPRESS_STEP_LIMITS.maxOffset, Math.max(SUPPRESS_STEP_LIMITS.minOffset, value)));
                 }}
                 className="h-6 w-16 rounded border border-border bg-input px-1.5 text-xs text-foreground"
               />
@@ -385,12 +386,12 @@ export function SecretsSettingsDialog({
               <input
                 type="number"
                 min={0}
-                max={10}
+                max={SUPPRESS_STEP_LIMITS.maxLift}
                 step={1}
                 value={maxStepColorBlockLift}
                 onChange={event => {
                   const value = Number(event.target.value);
-                  if (Number.isSafeInteger(value)) setMaxStepColorBlockLift(Math.min(10, Math.max(0, value)));
+                  if (Number.isSafeInteger(value)) setMaxStepColorBlockLift(Math.min(SUPPRESS_STEP_LIMITS.maxLift, Math.max(0, value)));
                 }}
                 className="h-6 w-16 rounded border border-border bg-input px-1.5 text-xs text-foreground"
               />

@@ -29,6 +29,22 @@ import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 import { SupportMode } from "@/types/ui";
 import { createZip } from "@/utils/zip";
+import { getTwoLayerSpacing } from "@/lib/generationPolicy";
+
+// Preserve the UI's spacing policy while moving it out of Index.
+for (const support of Object.values(SupportMode)) for (const crubTech of [false, true]) {
+  for (const requestedLayerGap of [2, 3, 5, 14, 20, 63]) for (const requestedLateGap of [-5, 1, 10, 63, NaN, 2.5]) {
+    const minLayerGap = support === SupportMode.All || support === SupportMode.Fragile ? 3 : 2;
+    const layerGap = crubTech ? DEFAULT_CRUBTECH_LAYER_GAP : Math.max(minLayerGap, requestedLayerGap);
+    const maxLatePairsGap = Math.max(1, 64 - Math.max(1, layerGap));
+    const rawGap = Number.isFinite(requestedLateGap) ? Math.trunc(requestedLateGap) : DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP;
+    const latePairsGap = crubTech ? DEFAULT_CRUBTECH_LATE_PAIRS_GAP : Math.max(1, Math.min(maxLatePairsGap, rawGap));
+    const expected = { minLayerGap, layerGap, maxLatePairsGap, latePairsGap, latePairY: Math.max(1, layerGap) + latePairsGap };
+    if (JSON.stringify(getTwoLayerSpacing(support, requestedLayerGap, requestedLateGap, crubTech)) !== JSON.stringify(expected)) {
+      throw new Error("Shared two-layer spacing differs from the UI policy");
+    }
+  }
+}
 
 const VS_FILLER_LOAD_SPOT_ORTHOGONAL_REACH = 14;
 const CRUBTECH_WATER_COLOR_BLOCK = "glass_pane[east=true,north=true,south=true,west=true,waterlogged=true]";
