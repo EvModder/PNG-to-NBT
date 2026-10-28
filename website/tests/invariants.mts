@@ -2094,6 +2094,42 @@ async function assertCenterOutTwoLayerInvariants(): Promise<void> {
   }
 }
 
+// Minimum-height Party keeps every shade while using the fewest levels.
+function assertPartyMinHeight(): void {
+  const options = { layerGap: 0, collapseStaircaseModes: false, selectedStepDirection: SuppressStepDirection.EastToWest };
+  const party = (grid: ColorGrid, partyMinHeight: boolean, buildAtWorldMinY = false) => generateShapeMap(grid, undefined, false,
+    grid.some(column => column.includes(TRANSPARENT_COLOR)), false,
+    { ...options, selectedMode: BuildMode.StaircaseParty, partyMinHeight, buildAtWorldMinY })[BuildMode.StaircaseParty]!;
+  // Every short land-shade sequence, with the rest of the tile transparent.
+  for (let sequence = 0; sequence < 81; ++sequence) {
+    const tiny: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array(MAP_SIZE).fill(TRANSPARENT_COLOR));
+    for (let z = 0; z < 4; ++z) tiny[0][z] = { id: 11, isCustom: false, shade: Math.floor(sequence / 3 ** z) % 3 as Shade };
+    const tops = new Map<number, number>();
+    for (const part of party(tiny, true).parts) for (const [coord, cell] of part.cells) {
+      const [, y, z] = parseShapeCoordKey(coord);
+      if (!Array.isArray(cell) || cell.includes(FillerRole.ShadeNorthRow)) tops.set(z, Math.max(tops.get(z) ?? -Infinity, y));
+    }
+    for (let z = 0; z < 4; ++z) {
+      const north = tops.get(z - 1);
+      assert.equal(north === undefined ? 1 : Math.sign(tops.get(z)! - north), tiny[0][z].shade - Shade.Flat, `Party shade ${sequence}:${z}`);
+    }
+    for (const minHeight of [false, true]) {
+      assert.equal(party(tiny, minHeight, true), party(tiny, minHeight), "World-min-Y has no effect on Party geometry or cache identity");
+    }
+  }
+  // Repeated low/high runs need exactly five levels.
+  const waves: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, (_, z) => ({
+    id: 11, isCustom: false, shade: z % 8 < 4 ? Shade.Light : Shade.Dark,
+  })));
+  const height = (shape: GeneratedShape) => shape.parts[0].bounds.maxY - shape.parts[0].bounds.minY;
+  assert.equal(height(party(waves, true)), 4);
+  assert(generateShapeMap(waves, undefined, false, false, false, { ...options, collapseStaircaseModes: true, partyMinHeight: true })[BuildMode.StaircaseParty],
+    "Compact Party must remain selectable even when identical to another mode");
+  const wide = party(waves, false);
+  assert(height(wide) > 4);
+  assert.equal(party(waves, false), wide, "Toggling min height must not contaminate the default cache");
+}
+
 function assertZipMetadata(): void {
   const name = "caf\u00e9-\u5730\u56fe.nbt";
   const data = new Uint8Array([1, 2, 3]);
@@ -2856,6 +2892,7 @@ async function main(): Promise<number> {
   assertPlacementWarnings();
   await assertContextualSupport();
   assertZipMetadata();
+  assertPartyMinHeight();
   await assertSharedSupportMaterialCounts();
   assertVsSparseMarkerInvariants();
   await assertMixedStepSupportInvariants();

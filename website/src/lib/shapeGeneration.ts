@@ -7,6 +7,7 @@
  */
 import {
   buildModeUsesLayerGap,
+  buildModeUsesWorldMinYGeometry,
   isSuppressStepsBuildMode,
   buildModeUsesPaletteSeed,
   isStaircaseBuildMode,
@@ -109,12 +110,6 @@ function getCanonicalBuildMode(buildMode: BuildMode): InternalBuildMode {
     default:
       return buildMode;
   }
-}
-
-function buildModeUsesWorldMinYGeometry(buildMode: BuildMode): boolean {
-  return isStaircaseBuildMode(buildMode) &&
-    buildMode !== BuildMode.InclineUp &&
-    buildMode !== BuildMode.InclineDown;
 }
 
 function getRequestedStaircaseModes(
@@ -708,6 +703,7 @@ type ShapeOptions = {
   stepDirection?: SuppressStepDirection;
   centerOut?: boolean;
   paletteSeed?: number;
+  partyMinHeight?: boolean;
   waterDrops?: WaterDrops;
   topAlignedWater?: boolean;
   enableWaterConvenience?: boolean;
@@ -724,7 +720,7 @@ type ShapeOptions = {
 
 function getShapeCacheKeyId({
   buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette, groundedStepColors,
-  stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0,
+  stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0, partyMinHeight = false,
   waterDrops, topAlignedWater = false, enableWaterConvenience = true, buildAtWorldMinY = false,
   skipEmptySuppressSteps = true, useCrubTech = false, includeTransparentBlocks = false,
   transparentPlacementMode = buildMode, suppress2LayerLatePairY = layerGap + 1,
@@ -740,10 +736,11 @@ function getShapeCacheKeyId({
   if (isSuppressStepsBuildMode(buildMode)) id += `|skipempty:${skipEmptySuppressSteps ? 1 : 0}`;
   if (useCrubTech && buildModeUsesLayerGap(buildMode)) id += "|crubtech:1";
   if (buildMode === BuildMode.Suppress2LayerLatePairs) id += `|latepairy:${suppress2LayerLatePairY}`;
+  if (buildMode === BuildMode.StaircaseParty && partyMinHeight) id += "|minheight:1";
   if (buildModeUsesPaletteSeed(buildMode)) id += `|seed:${paletteSeed}`;
   if (waterDrops) id += `|waterdrop:${waterDrops[Shade.Light]},${waterDrops[Shade.Flat]},${waterDrops[Shade.Dark]}`;
   else if (topAlignedWater && isStaircaseBuildMode(buildMode)) id += "|watertop:1";
-  if (buildAtWorldMinY && buildModeUsesWorldMinYGeometry(buildMode)) id += "|world-min-y:1";
+  if (buildAtWorldMinY) id += "|world-min-y:1";
   if (includeTransparentBlocks && isStaircaseBuildMode(buildMode)) id += "|id0:1";
   if (includeTransparentBlocks && transparentPlacementMode !== buildMode) id += `|id0mode:${transparentPlacementMode}`;
   if (isStaircaseBuildMode(buildMode) && buildMode !== BuildMode.StaircaseParty && !waterDrops && !topAlignedWater)
@@ -785,11 +782,13 @@ function getStaircaseVariantCacheKey(
   excludeWater: boolean,
   topAlignedWater: boolean,
   buildAtWorldMinY: boolean,
+  partyMinHeight: boolean,
 ): string {
   return [
     getStaircaseBaseCacheKey(excludeWater, topAlignedWater, buildAtWorldMinY),
     buildMode,
     buildModeUsesPaletteSeed(buildMode) ? paletteSeed : 0,
+    buildMode === BuildMode.StaircaseParty && partyMinHeight ? 1 : 0,
   ].join("|");
 }
 
@@ -801,9 +800,10 @@ function getCachedStaircaseVariantBlocks(
   waterDrops?: WaterDrops,
   topAlignedWater = false,
   buildAtWorldMinY = false,
+  partyMinHeight = false,
 ): ShapeBlock[] {
   const excludeWater = waterDrops !== undefined;
-  const key = getStaircaseVariantCacheKey(buildMode, paletteSeed, excludeWater, topAlignedWater, buildAtWorldMinY);
+  const key = getStaircaseVariantCacheKey(buildMode, paletteSeed, excludeWater, topAlignedWater, buildAtWorldMinY, partyMinHeight);
   const cached = cache.staircaseVariantBlocks.get(key);
   if (cached) return cached;
 
@@ -829,7 +829,7 @@ function getCachedStaircaseVariantBlocks(
       applyStaircaseVariantGroupPostProcess(blocks, colorGrid, cache, excludeWater);
       break;
     case BuildMode.StaircaseParty:
-      applyStaircaseVariantParty(blocks, colorGrid, paletteSeed, cache, excludeWater);
+      applyStaircaseVariantParty(blocks, colorGrid, paletteSeed, cache, excludeWater, partyMinHeight);
       break;
     default:
       assertUnhandledBuildMode(buildMode, "getCachedStaircaseVariantBlocks");
@@ -850,6 +850,7 @@ function getCachedStaircaseParts(
   buildAtWorldMinY = false,
   includeTransparentBlocks = false,
   transparentPlacementMode: TransparentPlacementBuildMode = buildMode,
+  partyMinHeight = false,
 ): RawShapePart[] {
   const belowPlatformWater = waterDrops !== undefined;
   const sourceBuildMode =
@@ -858,7 +859,7 @@ function getCachedStaircaseParts(
       : buildMode;
   const keyId = getShapeCacheKeyId({
     buildMode, paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience,
-    buildAtWorldMinY, includeTransparentBlocks, transparentPlacementMode,
+    buildAtWorldMinY, includeTransparentBlocks, transparentPlacementMode, partyMinHeight,
   });
   return getCachedRawParts(cache, keyId, () => {
     if (buildMode === BuildMode.InclineUp || buildMode === BuildMode.InclineDown) {
@@ -866,7 +867,7 @@ function getCachedStaircaseParts(
       return [buildShapePart(blocks)];
     }
 
-    const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, sourceBuildMode, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY));
+    const blocks = cloneShapeBlocks(getCachedStaircaseVariantBlocks(colorGrid, cache, sourceBuildMode, paletteSeed, waterDrops, topAlignedWater, buildAtWorldMinY, partyMinHeight));
     const waterConvenienceFillerCandidates =
       belowPlatformWater || sourceBuildMode === BuildMode.StaircaseParty || topAlignedWater || !enableWaterConvenience
         ? []
@@ -977,7 +978,7 @@ function buildRawShapeParts(
   cache: GridShapeCache,
   {
     buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette, groundedStepColors,
-    stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0,
+    stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0, partyMinHeight = false,
     waterDrops, topAlignedWater = false, enableWaterConvenience = true, buildAtWorldMinY = false,
     skipEmptySuppressSteps = true, useCrubTech = false, includeTransparentBlocks = false,
     transparentPlacementMode = buildMode, suppress2LayerLatePairY = layerGap + 1,
@@ -1024,6 +1025,7 @@ function buildRawShapeParts(
         buildAtWorldMinY,
         includeTransparentBlocks,
         transparentPlacementMode as TransparentPlacementBuildMode,
+        partyMinHeight,
       );
     }
   }
@@ -1169,6 +1171,7 @@ export function generateShapeMap(
     // From getGroundedStepColors(): colors that N/S step reuse must not lift.
     groundedStepColors?: readonly ColorRefKey[];
     paletteSeed?: number;
+    partyMinHeight?: boolean;
     waterSetting?: StaircaseWaterSetting;
     enableWaterConvenience?: boolean;
     buildAtWorldMinY?: boolean;
@@ -1235,7 +1238,8 @@ export function generateShapeMap(
       environmentalPalette: options.environmentalPalette,
       buildMode: internalBuildMode, layerGap, mixSteps, mixedStepMaxHeight, stepDirection,
       centerOut: options.suppressCenterOut === true && isSuppressStepsBuildMode(buildMode),
-      paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience, buildAtWorldMinY,
+      paletteSeed, partyMinHeight: options.partyMinHeight, waterDrops, topAlignedWater, enableWaterConvenience,
+      buildAtWorldMinY: buildAtWorldMinY && buildModeUsesWorldMinYGeometry(buildMode),
       skipEmptySuppressSteps, useCrubTech, includeTransparentBlocks, transparentPlacementMode: buildMode,
       suppress2LayerLatePairY, mixedStepPalette, groundedStepColors,
       stepSpacing: isSuppressStepsBuildMode(buildMode) && (minimumStepOffset !== 1 || !uniformStepSpacing || !!options.environmentalPalette)
@@ -1245,7 +1249,8 @@ export function generateShapeMap(
     // Single-mode jobs still generate the full shape, but have nothing to deduplicate.
     if (requestedModes.length > 1) {
       const signatureId = generated.signatureId ??= getGeneratedShapeSignatureId(generated.shape);
-      if (seenShapeSignatures.has(signatureId)) continue;
+      // Compact Party can match Valley; keep its control available to turn it off.
+      if (seenShapeSignatures.has(signatureId) && !(buildMode === BuildMode.StaircaseParty && options.partyMinHeight)) continue;
       seenShapeSignatures.add(signatureId);
     }
     shapes[buildMode] = generated.shape;

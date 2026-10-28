@@ -32,6 +32,7 @@ export const STORAGE_KEYS = {
   suppressStepDirection: "mapart_suppress_step_direction",
   suppressCenterOut: "mapart_suppress_center_out",
   vsFillerLoadSpotDirection: "mapart_vs_filler_load_spot_direction",
+  partyMinHeight: "mapart_party_min_height",
   paletteSeed: "mapart_palette_seed",
   layerGap: "mapart_layer_gap",
   suppress2LayerLatePairsGap: "mapart_suppress_2layer_late_pairs_gap",

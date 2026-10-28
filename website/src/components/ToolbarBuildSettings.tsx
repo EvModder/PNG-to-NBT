@@ -60,6 +60,8 @@ export type ToolbarBuildSettingsProps = {
   suppressCenterOut: boolean;
   setSuppressCenterOut: (value: boolean) => void;
   showPaletteSeedToggle: boolean;
+  partyMinHeight: boolean;
+  setPartyMinHeight: (value: boolean) => void;
   proPaletteSeed: boolean;
   setProPaletteSeed: (value: boolean) => void;
   showBuildAtWorldMinYToggle: boolean;
@@ -158,6 +160,7 @@ export function ToolbarBuildSettings({
   suppressCenterOut,
   setSuppressCenterOut,
   showPaletteSeedToggle,
+  partyMinHeight, setPartyMinHeight,
   proPaletteSeed,
   setProPaletteSeed,
   showBuildAtWorldMinYToggle,
@@ -352,6 +355,15 @@ export function ToolbarBuildSettings({
         </label>
       ),
     });
+  }
+
+  if (buildMode === BuildMode.StaircaseParty) {
+    groups.push({ key: "party-height", node: (
+      <label className={`${ACCENT_SMALL_LABEL_TEXT_CLASS} flex items-center gap-1 cursor-pointer`} title={messages.buildMode.partyMinHeightTooltip}>
+        <span>{messages.buildMode.partyMinHeightLabel}</span>
+        <input type="checkbox" checked={partyMinHeight} onChange={e => setPartyMinHeight(e.target.checked)} className="h-3.5 w-3.5" />
+      </label>
+    ) });
   }
 
   if (showPaletteSeedControl) {

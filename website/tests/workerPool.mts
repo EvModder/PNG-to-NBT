@@ -245,6 +245,14 @@ try {
   respond(waterExpected); await northline;
   assert.equal(await getTileBaseGeometry("northline-seed", { ...waterProbe, paletteSeed: 9 },
     () => assert.fail("Northline does not use a palette seed")), waterExpected);
+  assert.equal(await getTileBaseGeometry("northline-seed", { ...waterProbe, partyMinHeight: true },
+    () => assert.fail("Northline does not use Party min-height")), waterExpected);
+  const collapsed = getTileFinalGeometry("collapsed-party", input, () => {});
+  respond(result); await collapsed;
+  let compactPending = false;
+  const compactRequest = getTileFinalGeometry("collapsed-party", { ...input, partyMinHeight: true }, () => { compactPending = true; });
+  assert(compactPending, "Full discovery must retain Party min-height even when another mode is selected");
+  respond(result); await compactRequest;
   for (const shade of [Shade.Dark, Shade.Flat, Shade.Light]) {
     const colorGrid = input.colorGrid.map((column, x) => column.map((cell, z) => ({ ...cell,
       id: x > 1 || z > 1 ? 0 : x === 0 ? 12 : 11, shade })));

@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - isStaircaseBuildMode()
+ * - buildModeUsesWorldMinYGeometry()
  * - isSuppressBuildMode()
  * - isSuppressStepsBuildMode()
  * - buildModeUsesLayerGap()
@@ -101,6 +102,14 @@ export function getBuildModeDownloadSuffix(
     case BuildMode.Suppress2Layer:
       return crubTech ? "-suppress_crubtech" : `-suppress_2layer_${getDirectionSuffix(direction)}`;
   }
+}
+
+// Callers:
+// - src/lib/generationPolicy.ts
+// - src/lib/shapeGeneration.ts
+export function buildModeUsesWorldMinYGeometry(mode: BuildMode): boolean {
+  return isStaircaseBuildMode(mode) && mode !== BuildMode.InclineUp && mode !== BuildMode.InclineDown
+    && mode !== BuildMode.StaircaseParty;
 }
 
 // Callers:

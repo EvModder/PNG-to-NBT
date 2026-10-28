@@ -23,6 +23,7 @@ import {
   DEFAULT_SUPPRESS_CENTER_OUT,
   DEFAULT_VS_FILLER_LOAD_DIRECTION,
   DEFAULT_PALETTE_SEED,
+  DEFAULT_PARTY_MIN_HEIGHT,
   DEFAULT_LAYER_GAP,
   DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH,
@@ -612,6 +613,7 @@ const Index = () => {
     const storedDirection = loadCached(LS_KEYS.vsFillerLoadSpotDirection, DEFAULT_VS_FILLER_LOAD_DIRECTION);
     return isSuppressStepDirection(storedDirection) ? storedDirection : DEFAULT_VS_FILLER_LOAD_DIRECTION;
   });
+  const [partyMinHeight, setPartyMinHeight] = useState(() => loadCached(LS_KEYS.partyMinHeight, DEFAULT_PARTY_MIN_HEIGHT));
   const [proPaletteSeed, setProPaletteSeed] = useState(() => loadCached(LS_KEYS.paletteSeed, DEFAULT_PALETTE_SEED));
   const calcProPaletteSeed = useDeferredValue(proPaletteSeed);
   const [layerGap, setLayerGap] = useState(() => loadCached(LS_KEYS.layerGap, DEFAULT_LAYER_GAP));
@@ -1018,6 +1020,7 @@ const Index = () => {
       [LS_KEYS.suppressCenterOut]: suppressCenterOut,
       [LS_KEYS.vsFillerLoadSpotDirection]: vsFillerLoadSpotDirection,
       [LS_KEYS.paletteSeed]: proPaletteSeed,
+      [LS_KEYS.partyMinHeight]: partyMinHeight,
       [LS_KEYS.layerGap]: layerGap,
       [LS_KEYS.suppress2LayerLatePairsGap]: suppress2LayerLatePairsGap,
       [LS_KEYS.crubTech]: crubTech,
@@ -1211,6 +1214,8 @@ const Index = () => {
     : cycleSuppressStepDirection(suppressStepDirection, isSuppressDirectionSelectable);
   const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(effectiveSupportFillerBlock);
   const flatAssumeSupportFloor = shouldAssumeSupportFloor(applySupportFloorYs, BuildMode.Flat, supportMode, effectiveSupportFillerBlock);
+  const modeAssumeSupportFloor = crubTechControlsCurrent2LayerSettings || shouldAssumeSupportFloor(
+    applySupportFloorYs, buildMode, supportMode, effectiveSupportFillerBlock);
   const sanitizeCommittedBlockEntry = useCallback((value: string) => sanitizeUserBlockEntry(value), []);
   const setCommittedSupportFillerBlock = useCallback(
     (value: string) => setSupportFillerBlock(sanitizeCommittedBlockEntry(value)),
@@ -1337,6 +1342,7 @@ const Index = () => {
             flatModeBehavior: tileDerivedStats.flatModeBehavior,
             layerGap: calcLayerGap,
             paletteSeed: paletteSeedOffset,
+            partyMinHeight,
             enableWaterConvenience: supportMode !== SupportMode.None,
           }, startAnalysis, controller.signal, getDisplayedGeometry(index)?.baseShapeMap);
           advanceProgress();
@@ -1402,8 +1408,7 @@ const Index = () => {
         const nextBuildAtWorldMinYEligible = getBuildAtWorldMinYEligibleForBuildMode(
           nextBaseAnalyses,
           nextResolvedBuildMode,
-          (crubTech && isCrubTechBuildMode(nextResolvedBuildMode))
-            || (nextResolvedBuildMode === BuildMode.Flat ? flatAssumeSupportFloor : applySupportFloorYs),
+          modeAssumeSupportFloor,
         );
         const nextActiveBuildAtWorldMinY = nextBuildAtWorldMinYEligible && buildAtWorldMinY;
         const nextUseCrubTechShadeFillers =
@@ -1487,6 +1492,7 @@ const Index = () => {
               mixedStepPalette: scopeMixedStepPalette(mixedStepPalette, tile.derivedImageStats.usedShadesByColorKey.keys()),
               groundedStepColors: groundedStepColors?.filter(key => tile.derivedImageStats.usedShadesByColorKey.has(key)),
               paletteSeed: paletteSeedOffset,
+              partyMinHeight,
               enableWaterConvenience: supportMode !== SupportMode.None,
               skipEmptySuppressSteps: skipEmptySuppressSteps && !calcKeepSuppressExtras,
               minSuppressStepOffset,
@@ -1561,6 +1567,7 @@ const Index = () => {
     calcKeepSuppressExtras,
     calcSuppressCenterOut,
     paletteSeedOffset,
+    partyMinHeight,
     supportMode,
     mixedStepMaxHeight,
     mixedStepPalette,
@@ -1571,7 +1578,7 @@ const Index = () => {
     uniformSuppressStepSpacing,
     crubTech,
     effectiveSuppressStepDirection,
-    applySupportFloorYs,
+    modeAssumeSupportFloor,
     flatAssumeSupportFloor,
     buildAtWorldMinY,
     hasMultipleTiles,
@@ -1611,8 +1618,8 @@ const Index = () => {
   const effectiveShowTransparentRow = !crubTechControlsActive2LayerSettings && showTransparentRow;
   const effectiveForceXZ128 = crubTechControlsActive2LayerSettings || forceXZ128;
   const effectiveForceZ129 = crubTechControlsActive2LayerSettings || forceZ129;
-  const effectiveApplySupportFloorYs = crubTechControlsActive2LayerSettings || shouldAssumeSupportFloor(
-    applySupportFloorYs, effectiveBuildMode, effectiveSupportMode, effectiveSupportFillerBlock);
+  const effectiveApplySupportFloorYs = lockFlatBuildMode ? flatAssumeSupportFloor : modeAssumeSupportFloor;
+  const supportFloorLocked = crubTechControlsActive2LayerSettings || effectiveBuildMode === BuildMode.StaircaseParty;
   const effectiveBelowPlatformWater = crubTechControlsActive2LayerSettings || belowPlatformWater;
   const uiFillerAssignments = useMemo(
     () => createFillerAssignments(
@@ -3088,6 +3095,7 @@ const Index = () => {
     suppressCenterOut: suppressCenterOut && buildModeSupportsCenterOut(effectiveBuildMode, crubTech),
     setSuppressCenterOut,
     showPaletteSeedToggle,
+    partyMinHeight, setPartyMinHeight,
     proPaletteSeed,
     setProPaletteSeed,
     showBuildAtWorldMinYToggle,
@@ -4049,9 +4057,9 @@ const Index = () => {
         forceZ129={effectiveForceZ129}
         setForceZ129={setForceZ129}
         forceZ129Disabled={crubTechControlsActive2LayerSettings}
-        applySupportFloorYs={crubTechControlsActive2LayerSettings || applySupportFloorYs}
+        applySupportFloorYs={supportFloorLocked ? effectiveApplySupportFloorYs : applySupportFloorYs}
         setApplySupportFloorYs={setApplySupportFloorYs}
-        applySupportFloorYsDisabled={crubTechControlsActive2LayerSettings}
+        applySupportFloorYsDisabled={supportFloorLocked}
         belowPlatformWater={effectiveBelowPlatformWater}
         setBelowPlatformWater={setBelowPlatformWater}
         belowPlatformWaterDisabled={crubTechControlsActive2LayerSettings}

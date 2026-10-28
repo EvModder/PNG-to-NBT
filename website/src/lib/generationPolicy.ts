@@ -28,7 +28,7 @@ import { Shade, type ColorGrid } from "@/types/color";
 import { BuildMode } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 import type { GeneratedShape } from "@/types/shape";
-import { isCrubTechBuildMode, isStaircaseBuildMode } from "@/utils/conversion";
+import { buildModeUsesWorldMinYGeometry, isCrubTechBuildMode, isStaircaseBuildMode } from "@/utils/conversion";
 import { FlatModeBehavior, type WaterDrops, type deriveImageStats } from "./colorGridAnalysis";
 import { getColorRefKey, type ColorRefKey } from "./colorRefs";
 import { hasBuildAtWorldMinYOpportunity } from "./shapeAnalysis";
@@ -41,11 +41,12 @@ type TileBaseAnalysis = TileBaseGeometryWorkerResult & {
 };
 const EMPTY_USED_WATER_SHADES: ReadonlySet<Shade> = new Set();
 
-// Explicit flat-map supports replace the assumed platform; do not change the saved preference.
+// Party has no assumed platform; explicit flat-map supports replace it.
 // Callers:
 // - src/Index.tsx
 export function shouldAssumeSupportFloor(assumeFloor: boolean, mode: BuildMode, support: SupportMode, block: string): boolean {
-  return assumeFloor && !(mode === BuildMode.Flat && support !== SupportMode.None && !!block.trim() && !isFillerDisabled(block));
+  return assumeFloor && mode !== BuildMode.StaircaseParty
+    && !(mode === BuildMode.Flat && support !== SupportMode.None && !!block.trim() && !isFillerDisabled(block));
 }
 
 // Callers:
@@ -188,7 +189,7 @@ export function getBuildAtWorldMinYEligibleForBuildMode(
   buildMode: BuildMode,
   applySupportFloorYs: boolean,
 ): boolean {
-  if (!isStaircaseBuildMode(buildMode)) return false;
+  if (!buildModeUsesWorldMinYGeometry(buildMode)) return false;
   if (buildMode === BuildMode.Flat) {
     return getFlatBuildAtWorldMinYEligible(tileBaseAnalyses, applySupportFloorYs);
   }

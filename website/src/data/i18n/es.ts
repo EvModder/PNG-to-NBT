@@ -120,6 +120,8 @@ export const esCatalog = {
     waterLevelTooltip:
       "Agua de tono {shadeName}: 0 coloca el bloque de agua de este tono en la Y del piso no acuoso. Cada incremento lo baja 1 bloque más. Los tonos de agua usados deben tener valores distintos.",
     waterLevelAriaLabel: "Nivel de agua para el tono {shadeName}",
+    partyMinHeightLabel: "Altura mín.:",
+    partyMinHeightTooltip: "Usa el intervalo mínimo posible en Fiesta en lugar de 0–127 por fila de mapas. Los soportes y las cubiertas pueden ampliar la construcción. Reduce la variación de alturas.",
     paletteSeedLabel: "Semilla de paleta:",
     stepDirectionLabels: {
       [SuppressStepDirection.EastToWest]: "E→O",
@@ -445,7 +447,7 @@ export const esCatalog = {
       forceZ129: "Ancho Z siempre 129",
       forceZ129Tooltip: "Incluir siempre espacio para la fila extra de sombreado al norte, aunque no se use.",
       assumeFloor: "Suponer suelo",
-      assumeFloorTooltip: "Tratar las plataformas como ya existentes; omitir soportes al nivel del suelo salvo cuando se eligen para mapas planos.",
+      assumeFloorTooltip: "Omitir los soportes al nivel del suelo en plataformas existentes. Party no supone una plataforma; los mapas planos conservan los soportes elegidos explícitamente.",
       belowPlatformWater: "Agua bajo la plataforma",
       belowPlatformWaterTooltip: "Suponer colocaciones de agua bajo la plataforma, con alturas de superficie ajustables para cada tono.",
       skipEmptySuppressSteps: "Omitir Suppress-steps vacíos",

@@ -126,6 +126,8 @@ export const enCatalog = {
     waterLevelTooltip:
       "{shadeName} water shade: 0 places this shade's water block at the non-water floor Y. Each increment lowers it by 1 block. Used water shades must have distinct values.",
     waterLevelAriaLabel: "{shadeName} water shade level",
+    partyMinHeightLabel: "Min. height:",
+    partyMinHeightTooltip: "Use the smallest feasible Party height range instead of 0–127 per tile row. Supports and covers may extend the build. This reduces height variation.",
     paletteSeedLabel: "Palette seed:",
     stepDirectionLabels: {
       [SuppressStepDirection.EastToWest]: "E→W",
@@ -449,7 +451,7 @@ export const enCatalog = {
       forceZ129: "Z-width always 129",
       forceZ129Tooltip: "Always include space for the extra north shading row, even when unused.",
       assumeFloor: "Assume floor",
-      assumeFloorTooltip: "Treat build platforms as already present; omit floor-level supports except when explicitly selected for flat maps.",
+      assumeFloorTooltip: "Omit floor-level supports on existing platforms. Party assumes no platform; flat maps keep explicitly selected supports.",
       belowPlatformWater: "Below-platform water",
       belowPlatformWaterTooltip: "Assume water placements below the platform, with adjustable surface heights for each shade.",
       skipEmptySuppressSteps: "Skip empty Suppress-steps",

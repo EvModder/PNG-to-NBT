@@ -45,6 +45,7 @@ export type TileBaseGeometryWorkerInput = {
   flatModeBehavior: FlatModeBehavior;
   layerGap: number;
   paletteSeed: number;
+  partyMinHeight?: boolean;
   enableWaterConvenience: boolean;
 };
 
@@ -81,6 +82,7 @@ export type TileFinalGeometryWorkerInput = {
   mixedStepPalette?: MixedStepPalette;
   groundedStepColors?: readonly ColorRefKey[];
   paletteSeed: number;
+  partyMinHeight?: boolean;
   enableWaterConvenience: boolean;
   skipEmptySuppressSteps: boolean;
   minSuppressStepOffset: number;

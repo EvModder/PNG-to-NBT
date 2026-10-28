@@ -144,6 +144,7 @@ function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeomet
     serializeWaterSetting(input.waterSetting),
     input.flatModeBehavior,
     includesParty ? input.paletteSeed : 0,
+    includesParty && input.partyMinHeight ? 1 : 0,
     input.hasWater && !input.waterSetting && input.enableWaterConvenience ? 1 : 0,
   ].join("|");
 }
@@ -177,6 +178,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     raisedSteps ? input.mixedStepPalette?.key ?? "" : "",
     mixSteps && !eastWest ? input.groundedStepColors?.join() ?? "" : "",
     includesParty ? input.paletteSeed : 0,
+    includesParty && input.partyMinHeight ? 1 : 0,
     input.hasWater && !input.waterSetting && input.enableWaterConvenience ? 1 : 0,
     steps && input.skipEmptySuppressSteps ? 1 : 0,
     steps ? input.minSuppressStepOffset : "",

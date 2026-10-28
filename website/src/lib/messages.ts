@@ -300,6 +300,8 @@ export const messages = {
     },
   },
   buildMode: {
+    partyMinHeightLabel: catalog.buildMode.partyMinHeightLabel,
+    partyMinHeightTooltip: catalog.buildMode.partyMinHeightTooltip,
     label: catalog.buildMode.label,
     staircaseGroupLabel: catalog.buildMode.staircaseGroupLabel,
     suppressGroupLabel: catalog.buildMode.suppressGroupLabel,

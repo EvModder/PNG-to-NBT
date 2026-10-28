@@ -1012,6 +1012,7 @@ export function applyStaircaseVariantParty<T extends PositionedEntry>(
   paletteSeed = 0,
   cache: ColumnPixelCache,
   excludeWater = false,
+  minimizeHeight = false,
 ) {
   const seedBase = (42 ^ paletteSeed) >>> 0;
 
@@ -1023,6 +1024,32 @@ export function applyStaircaseVariantParty<T extends PositionedEntry>(
   const maxFeas = Array<number | undefined>(MAP_SIZE);
   const assignedTopY = Array<number | undefined>(MAP_SIZE);
   const columns = groupBlocksByColumn(blocks);
+  // Difference constraints on a line: rising/equal edges propagate south,
+  // falling/equal edges north. Two passes give the least feasible top heights.
+  let heightLimit = colorGrid[0].length - 1;
+  if (minimizeHeight) {
+    heightLimit = 0;
+    for (let x = 0; x < colorGrid.length; ++x) {
+      const pixels = getCachedColumnPixelInfo(colorGrid, cache, x, excludeWater);
+      if (pixels.size === 0) continue;
+      const rows = buildColumnBlockRows(columns[x]);
+      const heights = Array<number>(colorGrid[0].length).fill(0);
+      for (const [z, pixel] of pixels) {
+        if (pixel.isWater) heights[z] = rows.rowMaxY[z + 1] - rows.rowMinY[z + 1];
+        if (!pixels.has(z - 1) || pixel.isWater) continue;
+        if (pixel.shade !== Shade.Dark) heights[z] = Math.max(heights[z], heights[z - 1] + (pixel.shade === Shade.Light ? 1 : 0));
+      }
+      for (let z = heights.length - 2; z >= 0; --z) {
+        const south = pixels.get(z + 1);
+        if (!pixels.has(z) || !south || south.isWater || south.shade === Shade.Light) continue;
+        heights[z] = Math.max(heights[z], heights[z + 1] + (south.shade === Shade.Dark ? 1 : 0));
+      }
+      for (const [z, pixel] of pixels) {
+        const needsShader = !pixel.isWater && pixel.shade === Shade.Dark && !pixels.has(z - 1);
+        heightLimit = Math.max(heightLimit, heights[z] + (needsShader ? 1 : 0));
+      }
+    }
+  }
   for (let x = 0; x < MAP_SIZE; ++x) {
     const colBlocks = columns[x];
     if (colBlocks.length === 0) continue;
@@ -1063,7 +1090,8 @@ export function applyStaircaseVariantParty<T extends PositionedEntry>(
     }
 
     const lowerBound = (z: number) => (pixelInfo.get(z)?.isWater ? (depthByZ[z] ?? 1) - 1 : 0);
-    const upperBound = (_z: number) => MAP_SIZE - 1;
+    const upperBound = (z: number) => heightLimit - (minimizeHeight && !pixelInfo.get(z)?.isWater
+      && pixelInfo.get(z)?.shade === Shade.Dark && !pixelInfo.has(z - 1) ? 1 : 0);
     const hasPrimary = (z: number) => pixelInfo.has(z);
     const edgeRel = (northZ: number): -1 | 0 | 1 | null => {
       const southZ = northZ + 1;

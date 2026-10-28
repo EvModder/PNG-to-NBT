@@ -69,6 +69,7 @@ export const DEFAULT_SUPPRESS_STEP_DIRECTION = SuppressStepDirection.EastToWest;
 export const DEFAULT_SUPPRESS_CENTER_OUT = false;
 export const DEFAULT_VS_FILLER_LOAD_DIRECTION = SuppressStepDirection.NorthToSouth;
 export const DEFAULT_PALETTE_SEED = false;
+export const DEFAULT_PARTY_MIN_HEIGHT = false;
 export const DEFAULT_LAYER_GAP = 5;
 export const DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP = 1;
 export const DEFAULT_CRUBTECH_LAYER_GAP = 14;
