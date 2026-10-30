@@ -7,9 +7,7 @@
  * - getSupportedBlockIdAbove()
  * - NO_SUPPORT_FLOORS
  * - isWithinShapeBounds()
- * - shouldIncludeFragileSupportCell()
- * - FragileSupportOverride
- * - getFragileSupportOverride()
+ * - resolveShapeFiller()
  *
  * Callers:
  * - src/Index.tsx
@@ -25,7 +23,31 @@ import { resolveAssignedFillerName } from "@/lib/fillerRules";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { normalizeBlockId, resolveAssignedColorBlock, type ColorBlockSelections } from "@/lib/blockId";
+import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
+
+// Callers:
+// - src/lib/shapeAnalysis.ts
+// - src/lib/nbtExport.ts
+export function resolveShapeFiller(
+  part: ShapePart,
+  coord: number,
+  roles: readonly FillerRole[],
+  options: ColorBlockSelections,
+  assignments: Map<FillerRole, string>,
+): { role: FillerRole; blockName: string | null; override: FragileSupportOverride | null } | null {
+  let missing: ReturnType<typeof resolveShapeFiller> = null;
+  // Assignment order determines priority; rejected or disabled blocks do not claim a cell.
+  for (const [role, block] of assignments) {
+    if (!roles.includes(role) || !shouldIncludeFragileSupportCell(part, coord, roles, role, options, assignments)) continue;
+    const override = getFragileSupportOverride(part, coord, role, block, options, assignments);
+    const blockName = override ? resolveExportBlockName(override.replacementBlockId) : resolveAssignedFillerName(assignments, role);
+    const resolved = { role, blockName, override };
+    if (blockName) return resolved;
+    // Keep the unfilled requirement visible in the material toolbar.
+    missing ??= resolved;
+  }
+  return missing;
+}
 
 // Callers:
 // - src/lib/nbtExport.ts
@@ -118,10 +140,7 @@ export function isWithinShapeBounds(
   return true;
 }
 
-// Callers:
-// - src/lib/nbtExport.ts
-// - src/lib/shapeAnalysis.ts
-export function shouldIncludeFragileSupportCell(
+function shouldIncludeFragileSupportCell(
   part: ShapePart,
   coord: number,
   roles: readonly FillerRole[],
@@ -134,17 +153,12 @@ export function shouldIncludeFragileSupportCell(
   return !!blockId && isFragileBlock(blockId);
 }
 
-// Callers:
-// - src/lib/shapeAnalysis.ts
-export interface FragileSupportOverride {
+interface FragileSupportOverride {
   blockId: string;
   replacementBlockId: string;
 }
 
-// Callers:
-// - src/lib/nbtExport.ts
-// - src/lib/shapeAnalysis.ts
-export function getFragileSupportOverride(
+function getFragileSupportOverride(
   part: ShapePart,
   coord: number,
   activeRole: FillerRole | null,

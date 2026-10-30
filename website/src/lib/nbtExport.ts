@@ -17,8 +17,8 @@ import {
   DEFAULT_CRUBTECH_DARK_WATER_DROP,
 } from "@/data/defaultSettings";
 import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
-import { CRUBTECH_NOOBLINE_FILLER_BLOCK, buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
-import { type ColorBlockSelections, resolveExportBlockName, resolveShapeColorBlockName } from "./blockId";
+import { CRUBTECH_NOOBLINE_FILLER_BLOCK, buildFillerAssignmentMap } from "./fillerRules";
+import { type ColorBlockSelections, resolveShapeColorBlockName } from "./blockId";
 import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getVersionedBlockName, isBlockAvailable } from "./minecraftVersion";
@@ -32,8 +32,7 @@ import {
   isWithinShapeBounds,
   NO_SUPPORT_FLOORS,
   parseShapeCoordKey,
-  shouldIncludeFragileSupportCell,
-  getFragileSupportOverride,
+  resolveShapeFiller,
 } from "./shapeModel";
 import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
 import { appendSuppressClearanceMarkers } from "./suppressClearance";
@@ -263,7 +262,6 @@ function resolveExportShapeColorBlockName(
 
 function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs: ReadonlySet<number>): PaletteSourceBlock[] {
   const resolved: PaletteSourceBlock[] = [];
-  const occupied = new Set<number>();
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
   const waterTopYByColumn = getWaterColumnTopY(part);
 
@@ -273,36 +271,22 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
     const blockName = resolveExportShapeColorBlockName(cell, x, y, z, waterTopYByColumn, options, fillerAssignments);
     if (!blockName) continue;
     resolved.push({ x, y, z, blockName });
-    occupied.add(coord);
   }
 
   if (options.fillerAssignments.length === 0) return resolved;
 
-  const resolveExportFillerName = (role: FillerRole) => {
-    if (
-      options.crubTech &&
-      (role === FillerRole.ShadeNorthRowBreakable || role === FillerRole.ShadeNorthRowPushable)
-    ) {
-      return resolveExportBlockName(CRUBTECH_NOOBLINE_FILLER_BLOCK);
+  if (options.crubTech) {
+    for (const role of [FillerRole.ShadeNorthRowBreakable, FillerRole.ShadeNorthRowPushable]) {
+      if (fillerAssignments.has(role)) fillerAssignments.set(role, CRUBTECH_NOOBLINE_FILLER_BLOCK);
     }
-    return resolveAssignedFillerName(fillerAssignments, role);
-  };
-
-  for (const assignment of options.fillerAssignments) {
-    const fillerName = resolveExportFillerName(assignment.role);
-    for (const [coord, cell] of part.cells) {
-      if (!isShapeFillerCell(cell) || !cell.includes(assignment.role)) continue;
-      const [x, y, z] = parseShapeCoordKey(coord);
-      if (!shouldIncludeFragileSupportCell(part, coord, cell, assignment.role, options, fillerAssignments)) continue;
-      if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
-      if (occupied.has(coord)) continue;
-      const assignedSupportBlock = fillerAssignments.get(assignment.role) ?? null;
-      const override = getFragileSupportOverride(part, coord, assignment.role, assignedSupportBlock, options, fillerAssignments);
-      const blockName = override ? resolveExportBlockName(override.replacementBlockId) : fillerName;
-      if (!blockName) continue;
-      resolved.push({ x, y, z, blockName, paletteRole: getExportPaletteRoleForFiller(assignment.role) });
-      occupied.add(coord);
-    }
+  }
+  for (const [coord, cell] of part.cells) {
+    if (!isShapeFillerCell(cell)) continue;
+    const [x, y, z] = parseShapeCoordKey(coord);
+    if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
+    const filler = resolveShapeFiller(part, coord, cell, options, fillerAssignments);
+    if (!filler?.blockName) continue;
+    resolved.push({ x, y, z, blockName: filler.blockName, paletteRole: getExportPaletteRoleForFiller(filler.role) });
   }
 
   return resolved.toSorted(comparePaletteSourceBlocks);

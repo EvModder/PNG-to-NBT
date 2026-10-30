@@ -260,7 +260,6 @@ export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[
 
 // Callers:
 // - src/lib/shapeAnalysis.ts
-// - src/lib/nbtExport.ts
 // - src/lib/shapeModel.ts
 export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, role: FillerRole): string | null {
   const block = assignments.get(role) ?? "";

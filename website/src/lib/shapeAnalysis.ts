@@ -24,20 +24,18 @@ import { Shade, type ColorGrid } from "@/types/color";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
-import { normalizeBlockId, resolveExportBlockName, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
+import { normalizeBlockId, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
 import { getColorRefKey } from "./colorRefs";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { forEachSuppressClearanceCell, getSuppressClearancePlan } from "./suppressClearance";
 import {
-  getFragileSupportOverride,
-  type FragileSupportOverride,
+  resolveShapeFiller,
   isShapeColorCell,
   isShapeFillerCell,
   isWithinShapeBounds,
   NO_SUPPORT_FLOORS,
   parseShapeCoordKey,
   toShapeCoordKey,
-  shouldIncludeFragileSupportCell,
 } from "./shapeModel";
 
 interface FillerNeedStats {
@@ -112,26 +110,6 @@ function getVisibleColorShadeKey(colorGrid: ColorGrid, x: number, z: number): nu
   return getColorRefKey(color) * 4 + color.shade;
 }
 
-function resolveShapeFiller(
-  part: ShapePart,
-  coord: number,
-  roles: readonly FillerRole[],
-  options: ColorBlockSelections,
-  assignments: Map<FillerRole, string>,
-): { role: FillerRole; blockName: string | null; override: FragileSupportOverride | null } | null {
-  let missing: ReturnType<typeof resolveShapeFiller> = null;
-  // Match export priority: rejected or disabled assignments do not claim the cell.
-  for (const [role, block] of assignments) {
-    if (!roles.includes(role) || !shouldIncludeFragileSupportCell(part, coord, roles, role, options, assignments)) continue;
-    const override = getFragileSupportOverride(part, coord, role, block, options, assignments);
-    const blockName = override ? resolveExportBlockName(override.replacementBlockId) : resolveAssignedFillerName(assignments, role);
-    const resolved = { role, blockName, override };
-    if (blockName) return resolved;
-    // Keep the unfilled requirement visible in the material toolbar.
-    missing ??= resolved;
-  }
-  return missing;
-}
 
 // Retained blocks are counted during replay; collecting them skips unused per-part totals.
 function analyzePartMaterialNeeds(
