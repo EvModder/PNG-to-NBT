@@ -18,22 +18,22 @@ import { getBuildModeDownloadSuffix } from "@/utils/conversion";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAnalysis";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbt } from "@/lib/nbtExport";
-import { createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
+import { buildFillerAssignmentMap, createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { getMixedStepSettings, getMixedStepReuse } from "@/lib/mixedStepHeights";
-import { analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
+import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { canSupportBlock } from "@/lib/blockSupport";
 import { isFragileBlock } from "@/data/fragileBlocks";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
-import { normalizeBlockId } from "@/lib/blockId";
+import { normalizeBlockId, type ColorBlockSelections } from "@/lib/blockId";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
 import { SupportMode } from "@/types/ui";
 import { createZip } from "@/utils/zip";
-import { getTwoLayerSpacing } from "@/lib/generationPolicy";
+import { getTwoLayerSpacing, shouldAssumeSupportFloor } from "@/lib/generationPolicy";
 
 // Preserve the UI's spacing policy while moving it out of Index.
 for (const support of Object.values(SupportMode)) for (const crubTech of [false, true]) {
@@ -2024,16 +2024,100 @@ function assertBlockSupportPairs(): void {
   for (const base of ["bamboo", "bamboo_sapling"]) assert(canSupportBlock(base, "oak_sign"));
 }
 
+function assertFragileSupportEligibility(): void {
+  for (const block of ["air", "none", "", "minecraft:air"]) assert(shouldAssumeSupportFloor(true, BuildMode.Flat, SupportMode.All, block));
+  assert(shouldAssumeSupportFloor(true, BuildMode.Flat, SupportMode.None, "sand"));
+  assert(shouldAssumeSupportFloor(true, BuildMode.SuppressStepChecker, SupportMode.Fragile, "sand"));
+  assert(!shouldAssumeSupportFloor(true, BuildMode.Flat, SupportMode.Fragile, "stone"));
+  assert(!shouldAssumeSupportFloor(false, BuildMode.Flat, SupportMode.None, "air"));
+  const grid: ColorGrid = Array.from({ length: 128 }, () => Array.from({ length: 128 }, () => ({ id: 1, isCustom: false, shade: Shade.Flat })));
+  const hasFragileSupport = (shape: GeneratedShape, selections: ColorBlockSelections, fillers: Map<FillerRole, string>, assumeFloor: boolean) => {
+    const { supportNeeds } = analyzeMaterialNeeds(grid, shape, { ...selections,
+      fillerAssignments: Array.from(fillers, ([role, block]) => ({ role, block })), applySupportFloorYs: assumeFloor });
+    return supportNeeds.aboveFloor > 0 || (!assumeFloor && supportNeeds.atFloor > 0);
+  };
+  const reused: GeneratedShape = { partType: ShapePartType.SingleColumn, splitExportNames: null,
+    suppressedTransparentVsCollisionCount: 0, parts: [{ cells: new Map([
+      [toShapeCoordKey(0, 1, 0), { id: 11, isCustom: false, fillerRole: FillerRole.SupportRetained }],
+      [toShapeCoordKey(1, 1, 0), { id: 11, isCustom: false, fillerRole: FillerRole.ShadeSuppress }],
+      [toShapeCoordKey(2, 1, 0), { id: 11, isCustom: false }],
+      [toShapeCoordKey(3, 1, 0), [FillerRole.ShadeSuppress]],
+    ]), bounds: { minY: 0, maxY: 1, minZ: 0, maxZ: 0 }, supportFloorYs: new Set([0]) }] };
+  assert.deepEqual(analyzeFillerNeeds(reused).roleCounts,
+    new Map([[FillerRole.SupportRetained, 1], [FillerRole.ShadeSuppress, 2]]),
+    "Dependency counts must include filler assignments reused as color blocks");
+  const selections = { selectedBlocks: { 1: "stone_pressure_plate", 11: "stone" }, selectedBlocksCustom: {}, customColors: [] };
+  const assignments = createFillerAssignments("scaffolding", "resin_clump[down=true]", "moss_block", "resin_block", "resin_block",
+    "slime_block", "resin_block", SupportMode.Fragile, false, false, false);
+  const fillers = buildFillerAssignmentMap(assignments);
+  const make = (height: number): GeneratedShape => ({ partType: ShapePartType.SuppressStepPhases, splitExportNames: null,
+    suppressedTransparentVsCollisionCount: 0, parts: [{ bounds: { minY: 0, maxY: 3, minZ: 0, maxZ: 127 }, supportFloorYs: new Set([0]),
+      cells: new Map([[toShapeCoordKey(0, height + 1, 0), [FillerRole.ShadeSuppress]],
+        [toShapeCoordKey(0, height, 0), [FillerRole.SupportFragile]]]) }] });
+  assert(!hasFragileSupport(make(0), selections, fillers, true), "The assumed floor supports shade fillers");
+  assert(hasFragileSupport(make(0), selections, fillers, false), "Without a floor the same filler needs support");
+  const raised = make(1);
+  assert(hasFragileSupport(raised, selections, fillers, true), "Raised shade fillers need support");
+  const air = new Map(fillers); air.set(FillerRole.SupportFragile, "air");
+  assert(hasFragileSupport(raised, selections, air, true), "Air cannot hide an unmet requirement");
+  const noSupport = new Map(fillers); noSupport.delete(FillerRole.SupportFragile);
+  assert(hasFragileSupport(raised, selections, noSupport, true), "None cannot hide an unmet requirement");
+  const disabledShade = new Map(fillers); disabledShade.set(FillerRole.ShadeSuppress, "air");
+  assert(!hasFragileSupport(raised, selections, disabledShade, true), "Disabled fillers need no support");
+  const phases = make(0); phases.parts.push(raised.parts[0]);
+  assert(hasFragileSupport(phases, selections, fillers, true), "A need in any phase keeps Fragile available");
+  const analysisOptions = { ...selections, fillerAssignments: assignments, applySupportFloorYs: true };
+  const repeated = { ...raised, parts: [raised.parts[0], raised.parts[0]] };
+  assert.equal(analyzeMaterialNeeds(grid, repeated, analysisOptions).supportNeeds.aboveFloor, 1,
+    "Support demand uses the phase maximum, not the sum");
+  assert.equal(analyzeMaterialNeeds(grid, { ...repeated, partType: ShapePartType.SingleColumn }, analysisOptions).supportNeeds.aboveFloor, 2);
+  const soil = make(1);
+  soil.parts[0].cells.set(toShapeCoordKey(0, 2, 0), { id: 1, isCustom: false });
+  const soilOptions = { ...analysisOptions, selectedBlocks: { 1: "poppy" } };
+  assert.deepEqual(analyzeMaterialNeeds(grid, soil, soilOptions).supportNeeds.overrideCounts, { poppy: 1 });
+  assert.deepEqual(analyzeMaterialNeeds(grid, soil, { ...soilOptions, phaseRange: [1, 1] }).supportNeeds.overrideCounts, {});
+  raised.parts[0].cells.set(toShapeCoordKey(0, 1, 0), { id: 11, isCustom: false });
+  assert(!hasFragileSupport(raised, selections, fillers, true), "A reused color block replaces the optional support");
+  raised.parts[0].cells.set(toShapeCoordKey(0, 1, 0), [FillerRole.ShadeNorthRow]);
+  const solidShade = new Map(fillers); solidShade.set(FillerRole.ShadeNorthRow, "stone");
+  assert(!hasFragileSupport(raised, selections, solidShade, true), "A valid shade block is not an extra support placement");
+  raised.parts[0].cells.set(toShapeCoordKey(0, 1, 0), [FillerRole.SupportRetained]);
+  assert(hasFragileSupport(raised, selections, fillers, true), "Retained supports require the support assignment");
+  raised.parts[0].cells.set(toShapeCoordKey(0, 1, 0), { id: 11, isCustom: false, fillerRole: FillerRole.SupportRetained });
+  assert(hasFragileSupport(raised, selections, fillers, true), "Support reused as color still requires its assignment");
+
+  for (const mode of [BuildMode.StaircaseNorthline, BuildMode.SuppressStepPairs, BuildMode.SuppressStepChecker]) {
+    for (const direction of Object.values(SuppressStepDirection)) {
+      const shape = generateShapeMap(grid, Shade.Flat, false, false, false, { selectedMode: mode,
+        selectedStepDirection: direction, layerGap: 5, mixSteps: true })[mode]!;
+      assert(shape);
+      assert(!hasFragileSupport(shape, selections, fillers, true), `${mode}/${direction}: all blocks rest on the floor`);
+      assert(hasFragileSupport(shape, selections, fillers, false), `${mode}/${direction}: removing the floor exposes support needs`);
+      const full = analyzeMaterialNeeds(grid, shape, analysisOptions);
+      const retained = analyzeMaterialNeeds(grid, shape, { ...analysisOptions, keepSuppressExtras: true });
+      assert.deepEqual(retained.supportNeeds, full.supportNeeds, "Recycling changes inventory, not required support placements");
+    }
+  }
+}
+
+
 async function main(): Promise<number> {
   const [suite, ...extra] = process.argv.slice(2);
-  if (extra.length || suite && !["--rules", "--slope"].includes(suite)) {
-    throw new Error("Choose one of --rules or --slope, or omit flags for the full suite");
+  if (extra.length || suite && !["--rules", "--slope", "--support"].includes(suite)) {
+    throw new Error("Choose one of --rules, --slope or --support, or omit flags for the full suite");
   }
   if (suite === "--rules") {
     assertBlockSupportPairs();
     console.log("Block support rules passed.");
     return 0;
   }
+  if (process.argv.includes("--support")) {
+    assertBlockSupportPairs();
+    assertFragileSupportEligibility();
+    console.log("Support eligibility invariants passed.");
+    return 0;
+  }
+  assertFragileSupportEligibility();
   assertBlockSupportPairs();
   if (process.argv.includes("--slope")) {
     await assertWestEastSlopeExportInvariant();

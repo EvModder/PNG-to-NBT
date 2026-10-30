@@ -6,7 +6,6 @@
  * - nooblineIsSingleY()
  * - hasNonWaterColorHeightVariance()
  * - hasBuildAtWorldMinYOpportunity()
- * - analyzeFragileSupportOverrideNeeds()
  * - analyzeMaterialNeeds()
  * - aggregateMaterialCounts()
  * - aggregateOverrideCounts()
@@ -36,6 +35,7 @@ import {
   NO_SUPPORT_FLOORS,
   parseShapeCoordKey,
   toShapeCoordKey,
+  shouldIncludeFragileSupportCell,
 } from "./shapeModel";
 
 interface FillerNeedStats {
@@ -53,10 +53,13 @@ interface MaterialNeedStats {
   colorCounts: Record<string, number>;
   numUniqueColorShadesForPart: number;
   fillerRoleCounts: Map<FillerRole, number>;
+  supportNeeds: SupportNeeds;
   retainedState?: { blocks: ReadonlyMap<number, RetainedMaterial>; pixelMask: Uint8Array };
 }
 
-interface FragileSupportOverrideNeedStats {
+interface SupportNeeds {
+  aboveFloor: number;
+  atFloor: number;
   overrideCounts: Record<string, number>;
 }
 
@@ -82,6 +85,17 @@ interface PartMaterialNeedStats {
   colorCounts: Record<string, number>;
   visibleColorKeys: Set<number>;
   fillerRoleCounts: Map<FillerRole, number>;
+  supportNeeds: SupportNeeds;
+}
+
+function emptySupportNeeds(): SupportNeeds {
+  return { aboveFloor: 0, atFloor: 0, overrideCounts: {} };
+}
+
+function mergeSupportNeeds(into: SupportNeeds, from: SupportNeeds, phases: boolean): void {
+  into.aboveFloor = phases ? Math.max(into.aboveFloor, from.aboveFloor) : into.aboveFloor + from.aboveFloor;
+  into.atFloor = phases ? Math.max(into.atFloor, from.atFloor) : into.atFloor + from.atFloor;
+  for (const [block, count] of Object.entries(from.overrideCounts)) addCount(into.overrideCounts, block, count);
 }
 
 function addCount(map: Record<string, number>, key: string, amount = 1): void {
@@ -129,6 +143,7 @@ function analyzePartMaterialNeeds(
   const countedVisibleWaterColumns = new Set<number>();
   const countedRealWaterColumns = new Set<number>();
   const colorBlockNames = new Map<number, string | null>();
+  const supportNeeds = emptySupportNeeds();
   for (const [coord, cell] of part.cells) {
     const [x, y, z] = parseShapeCoordKey(coord);
     if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
@@ -137,6 +152,8 @@ function analyzePartMaterialNeeds(
     const materialCoord = materials ? toShapeCoordKey(x, y - materialFloor, z) : coord;
 
     if (isShapeColorCell(cell)) {
+      // A support reused as color still needs its material, even at floor level.
+      if (cell.fillerRole === FillerRole.SupportRetained) ++supportNeeds.aboveFloor;
       const isWaterColorCell = !cell.isCustom && cell.id === WATER_BASE_INDEX;
       const waterColumnKey = isWaterColorCell ? (x * 128 + z) : -1;
       if (!materials && (!isWaterColorCell || !countedVisibleWaterColumns.has(waterColumnKey))) {
@@ -189,9 +206,18 @@ function analyzePartMaterialNeeds(
       continue;
     }
 
-    if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
+    if (!isWithinShapeBounds({ x, y, z }, part.bounds, NO_SUPPORT_FLOORS)) continue;
+    // Demand is independent of the selected support mode/block. Keep floor demand
+    // separate: explicit Flat supports override assumed floors for export, not eligibility.
+    if (cell.includes(FillerRole.SupportRetained) || (cell.includes(FillerRole.SupportFragile)
+      && shouldIncludeFragileSupportCell(part, coord, cell, FillerRole.SupportFragile, options, fillerAssignments))) {
+      if (part.supportFloorYs.has(y)) ++supportNeeds.atFloor;
+      else ++supportNeeds.aboveFloor;
+    }
+    if (supportFloorYs.has(y)) continue;
     const resolved = resolveShapeFiller(part, coord, cell, options, fillerAssignments);
     if (!resolved) continue;
+    if (resolved.override) addCount(supportNeeds.overrideCounts, resolved.override.blockId);
     const { role: assignedRole, blockName: fillerName } = resolved;
     if (
       !materials && assignedRole &&
@@ -208,7 +234,7 @@ function analyzePartMaterialNeeds(
     materials?.set(materialCoord, { blockName: blockId, role: assignedRole ?? undefined });
   }
 
-  return { blockCounts, colorCounts, visibleColorKeys, fillerRoleCounts };
+  return { blockCounts, colorCounts, visibleColorKeys, fillerRoleCounts, supportNeeds };
 }
 
 // Cache one range-preview preparation, not resolved phases for every tile/settings combination.
@@ -219,6 +245,7 @@ let retainedPreviewCache: {
   prepared: {
     plan: NonNullable<ReturnType<typeof getSuppressClearancePlan>>;
     parts: Map<number, RetainedMaterial>[];
+    supportNeeds: SupportNeeds[];
     maxHeight: number;
   };
 } | undefined;
@@ -240,16 +267,18 @@ function prepareRetainedMaterials(
   const plan = getSuppressClearancePlan(shape)!;
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
   let maxHeight = 0;
+  const supportNeeds: SupportNeeds[] = [];
   const parts = shape.parts.map((part, index) => {
     const materials = new Map<number, RetainedMaterial>();
-    analyzePartMaterialNeeds(colorGrid, part, fillerAssignments, options, false,
+    const stats = analyzePartMaterialNeeds(colorGrid, part, fillerAssignments, options, false,
       options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS, materials, plan[index].floor);
+    supportNeeds.push(stats.supportNeeds);
     if (plan[index].columns.size) {
       for (const coord of materials.keys()) maxHeight = Math.max(maxHeight, parseShapeCoordKey(coord)[1]);
     }
     return materials;
   });
-  const prepared = { plan, parts, maxHeight };
+  const prepared = { plan, parts, maxHeight, supportNeeds };
   if (options.phaseRange) retainedPreviewCache = { shape, colorGrid, options, prepared };
   return prepared;
 }
@@ -260,7 +289,8 @@ function analyzeRetainedMaterialNeeds(
   options: MaterialAnalysisOptions,
 ): MaterialNeedStats {
   const [start, end] = options.phaseRange ?? [0, shape.parts.length - 1];
-  const { plan, parts, maxHeight } = prepareRetainedMaterials(colorGrid, shape, options);
+  const { plan, parts, maxHeight, supportNeeds: phaseSupportNeeds } = prepareRetainedMaterials(colorGrid, shape, options);
+  const supportNeeds = emptySupportNeeds();
   const world = new Map<number, RetainedMaterial>();
   const currentBlocks: Record<string, number> = {};
   const currentColors: Record<string, number> = {};
@@ -314,6 +344,7 @@ function analyzeRetainedMaterialNeeds(
       adjust(material, 1);
     }
     if (index < start) continue;
+    mergeSupportNeeds(supportNeeds, phaseSupportNeeds[index], true);
     maximizeCounts(blockCounts, currentBlocks);
     maximizeCounts(colorCounts, currentColors);
     maximizeRoleCounts(fillerRoleCounts, currentRoles);
@@ -335,7 +366,7 @@ function analyzeRetainedMaterialNeeds(
     }
   }
   return {
-    blockCounts, colorCounts, fillerRoleCounts, numUniqueColorShadesForPart: visibleColorKeys.size,
+    blockCounts, colorCounts, fillerRoleCounts, supportNeeds, numUniqueColorShadesForPart: visibleColorKeys.size,
     ...(retainedPixelMask ? { retainedState: { blocks: world, pixelMask: retainedPixelMask } } : {}),
   };
 }
@@ -348,10 +379,10 @@ export function analyzeFillerNeeds(shape: GeneratedShape): FillerNeedStats {
 
   for (const part of shape.parts) {
     for (const [, cell] of part.cells) {
-      if (!isShapeFillerCell(cell)) continue;
-      for (const role of cell) {
-        roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
-      }
+      // Reused color cells still depend on their support/shade assignment.
+      if (isShapeColorCell(cell)) {
+        if (cell.fillerRole) addRoleCount(roleCounts, cell.fillerRole);
+      } else for (const role of cell) addRoleCount(roleCounts, role);
     }
   }
 
@@ -484,40 +515,6 @@ export function hasBuildAtWorldMinYOpportunity(
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/shapeAnalysisCache.ts
-export function analyzeFragileSupportOverrideNeeds(
-  shape: GeneratedShape,
-  options: MaterialAnalysisOptions,
-): FragileSupportOverrideNeedStats {
-  const overrideCounts: Record<string, number> = {};
-  const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
-
-  const analyzePart = (part: ShapePart, applyColumnRange: boolean) => {
-    const supportFloorYs = options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
-    for (const [coord, cell] of part.cells) {
-      if (!isShapeFillerCell(cell)) continue;
-      const [x, y, z] = parseShapeCoordKey(coord);
-      if (applyColumnRange && options.xColumnRange && (x < options.xColumnRange[0] || x > options.xColumnRange[1])) continue;
-      if (applyColumnRange && options.zColumnRange && (Math.max(0, z) < options.zColumnRange[0] || z > options.zColumnRange[1])) continue;
-      if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) continue;
-      const override = resolveShapeFiller(part, coord, cell, options, fillerAssignments)?.override;
-      if (!override) continue;
-      addCount(overrideCounts, override.blockId);
-    }
-  };
-
-  if (shape.partType === ShapePartType.SuppressStepPhases) {
-    const [start, end] = options.phaseRange ?? [0, shape.parts.length - 1];
-    for (let i = start; i <= end && i < shape.parts.length; ++i) analyzePart(shape.parts[i], false);
-    return { overrideCounts };
-  }
-
-  for (const part of shape.parts) analyzePart(part, true);
-  return { overrideCounts };
-}
-
-// Callers:
-// - src/Index.tsx
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysisCache.ts
 export function analyzeMaterialNeeds(
@@ -529,7 +526,7 @@ export function analyzeMaterialNeeds(
     return analyzeRetainedMaterialNeeds(colorGrid, shape, options);
   }
   const fillerAssignments = buildFillerAssignmentMap(options.fillerAssignments);
-
+  const supportNeeds = emptySupportNeeds();
   if (shape.partType === ShapePartType.SuppressStepPhases) {
     const [start, end] = options.phaseRange ?? [0, shape.parts.length - 1];
     const blockCounts: Record<string, number> = {};
@@ -552,6 +549,7 @@ export function analyzeMaterialNeeds(
       maximizeCounts(colorCounts, step.colorCounts);
       for (const key of step.visibleColorKeys) visibleColorKeys.add(key);
       maximizeRoleCounts(fillerRoleCounts, step.fillerRoleCounts);
+      mergeSupportNeeds(supportNeeds, step.supportNeeds, true);
     }
 
     return {
@@ -559,6 +557,7 @@ export function analyzeMaterialNeeds(
       colorCounts,
       numUniqueColorShadesForPart: visibleColorKeys.size,
       fillerRoleCounts,
+      supportNeeds,
     };
   }
 
@@ -581,6 +580,7 @@ export function analyzeMaterialNeeds(
     for (const [key, count] of Object.entries(stats.colorCounts)) addCount(colorCounts, key, count);
     for (const key of stats.visibleColorKeys) visibleColorKeys.add(key);
     for (const [role, count] of stats.fillerRoleCounts) addRoleCount(fillerRoleCounts, role, count);
+    mergeSupportNeeds(supportNeeds, stats.supportNeeds, false);
   }
 
   return {
@@ -588,6 +588,7 @@ export function analyzeMaterialNeeds(
     colorCounts,
     numUniqueColorShadesForPart: visibleColorKeys.size,
     fillerRoleCounts,
+    supportNeeds,
   };
 }
 
@@ -628,7 +629,7 @@ export function aggregateMaterialCounts(
 // Callers:
 // - src/Index.tsx
 export function aggregateOverrideCounts(
-  stats: readonly FragileSupportOverrideNeedStats[],
+  stats: readonly Pick<SupportNeeds, "overrideCounts">[],
 ): Record<string, number> {
   const overrideCounts: Record<string, number> = {};
   for (const stat of stats) {

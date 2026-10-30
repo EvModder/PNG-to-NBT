@@ -121,7 +121,6 @@ import {
 } from "@/utils/customColors";
 import type { ColorGrid, ColorRgb } from "@/types/color";
 import {
-  analyzeFragileSupportOverrideNeeds,
   analyzeMaterialNeeds,
   aggregateMaterialCounts,
   aggregateOverrideCounts,
@@ -137,7 +136,6 @@ import {
 } from "@/lib/blockId";
 import { getColorRefKey, parseColorRefKey, type ColorRefKey } from "@/lib/colorRefs";
 import {
-  buildFillerAssignmentMap,
   createFillerAssignments,
   getSupportModeFillerRoles,
   isCrubTechBreakableValid,
@@ -165,6 +163,7 @@ import { measureToolbarWidths } from "@/utils/toolbarLayout";
 import {
   getShapeForBuildMode,
   getTwoLayerSpacing,
+  shouldAssumeSupportFloor,
   CRUBTECH_WATER_DROPS,
   WATER_DROP_INPUT_ORDER,
   getUsedWaterShades,
@@ -184,7 +183,6 @@ import {
   useStepPreview,
   useVsFillerPreviewReplacements,
 } from "@/lib/previewImageEdits";
-import { getSupportedBlockIdAbove, isShapeFillerCell, isWithinShapeBounds, NO_SUPPORT_FLOORS, parseShapeCoordKey } from "@/lib/shapeModel";
 import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type SortKey } from "@/types/ui";
 import { INITIAL_COLOR_TABLE_LAYOUT, type ColorTableLayout } from "@/utils/colorTableLayout";
 import {
@@ -285,7 +283,6 @@ type TileGeometryAnalysis = TileBaseAnalysis & {
 };
 type TileAnalysis = TileGeometryAnalysis & {
   materialNeedStats: ReturnType<typeof analyzeMaterialNeeds> | null;
-  fragileSupportOverrideNeedStats: ReturnType<typeof analyzeFragileSupportOverrideNeeds> | null;
 };
 type TileAnalysisResult = {
   tileGeometryAnalyses: TileGeometryAnalysis[];
@@ -802,7 +799,6 @@ const Index = () => {
     colorAssignmentsByKey: Map<ColorRefKey, string>;
     fillerAssignmentsByRole: Map<FillerRole, string>;
     applySupportFloorYs: boolean;
-    supportModeEnabled: boolean;
     keepSuppressExtras: boolean;
   } | null>(null);
   const decodedImageSet = useMemo<ColorGridSetParseResult | null>(
@@ -1196,6 +1192,7 @@ const Index = () => {
     : cycleSuppressStepDirection(suppressStepDirection, isSuppressDirectionSelectable);
   const supportFillerIsFragile = isSupportFillerFragile(effectiveSupportFillerBlock);
   const supportWaterSidesFillerValid = isWaterSideSupportFillerValid(effectiveSupportFillerBlock);
+  const flatAssumeSupportFloor = shouldAssumeSupportFloor(applySupportFloorYs, BuildMode.Flat, supportMode, effectiveSupportFillerBlock);
   const sanitizeCommittedBlockEntry = useCallback((value: string) => sanitizeUserBlockEntry(value), []);
   const setCommittedSupportFillerBlock = useCallback(
     (value: string) => setSupportFillerBlock(sanitizeCommittedBlockEntry(value)),
@@ -1251,10 +1248,12 @@ const Index = () => {
   );
   const { maxHeight: mixedStepMaxHeight, palette: mixedStepPalette } = useMemo(
     () => getMixedStepSettings(
-      usedColorKeys, colorBlockSelections, supportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock,
+      // Auto-hiding unused supports must not undo the reuse plan that made them unnecessary.
+      usedColorKeys, colorBlockSelections, supportMode === SupportMode.None && preferredSupportMode === SupportMode.Fragile
+        ? preferredSupportMode : supportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock,
       applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop,
     ),
-    [usedColorKeys, colorBlockSelections, supportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock, applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop],
+    [usedColorKeys, colorBlockSelections, supportMode, preferredSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock, applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop],
   );
   useEffect(() => {
     if (!imageValid || parsedTiles.length === 0) {
@@ -1335,7 +1334,7 @@ const Index = () => {
 
         const nextFlatModeBehavior = getAggregatedFlatModeBehavior(nextBaseAnalyses);
         const nextIsFlatShape = nextBaseAnalyses.length > 0 && nextBaseAnalyses.every(tile => tile.isFlatShape);
-        const nextFlatBuildAtWorldMinYEligible = getFlatBuildAtWorldMinYEligible(nextBaseAnalyses, applySupportFloorYs);
+        const nextFlatBuildAtWorldMinYEligible = getFlatBuildAtWorldMinYEligible(nextBaseAnalyses, flatAssumeSupportFloor);
         const nextActiveFlatBuildAtWorldMinY = nextFlatBuildAtWorldMinYEligible && buildAtWorldMinY;
         const nextFlatRequiresVsFillers =
           nextFlatModeBehavior === FlatModeBehavior.ToggleableBuildAtWorldMinY &&
@@ -1383,7 +1382,8 @@ const Index = () => {
         const nextBuildAtWorldMinYEligible = getBuildAtWorldMinYEligibleForBuildMode(
           nextBaseAnalyses,
           nextResolvedBuildMode,
-          applySupportFloorYs || (crubTech && isCrubTechBuildMode(nextResolvedBuildMode)),
+          (crubTech && isCrubTechBuildMode(nextResolvedBuildMode))
+            || (nextResolvedBuildMode === BuildMode.Flat ? flatAssumeSupportFloor : applySupportFloorYs),
         );
         const nextActiveBuildAtWorldMinY = nextBuildAtWorldMinYEligible && buildAtWorldMinY;
         const nextUseCrubTechShadeFillers =
@@ -1551,6 +1551,7 @@ const Index = () => {
     crubTech,
     effectiveSuppressStepDirection,
     applySupportFloorYs,
+    flatAssumeSupportFloor,
     buildAtWorldMinY,
     hasMultipleTiles,
     flatSuppressStepsEnabled,
@@ -1565,8 +1566,8 @@ const Index = () => {
   );
   const isFlatShape = tileBaseAnalyses.length > 0 && tileBaseAnalyses.every(tile => tile.isFlatShape);
   const flatBuildAtWorldMinYEligible = useMemo(
-    () => getFlatBuildAtWorldMinYEligible(tileBaseAnalyses, applySupportFloorYs),
-    [tileBaseAnalyses, applySupportFloorYs],
+    () => getFlatBuildAtWorldMinYEligible(tileBaseAnalyses, flatAssumeSupportFloor),
+    [tileBaseAnalyses, flatAssumeSupportFloor],
   );
   const flatShowBuildAtWorldMinYToggle = imageValid && flatBuildAtWorldMinYEligible;
   const activeFlatBuildAtWorldMinY = flatShowBuildAtWorldMinYToggle && buildAtWorldMinY;
@@ -1589,7 +1590,8 @@ const Index = () => {
   const effectiveShowTransparentRow = !crubTechControlsActive2LayerSettings && showTransparentRow;
   const effectiveForceXZ128 = crubTechControlsActive2LayerSettings || forceXZ128;
   const effectiveForceZ129 = crubTechControlsActive2LayerSettings || forceZ129;
-  const effectiveApplySupportFloorYs = crubTechControlsActive2LayerSettings || applySupportFloorYs;
+  const effectiveApplySupportFloorYs = crubTechControlsActive2LayerSettings || shouldAssumeSupportFloor(
+    applySupportFloorYs, effectiveBuildMode, effectiveSupportMode, effectiveSupportFillerBlock);
   const effectiveBelowPlatformWater = crubTechControlsActive2LayerSettings || belowPlatformWater;
   const uiFillerAssignments = useMemo(
     () => createFillerAssignments(
@@ -1680,7 +1682,6 @@ const Index = () => {
       [...usedColorKeys].map(key => [key, normalizeBlockId(resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections))] as const),
     );
     const currentFillerAssignmentsByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, normalizeBlockId(assignment.block)]));
-    const currentSupportModeEnabled = effectiveSupportMode !== SupportMode.None;
     const changedColorKeys = previousMaterialInputs
       ? new Set(
           [...usedColorKeys].filter(key =>
@@ -1707,50 +1708,29 @@ const Index = () => {
       if (hasAnySharedValue(tile.fillerNeedStats?.roleCounts.keys() ?? [], changedFillerRoles)) return false;
       return true;
     };
-    const canReuseFragileStats = (
-      previousTile: TileAnalysis | undefined,
-      tile: TileGeometryAnalysis,
-    ): previousTile is TileAnalysis => {
-      if (!currentSupportModeEnabled || !previousTile?.fragileSupportOverrideNeedStats) return false;
-      if (!previousMaterialInputs?.supportModeEnabled) return false;
-      return canReuseMaterialStats(previousTile, tile);
-    };
     const reusableTileAnalyses = tileGeometryAnalyses.map((tile, index) => {
       if (!tile.supportShape) {
         return {
           ...tile,
           materialNeedStats: null,
-          fragileSupportOverrideNeedStats: null,
         } satisfies TileAnalysis;
       }
       const cached = getCachedShapeMaterialNeeds(tile.supportShape, `${tile.tile.cacheKey}|${currentMaterialInputSignature}`);
-      if (cached) return { ...tile, ...cached } satisfies TileAnalysis;
+      if (cached) return { ...tile, materialNeedStats: cached } satisfies TileAnalysis;
       const previousTile = tileAnalysesState[index];
       if (!canReuseMaterialStats(previousTile, tile)) return null;
       return {
         ...tile,
         materialNeedStats: previousTile.materialNeedStats,
-        fragileSupportOverrideNeedStats: canReuseFragileStats(previousTile, tile)
-          ? previousTile.fragileSupportOverrideNeedStats
-          : null,
       } satisfies TileAnalysis;
     });
 
-    if (
-      reusableTileAnalyses.every((tile): tile is TileAnalysis => tile !== null) &&
-      (
-        !currentSupportModeEnabled ||
-        reusableTileAnalyses.every((tile, index) =>
-          !tileGeometryAnalyses[index]?.supportShape || tile.fragileSupportOverrideNeedStats !== null,
-        )
-      )
-    ) {
+    if (reusableTileAnalyses.every((tile): tile is TileAnalysis => tile !== null)) {
       previousMaterialInputsRef.current = {
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
         applySupportFloorYs: effectiveApplySupportFloorYs,
-        supportModeEnabled: currentSupportModeEnabled,
         keepSuppressExtras: activeKeepSuppressExtras,
       };
       setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, reusableTileAnalyses) ? current : reusableTileAnalyses));
@@ -1770,33 +1750,19 @@ const Index = () => {
 
       for (const [index, tile] of tileGeometryAnalyses.entries()) {
         const reusableTileAnalysis = reusableTileAnalyses[index];
-        if (reusableTileAnalysis && (!currentSupportModeEnabled || reusableTileAnalysis.fragileSupportOverrideNeedStats !== null)) {
+        if (reusableTileAnalysis) {
           nextTileAnalyses.push(reusableTileAnalysis);
         } else if (!tile.supportShape) {
           nextTileAnalyses.push({
             ...tile,
             materialNeedStats: null,
-            fragileSupportOverrideNeedStats: null,
           });
         } else {
-          const previousTile = tileAnalysesState[index];
-          const materialNeedStats =
-            reusableTileAnalysis?.materialNeedStats ??
-            (canReuseMaterialStats(previousTile, tile) ? previousTile.materialNeedStats : analyzeMaterialNeeds(tile.tile.colorGrid, tile.supportShape, materialAnalysisOptions));
-          const fragileSupportOverrideNeedStats =
-            currentSupportModeEnabled
-              ? canReuseFragileStats(previousTile, tile)
-                ? previousTile.fragileSupportOverrideNeedStats
-                : analyzeFragileSupportOverrideNeeds(tile.supportShape, materialAnalysisOptions)
-              : null;
-          if (materialNeedStats) cacheShapeMaterialNeeds(tile.supportShape, `${tile.tile.cacheKey}|${currentMaterialInputSignature}`, {
-            materialNeedStats,
-            fragileSupportOverrideNeedStats,
-          });
+          const materialNeedStats = analyzeMaterialNeeds(tile.tile.colorGrid, tile.supportShape, materialAnalysisOptions);
+          cacheShapeMaterialNeeds(tile.supportShape, `${tile.tile.cacheKey}|${currentMaterialInputSignature}`, materialNeedStats);
           nextTileAnalyses.push({
             ...tile,
             materialNeedStats,
-            fragileSupportOverrideNeedStats,
           });
         }
 
@@ -1822,7 +1788,6 @@ const Index = () => {
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
         applySupportFloorYs: effectiveApplySupportFloorYs,
-        supportModeEnabled: currentSupportModeEnabled,
         keepSuppressExtras: activeKeepSuppressExtras,
       };
       setTileAnalysesState(current => (areTileAnalysesShallowEqual(current, nextTileAnalyses) ? current : nextTileAnalyses));
@@ -1911,8 +1876,6 @@ const Index = () => {
   );
   const enableFragileSupportOption = useMemo(() => {
     if (crubTechControlsActive2LayerSettings) return false;
-    // The experimental plan needs Fragile even when every support is reused.
-    if (mixedStepPalette) return true;
     const hasFragileMappedBlock = (block: string) => !!block && isFragileBlock(normalizeBlockId(block));
     if (!imageData) {
       return uiFillerAssignments.some(({ block }) => !isShadeFillerDisabled(block) && hasFragileMappedBlock(block)) ||
@@ -1921,30 +1884,22 @@ const Index = () => {
           hasFragileMappedBlock(getSelectedCustomColorBlock(selectedBlocksCustom, customIndex, customColors))
         );
     }
-    if (supportModeVisibilityPending) return true;
-    const fillerAssignments = buildFillerAssignmentMap(uiFillerAssignments);
-    return tileAnalyses.some(tile =>
-      !!tile.supportShape?.parts.some(part =>
-        part.cells.entries().some(([coord, cell]) => {
-          if (!isShapeFillerCell(cell)) return false;
-          const [x, y, z] = parseShapeCoordKey(coord);
-          const supportFloorYs = effectiveApplySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
-          if (!isWithinShapeBounds({ x, y, z }, part.bounds, supportFloorYs)) return false;
-          if (!cell.includes(FillerRole.SupportFragile)) return false;
-          const blockId = getSupportedBlockIdAbove(part, coord, colorBlockSelections, fillerAssignments);
-          return !!blockId && isFragileBlock(blockId);
-        }),
-      ),
-    );
+    if (supportModeVisibilityPending || tileAnalyses.some(tile => tile.supportShape && !tile.materialNeedStats)) return true;
+    const assumeFloor = effectiveBuildMode === BuildMode.Flat ? applySupportFloorYs : effectiveApplySupportFloorYs;
+    return tileAnalyses.some(tile => {
+      const needs = tile.materialNeedStats?.supportNeeds;
+      return needs && (needs.aboveFloor > 0 || (!assumeFloor && needs.atFloor > 0));
+    });
   }, [
     crubTechControlsActive2LayerSettings,
-    mixedStepPalette,
     imageData,
     supportModeVisibilityPending,
     tileAnalyses,
     colorBlockSelections,
     uiFillerAssignments,
     effectiveApplySupportFloorYs,
+    applySupportFloorYs,
+    effectiveBuildMode,
   ]);
   const staircaseModeOptions = useMemo(
     () => getStaircaseModeOptionsForState(
@@ -2036,7 +1991,7 @@ const Index = () => {
     [selectedTileAnalyses],
   );
   const fragileSupportOverrideNeedStats = useMemo(() => {
-    const aggregateStats = tileAnalyses.flatMap(tile => tile.fragileSupportOverrideNeedStats ? [tile.fragileSupportOverrideNeedStats] : []);
+    const aggregateStats = tileAnalyses.flatMap(tile => tile.materialNeedStats ? [tile.materialNeedStats.supportNeeds] : []);
     return aggregateStats.length > 0 ? { overrideCounts: aggregateOverrideCounts(aggregateStats) } : null;
   }, [tileAnalyses]);
   const getSupportModeRoleCount = useCallback(
@@ -4057,7 +4012,7 @@ const Index = () => {
         forceZ129={effectiveForceZ129}
         setForceZ129={setForceZ129}
         forceZ129Disabled={crubTechControlsActive2LayerSettings}
-        applySupportFloorYs={effectiveApplySupportFloorYs}
+        applySupportFloorYs={crubTechControlsActive2LayerSettings || applySupportFloorYs}
         setApplySupportFloorYs={setApplySupportFloorYs}
         applySupportFloorYsDisabled={crubTechControlsActive2LayerSettings}
         belowPlatformWater={effectiveBelowPlatformWater}

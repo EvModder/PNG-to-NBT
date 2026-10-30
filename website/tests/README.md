@@ -27,10 +27,11 @@ bun run test:fixtures img4-northline
 Targeted support eligibility and placement checks:
 ```bash
 bun run test:rules
+bun run test:invariants --support
 ```
 
 `test:rules` checks block/substrate rules without generating shapes. Use
-`test:invariants --slope` for the affected generator
+`test:invariants --support` or `--slope` for the affected generator
 path; omit flags only when intending to run the whole invariant suite.
 
 `test:versions` includes the offline support audit. Rule/catalog/version changes

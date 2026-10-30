@@ -4,13 +4,12 @@
  * - isShapeFillerCell()
  * - toShapeCoordKey()
  * - parseShapeCoordKey()
- * - getSupportedBlockIdAbove()
  * - NO_SUPPORT_FLOORS
  * - isWithinShapeBounds()
+ * - shouldIncludeFragileSupportCell()
  * - resolveShapeFiller()
  *
  * Callers:
- * - src/Index.tsx
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
@@ -59,7 +58,6 @@ export function isShapeColorCell(cell: ShapeCell): cell is ShapeColorRef {
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export function isShapeFillerCell(cell: ShapeCell): cell is FillerRole[] {
@@ -81,7 +79,6 @@ export function toShapeCoordKey(x: number, y: number, z: number): ShapeCoordKey 
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
@@ -95,9 +92,7 @@ export function parseShapeCoordKey(key: ShapeCoordKey): [number, number, number]
   return [x, y, z];
 }
 
-// Callers:
-// - src/Index.tsx
-export function getSupportedBlockIdAbove(
+function getSupportedBlockIdAbove(
   part: ShapePart,
   coord: number,
   options: ColorBlockSelections,
@@ -120,13 +115,11 @@ export function getSupportedBlockIdAbove(
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export const NO_SUPPORT_FLOORS: ReadonlySet<number> = new Set<number>();
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/shapeAnalysis.ts
 export function isWithinShapeBounds(
@@ -140,7 +133,9 @@ export function isWithinShapeBounds(
   return true;
 }
 
-function shouldIncludeFragileSupportCell(
+// Callers:
+// - src/lib/shapeAnalysis.ts
+export function shouldIncludeFragileSupportCell(
   part: ShapePart,
   coord: number,
   roles: readonly FillerRole[],
@@ -177,6 +172,9 @@ function getFragileSupportOverride(
   if (!fragileBlockId) return null;
   const fragileSupportRule = FRAGILE_SUPPORT_RULES.get(fragileBlockId);
   if (!fragileSupportRule) return null;
+  // Automatic replacements deliberately use substrate IDs only. Some otherwise-valid
+  // state-dependent bases (e.g. waterlogged lily-pad supports) still get the safe fallback.
+  // Keeping this separate from placement validation preserves state-insensitive material caching.
   const assignedSupportBlockId = assignedSupportBlockName ? normalizeBlockId(assignedSupportBlockName) : "";
   if (assignedSupportBlockId && fragileSupportRule.validSupportBlocks.includes(assignedSupportBlockId)) {
     return null;

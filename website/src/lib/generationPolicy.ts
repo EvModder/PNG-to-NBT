@@ -13,6 +13,7 @@
  * - getShapeForBuildMode()
  * - getPaletteSeedOffset()
  * - getTwoLayerSpacing()
+ * - shouldAssumeSupportFloor()
  *
  * Callers:
  * - src/Index.tsx
@@ -31,6 +32,7 @@ import { isCrubTechBuildMode, isStaircaseBuildMode } from "@/utils/conversion";
 import { FlatModeBehavior, type WaterDrops, type deriveImageStats } from "./colorGridAnalysis";
 import { getColorRefKey, type ColorRefKey } from "./colorRefs";
 import { hasBuildAtWorldMinYOpportunity } from "./shapeAnalysis";
+import { isFillerDisabled } from "./fillerRules";
 import type { TileBaseGeometryWorkerResult, TileWaterSetting } from "./tileGeometryWorkerTypes";
 
 type TileBaseAnalysis = TileBaseGeometryWorkerResult & {
@@ -38,6 +40,13 @@ type TileBaseAnalysis = TileBaseGeometryWorkerResult & {
   flatModeBehavior: FlatModeBehavior;
 };
 const EMPTY_USED_WATER_SHADES: ReadonlySet<Shade> = new Set();
+
+// Explicit flat-map supports replace the assumed platform; do not change the saved preference.
+// Callers:
+// - src/Index.tsx
+export function shouldAssumeSupportFloor(assumeFloor: boolean, mode: BuildMode, support: SupportMode, block: string): boolean {
+  return assumeFloor && !(mode === BuildMode.Flat && support !== SupportMode.None && !!block.trim() && !isFillerDisabled(block));
+}
 
 // Callers:
 // - src/Index.tsx

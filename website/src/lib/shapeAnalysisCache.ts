@@ -13,13 +13,9 @@ import {
   analyzeFillerNeeds,
   nooblineIsSingleY,
   type analyzeMaterialNeeds,
-  type analyzeFragileSupportOverrideNeeds,
 } from "@/lib/shapeAnalysis";
 
-type ShapeMaterialNeeds = {
-  materialNeedStats: ReturnType<typeof analyzeMaterialNeeds>;
-  fragileSupportOverrideNeedStats: ReturnType<typeof analyzeFragileSupportOverrideNeeds> | null;
-};
+type ShapeMaterialNeeds = ReturnType<typeof analyzeMaterialNeeds>;
 
 const MAX_MATERIAL_CACHE_ENTRIES = 8;
 const fillerNeedStatsCache = new WeakMap<GeneratedShape, ReturnType<typeof analyzeFillerNeeds>>();

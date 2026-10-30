@@ -16,6 +16,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
@@ -205,6 +206,7 @@ export function createFillerAssignments(
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
 export function isFillerDisabled(fillerBlock: string): boolean {
   const normalized = normalizeBlockId(fillerBlock);
