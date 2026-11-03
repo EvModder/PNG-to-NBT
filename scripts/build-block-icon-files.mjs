@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
-import { blockIdOnly, normalizeBlockEntry } from "./block-entry-utils.mjs";
+import { blockIdOnly, normalizeBlockEntry, parseMapColors } from "./block-entry-utils.mjs";
 import { EXCLUDED_BLOCK_IDS, EXCLUDED_BLOCK_PATTERNS, OMITTED_BLOCK_PATTERNS } from "./excluded-blocks.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -25,18 +25,6 @@ function toBlockIconKey(raw) {
     .replace(/=/g, "__eq__")
     .replace(/,/g, "__cm__")
     .replace(/:/g, "__cl__");
-}
-
-function parseMapColors(tsText) {
-  const rows = [];
-  const rowRe = /\{\s*name:\s*"([^"]+)"[\s\S]*?blocks:\s*\[([\s\S]*?)\]\s*\}/g;
-  for (const m of tsText.matchAll(rowRe)) {
-    const name = m[1];
-    const content = m[2];
-    const entries = [...content.matchAll(/"([^"]+)"/g)].map(s => normalizeBlockEntry(s[1]));
-    rows.push({ name, entries });
-  }
-  return rows;
 }
 
 function parseExcludedColors(tsText) {
