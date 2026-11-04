@@ -102,6 +102,10 @@ assert(!FRAGILE_SUPPORT_RULES.has("shelf_mushroom"));
 for (const version of versions) {
   const catalog = getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion);
   assert.equal(getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion), catalog, "Known DataVersions reuse cached catalogs");
+  assert.deepEqual(catalog.blocks[10].slice(0, 3), ["dirt", "coarse_dirt", "rooted_dirt"]);
+  const mushroomIndex = catalog.blocks[26].indexOf("brown_mushroom");
+  assert.equal(catalog.blocks[28].indexOf("red_mushroom"), mushroomIndex, `${version}: mushroom columns align`);
+  assert.deepEqual(catalog.blocks[28].slice(mushroomIndex - 3, mushroomIndex), ["nether_wart_block", "nether_wart", "shroomlight"]);
   for (const block of ["cactus", "sugar_cane", "carrots", "potatoes", "beetroots", "sniffer_egg"]) {
     assert(![...catalog.blocks, ...catalog.excluded].flat().some(choice => choice.split("[")[0] === block), `${version}: fully omitted ${block}`);
   }
