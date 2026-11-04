@@ -14,6 +14,7 @@
 // - scripts/audit-mapcolors.mjs
 // - scripts/build-block-icon-files.mjs
 export const OMITTED_BLOCK_PATTERNS = [
+  /^sniffer_egg$/, // Scheduled hatching cannot be stopped by darkness, covers or missing support.
   /^(cactus|sugar_cane)$/, // Substrate, clearance and hydration requirements outweigh their utility.
   /^bamboo$/, // Isolated stems require temporary bamboo placements; use covered saplings instead.
   /^(carrots|potatoes|beetroots)$/, // Farmland and harvesting costs offer no useful map-art advantage.

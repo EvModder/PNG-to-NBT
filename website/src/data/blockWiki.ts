@@ -821,7 +821,6 @@ export const BLOCK_WIKI_PATHS: Readonly<Record<string, string>> = {
   smooth_sandstone_stairs: "Smooth_Sandstone_Stairs",
   smooth_stone: "Smooth_Stone",
   smooth_stone_slab: "Smooth_Stone_Slab",
-  sniffer_egg: "Sniffer_Egg",
   snow: "Snow",
   snow_block: "Snow_Block",
   soul_campfire: "Soul_Campfire",

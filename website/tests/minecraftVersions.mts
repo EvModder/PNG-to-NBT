@@ -20,6 +20,8 @@ import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
 
 const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
+assert.equal(getBlockIconAtlasEntry("primary", "sniffer_egg"), null);
+assert.equal(getBlockIconAtlasEntry("unused", "sniffer_egg"), null);
 if (false) {
   // @ts-expect-error Named UI versions must be resolved at the caller.
   isBlockAvailable("stone", "1.21.4");
@@ -100,7 +102,7 @@ assert(!FRAGILE_SUPPORT_RULES.has("shelf_mushroom"));
 for (const version of versions) {
   const catalog = getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion);
   assert.equal(getMinecraftCatalog(MINECRAFT_VERSIONS[version].dataVersion), catalog, "Known DataVersions reuse cached catalogs");
-  for (const block of ["cactus", "sugar_cane", "carrots", "potatoes", "beetroots"]) {
+  for (const block of ["cactus", "sugar_cane", "carrots", "potatoes", "beetroots", "sniffer_egg"]) {
     assert(![...catalog.blocks, ...catalog.excluded].flat().some(choice => choice.split("[")[0] === block), `${version}: fully omitted ${block}`);
   }
   assert(![...catalog.blocks, ...catalog.excluded].flat().some(block => block.includes("_coral_wall_fan")), `${version}: wall fans must remain fully omitted`);
