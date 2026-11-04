@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { gunzipSync } from "node:zlib";
+import assert from "node:assert/strict";
 
 import {
   DEFAULT_LAYER_GAP,
@@ -472,6 +473,28 @@ async function assertPaletteCollapseModeInvariants(): Promise<void> {
 }
 
 async function assertWestEastSlopeExportInvariant(): Promise<void> {
+  const flushShape = buildTestShape(Array.from({ length: MAP_SIZE }, (_, x) => ({
+    x, y: 0, z: 0, cell: { id: 1, isCustom: false },
+  })));
+  const flushOptions = {
+    selectedBlocks: { 1: "stone" }, selectedBlocksCustom: {}, customColors: [], fillerAssignments: [],
+    applySupportFloorYs: false, forceXZ128: false, forceZ129: false,
+    baseName: "water-flush", buildMode: BuildMode.StaircaseClassic,
+    suppressStepDirection: SuppressStepDirection.EastToWest,
+  };
+  const unsloped = await convertToNbt(flushShape, flushOptions);
+  for (const run of [1, 7, 127]) {
+    const zeroRise = await convertToNbt(flushShape, { ...flushOptions, westEastSlope: { run, rise: 0 } });
+    assertBytesEqual(gunzipSync(zeroRise.data), gunzipSync(unsloped.data), `Zero-rise run=${run} leaves NBT unchanged`);
+  }
+  for (const rise of [-1, 1]) {
+    const flush = await convertToNbt(flushShape, { ...flushOptions, westEastSlope: { run: 7, rise } });
+    const blocks = parseStructureBlocks(new Uint8Array(gunzipSync(flush.data)));
+    for (let x = 0; x < MAP_SIZE; ++x) {
+      const expected = Math.floor(x / 7) * rise + (rise < 0 ? Math.floor((MAP_SIZE - 1) / 7) : 0);
+      assert.equal(blocks.find(block => block.x === x)?.y, expected, `Water-flush run at x=${x}, rise=${rise}`);
+    }
+  }
   const slopedShape = buildTestShape([0, 1, 2, 3].map(x => ({
     x,
     y: 0,
@@ -505,7 +528,7 @@ async function assertWestEastSlopeExportInvariant(): Promise<void> {
     }
   }
 
-  const zeroRunResult = await convertToNbt(slopedShape, {
+  const singleColumnResult = await convertToNbt(slopedShape, {
     selectedBlocks: { 1: "stone" },
     selectedBlocksCustom: {},
     customColors: [],
@@ -514,20 +537,20 @@ async function assertWestEastSlopeExportInvariant(): Promise<void> {
     collapseDuplicatePaletteStates: true,
     forceXZ128: false,
     forceZ129: false,
-    baseName: "west-east-zero-run-slope-test",
+    baseName: "west-east-single-column-slope-test",
     buildMode: BuildMode.StaircaseClassic,
     suppressStepDirection: SuppressStepDirection.EastToWest,
-    westEastSlope: { run: 0, rise: 2 },
+    westEastSlope: { run: 1, rise: 2 },
     markSuppressLoadSpotsInSchematic: false,
     suppressLoadSpotMarkerBlock: "jigsaw",
   });
-  if (zeroRunResult.isZip) throw new Error("Expected single NBT export in W-E zero-run slope invariant test");
-  const zeroRunStoneBlocks = parseStructureBlocks(new Uint8Array(gunzipSync(zeroRunResult.data)))
+  if (singleColumnResult.isZip) throw new Error("Expected single NBT export in W-E single-column slope invariant test");
+  const singleColumnStoneBlocks = parseStructureBlocks(new Uint8Array(gunzipSync(singleColumnResult.data)))
     .filter(block => block.blockName === "minecraft:stone");
   for (const x of [0, 1, 2, 3]) {
-    const actualY = zeroRunStoneBlocks.find(block => block.x === x)?.y;
+    const actualY = singleColumnStoneBlocks.find(block => block.x === x)?.y;
     if (actualY !== x * 2) {
-      throw new Error(`Expected W-E run=0 slope stone at x=${x} to export y=${x * 2}, got ${actualY}`);
+      throw new Error(`Expected W-E run=1 slope stone at x=${x} to export y=${x * 2}, got ${actualY}`);
     }
   }
 
@@ -1955,6 +1978,11 @@ function assertZipMetadata(): void {
 }
 
 async function main(): Promise<number> {
+  if (process.argv.includes("--slope")) {
+    await assertWestEastSlopeExportInvariant();
+    console.log("West-east slope export invariants passed.");
+    return 0;
+  }
   assertZipMetadata();
   await assertSharedSupportMaterialCounts();
   assertVsSparseMarkerInvariants();

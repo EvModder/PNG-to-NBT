@@ -243,12 +243,13 @@ function loadCached<T>(key: string, fallback: T): T {
   return fallback;
 }
 
-const DEFAULT_WEST_EAST_SLOPE_RUN = 0;
+// Maximum distance between drops for a water-flush platform.
+const DEFAULT_WEST_EAST_SLOPE_RUN = 7;
 const DEFAULT_WEST_EAST_SLOPE_RISE = 0;
 
 function clampWestEastSlopeRun(value: number): number {
   const nextValue = Number.isFinite(value) ? Math.trunc(value) : DEFAULT_WEST_EAST_SLOPE_RUN;
-  return Math.max(0, Math.min(MAP_SIZE - 1, nextValue));
+  return Math.max(1, Math.min(MAP_SIZE - 1, nextValue));
 }
 
 function clampWestEastSlopeRise(value: number): number {

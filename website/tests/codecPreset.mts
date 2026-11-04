@@ -36,7 +36,7 @@ const standard: FullPreset = {
   proPaletteSeed: false, mixSteps: true, buildAtWorldMinY: true, crubTech: false, westEastSlopeEnabled: false, suppressCenterOut: false, keepSuppressExtras: false,
   suppressStepDirection: SuppressStepDirection.EastToWest, vsFillerLoadSpotDirection: SuppressStepDirection.NorthToSouth,
   minecraftVersion: "26.2", suppress2LayerLatePairsGap: 1, layerGap: 5,
-  lightWaterDrop: 0, flatWaterDrop: 2, darkWaterDrop: 4, westEastSlopeRun: 0, westEastSlopeRise: 0,
+  lightWaterDrop: 0, flatWaterDrop: 2, darkWaterDrop: 4, westEastSlopeRun: 1, westEastSlopeRise: 0,
 };
 
 let roundTrips = 0;
@@ -275,6 +275,7 @@ assert.deepEqual(decodedDefault?.selectedBlocksCustom, { 0: custom.customColors[
 // A simple all-empty fixture makes byte offsets explicit for corruption checks.
 const empty: FullPreset = {
   ...standard,
+  westEastSlopeRun: 0, // Legacy URL values still decode; the UI clamps them to 1.
   blockPreset: { name: "", selectedBlocks: Object.fromEntries(BASE_COLORS.map((_, id) => [id, ""])) },
   supportFiller: "", shadeFiller: "", crubTechShadeBreakableFillerBlock: "", crubTechShadePushableFillerBlock: "",
   suppress2LayerLateFillerBlock: "", dominateVoidFillerBlock: "", recessiveVoidFillerBlock: "",

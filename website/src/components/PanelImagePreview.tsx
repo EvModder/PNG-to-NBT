@@ -656,7 +656,7 @@ export function PanelImagePreview({
                   <span className="font-mono font-semibold text-foreground text-xs w-8 text-center shrink-0">W→E</span>
                   <input
                     type="number"
-                    min={0}
+                    min={1}
                     max={127}
                     value={westEastSlopeRun}
                     onChange={event => setWestEastSlopeRun(Number.parseInt(event.target.value, 10))}

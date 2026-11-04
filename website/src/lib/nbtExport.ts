@@ -320,10 +320,10 @@ function materializeShapeParts(shape: GeneratedShape, options: ExportOptions): P
 
 function applyWestEastSlope(blocks: PaletteSourceBlock[], options: ExportOptions): void {
   if (!options.westEastSlope || isSuppressBuildMode(options.buildMode)) return;
-  const rawRun = Number.isFinite(options.westEastSlope.run) ? Math.trunc(options.westEastSlope.run) : 0;
-  const run = Math.max(0, Math.min(MAP_SIZE - 1, rawRun)) || 1;
   const rise = Number.isFinite(options.westEastSlope.rise) ? Math.trunc(options.westEastSlope.rise) : 0;
   if (rise === 0) return;
+  const rawRun = Number.isFinite(options.westEastSlope.run) ? Math.trunc(options.westEastSlope.run) : 1;
+  const run = Math.max(1, Math.min(MAP_SIZE - 1, rawRun));
   for (const block of blocks) {
     if (block.x < 0 || block.x >= MAP_SIZE) continue;
     // Positive rise follows increasing X, which is west-to-east in the map preview/export grid.

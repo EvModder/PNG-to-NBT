@@ -391,7 +391,7 @@ export const esCatalog = {
     rowRangeButton: "Rango de filas",
     westEastSlopeButton: "Pendiente W→E",
     westEastSlopeTooltip: "Inclina los bloques generados del mapa de oeste a este antes de exportar.",
-    westEastSlopeRunTitle: "Recorrido oeste a este, 0-127; 0 significa cada columna",
+    westEastSlopeRunTitle: "Recorrido oeste a este, 1-127 columnas",
     westEastSlopeRiseTitle: "Cambio en Y por recorrido W→E; negativo invierte la inclinación",
   },
   swatches: {

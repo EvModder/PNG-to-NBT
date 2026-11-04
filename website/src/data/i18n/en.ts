@@ -395,7 +395,7 @@ export const enCatalog = {
     rowRangeButton: "Row range",
     westEastSlopeButton: "W→E slope",
     westEastSlopeTooltip: "Slope generated map blocks west-to-east across columns before export.",
-    westEastSlopeRunTitle: "West-to-east run, 0-127; 0 means every column",
+    westEastSlopeRunTitle: "West-to-east run, 1-127 columns",
     westEastSlopeRiseTitle: "Y change per W→E run; negative reverses the slope",
   },
   swatches: {
