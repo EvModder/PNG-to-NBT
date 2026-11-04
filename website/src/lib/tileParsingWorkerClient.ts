@@ -41,10 +41,12 @@ const pool = createWorkerPool<Omit<TileParsingWorkerRequest, "id">, TileParsingW
 function runWorkerRequest(
   input: TileParsingWorkerRequest["input"],
   onProgressDelta?: (delta: number) => void,
+  signal?: AbortSignal,
 ): Promise<TileParsingWorkerResult> {
   let completed = 0;
   // Each request owns an extracted batch; the source image remains available for fallback.
   return pool.run({ input }, {
+    signal,
     transfer: [input.imageData.data.buffer],
     onProgress: next => {
       const delta = Math.max(0, next - completed);
@@ -123,12 +125,16 @@ export async function parseColorGridTilesInWorkers(
   tileCols: number,
   onProgress?: (completed: number, total: number) => void,
   allowedColors?: InputColorPalette,
+  signal?: AbortSignal,
 ): Promise<TileParsingWorkerAggregateResult> {
+  signal?.throwIfAborted();
   const totalTiles = tileRows * tileCols;
   const workerCount = Math.min(pool.size, totalTiles);
   const tileBatches = buildTileBatches(tileRows, tileCols, workerCount);
   let completed = 0;
 
+  const batchController = new AbortController();
+  const batchSignal = signal ? AbortSignal.any([signal, batchController.signal]) : batchController.signal;
   const results = await Promise.all(tileBatches.map(batch =>
     runWorkerRequest(
       {
@@ -144,8 +150,13 @@ export async function parseColorGridTilesInWorkers(
         completed += delta;
         onProgress?.(completed, totalTiles);
       },
+      batchSignal,
     ),
-  ));
+  )).catch(error => {
+    // Stop sibling batches before a main-thread fallback starts another copy.
+    batchController.abort(error);
+    throw error;
+  });
 
   let workingImageData = imageData;
   const tiles: TileParsingWorkerTileResult[] = [];

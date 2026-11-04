@@ -402,7 +402,9 @@ export async function convertImageToColorGridSetAsync(
   invalidDimensionsMode: InvalidDimensionsMode = "reject",
   onProgress?: (completed: number, total: number) => void,
   allowedColors?: InputColorPalette,
+  signal?: AbortSignal,
 ): Promise<ColorGridSetParseResult> {
+  signal?.throwIfAborted();
   const preprocessed = resizeImageToTileMultiples(imageData, invalidDimensionsMode);
   const baseImageData = preprocessed.imageData;
   const validWidth = baseImageData.width > 0 && baseImageData.width % MAP_SIZE === 0;
@@ -438,6 +440,7 @@ export async function convertImageToColorGridSetAsync(
       tileCols,
       onProgress,
       allowedColors,
+      signal,
     );
 
     return {
@@ -449,6 +452,7 @@ export async function convertImageToColorGridSetAsync(
       hasBlockingIssue: workerResult.hasBlockingIssue,
     };
   } catch {
+    signal?.throwIfAborted();
     // baseImageData was already resized above, so re-parsing must leave its dimensions alone.
     const fallback = convertImageToColorGridSet(baseImageData, customColors, autoFixInvalidColors, "reject", allowedColors);
     return {

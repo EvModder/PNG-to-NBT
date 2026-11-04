@@ -18,23 +18,97 @@ import type {
   TileWaterSetting,
 } from "@/lib/tileGeometryWorkerTypes";
 
-// Large multi-tile images can exceed 512 tiles on their own, so a smaller cap defeats
-// repeated-mode caching for exactly the workloads this client exists to accelerate.
+// Entry counts alone can retain gigabytes of dense geometry. Cells bound the
+// retained history (not active UI results); Map.size avoids scanning block contents.
 const MAX_CACHE_ENTRIES = 4096;
+const MAX_CACHE_CELLS = 1_048_576;
 const pool = createWorkerPool<Omit<TileGeometryWorkerRequest, "id">, TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult>(
   () => new Worker(new URL("./tileGeometry.worker.ts", import.meta.url), { type: "module" }),
 );
-const baseGeometryCache = new Map<string, TileBaseGeometryWorkerResult>();
-const finalGeometryCache = new Map<string, TileFinalGeometryWorkerResult>();
-const baseGeometryInflight = new Map<string, Promise<TileBaseGeometryWorkerResult>>();
-const finalGeometryInflight = new Map<string, Promise<TileFinalGeometryWorkerResult>>();
+type GeometryResult = TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult;
+type GeometryJob<T> = { promise: Promise<T>; controller: AbortController; users: number };
+const baseGeometryCache = createGeometryCache<TileBaseGeometryWorkerResult>();
+const finalGeometryCache = createGeometryCache<TileFinalGeometryWorkerResult>();
+const baseGeometryInflight = new Map<string, GeometryJob<TileBaseGeometryWorkerResult>>();
+const finalGeometryInflight = new Map<string, GeometryJob<TileFinalGeometryWorkerResult>>();
 
-function touchBoundedCache<T>(cache: Map<string, T>, key: string, value: T): void {
-  if (cache.has(key)) cache.delete(key);
-  cache.set(key, value);
-  if (cache.size <= MAX_CACHE_ENTRIES) return;
-  const oldestKey = cache.keys().next().value;
-  if (oldestKey !== undefined) cache.delete(oldestKey);
+function createGeometryCache<T extends GeometryResult>() {
+  const entries = new Map<string, { value: T; size: number }>();
+  // The UI keeps the shape map, not the worker response wrapper. Reuse a live
+  // result after LRU eviction without pinning the map or relaxing the cell budget.
+  const liveResults = new WeakMap<object, { key: string; value: T }>();
+  let cells = 0;
+  return {
+    get(key: string, displayed?: object): T | undefined {
+      const entry = entries.get(key);
+      if (!entry) {
+        const live = displayed && liveResults.get(displayed);
+        return live?.key === key ? live.value : undefined;
+      }
+      entries.delete(key);
+      entries.set(key, entry);
+      return entry.value;
+    },
+    set(key: string, value: T): void {
+      liveResults.set("baseShapeMap" in value ? value.baseShapeMap : value.shapeMap, { key, value });
+      const shapes = "baseShapeMap" in value
+        ? [...Object.values(value.baseShapeMap), value.baseNorthlineShape]
+        : [...Object.values(value.shapeMap), value.northlineShape, value.supportShape];
+      const parts = new Set(shapes.flatMap(shape => shape?.parts ?? []));
+      const size = [...parts].reduce((sum, part) => sum + part.cells.size + 1, 1);
+      if (size > MAX_CACHE_CELLS) return;
+      const previous = entries.get(key);
+      if (previous) { cells -= previous.size; entries.delete(key); }
+      entries.set(key, { value, size });
+      cells += size;
+      while (entries.size > MAX_CACHE_ENTRIES || cells > MAX_CACHE_CELLS) {
+        const [oldest, entry] = entries.entries().next().value!;
+        cells -= entry.size;
+        entries.delete(oldest);
+      }
+    },
+  };
+}
+
+function getCachedGeometry<T extends GeometryResult>(
+  cache: ReturnType<typeof createGeometryCache<T>>, inFlight: Map<string, GeometryJob<T>>, key: string,
+  run: (signal: AbortSignal) => Promise<T>, onPending: () => void, signal?: AbortSignal, displayed?: object,
+): Promise<T> {
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  const cached = cache.get(key, displayed);
+  if (cached) return Promise.resolve(cached);
+  onPending();
+  let job = inFlight.get(key);
+  if (!job) {
+    const controller = new AbortController();
+    const next: GeometryJob<T> = { controller, users: 0, promise: run(controller.signal).then(result => {
+      if (!controller.signal.aborted) cache.set(key, result);
+      return result;
+    }).finally(() => {
+      if (inFlight.get(key) === next) inFlight.delete(key);
+    }) };
+    inFlight.set(key, job = next);
+  }
+  const pending = job;
+  ++pending.users;
+  if (!signal) return pending.promise;
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      if (--pending.users === 0) {
+        if (inFlight.get(key) === pending) inFlight.delete(key);
+        pending.controller.abort(signal.reason);
+      }
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    pending.promise.then(result => {
+      signal.removeEventListener("abort", abort);
+      resolve(result);
+    }, error => {
+      signal.removeEventListener("abort", abort);
+      reject(error);
+    });
+  });
 }
 
 function serializeWaterSetting(waterSetting: TileWaterSetting): string {
@@ -43,14 +117,15 @@ function serializeWaterSetting(waterSetting: TileWaterSetting): string {
   return `below:${waterSetting.drops.join(",")}`;
 }
 
-function runWorkerRequest(request: { type: "base"; input: TileBaseGeometryWorkerInput }, tileCacheKey: string): Promise<TileBaseGeometryWorkerResult>;
-function runWorkerRequest(request: { type: "final"; input: TileFinalGeometryWorkerInput }, tileCacheKey: string): Promise<TileFinalGeometryWorkerResult>;
+function runWorkerRequest(request: { type: "base"; input: TileBaseGeometryWorkerInput }, tileCacheKey: string, signal?: AbortSignal): Promise<TileBaseGeometryWorkerResult>;
+function runWorkerRequest(request: { type: "final"; input: TileFinalGeometryWorkerInput }, tileCacheKey: string, signal?: AbortSignal): Promise<TileFinalGeometryWorkerResult>;
 function runWorkerRequest(request:
   | { type: "base"; input: TileBaseGeometryWorkerInput }
   | { type: "final"; input: TileFinalGeometryWorkerInput },
   tileCacheKey: string,
+  signal?: AbortSignal,
 ): Promise<TileBaseGeometryWorkerResult | TileFinalGeometryWorkerResult> {
-  return pool.run({ ...request, tileCacheKey }, { affinity: request.input.colorGrid });
+  return pool.run({ ...request, tileCacheKey }, { affinity: request.input.colorGrid, signal });
 }
 
 function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeometryWorkerInput): string {
@@ -112,28 +187,12 @@ export function getTileBaseGeometry(
   tileCacheKey: string,
   input: TileBaseGeometryWorkerInput,
   onPending: () => void,
+  signal?: AbortSignal,
+  displayed?: TileBaseGeometryWorkerResult["baseShapeMap"],
 ): Promise<TileBaseGeometryWorkerResult> {
   const cacheKey = getTileBaseGeometryCacheKey(tileCacheKey, input);
-  const cached = baseGeometryCache.get(cacheKey);
-  if (cached) {
-    touchBoundedCache(baseGeometryCache, cacheKey, cached);
-    return Promise.resolve(cached);
-  }
-  onPending();
-  const inFlight = baseGeometryInflight.get(cacheKey);
-  if (inFlight) return inFlight;
-  const next = runWorkerRequest({ type: "base", input }, tileCacheKey)
-    .then(result => {
-      baseGeometryInflight.delete(cacheKey);
-      touchBoundedCache(baseGeometryCache, cacheKey, result);
-      return result;
-    })
-    .catch(error => {
-      baseGeometryInflight.delete(cacheKey);
-      throw error;
-    });
-  baseGeometryInflight.set(cacheKey, next);
-  return next;
+  return getCachedGeometry(baseGeometryCache, baseGeometryInflight, cacheKey,
+    signal => runWorkerRequest({ type: "base", input }, tileCacheKey, signal), onPending, signal, displayed);
 }
 
 // Callers:
@@ -142,26 +201,10 @@ export function getTileFinalGeometry(
   tileCacheKey: string,
   input: TileFinalGeometryWorkerInput,
   onPending: () => void,
+  signal?: AbortSignal,
+  displayed?: TileFinalGeometryWorkerResult["shapeMap"],
 ): Promise<TileFinalGeometryWorkerResult> {
   const cacheKey = getTileFinalGeometryCacheKey(tileCacheKey, input);
-  const cached = finalGeometryCache.get(cacheKey);
-  if (cached) {
-    touchBoundedCache(finalGeometryCache, cacheKey, cached);
-    return Promise.resolve(cached);
-  }
-  onPending();
-  const inFlight = finalGeometryInflight.get(cacheKey);
-  if (inFlight) return inFlight;
-  const next = runWorkerRequest({ type: "final", input }, tileCacheKey)
-    .then(result => {
-      finalGeometryInflight.delete(cacheKey);
-      touchBoundedCache(finalGeometryCache, cacheKey, result);
-      return result;
-    })
-    .catch(error => {
-      finalGeometryInflight.delete(cacheKey);
-      throw error;
-    });
-  finalGeometryInflight.set(cacheKey, next);
-  return next;
+  return getCachedGeometry(finalGeometryCache, finalGeometryInflight, cacheKey,
+    signal => runWorkerRequest({ type: "final", input }, tileCacheKey, signal), onPending, signal, displayed);
 }

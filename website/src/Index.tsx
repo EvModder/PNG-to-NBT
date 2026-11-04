@@ -1096,6 +1096,7 @@ const Index = () => {
   const imageHasWater = usedWaterShades.size > 0;
   const paletteUsageInfo = derivedImageStats?.paletteUsageInfo ?? null;
   const [analysisResult, setAnalysisResult] = useState<TileAnalysisResult | null>(null);
+  const getDisplayedGeometry = useEffectEvent((index: number) => analysisResult?.tileGeometryAnalyses[index]);
   const [isAnalyzingTiles, setIsAnalyzingTiles] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
   const [analysisPhase, setAnalysisPhase] = useState<TileAnalysisPhase>("generating");
@@ -1267,6 +1268,7 @@ const Index = () => {
     }
     let cancelled = false;
     const totalTiles = parsedTiles.length;
+    const controller = new AbortController();
     const showTileAnalysisProgress = totalTiles > 1;
 
     let analysisStarted = false;
@@ -1316,7 +1318,7 @@ const Index = () => {
             layerGap: calcLayerGap,
             paletteSeed: paletteSeedOffset,
             enableWaterConvenience: supportMode !== SupportMode.None,
-          }, startAnalysis);
+          }, startAnalysis, controller.signal, getDisplayedGeometry(index)?.baseShapeMap);
           advanceProgress();
           return {
             tile,
@@ -1439,7 +1441,7 @@ const Index = () => {
             setAnalysisPhase("generating");
             setAnalysisProgress({ completed: 0, total: totalTiles });
           }
-          nextTileGeometryAnalyses = await Promise.all(nextBaseAnalyses.map(async tile => {
+          nextTileGeometryAnalyses = await Promise.all(nextBaseAnalyses.map(async (tile, index) => {
             const includeTransparentBlocks = shouldIncludeTransparentBlocks(
               transparentBlockMapping,
               tile.derivedImageStats.hasTransparency,
@@ -1473,7 +1475,7 @@ const Index = () => {
               collapseStaircaseModes: !hasMultipleTiles,
               includeFlatNorthline: hasMultipleTiles && tile.flatModeBehavior !== FlatModeBehavior.None,
               selectedStepDirection: effectiveSuppressStepDirection,
-            }, startAnalysis);
+            }, startAnalysis, controller.signal, getDisplayedGeometry(index)?.shapeMap);
             advanceProgress();
             return {
               ...tile,
@@ -1506,6 +1508,7 @@ const Index = () => {
         });
       } catch (error) {
         if (cancelled) return;
+        controller.abort();
         startTransition(() => {
           setAnalysisResult(null);
           setPaletteNotices([messages.parsing.errorNotice((error as Error)?.message || messages.parsing.conversionFailed)]);
@@ -1519,6 +1522,7 @@ const Index = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [
     imageValid,
@@ -2641,6 +2645,7 @@ const Index = () => {
 
     let cancelled = false;
     const expectedTileCount = getExpectedTileShape(imageData, effectiveInvalidDimensionsMode).tileCount;
+    const controller = new AbortController();
     const singleTileImage = expectedTileCount === 1;
     setIsParsingImage(true);
     setParseProgress(!singleTileImage && expectedTileCount > 0 ? { completed: 0, total: expectedTileCount } : null);
@@ -2666,6 +2671,7 @@ const Index = () => {
                   setParseProgress(current => ({ completed, total: current?.total ?? total }));
                 },
                 allowedColors,
+                controller.signal,
               );
             })();
         if (cancelled) return;
@@ -2701,6 +2707,7 @@ const Index = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [decodedColorGrid, imageData, sourceImageData, parseRelevantCustomColorKey, effectiveInvalidColorsPalette, allowedColors, effectiveInvalidDimensionsMode, imageLossyFormatLabel]);
 
