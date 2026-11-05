@@ -11,6 +11,7 @@
  * - getHue()
  *
  * Callers:
+ * - src/lib/tileGeometryWorkerClient.ts
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
@@ -71,6 +72,7 @@ export const TRANSPARENT_COLOR: ShadedColorRef = Object.freeze({ isCustom: false
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/tileGeometryWorkerClient.ts
 export function isTransparentColor(cell: ShadedColorRef): boolean {
   return !cell.isCustom && cell.id === TRANSPARENCY_BASE_INDEX;
 }

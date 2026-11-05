@@ -8,6 +8,9 @@
  */
 import { buildModeUsesLayerGap, isSuppressStepsBuildMode } from "@/utils/conversion";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
+import { isTransparentColor } from "@/utils/color";
+import { Shade } from "@/types/color";
+import { FlatModeBehavior } from "./colorGridAnalysis";
 import { createWorkerPool } from "@/utils/workerPool";
 import type {
   TileBaseGeometryWorkerInput,
@@ -130,21 +133,24 @@ function runWorkerRequest(request:
 
 function getTileBaseGeometryCacheKey(tileCacheKey: string, input: TileBaseGeometryWorkerInput): string {
   // The base pass only generates staircase shapes, so layer gap has no effect.
+  const includesParty = !input.northlineOnly;
   return [
     tileCacheKey,
+    input.northlineOnly ? 1 : 0,
     input.allSameShade ?? "",
     input.hasWater ? 1 : 0,
     input.hasTransparency ? 1 : 0,
     input.includeTransparentBlocks ? 1 : 0,
     serializeWaterSetting(input.waterSetting),
     input.flatModeBehavior,
-    input.paletteSeed,
-    input.enableWaterConvenience ? 1 : 0,
+    includesParty ? input.paletteSeed : 0,
+    input.hasWater && !input.waterSetting && input.enableWaterConvenience ? 1 : 0,
   ].join("|");
 }
 
 function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeometryWorkerInput): string {
   const twoLayer = buildModeUsesLayerGap(input.buildMode);
+  const includesParty = input.collapseStaircaseModes || input.buildMode === BuildMode.StaircaseParty;
   const steps = isSuppressStepsBuildMode(input.buildMode);
   const independentStepSpacing = steps && !input.uniformSuppressStepSpacing;
   const mixSteps = steps && input.mixSteps;
@@ -168,8 +174,8 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     mixSteps ? 1 : 0,
     raisedSteps ? input.mixedStepMaxHeight : 0,
     raisedSteps ? input.mixedStepPalette?.key ?? "" : "",
-    input.paletteSeed,
-    input.enableWaterConvenience ? 1 : 0,
+    includesParty ? input.paletteSeed : 0,
+    input.hasWater && !input.waterSetting && input.enableWaterConvenience ? 1 : 0,
     steps && input.skipEmptySuppressSteps ? 1 : 0,
     steps ? input.minSuppressStepOffset : "",
     independentStepSpacing ? 1 : 0,
@@ -190,6 +196,16 @@ export function getTileBaseGeometry(
   signal?: AbortSignal,
   displayed?: TileBaseGeometryWorkerResult["baseShapeMap"],
 ): Promise<TileBaseGeometryWorkerResult> {
+  // Multi-tile suppression uses grid statistics for the dropdown. Only flatness
+  // and the optional world-min-Y probe can require a Northline shape.
+  if (input.northlineOnly && !signal?.aborted) {
+    if (input.flatModeBehavior === FlatModeBehavior.Plain)
+      return Promise.resolve({ baseShapeMap: {}, baseNorthlineShape: null, isFlatShape: true });
+    if (!input.hasWater && input.flatModeBehavior === FlatModeBehavior.None && input.colorGrid.some(column =>
+      column.some((cell, z) => z > 0 && cell.shade !== Shade.Flat && !isTransparentColor(cell)
+        && !isTransparentColor(column[z - 1]))))
+      return Promise.resolve({ baseShapeMap: {}, baseNorthlineShape: null, isFlatShape: false });
+  }
   const cacheKey = getTileBaseGeometryCacheKey(tileCacheKey, input);
   return getCachedGeometry(baseGeometryCache, baseGeometryInflight, cacheKey,
     signal => runWorkerRequest({ type: "base", input }, tileCacheKey, signal), onPending, signal, displayed);

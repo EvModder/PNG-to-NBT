@@ -26,6 +26,7 @@
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/suppressSteps.ts
  * - src/lib/tileGeometryWorkerTypes.ts
+ * - src/lib/tileGeometryWorkerClient.ts
  * - src/lib/tileParsingWorkerTypes.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
@@ -83,6 +84,7 @@ type VoidShadowSummary = {
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/tileGeometry.ts
+// - src/lib/tileGeometryWorkerClient.ts
 export enum FlatModeBehavior {
   None = "none",
   Plain = "plain",

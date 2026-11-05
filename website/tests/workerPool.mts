@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createWorkerPool } from "@/utils/workerPool";
 import { getTileBaseGeometry, getTileFinalGeometry } from "@/lib/tileGeometryWorkerClient";
+import { analyzeBaseGeometry, analyzeFinalGeometry } from "@/lib/tileGeometry";
 import type { TileBaseGeometryWorkerInput, TileFinalGeometryWorkerInput } from "@/lib/tileGeometryWorkerTypes";
-import { FlatModeBehavior } from "@/lib/colorGridAnalysis";
+import { computeColorGridStats, deriveImageStats, FlatModeBehavior } from "@/lib/colorGridAnalysis";
+import { CRUBTECH_WATER_DROPS, resolveTileWaterSetting } from "@/lib/generationPolicy";
 import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { Shade } from "@/types/color";
 
@@ -144,6 +146,45 @@ try {
   } satisfies TileBaseGeometryWorkerInput & TileFinalGeometryWorkerInput;
   const result = { baseShapeMap: {}, baseNorthlineShape: null, isFlatShape: true,
     shapeMap: {}, northlineShape: null, supportShape: null, fillerNeedStats: null, northRowSingleLine: true };
+  for (const varied of [false, true]) {
+    const colorGrid = input.colorGrid.map(column => column.map((cell, z) => varied && z === 2 ? { ...cell, shade: Shade.Dark } : cell));
+    const probe = { ...input, colorGrid, flatModeBehavior: varied ? FlatModeBehavior.None : FlatModeBehavior.Plain };
+    const fast = await getTileBaseGeometry("probe", { ...probe, northlineOnly: true }, () => assert.fail("Unambiguous tiles need no discovery worker"));
+    assert.equal(fast.isFlatShape, analyzeBaseGeometry(probe).isFlatShape);
+  }
+  // North boundary, contiguous slopes, isolated pixels and mixed void shading.
+  for (const pattern of [0, 85, 170, 255, 13, 29, 53, 229]) {
+    const colorGrid = input.colorGrid.map((column, x) => column.map((cell, z) => {
+      const value = (pattern >>> (z * 2)) & 3;
+      return { ...cell, id: x === 0 && z < 4 && value < 3 ? 11 : 0, shade: value % 3 };
+    }));
+    const probe = { ...input, colorGrid, hasTransparency: true, ...computeColorGridStats(colorGrid), northlineOnly: true };
+    const expected = analyzeBaseGeometry(probe);
+    let pending = false;
+    const request = getTileBaseGeometry(`pattern:${pattern}`, probe, () => { pending = true; });
+    if (pending) geometryWorkers.findLast(worker => !worker.terminated)!.respond({ result: expected });
+    const actual = await request;
+    assert.equal(actual.isFlatShape, expected.isFlatShape, `Flatness differs for pattern ${pattern}`);
+    if (pending) assert.deepEqual(actual, expected);
+  }
+  for (const id of [0, 12]) {
+    const colorGrid = input.colorGrid.map(column => column.map((cell, z) => ({ ...cell, id, isCustom: true, shade: z % 3 })));
+    const probe = { ...input, colorGrid, flatModeBehavior: FlatModeBehavior.None, northlineOnly: true };
+    const actual = await getTileBaseGeometry(`custom:${id}`, probe, () => assert.fail("Custom colors are land, not vanilla void/water"));
+    assert.equal(actual.isFlatShape, analyzeBaseGeometry(probe).isFlatShape);
+  }
+  const waterGrid = input.colorGrid.map(column => column.map((cell, z) => ({ ...cell, id: 12, shade: z % 3 })));
+  const waterProbe = { ...input, colorGrid: waterGrid, hasWater: true, flatModeBehavior: FlatModeBehavior.None, northlineOnly: true };
+  const waterExpected = analyzeBaseGeometry(waterProbe);
+  let waterPending = false;
+  const waterRequest = getTileBaseGeometry("water-probe", waterProbe, () => { waterPending = true; });
+  assert(waterPending, "Water shading must use geometry, not the dry height witness");
+  geometryWorkers.findLast(worker => !worker.terminated)!.respond({ result: waterExpected });
+  assert.deepEqual(await waterRequest, waterExpected);
+  const aborted = new AbortController();
+  aborted.abort();
+  await assert.rejects(getTileBaseGeometry("aborted-probe", { ...input, northlineOnly: true },
+    () => assert.fail("Cancelled shortcuts must not start work"), aborted.signal), /abort/i);
   for (const get of [getTileBaseGeometry, getTileFinalGeometry]) {
     let pending = 0;
     const onPending = () => ++pending;
@@ -156,6 +197,7 @@ try {
     assert.equal(await get("tile", input, onPending), result);
     assert.equal(pending, 2, "Cache hits never report pending work");
     assert.equal(await get("tile", { ...input, layerGap: 17 }, onPending), result);
+    assert.equal(await get("tile", { ...input, enableWaterConvenience: true }, onPending), result);
     assert.equal(pending, 2, "Inactive settings preserve cache hits");
 
     const failed = get("retry", input, onPending);
@@ -184,6 +226,66 @@ try {
     await evicted;
   }
   const respond = (result: object) => geometryWorkers.findLast(worker => !worker.terminated)!.respond({ result });
+  const northline = getTileBaseGeometry("northline-seed", waterProbe, () => {});
+  respond(waterExpected); await northline;
+  assert.equal(await getTileBaseGeometry("northline-seed", { ...waterProbe, paletteSeed: 9 },
+    () => assert.fail("Northline does not use a palette seed")), waterExpected);
+  for (const shade of [Shade.Dark, Shade.Flat, Shade.Light]) {
+    const colorGrid = input.colorGrid.map((column, x) => column.map((cell, z) => ({ ...cell,
+      id: x > 1 || z > 1 ? 0 : x === 0 ? 12 : 11, shade })));
+    const stats = computeColorGridStats(colorGrid);
+    const derived = deriveImageStats(stats);
+    const drops = [3, 2, 1] as const;
+    const changed = drops.map((drop, i) => i === shade ? drop : drop + 10) as [number, number, number];
+    for (const crubTech of [false, true]) {
+      const mode = crubTech ? BuildMode.Suppress2Layer : BuildMode.StaircaseNorthline;
+      const waterSetting = resolveTileWaterSetting(derived, mode, true, crubTech, false, drops);
+      assert.deepEqual(waterSetting, resolveTileWaterSetting(derived, mode, true, crubTech, false, changed));
+      const probe = { ...input, colorGrid, hasWater: true, waterSetting, buildMode: mode, collapseStaircaseModes: false };
+      assert.deepEqual(analyzeFinalGeometry(probe), analyzeFinalGeometry({ ...probe,
+        colorGrid: structuredClone(colorGrid), waterSetting: { kind: "below-platform",
+          drops: crubTech ? CRUBTECH_WATER_DROPS.map(drop => drop + 1) as [number, number, number] : drops } }));
+    }
+  }
+  for (const buildMode of [BuildMode.StaircaseNorthline, BuildMode.StaircaseParty]) {
+    const probe = { ...input, buildMode, collapseStaircaseModes: false };
+    const expected = analyzeFinalGeometry(probe);
+    const first = getTileFinalGeometry(`seed:${buildMode}`, probe, () => {});
+    respond(expected); await first;
+    let pending = false;
+    const next = getTileFinalGeometry(`seed:${buildMode}`, { ...probe, paletteSeed: 9 }, () => { pending = true; });
+    assert.equal(pending, buildMode === BuildMode.StaircaseParty);
+    if (pending) respond(expected);
+    await next;
+    assert.equal(analyzeFinalGeometry({ ...probe, enableWaterConvenience: true }).shapeMap[buildMode], expected.shapeMap[buildMode],
+      "Dry geometry must reuse its inner shape cache");
+  }
+  for (const waterSetting of [{ kind: "top-aligned" }, { kind: "below-platform", drops: [3, 2, 1] }] as const) {
+    const colorGrid = input.colorGrid.map(column => column.map(cell => ({ ...cell, id: 12 })));
+    const probe = { ...input, colorGrid, hasWater: true, waterSetting };
+    for (const [get, analyze] of [[getTileBaseGeometry, analyzeBaseGeometry], [getTileFinalGeometry, analyzeFinalGeometry]] as const) {
+      const expected = analyze(probe);
+      const equivalent = analyze({ ...probe, enableWaterConvenience: true });
+      assert.deepEqual(equivalent, expected);
+      const before = "baseShapeMap" in expected ? expected.baseShapeMap : expected.shapeMap;
+      const after = "baseShapeMap" in equivalent ? equivalent.baseShapeMap : equivalent.shapeMap;
+      for (const mode of Object.keys(before) as BuildMode[]) assert.equal(after[mode], before[mode], "Inner geometry must also be reused");
+      const first = get(`explicit:${waterSetting.kind}`, probe, () => {});
+      respond(expected);
+      await first;
+      assert.deepEqual(await get(`explicit:${waterSetting.kind}`, { ...probe, enableWaterConvenience: true },
+        () => assert.fail("Explicit water placements bypass convenience")), expected);
+    }
+  }
+  for (const get of [getTileBaseGeometry, getTileFinalGeometry]) {
+    let pending = 0;
+    for (const enableWaterConvenience of [false, true]) {
+      const wet = get("wet", { ...input, hasWater: true, enableWaterConvenience }, () => ++pending);
+      respond(result);
+      await wet;
+    }
+    assert.equal(pending, 2, "Water convenience must not alias when it can change placements");
+  }
   const a = new AbortController(), b = new AbortController();
   const sharedA = getTileFinalGeometry("shared-abort", input, () => {}, a.signal);
   const sharedB = getTileFinalGeometry("shared-abort", input, () => {}, b.signal);

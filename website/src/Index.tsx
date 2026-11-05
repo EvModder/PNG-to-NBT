@@ -1308,6 +1308,7 @@ const Index = () => {
           );
           const waterSetting = getTileWaterSetting(tileDerivedStats, BuildMode.StaircaseClassic);
           const baseGeometry = await getTileBaseGeometry(tile.cacheKey, {
+            northlineOnly: hasMultipleTiles && isSuppressBuildMode(buildMode),
             colorGrid: tile.colorGrid,
             allSameShade: tileDerivedStats.allSameShade,
             hasWater,
@@ -2241,7 +2242,7 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
-    if (!imageData || previewBusy || crubTechControlsActive2LayerSettings) return;
+    if (!imageData || !hasCurrentMaterialAnalysis || previewBusy || crubTechControlsActive2LayerSettings) return;
     const selectable =
       preferredSupportMode === SupportMode.None ||
       (preferredSupportMode === SupportMode.All && enableAllSupportOption) ||
@@ -2252,6 +2253,7 @@ const Index = () => {
   }, [
     imageData,
     previewBusy,
+    hasCurrentMaterialAnalysis,
     crubTechControlsActive2LayerSettings,
     enableAllSupportOption,
     enableStepsSupportOption,

@@ -33,6 +33,7 @@ export type TileWaterSetting =
 // - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometry.ts
 export type TileBaseGeometryWorkerInput = {
+  northlineOnly?: boolean;
   colorGrid: ColorGrid;
   allSameShade?: Shade;
   hasWater: boolean;

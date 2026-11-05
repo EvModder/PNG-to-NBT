@@ -153,7 +153,8 @@ export function resolveTileWaterSetting(
   const shades = getUsedWaterShades(stats.usedShadesByColorKey);
   const crubTechWater = crubTech && isCrubTechBuildMode(mode);
   if ((belowPlatformWater || crubTechWater) && shades.size > 0) {
-    return { kind: "below-platform", drops: crubTechWater ? CRUBTECH_SHAPE_WATER_DROPS : drops };
+    const effectiveDrops = crubTechWater ? CRUBTECH_SHAPE_WATER_DROPS : drops;
+    return { kind: "below-platform", drops: effectiveDrops.map((drop, shade) => shades.has(shade) ? drop : 0) as [...WaterDrops] };
   }
   // Preserve leaf/ice staircase convenience placement outside flat land.
   if ((shades.has(Shade.Dark) || shades.has(Shade.Flat)) && (usesWaterForWater || stats.hasOnlyFlatLand)) {

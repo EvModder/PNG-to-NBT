@@ -2776,7 +2776,8 @@ function getShapeCacheKeyId({
   if (buildAtWorldMinY && buildModeUsesWorldMinYGeometry(buildMode)) id += "|world-min-y:1";
   if (includeTransparentBlocks && isStaircaseBuildMode(buildMode)) id += "|id0:1";
   if (includeTransparentBlocks && transparentPlacementMode !== buildMode) id += `|id0mode:${transparentPlacementMode}`;
-  if (isStaircaseBuildMode(buildMode)) id += `|waterconv:${enableWaterConvenience ? 1 : 0}`;
+  if (isStaircaseBuildMode(buildMode) && buildMode !== BuildMode.StaircaseParty && !waterDrops && !topAlignedWater)
+    id += `|waterconv:${enableWaterConvenience ? 1 : 0}`;
   return id as ShapeCacheKeyId;
 }
 
@@ -3182,7 +3183,7 @@ export function generateShapeMap(
   const paletteSeed = options.paletteSeed ?? 0;
   const waterDrops = options.waterSetting?.kind === "below-platform" ? options.waterSetting.drops : undefined;
   const topAlignedWater = options.waterSetting?.kind === "top-aligned";
-  const enableWaterConvenience = options.enableWaterConvenience ?? true;
+  const enableWaterConvenience = hasWater && !options.waterSetting && (options.enableWaterConvenience ?? true);
   const buildAtWorldMinY = options.buildAtWorldMinY ?? false;
   const skipEmptySuppressSteps = options.skipEmptySuppressSteps ?? true;
   const minimumStepOffset = options.minSuppressStepOffset ?? 1;

@@ -35,9 +35,9 @@ export function analyzeBaseGeometry(input: TileBaseGeometryWorkerInput): TileBas
       enableWaterConvenience: input.enableWaterConvenience,
       buildAtWorldMinY: false,
       skipEmptySuppressSteps: true,
-      collapseStaircaseModes: true,
+      collapseStaircaseModes: !input.northlineOnly,
       includeFlatNorthline: false,
-      selectedMode: null,
+      selectedMode: input.northlineOnly ? BuildMode.StaircaseNorthline : null,
       selectedStepDirection: SuppressStepDirection.EastToWest,
     },
   );

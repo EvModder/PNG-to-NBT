@@ -31,6 +31,7 @@
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/tileGeometryWorkerTypes.ts
+ * - src/lib/tileGeometryWorkerClient.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/lib/tileParsingWorkerTypes.ts
  * - src/types/shape.ts
@@ -54,6 +55,7 @@
 // - src/lib/tileGeometryWorkerTypes.ts
 // - src/utils/color.ts
 // - src/lib/generationPolicy.ts
+// - src/lib/tileGeometryWorkerClient.ts
 export enum Shade {
   Dark = 0,
   Flat = 1,
