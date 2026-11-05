@@ -3506,7 +3506,7 @@ const Index = () => {
     const warnings = imageValid ? getPlacementWarnings(activeOutputTileAnalyses.flatMap(tile => tile.supportShape ? [tile.supportShape] : []),
       buildSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings) : [];
     let supportChoiceWarning: ReturnType<typeof messages.preview.fragileSupportOverrideWarning> | null = null;
-    const placementWarnings = warnings.flatMap(({ kind, blocks, invalid, support, missingPlacements }) => {
+    const placementWarnings = warnings.flatMap(({ kind, blocks, invalid, world, support, missingPlacements }) => {
       const message = messages.preview.placementWarning(kind, blocks, support, missingPlacements);
       if (kind === "autoSupport" && hasCurrentMaterialAnalysis) {
         supportChoiceWarning = messages.preview.fragileSupportOverrideWarning(getCommonSupportChoices(blocks,
@@ -3515,7 +3515,7 @@ const Index = () => {
           MINECRAFT_VERSIONS[minecraftVersion].dataVersion));
         return [];
       }
-      return [{ ...message, kind, invalid }];
+      return [{ ...message, kind, invalid, world }];
     });
     return { supportChoiceWarning, placementWarnings };
   }, [imageValid, activeOutputTileAnalyses, buildSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings, minecraftVersion, hasCurrentMaterialAnalysis, usedColorKeys]);

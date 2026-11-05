@@ -22,6 +22,8 @@ import {
   PREVIEW_WARNING_FRAME_CLASS,
 } from "@/data/uiClasses";
 
+type PlacementWarningKind = Parameters<typeof messages.preview.placementWarning>[0];
+
 type ListedBlocks = { before: string; blocks: readonly string[]; after: string; summary: string };
 
 type PreviewWarning = {
@@ -67,7 +69,7 @@ type PanelImagePreviewProps = {
   onSelectSupport: (block: string) => void;
   autoPickSupports: boolean;
   setAutoPickSupports: (enabled: boolean) => void;
-  placementWarnings: (PreviewWarning & { suggestSupportModes: boolean })[];
+  placementWarnings: (PreviewWarning & { kind: PlacementWarningKind; world: boolean; suggestSupportModes: boolean })[];
   supportModeFix: { select: (mode: SupportMode) => void; fragile: boolean; all: boolean };
   vsFillerWarning: PreviewWarning | null;
   lateFillerWarning: PreviewWarning | null;
@@ -170,7 +172,7 @@ function WarningBanner({
   children,
 }: {
   text: string;
-  tone: "error" | "warning" | "muted";
+  tone: "error" | "warning" | "notice" | "muted";
   invalid?: boolean;
   warningHeadline?: boolean;
   detail?: string;
@@ -617,10 +619,9 @@ export function PanelImagePreview({
         onResolve={onResolveInvalidColors}
       />
       {imageValid && <>
-        {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
         {noFillerWarning && <WarningBanner text={noFillerWarning.text} tone={noFillerWarning.blocking ? "error" : "warning"} />}
-        {suppressNorthSouthWarning && <WarningBanner text={suppressNorthSouthWarning} tone="warning" />}
-        {liftSupportWarning && <WarningBanner {...liftSupportWarning} tone="muted" />}
+        {lateFillerWarning && <WarningBanner text={lateFillerWarning.text} tone="warning" invalid={lateFillerWarning.invalid} />}
+        {vsFillerWarning?.invalid && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid warningHeadline />}
         {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
         {autoPickSupports ? <WarningBanner text={messages.preview.autoSupportsEnabled} tone="warning">
           {" "}<button type="button" className="underline underline-offset-2 hover:text-foreground"
@@ -630,7 +631,7 @@ export function PanelImagePreview({
           {!fragileSupportOverrideWarning.supports.length && <button type="button" className="block underline underline-offset-2 hover:text-foreground"
             onClick={() => setAutoPickSupports(true)}>{messages.preview.autoPickSupports}</button>}
         </WarningBanner>}
-        {placementWarnings.map(warning => <WarningBanner key={`${warning.text}|${warning.detail ?? ""}`} {...warning} tone="warning">
+        {placementWarnings.filter(w => !w.world).map(warning => <WarningBanner key={`${warning.text}|${warning.detail ?? ""}`} {...warning} tone="warning">
           {warning.suggestSupportModes && <> [{[SupportMode.Fragile, SupportMode.All].map((mode, i) => (
             <Fragment key={mode}>
               {i > 0 && ", "}
@@ -642,8 +643,11 @@ export function PanelImagePreview({
             </Fragment>
           ))}]</>}
         </WarningBanner>)}
-        {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} warningHeadline />}
-        {lateFillerWarning && <WarningBanner text={lateFillerWarning.text} tone="warning" invalid={lateFillerWarning.invalid} />}
+        {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
+        {placementWarnings.filter(w => w.world).map(warning => <WarningBanner key={warning.kind} {...warning} tone="warning" />)}
+        {suppressNorthSouthWarning && <WarningBanner text={suppressNorthSouthWarning} tone="warning" />}
+        {liftSupportWarning && <WarningBanner {...liftSupportWarning} tone="muted" />}
+        {vsFillerWarning && !vsFillerWarning.invalid && <WarningBanner text={vsFillerWarning.text} tone="notice" />}
         {showNorthRowAlignmentInfo && <WarningBanner text={messages.preview.northRowAlignmentInfo} tone="muted" />}
         {canGenerate && imageHasWater && usesIceForWater && <WarningBanner text={messages.preview.iceConversionInfo} tone="muted" />}
       </>}

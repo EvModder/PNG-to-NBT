@@ -23,15 +23,19 @@ import { BuildMode, FillerRole, type FillerAssignment } from "@/types/conversion
 import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
 
 // Display order. true: error (red); false: reminder (yellow).
-const KINDS = {
+const SUPPORT_KINDS = {
   missingSupport: true, shelfSupport: true, falling: true, attachmentSupport: true,
   scaffoldSupportFiller: true, scaffoldConnection: true, supportMode: true, supportBlock: true, autoSupport: true,
   transparentSupport: true, invalidSupport: true,
+};
+// Conditions of the surrounding world, listed as their own group.
+const WORLD_KINDS = {
   cropLight: false, mushroomLight: false, mushroomSpread: false, missingCover: true, growthCover: false, coralSupport: false,
   tntIgnition: true, tnt: false, fireSpread: true, grassSpread: true, iceMelt: true, snowMelt: true, iceSnowMelt: true, meltRisk: false, snowRisk: false, iceSnowRisk: false, frostedIce: false,
 };
+const KINDS = { ...SUPPORT_KINDS, ...WORLD_KINDS };
 type Kind = keyof typeof KINDS;
-type Warning = { kind: Kind; blocks: string[]; invalid: boolean; support?: string; missingPlacements?: number };
+type Warning = { kind: Kind; blocks: string[]; invalid: boolean; world: boolean; support?: string; missingPlacements?: number };
 const KIND_ORDER = Object.keys(KINDS) as Kind[];
 type Cold = keyof typeof MELT_LIGHT;
 const NEIGHBORS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -440,9 +444,9 @@ function analyzePlacementWarnings(
   }
   if (!flatPlatform && growth) issues[missingCover ? "missingCover" : "growthCover"].add("saplings");
   return [
-    ...KIND_ORDER.filter(kind => issues[kind].size).map(kind => ({ kind, blocks: [...issues[kind]].sort(), invalid: KINDS[kind],
+    ...KIND_ORDER.filter(kind => issues[kind].size).map(kind => ({ kind, blocks: [...issues[kind]].sort(), invalid: KINDS[kind], world: kind in WORLD_KINDS,
       ...(kind === "supportMode" && { missingPlacements }),
     })),
-    ...[...invalidSupports].map(([support, blocks]) => ({ kind: "invalidSupport" as const, blocks: [...blocks].sort(), support, invalid: true })),
+    ...[...invalidSupports].map(([support, blocks]) => ({ kind: "invalidSupport" as const, blocks: [...blocks].sort(), support, invalid: true, world: false })),
   ];
 }
