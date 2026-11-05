@@ -3506,8 +3506,8 @@ const Index = () => {
     const warnings = imageValid ? getPlacementWarnings(activeOutputTileAnalyses.flatMap(tile => tile.supportShape ? [tile.supportShape] : []),
       buildSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings) : [];
     let supportChoiceWarning: ReturnType<typeof messages.preview.fragileSupportOverrideWarning> | null = null;
-    const placementWarnings = warnings.flatMap(({ kind, blocks, invalid, support }) => {
-      const message = messages.preview.placementWarning(kind, blocks, support);
+    const placementWarnings = warnings.flatMap(({ kind, blocks, invalid, support, missingPlacements }) => {
+      const message = messages.preview.placementWarning(kind, blocks, support, missingPlacements);
       if (kind === "autoSupport" && hasCurrentMaterialAnalysis) {
         supportChoiceWarning = messages.preview.fragileSupportOverrideWarning(getCommonSupportChoices(blocks,
           activeOutputTileAnalyses.flatMap(tile => [...tile.materialNeedStats?.supportNeeds.constrainedBlocks ?? []]),
@@ -3976,6 +3976,7 @@ const Index = () => {
               onSelectSupport={setCommittedSupportFillerBlock}
               autoPickSupports={autoPickSupports}
               setAutoPickSupports={setAutoPickSupports}
+              supportModeFix={{ select: setSupportMode, fragile: enableFragileSupportOption, all: enableAllSupportOption }}
               onResolveInvalidColors={imageData && !decodedColorGrid ? setInvalidColorsPaletteOverride : undefined}
               inputColorsPalette={effectiveInvalidColorsPalette}
               inputPaletteEquivalence={inputPaletteEquivalence}

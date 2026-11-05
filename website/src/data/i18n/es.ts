@@ -186,8 +186,6 @@ export const esCatalog = {
     growthCoverTooltip: "Bloques transparentes sobre las plantas. Deja vacío para no usar cubiertas; los brotes aún las necesitan. Las enredaderas retorcidas siempre exportan age=25.",
     growthCoverInvalid: "Cubierta inválida",
     heading: "Rellenos",
-    floorAttachmentWarning: "Solo se admite el soporte desde abajo",
-    fixFloorAttachment: "Fijar abajo",
     headingTooltip: "Asignaciones de bloques de relleno para soporte, sombreado y colocaciones de casos especiales.",
     supportLabel: "Soporte:",
     supportTooltip:
@@ -315,18 +313,31 @@ export const esCatalog = {
     convertButtonLayerSplitTitle: "Descarga esquemas separados para cada capa de construcción.",
   },
   preview: {
+    missingPlacementSupport: {
+      one: "{count} colocación necesita soporte:",
+      other: "{count} colocaciones necesitan soporte:",
+    },
     invalidSupportDetail: "No puede apoyarse sobre {support}",
     liftSupport: {
       one: "{support} no puede sostener {count} elevación",
       other: "{support} no puede sostener {count} elevaciones",
     },
     liftSupportDetail: "Elevables con otro soporte: {blocks}",
+    nonAirSupport: {
+      one: "{block} necesita un soporte distinto de aire",
+      other: "{count} tipos de bloque necesitan un soporte distinto de aire",
+    },
     placementWarnings: {
-      missingSupport: "Falta soporte debajo: {blocks}",
+      missingSupport: "Coloca un soporte justo debajo de: {blocks}",
+      supportMode: "Usa soporte Frágil o Todo con un bloque adecuado debajo de: {blocks}",
+      supportBlock: "Elige un bloque de soporte distinto de aire para: {blocks}",
       autoSupport: "Soporte generado incompatible o ausente para: {blocks}",
       invalidSupport: "Soporte no válido debajo: {blocks}",
       transparentSupport: "Una plataforma transparente no puede sostener: {blocks}",
-      attachmentSupport: "Soporte de fijación ausente o inválido: {blocks}",
+      attachmentSupport: {
+        one: "{blocks} necesita soporte en los lados seleccionados",
+        other: "{blocks} necesitan soporte en los lados seleccionados",
+      } as PluralForms,
       shelfSupport: "Pon apoyo lateral a los hongos de repisa",
       falling: "Bloques con gravedad sin soporte: {blocks}",
       tntIgnition: "La TNT se encenderá por {blocks}",

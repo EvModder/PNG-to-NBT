@@ -19,7 +19,7 @@ import { getBuildModeDownloadSuffix } from "@/utils/conversion";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAnalysis";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbt } from "@/lib/nbtExport";
-import { buildFillerAssignmentMap, createFillerAssignments, getFillerFloorAttachmentFix, getSupportModeFillerRoles, isCoralSupportValid } from "@/lib/fillerRules";
+import { buildFillerAssignmentMap, createFillerAssignments, getSupportModeFillerRoles, isCoralSupportValid } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
@@ -429,10 +429,6 @@ async function assertTripwireInvariants(): Promise<void> {
   ]) assert.equal(resolveExportBlockName(input), exported);
   assert.equal(toDisplayName("minecraft:glow_lichen[down=true]"), "glow_lichen[down=true]");
   assert.equal(getBlockSupport("glow_lichen").props.get("down"), "true");
-  for (const [input, fix] of [
-    ["glow_lichen", null], ["glow_lichen[down=true]", null], ["glow_lichen[down=false]", null],
-    ["resin_clump[north=true,waterlogged=true]", "resin_clump[waterlogged=true]"], ["stone", null],
-  ] as const) assert.equal(getFillerFloorAttachmentFix(input), fix, input);
   const wireCells: TestExportCell[] = [
     { x: 1, y: 0, z: 1, cell: [FillerRole.SupportAll] },
     { x: 2, y: 0, z: 1, cell: { id: 1, isCustom: false } },
@@ -2605,6 +2601,13 @@ function assertScaffoldingSupportWarnings(): void {
 
 
 async function assertContextualSupport(): Promise<void> {
+  const variants = ["dead_tube_coral_fan[waterlogged=false]", "dead_tube_coral_fan[waterlogged=true]"];
+  const single = messages.preview.placementWarning("supportBlock", variants);
+  assert(single.text.includes("dead_tube_coral_fan") && !single.text.includes("["));
+  const multiple = messages.preview.placementWarning("supportBlock", ["cherry_pressure_plate", ...variants]);
+  assert.match(multiple.text, /^2\b/);
+  for (const block of variants) assert(multiple.detail?.includes(block));
+  assert.equal(messages.preview.placementWarning("cropLight", ["wheat"]).detail, undefined);
   const supportWarning = (ids: string[]) =>
     messages.preview.fragileSupportOverrideWarning(getCommonSupportChoices(ids, [], [], 4903));
   assert.deepEqual(supportWarning(["wheat"]).supports, ["farmland"]);
@@ -2629,7 +2632,9 @@ async function assertContextualSupport(): Promise<void> {
   }
   for (const catalog of [enCatalog, esCatalog]) for (const [kind, template] of [...Object.entries(catalog.preview.placementWarnings),
     ["fragileSupportOverrideWarningMixed", catalog.preview.fragileSupportOverrideWarningMixed]]) {
-    assert((template.match(/\{\w+\}/g) ?? []).length <= 1, `${catalog.locale} ${kind}: only the list is a placeholder`);
+    for (const form of typeof template === "string" ? [template] : Object.values(template)) {
+      assert((form.match(/\{\w+\}/g) ?? []).length <= 1, `${catalog.locale} ${kind}: only the list is a placeholder`);
+    }
   }
   assert.deepEqual(supportWarning(["wheat", "oak_pressure_plate"]).supports, []);
   const selections = { selectedBlocks: { 1: "stone_pressure_plate", 12: "water" }, selectedBlocksCustom: {}, customColors: [] };
@@ -2682,7 +2687,9 @@ async function assertContextualSupport(): Promise<void> {
     const counts = analyzeMaterialNeeds(grid, shape, { ...colors, fillerAssignments: assignments, applySupportFloorYs: false });
     assert.equal(counts.blockCounts.stone, MAP_SIZE ** 2, `${block}: Fragile supplies supports for falling colors`);
     assert.equal(analyzeMaterialNeeds(grid, shape, { ...colors, fillerAssignments: assignments, applySupportFloorYs: true }).blockCounts.stone, undefined);
-    assert(getPlacementWarnings([shape], colors, [], false, BuildMode.Flat).some(warning => warning.kind === "falling"));
+    assert(getPlacementWarnings([shape], colors, [], false, BuildMode.Flat).some(warning => warning.kind === "supportMode"));
+    assert.deepEqual(getPlacementWarnings([shape], colors, [], false, BuildMode.Flat, true).map(warning => warning.kind), ["supportMode"],
+      `${block}: CrubTech gets the same support-mode guidance`);
     assert.deepEqual(getPlacementWarnings([shape], colors, assignments, false, BuildMode.Flat), []);
     const nbt = await convertToNbt(shape, { ...colors, fillerAssignments: assignments, applySupportFloorYs: false,
       forceXZ128: true, forceZ129: false, baseName: "support", buildMode: BuildMode.Flat, suppressStepDirection: SuppressStepDirection.EastToWest });
@@ -2719,7 +2726,8 @@ function assertPlacementWarnings(): void {
     });
     const shape: GeneratedShape = { partType: ShapePartType.SingleColumn, splitExportNames: null,
       suppressedTransparentVsCollisionCount: 0,
-      parts: [{ cells, bounds: { minY: -10, maxY: 20, minZ: -10, maxZ: 130 }, supportFloorYs: new Set([0]) }] };
+      parts: [{ cells, bounds: { minY: Math.min(...placements.map(p => p[1])), maxY: Math.max(...placements.map(p => p[1])),
+        minZ: -10, maxZ: 130 }, supportFloorYs: new Set([0]) }] };
     const selections = { selectedBlocks, selectedBlocksCustom: {}, customColors: [] };
     return { warnings: getPlacementWarnings([shape], selections, [], assumeFloor, mode), shape, selections };
   };
@@ -2783,6 +2791,14 @@ function assertPlacementWarnings(): void {
   assert(!kinds([[0, 1, 0, "amethyst_cluster[facing=north]"], [0, 1, 1, "stone"]]).includes("attachmentSupport"));
   assert(!kinds([[0, 1, 0, "resin_clump[down=true]"], [0, 0, 0, "stone"]]).includes("attachmentSupport"));
   assert(kinds([[0, 1, 0, "resin_clump[down=true,east=true]"], [0, 0, 0, "stone"]]).includes("attachmentSupport"));
+  const sideClump = check([[0, 1, 0, "resin_clump[east=true]"], [0, 0, 0, "stone"]]).warnings.find(w => w.kind === "attachmentSupport");
+  assert.deepEqual(sideClump?.blocks, ["resin_clump"]);
+  assert.equal(messages.preview.placementWarning("attachmentSupport", sideClump.blocks).text, "resin_clump requires support from selected sides");
+  const shadeShape = check([[0, 1, 0, "stone"]]);
+  const shadePart = { ...shadeShape.shape.parts[0], cells: new Map(shadeShape.shape.parts[0].cells) };
+  shadePart.cells.set(toShapeCoordKey(1, 1, 0), [FillerRole.ShadeSuppress]);
+  assert.deepEqual(getPlacementWarnings([{ ...shadeShape.shape, parts: [shadePart] }], shadeShape.selections, [{ role: FillerRole.ShadeSuppress, block: "resin_clump[north=true]" }],
+    true, BuildMode.StaircaseGroup).find(w => w.kind === "attachmentSupport")?.blocks, ["resin_clump"], "Side-attached fillers warn in the preview");
   for (const id of ["resin_clump", "glow_lichen", "sculk_vein"]) {
     const block = `${id}[down=true]`;
     assert.deepEqual(kinds([[0, 2, 0, block], [0, 1, 0, "scaffolding"]], true), [],
@@ -2796,14 +2812,39 @@ function assertPlacementWarnings(): void {
       "Do not treat scaffolding as a full cube");
     assert(kinds([[0, 2, 0, `${id}[down=true,east=true]`], [0, 1, 0, "scaffolding"]], true).includes("attachmentSupport"),
       "A valid bottom attachment must not hide another unsupported face");
-    assert(kinds([[0, 2, 0, block], [0, 1, 0, "decorated_pot"]], true).includes("attachmentSupport"));
-    assert(kinds([[0, 2, 0, block]], true).includes("attachmentSupport"));
+    assert(kinds([[0, 2, 0, block], [0, 1, 0, "decorated_pot"]], true).includes("invalidSupport"));
+    assert(kinds([[0, 2, 0, block]], true).includes("missingSupport"));
     const filler = check([[0, 2, 0, block]]);
     filler.shape.parts[0].cells.set(toShapeCoordKey(0, 1, 0), [FillerRole.SupportFragile]);
     assert.deepEqual(getPlacementWarnings([filler.shape], filler.selections,
       [{ role: FillerRole.SupportFragile, block: "scaffolding" }], true, BuildMode.SuppressStepChecker), [],
     "Configured scaffolding support is valid for down-facing attachments");
   }
+  for (const block of ["resin_clump[down=true]", "stone_pressure_plate", "sand", "poppy"]) {
+    const warnings = (height: number, assumeFloor: boolean, role: FillerRole, base: string, stepHere = false) => {
+      const { shape, selections } = check([[0, height, 0, block]]);
+      shape.parts[0].cells.set(toShapeCoordKey(0, height - 1, 0), [
+        FillerRole.SupportAll, FillerRole.SupportFragile, ...(stepHere ? [FillerRole.StairStep] : []),
+      ]);
+      return getPlacementWarnings([shape], selections, [{ role, block: base }], assumeFloor, BuildMode.StaircaseGroup).map(w => w.kind);
+    };
+    assert.deepEqual(warnings(1, true, FillerRole.StairStep, "dirt"), [], "A suitable assumed floor needs no mode change");
+    assert.deepEqual(warnings(1, false, FillerRole.StairStep, "dirt"), ["supportMode"]);
+    assert.deepEqual(warnings(2, true, FillerRole.StairStep, "dirt"), ["supportMode"], "A valid filler alone does not generate a support");
+    assert.deepEqual(warnings(2, true, FillerRole.StairStep, "dirt", true), [], "Steps works when its support occupies this position");
+    for (const role of [FillerRole.SupportAll, FillerRole.SupportFragile]) assert.deepEqual(warnings(2, true, role, "dirt"), []);
+    assert.deepEqual(warnings(2, true, FillerRole.StairStep, "air", true), ["autoSupport"]);
+  }
+  for (const block of ["resin_clump", "resin_clump[down=false]"]) {
+    assert(!kinds([[0, 2, 0, block], [0, 1, 0, "stone"]]).some(kind => kind.startsWith("attachment")), `${block} attaches below`);
+  }
+  const sample = check([[0, 2, 0, "resin_clump[down=true]"], [1, 2, 0, "resin_clump[down=true]"]]);
+  for (const x of [0, 1]) sample.shape.parts[0].cells.set(toShapeCoordKey(x, 1, 0), [FillerRole.SupportAll, FillerRole.SupportFragile]);
+  const [missing] = getPlacementWarnings([sample.shape, sample.shape], sample.selections, [], true, BuildMode.StaircaseGroup);
+  assert.deepEqual(missing.blocks, ["resin_clump"]);
+  assert.equal(missing.missingPlacements, 4, "Count placements across selected tiles, even when they share a cached shape and block type");
+  assert(kinds([[0, 2, 0, "resin_clump[down=true]"]], true, BuildMode.Flat).includes("missingSupport"),
+    "The flat fast path cannot grant support to a raised attachment");
   for (const [facing, x, z] of [["north", 0, 1], ["south", 0, -1], ["west", 1, 0], ["east", -1, 0]] as const) {
     assert(kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`]]).includes("shelfSupport"));
     assert(!kinds([[0, 1, 0, `shelf_mushroom[facing=${facing}]`], [x, 1, z, "stone"]]).includes("shelfSupport"));

@@ -191,8 +191,6 @@ export const enCatalog = {
     growthCoverTooltip: "Transparent blocks above growing plants. Leave empty for no covers; saplings still need them. Twisting vines always export age=25.",
     growthCoverInvalid: "Use a valid cover",
     heading: "Fillers",
-    floorAttachmentWarning: "Only attachment from below is supported",
-    fixFloorAttachment: "Attach below",
     headingTooltip: "Filler block assignments for support, shading, and special-case placements.",
     supportLabel: "Support:",
     supportTooltip:
@@ -319,18 +317,31 @@ export const enCatalog = {
     convertButtonLayerSplitTitle: "Download separate schematics for each build layer.",
   },
   preview: {
+    missingPlacementSupport: {
+      one: "{count} placement needs support:",
+      other: "{count} placements need support:",
+    } as PluralForms,
     invalidSupportDetail: "Cannot be supported by {support}",
     liftSupport: {
       one: "{support} cannot support {count} lift",
       other: "{support} cannot support {count} lifts",
     } as PluralForms,
     liftSupportDetail: "Liftable on another support: {blocks}",
+    nonAirSupport: {
+      one: "{block} needs non-air support",
+      other: "{count} block types need non-air support",
+    } as PluralForms,
     placementWarnings: {
-      missingSupport: "Missing support below: {blocks}",
+      missingSupport: "Place support directly below: {blocks}",
+      supportMode: "Use Fragile or All support with a suitable block below: {blocks}",
+      supportBlock: "Choose a non-air support block for: {blocks}",
       autoSupport: "Incompatible or missing generated support for: {blocks}",
       invalidSupport: "Invalid support below: {blocks}",
       transparentSupport: "Cannot be supported by a transparent platform: {blocks}",
-      attachmentSupport: "Missing or invalid attachment support: {blocks}",
+      attachmentSupport: {
+        one: "{blocks} requires support from selected sides",
+        other: "{blocks} require support from selected sides",
+      } as PluralForms,
       shelfSupport: "Shelf mushrooms need manual side-support",
       falling: "Unsupported falling blocks: {blocks}",
       tntIgnition: "TNT will be ignited by {blocks}",

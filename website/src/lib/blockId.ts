@@ -19,6 +19,7 @@
  * - src/lib/codecPreset.ts
  * - src/lib/environmentalSupport.ts
  * - src/lib/fillerRules.ts
+ * - src/lib/messages.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
  * - src/lib/placementWarnings.ts
@@ -61,6 +62,7 @@ export function stripDefaultBlockNamespace(raw: string): string {
 // - src/lib/blockSupport.ts
 // - src/lib/environmentalSupport.ts
 // - src/lib/fillerRules.ts
+// - src/lib/messages.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts

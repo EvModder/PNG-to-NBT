@@ -10,6 +10,7 @@
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
+ * - src/components/PanelImagePreview.tsx
  * - src/components/ToolbarPresetSettings.tsx
  * - src/data/defaultSettings.ts
  * - src/data/i18n/en.ts
@@ -23,6 +24,7 @@
 
 // Callers:
 // - src/Index.tsx
+// - src/components/PanelImagePreview.tsx
 // - src/components/ToolbarPresetSettings.tsx
 // - src/data/defaultSettings.ts
 // - src/data/i18n/en.ts

@@ -16,7 +16,6 @@ import {
   DEFAULT_RECESSIVE_VOID_SHADE_FILLER_BLOCK,
 } from "@/data/defaultSettings";
 import { messages } from "@/lib/messages";
-import { getFillerFloorAttachmentFix } from "@/lib/fillerRules";
 import { isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { ACCENT_SMALL_LABEL_TEXT_CLASS } from "@/data/uiClasses";
 
@@ -27,7 +26,6 @@ type FillerFieldProps = {
   setValue: (value: string) => void;
   onCommit?: (value: string) => void;
   placeholder: string;
-  isSupport?: boolean;
   warning?: string;
   showRequiredBadge: boolean;
   requiredTooltip: string;
@@ -87,7 +85,6 @@ function FillerField({
   setValue,
   onCommit,
   placeholder,
-  isSupport = false,
   warning,
   showRequiredBadge,
   requiredTooltip,
@@ -95,7 +92,6 @@ function FillerField({
 }: FillerFieldProps) {
   // Null unless editing, so the field always falls back to the committed, sanitized value.
   const [draftValue, setDraftValue] = useState<string | null>(null);
-  const floorAttachmentFix = isSupport ? null : getFillerFloorAttachmentFix(value);
 
   const commitValue = (nextValue: string) => {
     if (nextValue !== value) setValue(nextValue);
@@ -148,18 +144,9 @@ function FillerField({
           </>
         )}
       </div>
-      {(warning || floorAttachmentFix) && (
-        <div className="col-span-2 w-0 min-w-full bg-warning/20 border-2 border-warning/40 rounded px-2 py-1 text-xs font-medium text-warning-text">
-          {warning ? <span className="text-destructive-text">{warning}</span> : floorAttachmentFix && <button
-            type="button"
-            title={`${messages.fillers.floorAttachmentWarning}\n${floorAttachmentFix}`}
-            className="underline underline-offset-2 hover:text-foreground"
-            onClick={() => {
-              commitValue(floorAttachmentFix);
-            }}
-          >
-            {messages.fillers.fixFloorAttachment}
-          </button>}
+      {warning && (
+        <div className="col-span-2 w-0 min-w-full bg-destructive/25 border-2 border-destructive/50 rounded px-2 py-1 text-xs font-medium text-destructive-text">
+          {warning}
         </div>
       )}
     </div>
@@ -229,7 +216,6 @@ export function ToolbarFillerSettings({
           setValue={setSupportFillerBlock}
           onCommit={commitSupportFillerBlock}
           placeholder={DEFAULT_SUPPORT_FILLER_BLOCK}
-          isSupport
           showRequiredBadge={hasImageData && !supportFillerDisabled && supportFillerRequiredCount > 0}
           requiredTooltip={messages.fillers.supportRequiredTooltip}
           requiredCountLabel={formatRequiredCount(supportFillerRequiredCount)}
@@ -266,7 +252,6 @@ export function ToolbarFillerSettings({
           value={shadeBreakableFillerBlock}
           setValue={setShadeBreakableFillerBlock}
           placeholder={DEFAULT_CRUBTECH_SHADE_BREAKABLE_FILLER_BLOCK}
-          isSupport={crubTechIncludesSupport}
           showRequiredBadge={hasImageData && !shadeBreakableFillerShadingDisabled && shadeBreakableFillerRequiredCount > 0}
           requiredTooltip={messages.fillers.crubTechBreakableRequiredTooltip}
           requiredCountLabel={formatRequiredCount(shadeBreakableFillerRequiredCount)}
@@ -285,7 +270,6 @@ export function ToolbarFillerSettings({
           value={shadePushableFillerBlock}
           setValue={setShadePushableFillerBlock}
           placeholder={DEFAULT_CRUBTECH_SHADE_PUSHABLE_FILLER_BLOCK}
-          isSupport={crubTechIncludesSupport}
           showRequiredBadge={hasImageData && !shadePushableFillerShadingDisabled && shadePushableFillerRequiredCount > 0}
           requiredTooltip={messages.fillers.crubTechPushableRequiredTooltip}
           requiredCountLabel={formatRequiredCount(shadePushableFillerRequiredCount)}

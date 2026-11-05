@@ -25,13 +25,13 @@ import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
 // Display order. true: error (red); false: reminder (yellow).
 const KINDS = {
   missingSupport: true, shelfSupport: true, falling: true, attachmentSupport: true,
-  autoSupport: true,
+  supportMode: true, supportBlock: true, autoSupport: true,
   transparentSupport: true, invalidSupport: true,
   cropLight: false, mushroomLight: false, mushroomSpread: false, missingCover: true, growthCover: false, coralSupport: false,
   tntIgnition: true, tnt: false, fireSpread: true, grassSpread: true, iceMelt: true, snowMelt: true, iceSnowMelt: true, meltRisk: false, snowRisk: false, iceSnowRisk: false, frostedIce: false,
 };
 type Kind = keyof typeof KINDS;
-type Warning = { kind: Kind; blocks: string[]; invalid: boolean; support?: string };
+type Warning = { kind: Kind; blocks: string[]; invalid: boolean; support?: string; missingPlacements?: number };
 const KIND_ORDER = Object.keys(KINDS) as Kind[];
 type Cold = keyof typeof MELT_LIGHT;
 const NEIGHBORS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -193,7 +193,10 @@ export function getPlacementWarnings(
     for (const warning of warnings) {
       const group = JSON.stringify([warning.kind, warning.support]);
       const previous = combined.get(group);
-      combined.set(group, previous ? { ...warning, blocks: [...new Set([...previous.blocks, ...warning.blocks])].sort(), invalid: previous.invalid || warning.invalid } : warning);
+      combined.set(group, previous ? { ...warning, blocks: [...new Set([...previous.blocks, ...warning.blocks])].sort(),
+        invalid: previous.invalid || warning.invalid,
+        ...(warning.missingPlacements && { missingPlacements: previous.missingPlacements! + warning.missingPlacements }),
+      } : warning);
     }
   }
   const kindGroup = (kind: Kind) => JSON.stringify([kind, undefined]);
@@ -216,9 +219,11 @@ function analyzePlacementWarnings(
   shape: GeneratedShape, selections: ColorBlockSelections, assignments: readonly FillerAssignment[],
   assumeFloor: boolean, crubTech: boolean, flat: boolean,
 ): Warning[] {
-  const flatPlatform = flat && assumeFloor && shape.parts.every(part => part.supportFloorYs.size <= 1 && !hasWaterBelowFloor(part));
+  const flatPlatform = flat && assumeFloor && shape.parts.every(part => part.supportFloorYs.size === 1
+    && part.bounds.maxY <= Math.min(...part.supportFloorYs) + 1 && !hasWaterBelowFloor(part));
   const issues = Object.fromEntries(KIND_ORDER.map(kind => [kind, new Set<string>()])) as Record<Kind, Set<string>>;
   const invalidSupports = new Map<string, Set<string>>();
+  let missingPlacements = 0;
   const unsupported = (block: string, support: string) => {
     if (!invalidSupports.has(support)) invalidSupports.set(support, new Set());
     invalidSupports.get(support)!.add(block);
@@ -306,7 +311,13 @@ function analyzePlacementWarnings(
             else unsupported(id, below.name);
             return;
           }
-          issues[fallback].add(id);
+          if (rolesBelow?.includes(FillerRole.SupportFragile) && rolesBelow.includes(FillerRole.SupportAll)) {
+            // An active support role at an empty position needs a block, not a different mode.
+            const enabled = rolesBelow.some(role => fillers.has(role) &&
+              (role === FillerRole.StairStep || role === FillerRole.SupportFragile || role === FillerRole.SupportAll));
+            issues[enabled ? "supportBlock" : "supportMode"].add(enabled ? block.name : id);
+            if (!enabled) ++missingPlacements;
+          } else issues[fallback].add(id);
         };
         const multiface = ["resin_clump", "glow_lichen", "sculk_vein"].includes(id);
         const crystal = id.includes("amethyst") || id === "ice_crystal";
@@ -325,7 +336,11 @@ function analyzePlacementWarnings(
         };
         if (multiface) {
           const faces = Object.entries(FACING).filter(([face]) => props.get(face) === "true");
-          if (!faces.length || faces.some(([, [dx, dy, dz]]) => !attached(dx, dy, dz))) issues.attachmentSupport.add(id);
+          for (const [, [dx, dy, dz]] of faces) {
+            if (attached(dx, dy, dz)) continue;
+            if (dy === -1) unsupportedBelow();
+            else issues.attachmentSupport.add(id);
+          }
         } else if (anchor && anchor !== FACING.down && !attached(anchor[0], anchor[1], anchor[2])) issues.attachmentSupport.add(id);
         // Floors are wildcard substrates unless map visibility constrains them.
         if (block.fragile && !block.falling && id !== "scaffolding" && !platform && anchor === FACING.down
@@ -421,7 +436,9 @@ function analyzePlacementWarnings(
   }
   if (!flatPlatform && growth) issues[missingCover ? "missingCover" : "growthCover"].add("saplings");
   return [
-    ...KIND_ORDER.filter(kind => issues[kind].size).map(kind => ({ kind, blocks: [...issues[kind]].sort(), invalid: KINDS[kind] })),
+    ...KIND_ORDER.filter(kind => issues[kind].size).map(kind => ({ kind, blocks: [...issues[kind]].sort(), invalid: KINDS[kind],
+      ...(kind === "supportMode" && { missingPlacements }),
+    })),
     ...[...invalidSupports].map(([support, blocks]) => ({ kind: "invalidSupport" as const, blocks: [...blocks].sort(), support, invalid: true })),
   ];
 }

@@ -6,6 +6,7 @@
  * - src/Index.tsx
  */
 import { Fragment, useLayoutEffect, useRef, useState, type MouseEvent, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import { SupportMode } from "@/types/ui";
 import { Trash2 } from "lucide-react";
 import type { InvalidDimensionsStrategy, InvalidColorsPalette } from "@/data/defaultSettings";
 import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
@@ -66,7 +67,8 @@ type PanelImagePreviewProps = {
   onSelectSupport: (block: string) => void;
   autoPickSupports: boolean;
   setAutoPickSupports: (enabled: boolean) => void;
-  placementWarnings: PreviewWarning[];
+  placementWarnings: (PreviewWarning & { suggestSupportModes: boolean })[];
+  supportModeFix: { select: (mode: SupportMode) => void; fragile: boolean; all: boolean };
   vsFillerWarning: PreviewWarning | null;
   lateFillerWarning: PreviewWarning | null;
   showNorthRowAlignmentInfo: boolean;
@@ -321,6 +323,7 @@ export function PanelImagePreview({
   autoPickSupports,
   setAutoPickSupports,
   placementWarnings,
+  supportModeFix,
   vsFillerWarning,
   lateFillerWarning,
   showNorthRowAlignmentInfo,
@@ -627,7 +630,18 @@ export function PanelImagePreview({
           {!fragileSupportOverrideWarning.supports.length && <button type="button" className="block underline underline-offset-2 hover:text-foreground"
             onClick={() => setAutoPickSupports(true)}>{messages.preview.autoPickSupports}</button>}
         </WarningBanner>}
-        {placementWarnings.map(warning => <WarningBanner key={`${warning.text}|${warning.detail ?? ""}`} {...warning} tone="warning" />)}
+        {placementWarnings.map(warning => <WarningBanner key={`${warning.text}|${warning.detail ?? ""}`} {...warning} tone="warning">
+          {warning.suggestSupportModes && <> [{[SupportMode.Fragile, SupportMode.All].map((mode, i) => (
+            <Fragment key={mode}>
+              {i > 0 && ", "}
+              <button type="button" disabled={!(mode === SupportMode.Fragile ? supportModeFix.fragile : supportModeFix.all)}
+                className="enabled:underline underline-offset-2 enabled:hover:text-foreground disabled:opacity-50"
+                title={messages.supportMode.tooltip(mode)} onClick={() => supportModeFix.select(mode)}>
+                {messages.supportMode.optionLabel(mode)}
+              </button>
+            </Fragment>
+          ))}]</>}
+        </WarningBanner>)}
         {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} warningHeadline />}
         {lateFillerWarning && <WarningBanner text={lateFillerWarning.text} tone="warning" invalid={lateFillerWarning.invalid} />}
         {showNorthRowAlignmentInfo && <WarningBanner text={messages.preview.northRowAlignmentInfo} tone="muted" />}

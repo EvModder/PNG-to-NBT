@@ -4,7 +4,6 @@
  * - isCoralSupportValid()
  * - CRUBTECH_NOOBLINE_FILLER_BLOCK
  * - getSupportModeFillerRoles()
- * - getFillerFloorAttachmentFix()
  * - isFillerDisabled()
  * - isShadeFillerDisabled()
  * - isCrubTechBreakableValid()
@@ -15,7 +14,6 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/components/ToolbarFillerSettings.tsx
  * - src/lib/environmentalSupport.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
@@ -41,21 +39,6 @@ export function isCoralSupportValid(block: string): boolean {
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(["chain", ...BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId)]);
 const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
-
-// Callers:
-// - src/components/ToolbarFillerSettings.tsx
-export function getFillerFloorAttachmentFix(block: string): string | null {
-  const id = normalizeBlockId(block);
-  if (id !== "resin_clump" && id !== "glow_lichen" && id !== "sculk_vein") return null;
-  // Export names carry the implicit down=true of a bare block.
-  const props = new Map([...resolveExportBlockName(block).matchAll(/(\w+)\s*=\s*([^,\]]+)/g)].map(([, key, value]) => [key, value.trim()]));
-  const faces = ["down", "up", "north", "south", "east", "west"];
-  if (faces.filter(face => props.get(face) === "true").join() === "down") return null;
-
-  // Generated supports are below the filler, never beside or above it; the bare block attaches below.
-  const rest = [...props].filter(([key]) => !faces.includes(key)).map(([key, value]) => `${key}=${value}`);
-  return rest.length ? `${id}[${rest.join(",")}]` : id;
-}
 
 function isShadeCriticalFillerRole(role: FillerRole): boolean {
   switch (role) {

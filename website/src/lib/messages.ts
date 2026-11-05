@@ -34,6 +34,7 @@
  * - src/lib/tileParsingWorkerTypes.ts
  */
 import { STORAGE_KEYS } from "@/data/storageKeys";
+import { normalizeBlockId } from "./blockId";
 import type { InvalidColorsPalette } from "@/data/defaultSettings";
 import { enCatalog, type MessageCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
@@ -132,16 +133,19 @@ function formatTemplate(template: string, values: TemplateValues): string {
   return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key: string) => String(values[key] ?? `{${key}}`));
 }
 
-function formatPlural(forms: PluralForms, count: number, values: TemplateValues = {}): string {
+function selectPluralTemplate(forms: string | PluralForms, count: number): string {
+  if (typeof forms === "string") return forms;
   const pluralCategory = pluralRules.select(count);
-  const template =
-    (pluralCategory === "zero" && forms.zero) ||
+  return (pluralCategory === "zero" && forms.zero) ||
     (pluralCategory === "one" && forms.one) ||
     (pluralCategory === "two" && forms.two) ||
     (pluralCategory === "few" && forms.few) ||
     (pluralCategory === "many" && forms.many) ||
     forms.other;
-  return formatTemplate(template, { count, ...values });
+}
+
+function formatPlural(forms: PluralForms, count: number, values: TemplateValues = {}): string {
+  return formatTemplate(selectPluralTemplate(forms, count), { count, ...values });
 }
 
 function getLookupValue<T extends string>(lookup: Record<T, string>, key: T | string, fallback: string): string {
@@ -364,8 +368,6 @@ export const messages = {
     get growthCoverTooltip(): string { return catalog.fillers.growthCoverTooltip; },
     get growthCoverInvalid(): string { return catalog.fillers.growthCoverInvalid; },
     heading: catalog.fillers.heading,
-    floorAttachmentWarning: catalog.fillers.floorAttachmentWarning,
-    fixFloorAttachment: catalog.fillers.fixFloorAttachment,
     headingTooltip: catalog.fillers.headingTooltip,
     supportLabel: catalog.fillers.supportLabel,
     supportTooltip: catalog.fillers.supportTooltip,
@@ -497,10 +499,18 @@ export const messages = {
     autoPickSupports: catalog.preview.autoPickSupports,
     disableAutoSupports: catalog.preview.disableAutoSupports,
     autoSupportsEnabled: catalog.preview.autoSupportsEnabled,
-    placementWarning(kind: keyof MessageCatalog["preview"]["placementWarnings"], blocks: readonly string[], support?: string) {
+    placementWarning(kind: keyof MessageCatalog["preview"]["placementWarnings"], blocks: readonly string[], support?: string, missingPlacements?: number) {
+      const { text: description, listedBlocks } = formatListedBlocks(
+        selectPluralTemplate(catalog.preview.placementWarnings[kind], blocks.length), "blocks", blocks);
+      const blockIds = kind === "supportBlock" ? [...new Set(blocks.map(normalizeBlockId))] : null;
+      const summary = missingPlacements ? formatPlural(catalog.preview.missingPlacementSupport, missingPlacements)
+        : blockIds ? formatPlural(catalog.preview.nonAirSupport, blockIds.length, { block: blockIds[0] }) : null;
       return {
-        ...formatListedBlocks(catalog.preview.placementWarnings[kind], "blocks", blocks),
+        text: summary ?? description,
+        suggestSupportModes: !!missingPlacements,
+        listedBlocks: summary ? undefined : listedBlocks,
         detail: [
+          summary ? description : undefined,
           support && formatTemplate(catalog.preview.invalidSupportDetail, { support }),
         ].filter(Boolean).join("\n") || undefined,
       };
