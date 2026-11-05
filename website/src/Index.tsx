@@ -3515,7 +3515,7 @@ const Index = () => {
           MINECRAFT_VERSIONS[minecraftVersion].dataVersion));
         return [];
       }
-      return [{ ...message, invalid }];
+      return [{ ...message, kind, invalid }];
     });
     return { supportChoiceWarning, placementWarnings };
   }, [imageValid, activeOutputTileAnalyses, buildSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings, minecraftVersion, hasCurrentMaterialAnalysis, usedColorKeys]);
@@ -3532,7 +3532,8 @@ const Index = () => {
       liftSupportWarning,
       waterSideSupportWarning,
       fragileSupportOverrideWarning: supportChoiceWarning,
-      placementWarnings,
+      unsupportedScaffoldFiller: placementWarnings.some(w => w.kind === "scaffoldSupportFiller"),
+      placementWarnings: placementWarnings.filter(w => w.kind !== "scaffoldSupportFiller" || !fillerUiVisibilityState.showSupportFillerInput),
       vsFillerWarning,
       lateFillerWarning,
       showNorthRowAlignmentInfo,
@@ -3823,6 +3824,7 @@ const Index = () => {
             crubTechIncludesSupport={effectiveSupportMode !== SupportMode.None}
             showSupportFillerInput={fillerUiVisibilityState.showSupportFillerInput}
             supportFillerBlock={supportFillerBlock}
+            unsupportedScaffoldFiller={previewAnalysisDisplay.unsupportedScaffoldFiller && normalizeBlockId(effectiveSupportFillerBlock) === "scaffolding"}
             setSupportFillerBlock={setCommittedSupportFillerBlock}
             commitSupportFillerBlock={commitSupportFillerBlock}
             supportFillerDisabled={supportFillerDisabled}

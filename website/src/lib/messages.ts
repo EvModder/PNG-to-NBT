@@ -368,6 +368,7 @@ export const messages = {
     get growthCoverTooltip(): string { return catalog.fillers.growthCoverTooltip; },
     get growthCoverInvalid(): string { return catalog.fillers.growthCoverInvalid; },
     heading: catalog.fillers.heading,
+    supportRequiresSupportWarning: catalog.fillers.supportRequiresSupportWarning,
     headingTooltip: catalog.fillers.headingTooltip,
     supportLabel: catalog.fillers.supportLabel,
     supportTooltip: catalog.fillers.supportTooltip,

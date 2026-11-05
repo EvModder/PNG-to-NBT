@@ -186,6 +186,7 @@ export const esCatalog = {
     growthCoverTooltip: "Bloques transparentes sobre las plantas. Deja vacío para no usar cubiertas; los brotes aún las necesitan. Las enredaderas retorcidas siempre exportan age=25.",
     growthCoverInvalid: "Cubierta inválida",
     heading: "Rellenos",
+    supportRequiresSupportWarning: "Necesita su propio soporte",
     headingTooltip: "Asignaciones de bloques de relleno para soporte, sombreado y colocaciones de casos especiales.",
     supportLabel: "Soporte:",
     supportTooltip:
@@ -329,6 +330,8 @@ export const esCatalog = {
     },
     placementWarnings: {
       missingSupport: "Coloca un soporte justo debajo de: {blocks}",
+      scaffoldSupportFiller: "El andamio usado como soporte necesita una conexión con una base firme",
+      scaffoldConnection: "El andamio necesita una conexión con una base firme",
       supportMode: "Usa soporte Frágil o Todo con un bloque adecuado debajo de: {blocks}",
       supportBlock: "Elige un bloque de soporte distinto de aire para: {blocks}",
       autoSupport: "Soporte generado incompatible o ausente para: {blocks}",

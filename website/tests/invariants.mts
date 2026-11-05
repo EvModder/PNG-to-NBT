@@ -2741,8 +2741,8 @@ function assertPlacementWarnings(): void {
   assert(kinds([[0, 1, 0, "stone_pressure_plate"]], false, BuildMode.Flat).includes("missingSupport"));
   assert(!kinds([[0, 1, 0, "stone_pressure_plate"]], true).includes("missingSupport"));
   assert(kinds([[0, 2, 0, "stone_pressure_plate"]], true).includes("missingSupport"));
-  assert(kinds([[0, 2, 0, "scaffolding"]], true).includes("missingSupport"));
-  assert(!kinds([[0, 1, 0, "scaffolding"], [1, 1, 0, "scaffolding"]], true).includes("missingSupport"));
+  assert.deepEqual(kinds([[0, 2, 0, "scaffolding"]], true), ["scaffoldConnection"]);
+  assert.deepEqual(kinds([[0, 1, 0, "scaffolding"], [1, 1, 0, "scaffolding"]], true), []);
   assert(kinds([[0, 1, 0, "sand"]]).includes("falling"));
   assert(!kinds([[0, 1, 0, "sand"], [0, 0, 0, "stone"]]).includes("falling"));
   assert(!kinds([[0, 1, 0, "stone_pressure_plate"], [0, 0, 0, "hopper"]]).includes("invalidSupport"));
@@ -2804,7 +2804,7 @@ function assertPlacementWarnings(): void {
     assert.deepEqual(kinds([[0, 2, 0, block], [0, 1, 0, "scaffolding"]], true), [],
       `${id} attaches to the top of supported scaffolding`);
     const floating = kinds([[0, 3, 0, block], [0, 2, 0, "scaffolding"]], true);
-    assert(floating.includes("missingSupport") && !floating.includes("attachmentSupport"),
+    assert(floating.includes("scaffoldConnection") && !floating.includes("attachmentSupport"),
       "Unsupported scaffolding remains a separate failure, not an invalid attachment");
     assert(kinds([[0, 2, 0, `${id}[east=true]`], [1, 2, 0, "scaffolding"]]).includes("attachmentSupport"),
       "Scaffolding sides do not provide full attachment faces");
@@ -2820,7 +2820,7 @@ function assertPlacementWarnings(): void {
       [{ role: FillerRole.SupportFragile, block: "scaffolding" }], true, BuildMode.SuppressStepChecker), [],
     "Configured scaffolding support is valid for down-facing attachments");
   }
-  for (const block of ["resin_clump[down=true]", "stone_pressure_plate", "sand", "poppy"]) {
+  for (const block of ["resin_clump[down=true]", "stone_pressure_plate", "sand", "poppy", "scaffolding"]) {
     const warnings = (height: number, assumeFloor: boolean, role: FillerRole, base: string, stepHere = false) => {
       const { shape, selections } = check([[0, height, 0, block]]);
       shape.parts[0].cells.set(toShapeCoordKey(0, height - 1, 0), [

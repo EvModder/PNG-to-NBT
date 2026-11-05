@@ -191,6 +191,7 @@ export const enCatalog = {
     growthCoverTooltip: "Transparent blocks above growing plants. Leave empty for no covers; saplings still need them. Twisting vines always export age=25.",
     growthCoverInvalid: "Use a valid cover",
     heading: "Fillers",
+    supportRequiresSupportWarning: "Needs support itself",
     headingTooltip: "Filler block assignments for support, shading, and special-case placements.",
     supportLabel: "Support:",
     supportTooltip:
@@ -333,6 +334,8 @@ export const enCatalog = {
     } as PluralForms,
     placementWarnings: {
       missingSupport: "Place support directly below: {blocks}",
+      scaffoldSupportFiller: "Scaffolding used as support needs a grounded connection",
+      scaffoldConnection: "Scaffolding needs a grounded connection",
       supportMode: "Use Fragile or All support with a suitable block below: {blocks}",
       supportBlock: "Choose a non-air support block for: {blocks}",
       autoSupport: "Incompatible or missing generated support for: {blocks}",

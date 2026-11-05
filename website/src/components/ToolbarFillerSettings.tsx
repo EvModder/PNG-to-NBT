@@ -40,6 +40,7 @@ type ToolbarFillerSettingsProps = {
   crubTechIncludesSupport: boolean;
   showSupportFillerInput: boolean;
   supportFillerBlock: string;
+  unsupportedScaffoldFiller: boolean;
   setSupportFillerBlock: (value: string) => void;
   commitSupportFillerBlock: (value: string) => void;
   supportFillerDisabled: boolean;
@@ -163,6 +164,7 @@ export function ToolbarFillerSettings({
   crubTechIncludesSupport,
   showSupportFillerInput,
   supportFillerBlock,
+  unsupportedScaffoldFiller,
   setSupportFillerBlock,
   commitSupportFillerBlock,
   supportFillerDisabled,
@@ -213,6 +215,7 @@ export function ToolbarFillerSettings({
           label={messages.fillers.supportLabel}
           tooltip={messages.fillers.supportTooltip}
           value={supportFillerBlock}
+          warning={unsupportedScaffoldFiller ? messages.fillers.supportRequiresSupportWarning : undefined}
           setValue={setSupportFillerBlock}
           onCommit={commitSupportFillerBlock}
           placeholder={DEFAULT_SUPPORT_FILLER_BLOCK}

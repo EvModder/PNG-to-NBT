@@ -25,7 +25,7 @@ import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
 // Display order. true: error (red); false: reminder (yellow).
 const KINDS = {
   missingSupport: true, shelfSupport: true, falling: true, attachmentSupport: true,
-  supportMode: true, supportBlock: true, autoSupport: true,
+  scaffoldSupportFiller: true, scaffoldConnection: true, supportMode: true, supportBlock: true, autoSupport: true,
   transparentSupport: true, invalidSupport: true,
   cropLight: false, mushroomLight: false, mushroomSpread: false, missingCover: true, growthCover: false, coralSupport: false,
   tntIgnition: true, tnt: false, fireSpread: true, grassSpread: true, iceMelt: true, snowMelt: true, iceSnowMelt: true, meltRisk: false, snowRisk: false, iceSnowRisk: false, frostedIce: false,
@@ -244,14 +244,17 @@ function analyzePlacementWarnings(
       ...(hasFillers ? assignments.map(({ block }) => block) : [])].map(describe);
     return hasFillers ? [...placed, ...placed.flatMap(({ id }) => FRAGILE_SUPPORT_RULES.get(id)?.replacementBlock ?? []).map(describe)] : placed;
   });
-  if (!flatPlatform && partBlocks.some(blocks => blocks.some(block => block.id === "scaffolding"))) {
-    const scaffolding = analyzeScaffoldingSupport([shape], selections, assignments, assumeFloor);
-    if (scaffolding.colors || scaffolding.roles.size) issues.missingSupport.add("scaffolding");
+  const scaffolding = !flatPlatform && partBlocks.some(blocks => blocks.some(block => block.id === "scaffolding"))
+    ? analyzeScaffoldingSupport([shape], selections, assignments, assumeFloor) : undefined;
+  for (const role of scaffolding?.roles ?? []) {
+    const supportField = !crubTech && (role.startsWith("support_") || role.startsWith("convenience_"));
+    issues[supportField ? "scaffoldSupportFiller" : "scaffoldConnection"].add("scaffolding");
   }
   let growth = false, missingCover = false;
   for (const [index, part] of shape.parts.entries()) {
     // Gate each scan on what this part actually places, not on the whole palette.
     const blocks = partBlocks[index];
+    const unstableScaffoldColors = scaffolding?.colors.get(part);
     const hasIgniter = blocks.some(block => block.igniter), hasTnt = blocks.some(block => block.id === "tnt");
     const fuels = new Set(blocks.filter(block => block.flammable && block.id !== "tnt" && !issues.fireSpread.has(block.id)).map(block => block.id));
     // Color blocks come first; filler dirt never counts.
@@ -293,7 +296,7 @@ function analyzePlacementWarnings(
         const below = at(x, y - 1, z);
         const floorBelow = assumeFloor && part.supportFloorYs.has(y - 1);
         const platform = !below.id && floorBelow;
-        const unsupportedBelow = (fallback: "missingSupport" | "falling" = "missingSupport") => {
+        const unsupportedBelow = (fallback: "missingSupport" | "falling" | "scaffoldConnection" = "missingSupport") => {
           const belowCoord = toShapeCoordKey(x, y - 1, z);
           const cellBelow = part.cells.get(belowCoord);
           const rolesBelow = cellBelow && !isShapeColorCell(cellBelow) ? cellBelow : undefined;
@@ -319,6 +322,7 @@ function analyzePlacementWarnings(
             if (!enabled) ++missingPlacements;
           } else issues[fallback].add(id);
         };
+        if (id === "scaffolding" && unstableScaffoldColors?.has(coord)) unsupportedBelow("scaffoldConnection");
         const multiface = ["resin_clump", "glow_lichen", "sculk_vein"].includes(id);
         const crystal = id.includes("amethyst") || id === "ice_crystal";
         // Offset to the anchoring block; undefined where no single anchor is checked.

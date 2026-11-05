@@ -133,7 +133,7 @@ export function analyzeScaffoldingSupport(
   shapes: Iterable<GeneratedShape>, selections: ColorBlockSelections,
   assignments: readonly FillerAssignment[], assumeFloor: boolean,
 ) {
-  const result = { roles: new Set<FillerRole>(), colors: false };
+  const result = { roles: new Set<FillerRole>(), colors: new Map<ShapePart, Set<number>>() };
   if (![...assignments.map(({ block }) => block), ...Object.values(selections.selectedBlocks),
     ...Object.values(selections.selectedBlocksCustom)].some(block => normalizeBlockId(block) === "scaffolding")) return result;
   const fillers = buildFillerAssignmentMap(assignments);
@@ -194,7 +194,10 @@ export function analyzeScaffoldingSupport(
     }
     for (const [coord, role] of scaffolds) if (!distances.has(coord)) {
       if (role) result.roles.add(role);
-      else result.colors = true;
+      else {
+        if (!result.colors.has(part)) result.colors.set(part, new Set());
+        result.colors.get(part)!.add(coord);
+      }
     }
   }
   return result;
