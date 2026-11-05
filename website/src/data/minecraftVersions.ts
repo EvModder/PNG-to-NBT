@@ -19,6 +19,7 @@
  * - src/lib/presetFallbacks.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeModel.ts
  */
 
 // Breakpoints reflect default-visible blocks only. Each range targets its newest listed build.
@@ -38,6 +39,7 @@
 // - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeModel.ts
 export const MINECRAFT_VERSIONS = {
   "1.21.4": { label: "1.21.4", dataVersion: 4189 },
   "1.21.5": { label: "1.21.5–1.21.8", dataVersion: 4440 },

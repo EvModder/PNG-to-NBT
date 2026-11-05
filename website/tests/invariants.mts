@@ -3,6 +3,7 @@ import { gunzipSync } from "node:zlib";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_CORAL_SUPPORT_BLOCK,
   DEFAULT_LAYER_GAP,
   DEFAULT_SUPPRESS_2LAYER_LATE_PAIRS_GAP,
   DEFAULT_CRUBTECH_LAYER_GAP,
@@ -25,7 +26,7 @@ import { generateShapeMap } from "@/lib/shapeGeneration";
 import { countUnsupportedLifts, getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, getMixedStepColor, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { analyzeFillerNeeds, analyzeMaterialNeeds, analyzeScaffoldingSupport } from "@/lib/shapeAnalysis";
-import { getBlockSupport, canSupportBlock, standsOnFloor } from "@/lib/blockSupport";
+import { getBlockSupport, canSupportBlock, getCommonSupportChoices, standsOnFloor } from "@/lib/blockSupport";
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getPlacementWarnings } from "@/lib/placementWarnings";
@@ -245,6 +246,7 @@ async function exportTestStructureNbt(
   selectedBlocks: Record<number, string>,
   fillerAssignments: readonly FillerAssignment[],
   collapseDuplicatePaletteStates: boolean,
+  autoPickSupports = false,
 ): Promise<Uint8Array> {
   const shape = buildTestShape(cells);
   const { data, isZip } = await convertToNbt(shape, {
@@ -252,6 +254,7 @@ async function exportTestStructureNbt(
     selectedBlocksCustom: {},
     customColors: [],
     fillerAssignments: [...fillerAssignments],
+    autoPickSupports,
     applySupportFloorYs: false,
     collapseDuplicatePaletteStates,
     forceXZ128: false,
@@ -268,6 +271,28 @@ async function exportTestStructureNbt(
 
 async function assertSharedSupportMaterialCounts(): Promise<void> {
   const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR));
+  const mixed: TestExportCell[] = [18, 13].flatMap((id, x) => [
+    { x, y: 1, z: 0, cell: { id, isCustom: false } }, { x, y: 0, z: 0, cell: [FillerRole.SupportFragile] },
+  ]);
+  const plants = { 18: "wheat[age=7]", 13: "oak_pressure_plate" };
+  const mixedShape = buildTestShape(mixed);
+  for (const base of ["stone", "farmland", "air"]) for (const autoPickSupports of [false, true]) {
+    const fillers = [{ role: FillerRole.SupportFragile, block: base }];
+    const result = parseStructureBlocks(await exportTestStructureNbt(mixed, plants, fillers, true, autoPickSupports));
+    const expected = autoPickSupports ? ["farmland", base === "stone" ? "stone" : "cobblestone"] : [base, base];
+    for (const [x, id] of expected.entries()) {
+      const support = result.find(cell => cell.x === x && !["wheat", "oak_pressure_plate"].includes(normalizeBlockId(cell.blockName)));
+      assert.equal(support?.blockName, id === "air" ? undefined : `minecraft:${id}`, `${base}/${autoPickSupports}: wrong substrate at ${x}`);
+    }
+    const options = { selectedBlocks: plants, selectedBlocksCustom: {}, customColors: [], autoPickSupports, fillerAssignments: fillers, applySupportFloorYs: false };
+    const stats = analyzeMaterialNeeds(grid, mixedShape, options);
+    const expectedCounts: Record<string, number> = { wheat: 1, oak_pressure_plate: 1 };
+    for (const id of expected) if (id !== "air") expectedCounts[id] = (expectedCounts[id] ?? 0) + 1;
+    assert.deepEqual(stats.blockCounts, expectedCounts);
+    assert.equal(stats.fillerRoleCounts.get(FillerRole.SupportFragile) ?? 0,
+      autoPickSupports ? expected.filter(id => id === base).length : 2);
+    assert.equal(getPlacementWarnings([mixedShape], options, fillers, false, BuildMode.Flat).some(w => w.kind === "autoSupport"), !autoPickSupports);
+  }
   const cells: TestExportCell[] = [
     { x: 0, y: 1, z: 0, cell: { id: 11, isCustom: false } },
     { x: 0, y: 0, z: 0, cell: [FillerRole.SupportFragile, FillerRole.SupportWaterSides, FillerRole.SupportWaterSidesCovered] },
@@ -2299,8 +2324,12 @@ function assertFragileSupportEligibility(): void {
   const soil = make(1);
   soil.parts[0].cells.set(toShapeCoordKey(0, 2, 0), { id: 1, isCustom: false });
   const soilOptions = { ...analysisOptions, selectedBlocks: { 1: "poppy" } };
-  assert.deepEqual(analyzeMaterialNeeds(grid, soil, soilOptions).supportNeeds.overrideCounts, { poppy: 1 });
-  assert.deepEqual(analyzeMaterialNeeds(grid, soil, { ...soilOptions, phaseRange: [1, 1] }).supportNeeds.overrideCounts, {});
+  for (const block of ["stone", "dirt"]) {
+    const fillerAssignments = [{ role: FillerRole.SupportFragile, block }];
+    assert.deepEqual(analyzeMaterialNeeds(grid, soil, { ...soilOptions, fillerAssignments }).supportNeeds.constrainedBlocks,
+      new Set(["poppy"]), "Even a currently valid placement constrains the next support choice");
+  }
+  assert.equal(analyzeMaterialNeeds(grid, soil, { ...soilOptions, phaseRange: [1, 1] }).supportNeeds.constrainedBlocks.size, 0);
   raised.parts[0].cells.set(toShapeCoordKey(0, 1, 0), { id: 11, isCustom: false });
   assert(!hasFragileSupport(raised, selections, fillers, true), "A reused color block replaces the optional support");
   raised.parts[0].cells.set(toShapeCoordKey(0, 1, 0), [FillerRole.ShadeNorthRow]);
@@ -2343,6 +2372,26 @@ async function assertEnvironmentalSupport(): Promise<void> {
   assert(getEnvironmentalWarnings([coral], coralSelections, wetSupport, true).dryCoral, "Omitted platform fillers require a reminder");
   assert.deepEqual(getPlacementWarnings([coral], coralSelections, wetSupport, true, BuildMode.Flat).map(w => w.kind), ["coralSupport"]);
   assert(!getEnvironmentalWarnings([coral], coralSelections, wetSupport, false).dryCoral, "Generated waterlogged support needs no reminder");
+  const coralGrid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array.from({ length: MAP_SIZE }, () => TRANSPARENT_COLOR));
+  for (const block of ["", "air", "mangrove_roots", DEFAULT_CORAL_SUPPORT_BLOCK, "oak_slab[type=top,waterlogged=true]"]) {
+    for (const autoPickSupports of [false, true]) {
+      const assignments = [{ role: FillerRole.CoralSupport, block }];
+      const selections = { ...coralSelections, autoPickSupports };
+      const expected = autoPickSupports && !isCoralSupportValid(block) ? DEFAULT_CORAL_SUPPORT_BLOCK : block;
+      const placed = expected && expected !== "air";
+      const resolved = resolveShapeBlockName(coral.parts[0], toShapeCoordKey(0, 0, 0), selections, buildFillerAssignmentMap(assignments), false);
+      assert.equal(resolved, placed ? `minecraft:${expected}` : "");
+      assert.equal(getEnvironmentalWarnings([coral], selections, assignments, false).dryCoral, !isCoralSupportValid(expected));
+      assert(getEnvironmentalWarnings([coral], selections, assignments, true).dryCoral, "Auto-pick must not replace assumed platforms");
+      const options = { ...selections, fillerAssignments: assignments, applySupportFloorYs: false };
+      const counts = analyzeMaterialNeeds(coralGrid, coral, options).blockCounts;
+      assert.equal(counts.mangrove_roots ?? 0, expected.startsWith("mangrove_roots") ? 1 : 0);
+      const file = await convertToNbt(coral, { ...options, baseName: "coral",
+        buildMode: BuildMode.Flat, suppressStepDirection: SuppressStepDirection.EastToWest });
+      const blocks = parseStructureBlocks(new Uint8Array(gunzipSync(file.data)));
+      assert.equal(blocks.some(cell => normalizeBlockId(cell.blockName) === "mangrove_roots"), expected.startsWith("mangrove_roots"));
+    }
+  }
   coral.parts[0].cells.set(toShapeCoordKey(0, 0, 0), { id: 10, isCustom: false });
   assert(!getEnvironmentalWarnings([coral], coralSelections, wetSupport, true).dryCoral, "An actual waterlogged color block is not an omitted platform");
   coral.parts[0].cells.set(toShapeCoordKey(0, 0, 0), [FillerRole.SupportFragile]);
@@ -2530,8 +2579,9 @@ function assertScaffoldingSupportWarnings(): void {
   part.cells.clear();
   put(0, 1);
   put(0, 2, { id: 7, isCustom: false });
-  assert(!warn(false, assignments, { ...selections, selectedBlocks: { 7: "poppy", 11: "stone", 13: "scaffolding" } }),
-    "Soil replacement is not scaffolding");
+  assert(warn(false), "Without consent the scaffold remains, even below a poppy");
+  assert(!analyzeScaffoldingSupport([shape], { ...selections, autoPickSupports: true }, assignments, false).roles.size,
+    "Opting in replaces the incompatible scaffold under a poppy");
   assert.equal(analyzeScaffoldingSupport([shape], selections, [{ role, block: "stone" }], false).roles.size, 0);
   part.cells.clear();
   put(0, 2, [FillerRole.ShadeSuppress, role]);
@@ -2555,27 +2605,33 @@ function assertScaffoldingSupportWarnings(): void {
 
 
 async function assertContextualSupport(): Promise<void> {
-  const supportWarning = (counts: Record<string, number>) => messages.preview.fragileSupportOverrideWarning(counts, FRAGILE_SUPPORT_RULES);
-  assert.equal(supportWarning({ poppy: 0 }), null);
-  const shared = supportWarning({ open_eyeblossom: 5, closed_eyeblossom: 1 })!.text;
-  assert.match(shared, /\b2\b.*\[dirt, mud, .*\]$/, "Count distinct block types, not placements");
-  assert.doesNotMatch(shared, /eyeblossom|[\r\n]/);
-  assert.match(supportWarning({ wheat: 1 })!.text, /wheat.*farmland/);
-  for (const counts of [{ wheat: 1, lily_pad: 2 }, { azalea: 2, open_eyeblossom: 5 }] as Record<string, number>[]) {
-    const warning = supportWarning({ ...counts, poppy: 0 })!.text;
-    for (const id of Object.keys(counts)) assert(warning.includes(id));
-    assert(!/[\r\n]|poppy|farmland|dirt|water/.test(warning), "Different support sets need one warning, not a shared list of options");
-  }
+  const supportWarning = (ids: string[]) =>
+    messages.preview.fragileSupportOverrideWarning(getCommonSupportChoices(ids, [], [], 4903));
+  assert.deepEqual(supportWarning(["wheat"]).supports, ["farmland"]);
+  // A constrained kind only counts once the palette or a filler places it.
+  assert.deepEqual(getCommonSupportChoices(["wheat"], ["lily_pad"], ["stone"], 4903).supports, ["farmland"]);
+  assert.deepEqual(getCommonSupportChoices(["wheat"], ["lily_pad"], ["stone", "lily_pad"], 4903).supports, []);
+  const plants = ["azalea", "open_eyeblossom"];
+  const shared = supportWarning(plants);
+  assert.match(shared.text, /\b2\b/);
+  assert.equal(shared.detail, plants.join(", "));
+  assert.deepEqual(shared.supports, FRAGILE_SUPPORT_RULES.get("open_eyeblossom")!.validSupportBlocks);
+  for (const choice of shared.supports) assert(plants.every(block => canSupportBlock(choice, block)));
+  const conflict = supportWarning(["wheat", "lily_pad"]);
+  assert.deepEqual(conflict.supports, []);
+  assert.equal(conflict.listedBlocks?.summary, "2 blocks");
+  assert.deepEqual(conflict.listedBlocks?.blocks, ["wheat", "lily_pad"]);
   // The fitted list replaces the text, so its parts must rebuild it exactly.
-  const listed = [supportWarning({ azalea: 2, open_eyeblossom: 5 })!, supportWarning({ wheat: 1, lily_pad: 2 })!,
-    ...Object.keys(enCatalog.preview.placementWarnings).map(kind =>
-      messages.preview.placementWarning(kind as keyof typeof enCatalog.preview.placementWarnings, ["wheat", "lily_pad"]))];
+  const listed = [conflict, ...Object.keys(enCatalog.preview.placementWarnings).map(kind =>
+    messages.preview.placementWarning(kind as keyof typeof enCatalog.preview.placementWarnings, ["wheat", "lily_pad"]))];
   for (const { text, listedBlocks } of listed) if (listedBlocks) {
     assert.equal(`${listedBlocks.before}[${listedBlocks.blocks.join(", ")}]${listedBlocks.after}`, text);
   }
-  for (const catalog of [enCatalog, esCatalog]) for (const [kind, template] of Object.entries(catalog.preview.placementWarnings)) {
+  for (const catalog of [enCatalog, esCatalog]) for (const [kind, template] of [...Object.entries(catalog.preview.placementWarnings),
+    ["fragileSupportOverrideWarningMixed", catalog.preview.fragileSupportOverrideWarningMixed]]) {
     assert((template.match(/\{\w+\}/g) ?? []).length <= 1, `${catalog.locale} ${kind}: only the list is a placeholder`);
   }
+  assert.deepEqual(supportWarning(["wheat", "oak_pressure_plate"]).supports, []);
   const selections = { selectedBlocks: { 1: "stone_pressure_plate", 12: "water" }, selectedBlocksCustom: {}, customColors: [] };
   const make = (height = 1): GeneratedShape => ({ partType: ShapePartType.SingleColumn, splitExportNames: null,
     suppressedTransparentVsCollisionCount: 0, parts: [{ bounds: { minY: -3, maxY: 8, minZ: 0, maxZ: 127 }, supportFloorYs: new Set([0]),
@@ -2930,6 +2986,8 @@ async function main(): Promise<number> {
   }
   assertFragileSupportEligibility();
   if (process.argv.includes("--support")) {
+    assertScaffoldingSupportWarnings();
+    assertPlacementWarnings();
     await assertContextualSupport();
     await assertSharedSupportMaterialCounts();
     console.log("Support eligibility and placement invariants passed.");

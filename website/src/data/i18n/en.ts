@@ -327,6 +327,7 @@ export const enCatalog = {
     liftSupportDetail: "Liftable on another support: {blocks}",
     placementWarnings: {
       missingSupport: "Missing support below: {blocks}",
+      autoSupport: "Incompatible or missing generated support for: {blocks}",
       invalidSupport: "Invalid support below: {blocks}",
       transparentSupport: "Cannot be supported by a transparent platform: {blocks}",
       attachmentSupport: "Missing or invalid attachment support: {blocks}",
@@ -383,9 +384,13 @@ export const enCatalog = {
       "Support filler is invalid ({value})\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported",
     waterSideSupportNotColorIdZero:
       "Support filler is not color_id=0 ({value})\nSome water-side supports require a color_id=0 block, so those placements will not be counted or exported",
-    fragileSupportOverrideWarning: "Valid support for {blockId}: {supports}",
-    fragileSupportOverrideWarningShared: "Valid support for {count} blocks: {supports}",
-    fragileSupportOverrideWarningMixed: "Specific support requirements for {blockId}",
+    fragileSupportOverrideWarning: "{blockId} requires support from",
+    chooseSupportBlock: "Set support to",
+    autoPickSupports: "Auto-pick valid supports",
+    disableAutoSupports: "Undo",
+    autoSupportsEnabled: "Auto-picking valid support blocks",
+    fragileSupportOverrideWarningShared: "{count} preset blocks require support from",
+    fragileSupportOverrideWarningMixed: "No common support for {blockId}",
     supportBlockListCount: "{count} blocks",
     vsFillerInvalid: {
       one: "{label} is invalid ({value})\n{count} pixel will be incorrectly light-shaded",

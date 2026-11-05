@@ -143,7 +143,6 @@ type FragileSupportRuleValue = {
 type FragileSupportRule = Readonly<FragileSupportRuleValue>;
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/blockSupport.ts
 // - src/lib/placementWarnings.ts
 // - src/lib/shapeModel.ts

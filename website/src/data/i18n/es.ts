@@ -323,6 +323,7 @@ export const esCatalog = {
     liftSupportDetail: "Elevables con otro soporte: {blocks}",
     placementWarnings: {
       missingSupport: "Falta soporte debajo: {blocks}",
+      autoSupport: "Soporte generado incompatible o ausente para: {blocks}",
       invalidSupport: "Soporte no válido debajo: {blocks}",
       transparentSupport: "Una plataforma transparente no puede sostener: {blocks}",
       attachmentSupport: "Soporte de fijación ausente o inválido: {blocks}",
@@ -379,9 +380,13 @@ export const esCatalog = {
       "El relleno de soporte no es válido ({value})\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán",
     waterSideSupportNotColorIdZero:
       "El relleno de soporte no es color_id=0 ({value})\nAlgunos soportes laterales de agua requieren un bloque color_id=0, así que esas colocaciones no se contarán ni se exportarán",
-    fragileSupportOverrideWarning: "Soporte válido para {blockId}: {supports}",
-    fragileSupportOverrideWarningShared: "Soporte válido para {count} bloques: {supports}",
-    fragileSupportOverrideWarningMixed: "Se requieren soportes específicos para {blockId}",
+    fragileSupportOverrideWarning: "{blockId} requiere soporte de",
+    chooseSupportBlock: "Usa como soporte",
+    autoPickSupports: "Elegir soportes válidos automáticamente",
+    disableAutoSupports: "Deshacer",
+    autoSupportsEnabled: "Se eligen automáticamente bloques de soporte válidos",
+    fragileSupportOverrideWarningShared: "{count} bloques del preajuste requieren soporte de",
+    fragileSupportOverrideWarningMixed: "No hay un soporte común para {blockId}",
     supportBlockListCount: "{count} bloques",
     vsFillerInvalid: {
       one: "{label} no es válido ({value})\n{count} píxel tendrá sombreado claro incorrecto",

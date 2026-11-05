@@ -384,10 +384,10 @@ for (const [version, id] of [["1.21.4", 49], ["26.2", 6]] as const) {
   });
   assert.deepEqual([pixel.r, pixel.g, pixel.b], [BASE_COLORS[id].r, BASE_COLORS[id].g, BASE_COLORS[id].b]);
 }
-async function exportBytes(version: MinecraftVersion, blocks: Record<number, string>, support = "iron_chain", collapseDuplicatePaletteStates = true) {
+async function exportBytes(version: MinecraftVersion, blocks: Record<number, string>, support = "iron_chain", collapseDuplicatePaletteStates = true, autoPickSupports = false) {
   const result = await convertToNbt(shape, {
     minecraftVersion: version, selectedBlocks: blocks, selectedBlocksCustom: {}, customColors: [],
-    collapseDuplicatePaletteStates,
+    collapseDuplicatePaletteStates, autoPickSupports,
     fillerAssignments: [{ role: FillerRole.SupportAll, block: support }],
     applySupportFloorYs: false, baseName: "version-test", buildMode: BuildMode.StaircaseClassic,
     suppressStepDirection: SuppressStepDirection.EastToWest,
@@ -405,17 +405,19 @@ for (const version of versions) {
   assert.equal(bytes.toString().split(chain).length - 1, 1, "Chain spellings must collapse to one palette state");
   const split = await exportBytes(version, { 0: "chain", 6: "iron_block" }, "iron_chain", false);
   assert.equal(split.toString().split(chain).length - 1, 2, "Uncollapsed chain states must remain separate by role");
-  const support = await exportBytes(version, { 0: "", 6: "big_dripleaf" }, "pale_moss_block");
+  const support = await exportBytes(version, { 0: "", 6: "big_dripleaf" }, "pale_moss_block", true, true);
   assert(support.includes(Buffer.from("minecraft:dirt")), "All versions use modern dripleaf support rules");
   const deadBush = await exportBytes(version, { 0: "", 6: "dead_bush" }, "farmland");
   assert(deadBush.includes(Buffer.from("minecraft:farmland")), "All versions use modern dead bush support rules");
   for (const block of ["azalea", "flowering_azalea", "sweet_berry_bush[age=3]"]) {
     const substrate = FRAGILE_SUPPORT_RULES.get(block.split("[")[0])!.replacementBlock;
-    const bytes = await exportBytes(version, { 6: block }, "cobblestone");
+    const unchanged = await exportBytes(version, { 6: block }, "cobblestone");
+    assert(unchanged.includes(Buffer.from("minecraft:cobblestone")) && !unchanged.includes(Buffer.from(`minecraft:${substrate}`)));
+    const bytes = await exportBytes(version, { 6: block }, "cobblestone", true, true);
     assert(bytes.includes(Buffer.from(`minecraft:${substrate}`)), `${block}: missing exported substrate`);
     assert(!bytes.includes(Buffer.from("minecraft:cobblestone")), `${block}: unsuitable support survived`);
     const stats = analyzeMaterialNeeds(waterGrid, shape, {
-      minecraftVersion: version, selectedBlocks: { 6: block }, selectedBlocksCustom: {}, customColors: [],
+      minecraftVersion: version, selectedBlocks: { 6: block }, selectedBlocksCustom: {}, customColors: [], autoPickSupports: true,
       fillerAssignments: [{ role: FillerRole.SupportAll, block: "cobblestone" }], applySupportFloorYs: false,
     });
     assert.equal(stats.blockCounts[substrate], 1, `${block}: material/export substrate mismatch`);
@@ -436,7 +438,7 @@ older.writeInt32BE(newer.readInt32BE(17), 17);
 assert.deepEqual(older, newer, "Unchanged blocks must produce identical geometry/palette bytes");
 await assert.rejects(exportBytes("1.21.4", { 0: "glass", 6: "waxed_copper_lantern" }), /unavailable/);
 await assert.rejects(exportBytes("26.2", { 0: "glass", 6: "red_shrub" }), /unavailable/);
-const shrub = await exportBytes("26.3", { 0: "glass", 6: "red_shrub" }, "stone");
+const shrub = await exportBytes("26.3", { 0: "glass", 6: "red_shrub" }, "stone", true, true);
 assert(shrub.includes(Buffer.from("minecraft:red_shrub")));
 assert(shrub.includes(Buffer.from("minecraft:dirt")), "Red shrub needs a soil support replacement");
 for (const block of ["ice_crystal", "icicle[attached=true]", "brittle_ice", "packed_ice_bricks", ...snapshotIce, ...snapshotAdditions.flatMap(([, blocks]) => blocks)]) {

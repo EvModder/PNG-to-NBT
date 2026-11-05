@@ -99,6 +99,7 @@ export function sanitizeUserBlockEntry(raw: string): string {
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
 export interface ColorBlockSelections {
+  autoPickSupports?: boolean;
   minecraftVersion?: MinecraftVersion;
   selectedBlocks: Record<number, string>;
   selectedBlocksCustom: Record<number, string>;

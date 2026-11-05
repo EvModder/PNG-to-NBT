@@ -22,7 +22,10 @@
  * - src/lib/suppressLoadMarkers.ts
  */
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
-import { resolveAssignedFillerName } from "@/lib/fillerRules";
+import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
+import { DEFAULT_CORAL_SUPPORT_BLOCK, DEFAULT_SUPPORT_FILLER_BLOCK } from "@/data/defaultSettings";
+import { canSupportBlock } from "./blockSupport";
+import { isCoralSupportValid, resolveAssignedFillerName } from "@/lib/fillerRules";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
@@ -43,8 +46,11 @@ export function resolveShapeBlockName(
   return resolveShapeFiller(part, coord, cell, selections, fillers)?.blockName ?? "";
 }
 
+const SUBSTITUTABLE_SUPPORTS = new Set([FillerRole.SupportAll, FillerRole.SupportFragile, FillerRole.StairStep, FillerRole.SupportWaterSidesCovered]);
+
 // Callers:
 // - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/shapeAnalysis.ts
 export function resolveShapeFiller(
   part: ShapePart,
@@ -52,19 +58,42 @@ export function resolveShapeFiller(
   roles: readonly FillerRole[],
   options: ColorBlockSelections,
   assignments: Map<FillerRole, string>,
-): { role: FillerRole; blockName: string | null; override: FragileSupportOverride | null } | null {
-  let missing: ReturnType<typeof resolveShapeFiller> = null;
-  // Assignment order determines priority; rejected or disabled blocks do not claim a cell.
-  for (const [role, block] of assignments) {
-    if (!roles.includes(role) || !shouldIncludeFragileSupportCell(part, coord, roles, role, options, assignments)) continue;
-    const override = getFragileSupportOverride(part, coord, role, block, options, assignments);
-    const blockName = override ? resolveExportBlockName(override.replacementBlockId) : resolveAssignedFillerName(assignments, role);
-    const resolved = { role, blockName, override };
-    if (blockName) return resolved;
-    // Keep the unfilled requirement visible in the material toolbar.
-    missing ??= resolved;
+): { role: FillerRole; blockName: string | null; constrainedBlock: string | null } | null {
+  // Looked up at most once: what a support here holds up.
+  let above: string | null | undefined;
+  const supported = () => above === undefined ? above = getSupportedBlockAbove(part, coord, options, assignments) : above;
+  let role: FillerRole | undefined;
+  let blockName: string | null = null;
+  // First placed assignment wins. If none place a block, retain the first unfilled requirement.
+  for (const candidate of assignments.keys()) {
+    if (!roles.includes(candidate)) continue;
+    // Fragile-only supports go under fragile blocks.
+    if (candidate === FillerRole.SupportFragile && !isFragileBlock(supported() ?? "")) continue;
+    const name = resolveAssignedFillerName(assignments, candidate);
+    if (name) {
+      role = candidate;
+      blockName = name;
+      break;
+    }
+    role ??= candidate;
   }
-  return missing;
+  if (role === undefined) return null;
+  const coral = role === FillerRole.CoralSupport || role === FillerRole.StairStep && roles.includes(FillerRole.CoralSupport);
+  if (options.autoPickSupports && coral && (!blockName || !isCoralSupportValid(blockName))) {
+    role = FillerRole.CoralSupport;
+    blockName = resolveExportBlockName(DEFAULT_CORAL_SUPPORT_BLOCK);
+  }
+  // CrubTech and shading roles keep their own assignments.
+  const held = SUBSTITUTABLE_SUPPORTS.has(role) ? supported() : null;
+  const constrainedBlock = held && isFragileBlock(held) ? normalizeBlockId(held) : null;
+  if (options.autoPickSupports && held && constrainedBlock) {
+    const version = options.minecraftVersion && MINECRAFT_VERSIONS[options.minecraftVersion].dataVersion;
+    if (!blockName || !canSupportBlock(blockName, held, version)) {
+      const replacement = FRAGILE_SUPPORT_RULES.get(constrainedBlock)?.replacementBlock ?? DEFAULT_SUPPORT_FILLER_BLOCK;
+      if (canSupportBlock(replacement, held, version)) blockName = resolveExportBlockName(replacement);
+    }
+  }
+  return { role, blockName, constrainedBlock };
 }
 
 // Callers:
@@ -118,7 +147,7 @@ export function parseShapeCoordKey(key: ShapeCoordKey): [number, number, number]
   return [x, y, z];
 }
 
-function getSupportedBlockIdAbove(
+function getSupportedBlockAbove(
   part: ShapePart,
   coord: number,
   options: ColorBlockSelections,
@@ -129,13 +158,13 @@ function getSupportedBlockIdAbove(
   if (!above) return null;
   if (isShapeColorCell(above)) {
     const block = above.fillerRole ? resolveAssignedFillerName(fillerAssignments, above.fillerRole) : resolveAssignedColorBlock(above, options);
-    return block ? normalizeBlockId(block) : null;
+    return block || null;
   }
   // Assignment order also determines which filler wins during export.
   for (const role of fillerAssignments.keys()) {
     if (!above.includes(role)) continue;
     const block = resolveAssignedFillerName(fillerAssignments, role);
-    if (block) return normalizeBlockId(block);
+    if (block) return block;
   }
   return null;
 }
@@ -170,40 +199,6 @@ export function shouldIncludeFragileSupportCell(
   fillerAssignments: Map<FillerRole, string>,
 ): boolean {
   if (activeRole !== FillerRole.SupportFragile || !roles.includes(FillerRole.SupportFragile)) return true;
-  const blockId = getSupportedBlockIdAbove(part, coord, options, fillerAssignments);
+  const blockId = getSupportedBlockAbove(part, coord, options, fillerAssignments);
   return !!blockId && isFragileBlock(blockId);
-}
-
-interface FragileSupportOverride {
-  blockId: string;
-  replacementBlockId: string;
-}
-
-function getFragileSupportOverride(
-  part: ShapePart,
-  coord: number,
-  activeRole: FillerRole | null,
-  assignedSupportBlockName: string | null,
-  options: ColorBlockSelections,
-  fillerAssignments: Map<FillerRole, string>,
-): FragileSupportOverride | null {
-  // CrubTech supports must retain their piston-specific block assignments.
-  if (
-    activeRole !== FillerRole.SupportAll &&
-    activeRole !== FillerRole.SupportFragile &&
-    activeRole !== FillerRole.StairStep &&
-    activeRole !== FillerRole.SupportWaterSidesCovered
-  ) return null;
-  const fragileBlockId = getSupportedBlockIdAbove(part, coord, options, fillerAssignments);
-  if (!fragileBlockId) return null;
-  const fragileSupportRule = FRAGILE_SUPPORT_RULES.get(fragileBlockId);
-  if (!fragileSupportRule) return null;
-  // Automatic replacements deliberately use substrate IDs only. Some otherwise-valid
-  // state-dependent bases (e.g. waterlogged lily-pad supports) still get the safe fallback.
-  // Keeping this separate from placement validation preserves state-insensitive material caching.
-  const assignedSupportBlockId = assignedSupportBlockName ? normalizeBlockId(assignedSupportBlockName) : "";
-  if (assignedSupportBlockId && fragileSupportRule.validSupportBlocks.includes(assignedSupportBlockId)) {
-    return null;
-  }
-  return { blockId: fragileBlockId, replacementBlockId: fragileSupportRule.replacementBlock };
 }

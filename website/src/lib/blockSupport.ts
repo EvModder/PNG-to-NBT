@@ -8,16 +8,19 @@
  * - getBlockSupport()
  * - standsOnFloor()
  * - canSupportBlock()
+ * - getCommonSupportChoices()
  *
  * Callers:
+ * - src/Index.tsx
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/placementWarnings.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeModel.ts
  */
 import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/blockFragility";
 import { PASSABLE_BLOCKS, PASSABLE_WHEN } from "@/data/blockPassability";
-import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
+import { DEFAULT_MINECRAFT_VERSION, DEFAULT_SUPPORT_FILLER_BLOCK } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
 import { normalizeBlockId, resolveExportBlockName } from "./blockId";
 
@@ -193,4 +196,19 @@ export function canSupportBlock(support: string, block: string, dataVersion?: nu
     || base.id === id && (base.props.get("vertical_direction") ?? "up") === (props.get("vertical_direction") ?? "up");
   if (id.endsWith("_trapdoor") || ["sculk_sensor", "calibrated_sculk_sensor", "turtle_egg"].includes(id)) return true;
   return base.full;
+}
+
+// Callers:
+// - src/Index.tsx
+//
+// Supports that hold every warned block, and every placed block of a kind that constrains its support.
+export function getCommonSupportChoices(warned: readonly string[], constrained: Iterable<string>, placed: Iterable<string>, version: number) {
+  const affected = new Set([...warned.map(normalizeBlockId), ...constrained]);
+  const blocks = new Set([...warned, ...Iterator.from(placed).filter(block => affected.has(normalizeBlockId(block)))]);
+  const ids = [...new Set([...blocks].map(normalizeBlockId))];
+  const candidates = new Set(ids.flatMap(id => FRAGILE_SUPPORT_RULES.get(id)?.validSupportBlocks ?? []));
+  const specific = candidates.size > 0;
+  candidates.add(DEFAULT_SUPPORT_FILLER_BLOCK);
+  const supports = [...candidates].filter(base => blocks.values().every(block => canSupportBlock(base, block, version)));
+  return { ids, supports, specific };
 }

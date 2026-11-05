@@ -8,7 +8,6 @@
  * - hasBuildAtWorldMinYOpportunity()
  * - analyzeMaterialNeeds()
  * - aggregateMaterialCounts()
- * - aggregateOverrideCounts()
  * - analyzeScaffoldingSupport()
  *
  * Callers:
@@ -65,7 +64,7 @@ interface MaterialNeedStats {
 interface SupportNeeds {
   aboveFloor: number;
   atFloor: number;
-  overrideCounts: Record<string, number>;
+  constrainedBlocks: Set<string>;
 }
 
 type MaterialAnalysisOptions = ColorBlockSelections & {
@@ -94,13 +93,13 @@ interface PartMaterialNeedStats {
 }
 
 function emptySupportNeeds(): SupportNeeds {
-  return { aboveFloor: 0, atFloor: 0, overrideCounts: {} };
+  return { aboveFloor: 0, atFloor: 0, constrainedBlocks: new Set() };
 }
 
 function mergeSupportNeeds(into: SupportNeeds, from: SupportNeeds, phases: boolean): void {
   into.aboveFloor = phases ? Math.max(into.aboveFloor, from.aboveFloor) : into.aboveFloor + from.aboveFloor;
   into.atFloor = phases ? Math.max(into.atFloor, from.atFloor) : into.atFloor + from.atFloor;
-  for (const [block, count] of Object.entries(from.overrideCounts)) addCount(into.overrideCounts, block, count);
+  for (const block of from.constrainedBlocks) into.constrainedBlocks.add(block);
 }
 
 function addCount(map: Record<string, number>, key: string, amount = 1): void {
@@ -293,8 +292,11 @@ function analyzePartMaterialNeeds(
     if (supportFloorYs.has(y)) continue;
     const resolved = resolveShapeFiller(part, coord, cell, options, fillerAssignments);
     if (!resolved) continue;
-    if (resolved.override) addCount(supportNeeds.overrideCounts, resolved.override.blockId);
-    const { role: assignedRole, blockName: fillerName } = resolved;
+    if (resolved.constrainedBlock) supportNeeds.constrainedBlocks.add(resolved.constrainedBlock);
+    const { role, blockName: fillerName } = resolved;
+    // A substituted substrate is inventory, but is not the material named in the toolbar.
+    const assignedRole = options.autoPickSupports && fillerName && (resolved.constrainedBlock || role === FillerRole.CoralSupport)
+      && normalizeBlockId(fillerName) !== normalizeBlockId(fillerAssignments.get(role) ?? "") ? undefined : role;
     if (
       !materials && assignedRole &&
       (
@@ -338,6 +340,7 @@ function prepareRetainedMaterials(
     cached.options.selectedBlocksCustom === options.selectedBlocksCustom &&
     cached.options.customColors === options.customColors &&
     cached.options.minecraftVersion === options.minecraftVersion &&
+    cached.options.autoPickSupports === options.autoPickSupports &&
     cached.options.fillerAssignments === options.fillerAssignments &&
     cached.options.applySupportFloorYs === options.applySupportFloorYs) return cached.prepared;
   const plan = getSuppressClearancePlan(shape)!;
@@ -697,18 +700,4 @@ export function aggregateMaterialCounts(
   }
 
   return { blockCounts, colorCounts, fillerRoleCounts };
-}
-
-// Callers:
-// - src/Index.tsx
-export function aggregateOverrideCounts(
-  stats: readonly Pick<SupportNeeds, "overrideCounts">[],
-): Record<string, number> {
-  const overrideCounts: Record<string, number> = {};
-  for (const stat of stats) {
-    for (const [blockId, count] of Object.entries(stat.overrideCounts)) {
-      overrideCounts[blockId] = (overrideCounts[blockId] || 0) + count;
-    }
-  }
-  return overrideCounts;
 }

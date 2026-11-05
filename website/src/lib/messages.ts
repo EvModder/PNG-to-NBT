@@ -153,12 +153,12 @@ function formatBlockIdList(blockIds: readonly string[]): string {
 }
 
 // Returns the text around the block list too, so the banner can fit the list to its width.
-function formatListedBlocks(template: string, key: string, blocks: readonly string[], values: TemplateValues = {}) {
-  const text = formatTemplate(template, { ...values, [key]: blocks.length === 1 ? blocks[0] : formatBlockIdList(blocks) });
+function formatListedBlocks(template: string, key: string, blocks: readonly string[]) {
+  const text = formatTemplate(template, { [key]: blocks.length === 1 ? blocks[0] : formatBlockIdList(blocks) });
   const at = template.indexOf(`{${key}}`);
   if (blocks.length < 2 || at < 0) return { text };
   return { text, listedBlocks: {
-    before: formatTemplate(template.slice(0, at), values), blocks, after: formatTemplate(template.slice(at + key.length + 2), values),
+    before: template.slice(0, at), blocks, after: template.slice(at + key.length + 2),
     summary: formatTemplate(catalog.preview.supportBlockListCount, { count: blocks.length }),
   } };
 }
@@ -491,6 +491,12 @@ export const messages = {
     convertButtonLayerSplitTitle: catalog.upload.convertButtonLayerSplitTitle,
   },
   preview: {
+    supportBlockListCount(count: number): string {
+      return formatTemplate(catalog.preview.supportBlockListCount, { count });
+    },
+    autoPickSupports: catalog.preview.autoPickSupports,
+    disableAutoSupports: catalog.preview.disableAutoSupports,
+    autoSupportsEnabled: catalog.preview.autoSupportsEnabled,
     placementWarning(kind: keyof MessageCatalog["preview"]["placementWarnings"], blocks: readonly string[], support?: string) {
       return {
         ...formatListedBlocks(catalog.preview.placementWarnings[kind], "blocks", blocks),
@@ -536,17 +542,13 @@ export const messages = {
         { value },
       );
     },
-    fragileSupportOverrideWarning(counts: Readonly<Record<string, number>>, rules: ReadonlyMap<string, { validSupportBlocks: readonly string[] }>) {
-      const affected = rules.entries().filter(([id]) => counts[id] > 0).toArray();
-      if (!affected.length) return null;
-      const [blockId, { validSupportBlocks: supports }] = affected[0];
-      if (affected.some(([, { validSupportBlocks: other }]) => other !== supports &&
-        (other.length !== supports.length || !other.every(id => supports.includes(id))))) {
-        const blocks = affected.map(([id]) => id);
-        return formatListedBlocks(catalog.preview.fragileSupportOverrideWarningMixed, "blockId", blocks);
-      }
-      return formatListedBlocks(affected.length === 1 ? catalog.preview.fragileSupportOverrideWarning : catalog.preview.fragileSupportOverrideWarningShared,
-        "supports", supports, { blockId, count: affected.length });
+    fragileSupportOverrideWarning({ ids: blocks, supports, specific }: { ids: string[]; supports: string[]; specific: boolean }) {
+      const mixed = supports.length ? null : formatListedBlocks(catalog.preview.fragileSupportOverrideWarningMixed, "blockId", blocks);
+      const text = mixed?.text ?? (specific ? formatTemplate(blocks.length === 1 ? catalog.preview.fragileSupportOverrideWarning
+        : catalog.preview.fragileSupportOverrideWarningShared, { blockId: blocks[0], count: blocks.length }) : catalog.preview.chooseSupportBlock);
+      // The shared text only counts the blocks; name them on hover.
+      const detail = !mixed && specific && blocks.length > 1 ? blocks.join(", ") : undefined;
+      return { text, listedBlocks: mixed?.listedBlocks, supports, invalid: true, detail };
     },
     vsFillerInvalid(label: string, value: string, noobPixels: number): string {
       return formatPlural(catalog.preview.vsFillerInvalid, noobPixels, {

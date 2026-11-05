@@ -5,7 +5,7 @@
  * Callers:
  * - src/Index.tsx
  */
-import { Fragment, useLayoutEffect, useRef, useState, type MouseEvent, type MutableRefObject, type RefObject } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type MouseEvent, type MutableRefObject, type ReactNode, type RefObject } from "react";
 import { Trash2 } from "lucide-react";
 import type { InvalidDimensionsStrategy, InvalidColorsPalette } from "@/data/defaultSettings";
 import { ImageColorNotice, isColorCorrectionNotice } from "@/components/ImageColorNotice";
@@ -62,7 +62,10 @@ type PanelImagePreviewProps = {
   suppressNorthSouthWarning: string | null;
   liftSupportWarning: PreviewWarning | null;
   waterSideSupportWarning: PreviewWarning | null;
-  fragileSupportOverrideWarning: PreviewWarning | null;
+  fragileSupportOverrideWarning: ReturnType<typeof messages.preview.fragileSupportOverrideWarning> | null;
+  onSelectSupport: (block: string) => void;
+  autoPickSupports: boolean;
+  setAutoPickSupports: (enabled: boolean) => void;
   placementWarnings: PreviewWarning[];
   vsFillerWarning: PreviewWarning | null;
   lateFillerWarning: PreviewWarning | null;
@@ -110,7 +113,7 @@ type PanelImagePreviewProps = {
 };
 
 // Shows as many blocks as fit on one line, then +N to expand. A list that cannot show any block collapses to the summary.
-function FittedBlockList({ before, blocks, after, summary }: ListedBlocks) {
+function FittedBlockList({ before, blocks, after, summary, onSelect }: ListedBlocks & { onSelect?: (id: string) => void }) {
   const line = useRef<HTMLSpanElement>(null);
   const probe = useRef<HTMLSpanElement>(null);
   const [count, setCount] = useState(0);
@@ -139,13 +142,15 @@ function FittedBlockList({ before, blocks, after, summary }: ListedBlocks) {
     observer.observe(container);
     document.fonts.addEventListener("loadingdone", measure);
     return () => { observer.disconnect(); document.fonts.removeEventListener("loadingdone", measure); };
-  }, [before, after, blocks, expanded]);
+  }, [before, after, blocks, summary, expanded]);
   const visible = expanded ? blocks.length : count;
   return <span ref={line} className="relative block">
     {!expanded && <span aria-hidden="true" className="pointer-events-none invisible absolute inset-0 overflow-hidden">
       <span ref={probe} className="inline-block whitespace-nowrap" />
     </span>}
-    {before}[{blocks.slice(0, visible).join(", ")}{visible < blocks.length && <>{visible > 0 && ", "}<button type="button"
+    {before}[{blocks.slice(0, visible).map((id, i) => <Fragment key={id}>{i > 0 && ", "}{onSelect
+      ? <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => onSelect(id)}>{id}</button> : id}</Fragment>)}
+    {visible < blocks.length && <>{visible > 0 && ", "}<button type="button"
       className={`hover:text-foreground ${visible ? "" : "underline underline-offset-2"}`}
       onClick={() => setExpanded(true)}>{visible ? `+${blocks.length - visible}` : summary}</button></>}]{after}
   </span>;
@@ -158,6 +163,9 @@ function WarningBanner({
   warningHeadline = false,
   detail,
   listedBlocks,
+  supportChoices,
+  onSelectSupport,
+  children,
 }: {
   text: string;
   tone: "error" | "warning" | "muted";
@@ -165,6 +173,9 @@ function WarningBanner({
   warningHeadline?: boolean;
   detail?: string;
   listedBlocks?: ListedBlocks;
+  supportChoices?: readonly string[];
+  onSelectSupport?: (block: string) => void;
+  children?: ReactNode;
 }) {
   const className =
     tone === "error"
@@ -185,6 +196,11 @@ function WarningBanner({
           <span className="text-warning-text">{text.slice(0, headlineEnd)}</span>
           {text.slice(headlineEnd)}
         </>}
+        {supportChoices?.length === 1 && <> <button type="button" className="underline underline-offset-2 hover:text-foreground"
+          onClick={() => onSelectSupport?.(supportChoices[0])}>{supportChoices[0]}</button></>}
+        {supportChoices && supportChoices.length > 1 && <>:<FittedBlockList key={supportChoices.join()} before="" blocks={supportChoices} after=""
+          summary={messages.preview.supportBlockListCount(supportChoices.length)} onSelect={onSelectSupport} /></>}
+        {children}
       </p>
     </div>
   );
@@ -301,6 +317,9 @@ export function PanelImagePreview({
   liftSupportWarning,
   waterSideSupportWarning,
   fragileSupportOverrideWarning,
+  onSelectSupport,
+  autoPickSupports,
+  setAutoPickSupports,
   placementWarnings,
   vsFillerWarning,
   lateFillerWarning,
@@ -600,7 +619,14 @@ export function PanelImagePreview({
         {suppressNorthSouthWarning && <WarningBanner text={suppressNorthSouthWarning} tone="warning" />}
         {liftSupportWarning && <WarningBanner {...liftSupportWarning} tone="muted" />}
         {waterSideSupportWarning && <WarningBanner text={waterSideSupportWarning.text} tone="warning" invalid={waterSideSupportWarning.invalid} />}
-        {fragileSupportOverrideWarning && <WarningBanner {...fragileSupportOverrideWarning} tone="warning" />}
+        {autoPickSupports ? <WarningBanner text={messages.preview.autoSupportsEnabled} tone="warning">
+          {" "}<button type="button" className="underline underline-offset-2 hover:text-foreground"
+            onClick={() => setAutoPickSupports(false)}>{messages.preview.disableAutoSupports}</button>
+        </WarningBanner> : fragileSupportOverrideWarning && <WarningBanner {...fragileSupportOverrideWarning} tone="warning"
+          supportChoices={fragileSupportOverrideWarning.supports} onSelectSupport={onSelectSupport}>
+          {!fragileSupportOverrideWarning.supports.length && <button type="button" className="block underline underline-offset-2 hover:text-foreground"
+            onClick={() => setAutoPickSupports(true)}>{messages.preview.autoPickSupports}</button>}
+        </WarningBanner>}
         {placementWarnings.map(warning => <WarningBanner key={`${warning.text}|${warning.detail ?? ""}`} {...warning} tone="warning" />)}
         {vsFillerWarning && <WarningBanner text={vsFillerWarning.text} tone="warning" invalid={vsFillerWarning.invalid} warningHeadline />}
         {lateFillerWarning && <WarningBanner text={lateFillerWarning.text} tone="warning" invalid={lateFillerWarning.invalid} />}

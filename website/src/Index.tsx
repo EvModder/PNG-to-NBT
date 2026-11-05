@@ -86,6 +86,7 @@ import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX, Shade } from "@
 import { STORAGE_KEYS as LS_KEYS } from "@/data/storageKeys";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, scopeEnvironmentalPalette } from "@/lib/environmentalSupport";
 import { getPlacementWarnings } from "@/lib/placementWarnings";
+import { getCommonSupportChoices } from "@/lib/blockSupport";
 import { getDarkTheme, observeTheme, toggleTheme } from "@/lib/theme";
 import { scalePixelArt } from "@/lib/pixelArtScaling";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbtEntries, getCrubTechLayerSplitSectionCount } from "@/lib/nbtExport";
@@ -128,7 +129,6 @@ import type { ColorGrid, ColorRgb } from "@/types/color";
 import {
   analyzeMaterialNeeds,
   aggregateMaterialCounts,
-  aggregateOverrideCounts,
   hasStairStepSupport,
 } from "@/lib/shapeAnalysis";
 import { cacheShapeMaterialNeeds, getCachedShapeFillerNeeds, getCachedShapeMaterialNeeds, getCachedShapeNooblineIsSingleY } from "@/lib/shapeAnalysisCache";
@@ -207,7 +207,7 @@ import {
 import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
 import { BuildMode, SuppressStepDirection, FillerRole } from "@/types/conversion";
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
+import { isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getVersionedSelections } from "@/lib/minecraftVersion";
 import { areBlockFallbacksEqual, normalizeBlockFallbacks, updatePresetBlockSelection } from "@/lib/presetFallbacks";
@@ -796,6 +796,7 @@ const Index = () => {
   useEffect(() => { colStartRef.current = colStart; }, [colStart]);
   useEffect(() => { colEndRef.current = colEnd; }, [colEnd]);
   const [decodedColorGrid, setDecodedColorGrid] = useState<ColorGrid | null>(null);
+  const [autoPickSupports, setAutoPickSupports] = useState(false);
   const [parsedImageSetState, setParsedImageSetState] = useState<ColorGridSetParseResult | null>(null);
   const [isParsingImage, setIsParsingImage] = useState(false);
   const [hasPendingIncomingImage, setHasPendingIncomingImage] = useState(false);
@@ -806,6 +807,7 @@ const Index = () => {
   const [tileSelectionAnchorIndex, setTileSelectionAnchorIndex] = useState<number | null>(null);
   const [imageLossyFormatLabel, setImageLossyFormatLabel] = useState<string | null>(null);
   const previousMaterialInputsRef = useRef<{
+    autoPickSupports: boolean;
     signature: string;
     colorAssignmentsByKey: Map<ColorRefKey, string>;
     fillerAssignmentsByRole: Map<FillerRole, string>;
@@ -1136,6 +1138,7 @@ const Index = () => {
   const { growthCover: growthCoverRequirement, palette: environmentalPalette } = useMemo(
     () => getEnvironmentalSettings(usedColorKeys, colorBlockSelections, coverEnabled), [usedColorKeys, colorBlockSelections, coverEnabled],
   );
+  const buildSelections = useMemo(() => ({ ...colorBlockSelections, autoPickSupports }), [colorBlockSelections, autoPickSupports]);
   const selectedWaterBlock = effectiveSelectedBlocks[WATER_BASE_INDEX];
   const usesWaterForWater = normalizeBlockId(selectedWaterBlock) === "water";
   const usesIceForWater = normalizeBlockId(selectedWaterBlock) === "ice";
@@ -1654,29 +1657,33 @@ const Index = () => {
   const usedMaterialColorAssignments = useMemo(
     () => [...usedColorKeys]
       .toSorted((a, b) => a - b)
-      .map(key => `${key}=${normalizeBlockId(resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections))}`)
+      .map(key => {
+        const block = resolveAssignedColorBlock(parseColorRefKey(key), colorBlockSelections);
+        return `${key}=${autoPickSupports ? block : normalizeBlockId(block)}`;
+      })
       .join("|"),
-    [usedColorKeys, colorBlockSelections],
+    [usedColorKeys, colorBlockSelections, autoPickSupports],
   );
   const usedMaterialFillerAssignments = useMemo(() => {
     if (aggregateFillerRoleCounts.size === 0) return "";
     const assignmentByRole = new Map(uiFillerAssignments.map(assignment => [assignment.role, assignment.block]));
     return [...aggregateFillerRoleCounts.keys()]
       .toSorted()
-      .map(role => `${role}=${normalizeBlockId(assignmentByRole.get(role) ?? "")}`)
+      .map(role => `${role}=${autoPickSupports ? assignmentByRole.get(role) ?? "" : normalizeBlockId(assignmentByRole.get(role) ?? "")}`)
       .join("|");
-  }, [aggregateFillerRoleCounts, uiFillerAssignments]);
+  }, [aggregateFillerRoleCounts, uiFillerAssignments, autoPickSupports]);
   const currentMaterialInputSignature = useMemo(
     () =>
       [
         usedMaterialColorAssignments,
         usedMaterialFillerAssignments,
+        autoPickSupports ? 1 : 0,
         `support=${effectiveSupportMode !== SupportMode.None ? 1 : 0}`,
         `supportFloorY=${effectiveApplySupportFloorYs ? 1 : 0}`,
         activeKeepSuppressExtras ? 1 : 0,
         minecraftVersion,
       ].join("||"),
-    [usedMaterialColorAssignments, usedMaterialFillerAssignments, effectiveSupportMode, effectiveApplySupportFloorYs, activeKeepSuppressExtras, minecraftVersion],
+    [usedMaterialColorAssignments, usedMaterialFillerAssignments, autoPickSupports, effectiveSupportMode, effectiveApplySupportFloorYs, activeKeepSuppressExtras, minecraftVersion],
   );
   const currentWaterDrops = crubTechControlsActive2LayerSettings
     ? CRUBTECH_WATER_DROPS
@@ -1700,12 +1707,9 @@ const Index = () => {
     const totalTiles = tileGeometryAnalyses.length;
     const previousMaterialInputs = previousMaterialInputsRef.current;
     const materialAnalysisOptions = {
-      selectedBlocks: effectiveSelectedBlocks,
-      minecraftVersion,
-      selectedBlocksCustom,
+      ...buildSelections,
       fillerAssignments: uiFillerAssignments,
       applySupportFloorYs: effectiveApplySupportFloorYs,
-      customColors,
       keepSuppressExtras: activeKeepSuppressExtras,
     };
     const currentColorAssignmentsByKey = new Map(
@@ -1731,6 +1735,7 @@ const Index = () => {
       tile: TileGeometryAnalysis,
     ): previousTile is TileAnalysis => {
       if (!previousTile?.materialNeedStats || !tile.supportShape) return false;
+      if (previousMaterialInputs?.autoPickSupports !== autoPickSupports || autoPickSupports && previousMaterialInputs.signature !== currentMaterialInputSignature) return false;
       if (previousTile.tile.cacheKey !== tile.tile.cacheKey || previousTile.supportShape !== tile.supportShape) return false;
       if (!previousMaterialInputs || previousMaterialInputs.applySupportFloorYs !== effectiveApplySupportFloorYs) return false;
       if (previousMaterialInputs.keepSuppressExtras !== activeKeepSuppressExtras) return false;
@@ -1757,6 +1762,7 @@ const Index = () => {
 
     if (reusableTileAnalyses.every((tile): tile is TileAnalysis => tile !== null)) {
       previousMaterialInputsRef.current = {
+        autoPickSupports,
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
@@ -1814,6 +1820,7 @@ const Index = () => {
 
       if (cancelled) return;
       previousMaterialInputsRef.current = {
+        autoPickSupports,
         signature: currentMaterialInputSignature,
         colorAssignmentsByKey: new Map(currentColorAssignmentsByKey),
         fillerAssignmentsByRole: new Map(currentFillerAssignmentsByRole),
@@ -1984,7 +1991,7 @@ const Index = () => {
       suppressCenterOut,
     ],
   );
-  // Material counts depend on block IDs, not state tags; export retains the full assignments.
+  // State tags affect inventory only when they change an automatic support choice.
   const selectedTileMaterialNeedStats = useMemo(() => {
     if (!selectedTileAnalysis?.supportShape || !imageValid) return null;
     if (!colRangeEnabled) return selectedTileAnalysis.materialNeedStats;
@@ -1992,7 +1999,7 @@ const Index = () => {
       selectedTileAnalysis.tile.colorGrid,
       selectedTileAnalysis.supportShape,
       {
-        ...colorBlockSelections,
+        ...buildSelections,
         fillerAssignments: uiFillerAssignments,
         applySupportFloorYs: effectiveApplySupportFloorYs,
         keepSuppressExtras: activeKeepSuppressExtras,
@@ -2026,10 +2033,6 @@ const Index = () => {
     () => aggregateMaterialCounts(selectedTileAnalyses.flatMap(tile => (tile.materialNeedStats ? [tile.materialNeedStats] : [])), "max"),
     [selectedTileAnalyses],
   );
-  const fragileSupportOverrideNeedStats = useMemo(() => {
-    const aggregateStats = tileAnalyses.flatMap(tile => tile.materialNeedStats ? [tile.materialNeedStats.supportNeeds] : []);
-    return aggregateStats.length > 0 ? { overrideCounts: aggregateOverrideCounts(aggregateStats) } : null;
-  }, [tileAnalyses]);
   const getSupportModeRoleCount = useCallback(
     (...roles: FillerRole[]) =>
       roles.reduce((sum, role) => sum + (aggregateFillerRoleCounts.get(role) ?? 0), 0),
@@ -2096,10 +2099,6 @@ const Index = () => {
   );
   const allTileMaterialCountsDisplaySum = useHeldValueWhilePending(
     hasCurrentMaterialAnalysis ? allTileMaterialCountsSum : EMPTY_MATERIAL_COUNTS,
-    holdResolvedMaterialUi,
-  );
-  const fragileSupportOverrideNeedStatsDisplay = useHeldValueWhilePending(
-    hasCurrentMaterialAnalysis ? fragileSupportOverrideNeedStats : null,
     holdResolvedMaterialUi,
   );
   const formatRequiredCount = (count: number) => (showStacks ? formatStacks(count) : count);
@@ -2213,6 +2212,7 @@ const Index = () => {
 
       if (decodedColorGrid) {
         setDecodedColorGrid(decodedColorGrid);
+        setAutoPickSupports(false);
         setSourceImageData(createImageDataFromColorGrid(decodedColorGrid, decodedPreset?.customColors ?? []));
         setImageName(messages.upload.sharedImageName);
         setImageValid(true);
@@ -2577,6 +2577,7 @@ const Index = () => {
   }, [presetDirty, markSavedImmediate, buildShareUrl, activeIdx, copyUrlToClipboard]);
 
   const clearImage = () => {
+    setAutoPickSupports(false);
     setAcceptedUpload(null);
     setInvalidColorsPaletteOverride(null);
     fileLoadRequestIdRef.current += 1;
@@ -2708,6 +2709,7 @@ const Index = () => {
 
   const handleFile = useCallback(
     (file: File) => {
+      setAutoPickSupports(false);
       setAcceptedUpload(null);
       const requestId = fileLoadRequestIdRef.current + 1;
       fileLoadRequestIdRef.current = requestId;
@@ -2781,16 +2783,13 @@ const Index = () => {
       for (const tile of exportTileAnalyses) {
         if (!tile.supportShape) throw new Error(messages.parsing.conversionFailed);
         const tileEntries = await convertTileToNbtEntries(tile.supportShape, {
+          ...buildSelections,
           blockUnavailableMessage: messages.parsing.blockUnavailableInVersion,
-          selectedBlocks: effectiveSelectedBlocks,
-          minecraftVersion,
           fillerAssignments: uiFillerAssignments,
           applySupportFloorYs: effectiveApplySupportFloorYs,
           collapseDuplicatePaletteStates: collapseDuplicateNbtPaletteStates,
           forceXZ128: effectiveForceXZ128,
           forceZ129: effectiveForceZ129,
-          selectedBlocksCustom,
-          customColors,
           baseName,
           buildMode: effectiveBuildMode,
           suppressStepDirection: activeSuppressDirection,
@@ -3199,7 +3198,7 @@ const Index = () => {
     shape: previewPhaseRange ? (selectedTileAnalysis?.supportShape ?? null) : null,
     phaseRange: previewPhaseRange,
     retainedState: selectedTileMaterialNeedStats?.retainedState,
-    selections: colorBlockSelections,
+    selections: buildSelections,
     fillerAssignments: uiFillerAssignments,
     belowPlatformWater,
   });
@@ -3420,21 +3419,6 @@ const Index = () => {
       invalid: true,
     };
   }, [showWaterSideSupportWarning, effectiveSupportFillerBlock, supportFillerDisabled]);
-  const fragileSupportOverrideWarning = useMemo<ShapeWarning | null>(() => {
-    if (!imageValid || !fragileSupportOverrideNeedStatsDisplay || crubTechControlsActive2LayerSettings) return null;
-    if (effectiveBuildMode === BuildMode.Flat && effectiveApplySupportFloorYs) return null;
-    if (supportMode === SupportMode.None) return null;
-
-    const warning = messages.preview.fragileSupportOverrideWarning(fragileSupportOverrideNeedStatsDisplay.overrideCounts, FRAGILE_SUPPORT_RULES);
-    return warning ? { ...warning, invalid: false } : null;
-  }, [
-    fragileSupportOverrideNeedStatsDisplay,
-    imageValid,
-    crubTechControlsActive2LayerSettings,
-    supportMode,
-    effectiveBuildMode,
-    effectiveApplySupportFloorYs,
-  ]);
   const vsFillerWarning = useMemo<ShapeWarning | null>(() => {
     type VsEntry = {
       label: string;
@@ -3518,12 +3502,23 @@ const Index = () => {
     effectiveShadeFillerBlock,
   ]);
 
-  const placementWarnings = useMemo(() => {
-    if (!imageValid) return [];
-    return getPlacementWarnings(activeOutputTileAnalyses.flatMap(tile => tile.supportShape ? [tile.supportShape] : []),
-      colorBlockSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings)
-      .map(({ kind, blocks, invalid, support }) => ({ ...messages.preview.placementWarning(kind, blocks, support), invalid }));
-  }, [imageValid, activeOutputTileAnalyses, colorBlockSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings]);
+  const { supportChoiceWarning, placementWarnings } = useMemo(() => {
+    const warnings = imageValid ? getPlacementWarnings(activeOutputTileAnalyses.flatMap(tile => tile.supportShape ? [tile.supportShape] : []),
+      buildSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings) : [];
+    let supportChoiceWarning: ReturnType<typeof messages.preview.fragileSupportOverrideWarning> | null = null;
+    const placementWarnings = warnings.flatMap(({ kind, blocks, invalid, support }) => {
+      const message = messages.preview.placementWarning(kind, blocks, support);
+      if (kind === "autoSupport" && hasCurrentMaterialAnalysis) {
+        supportChoiceWarning = messages.preview.fragileSupportOverrideWarning(getCommonSupportChoices(blocks,
+          activeOutputTileAnalyses.flatMap(tile => [...tile.materialNeedStats?.supportNeeds.constrainedBlocks ?? []]),
+          [...usedColorKeys].map(key => resolveAssignedColorBlock(parseColorRefKey(key), buildSelections)).concat(uiFillerAssignments.map(a => a.block)),
+          MINECRAFT_VERSIONS[minecraftVersion].dataVersion));
+        return [];
+      }
+      return [{ ...message, invalid }];
+    });
+    return { supportChoiceWarning, placementWarnings };
+  }, [imageValid, activeOutputTileAnalyses, buildSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings, minecraftVersion, hasCurrentMaterialAnalysis, usedColorKeys]);
 
   // Keep small-image notices and counts together; larger jobs use their live loading state.
   const previewAnalysisDisplay = useHeldValueWhilePending(
@@ -3536,7 +3531,7 @@ const Index = () => {
       suppressNorthSouthWarning,
       liftSupportWarning,
       waterSideSupportWarning,
-      fragileSupportOverrideWarning,
+      fragileSupportOverrideWarning: supportChoiceWarning,
       placementWarnings,
       vsFillerWarning,
       lateFillerWarning,
@@ -3978,6 +3973,9 @@ const Index = () => {
               setShowVsFillersInPreview={setShowVsFillersInPreview}
               paletteNotices={paletteNotices}
               onResolveInvalidDimensions={setInvalidDimensionsStrategyOverride}
+              onSelectSupport={setCommittedSupportFillerBlock}
+              autoPickSupports={autoPickSupports}
+              setAutoPickSupports={setAutoPickSupports}
               onResolveInvalidColors={imageData && !decodedColorGrid ? setInvalidColorsPaletteOverride : undefined}
               inputColorsPalette={effectiveInvalidColorsPalette}
               inputPaletteEquivalence={inputPaletteEquivalence}

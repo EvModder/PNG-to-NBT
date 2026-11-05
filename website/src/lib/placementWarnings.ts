@@ -18,13 +18,15 @@ import { environmentalRole, isGrowthCoverValid } from "./environmentalSupport";
 import { buildFillerAssignmentMap, isCoralSupportValid } from "./fillerRules";
 import { analyzeScaffoldingSupport } from "./shapeAnalysis";
 import { canSupportBlock, getBlockSupport } from "./blockSupport";
-import { isShapeColorCell, parseShapeCoordKey, resolveShapeBlockName, toShapeCoordKey } from "./shapeModel";
+import { isShapeColorCell, parseShapeCoordKey, resolveShapeBlockName, resolveShapeFiller, toShapeCoordKey } from "./shapeModel";
 import { BuildMode, FillerRole, type FillerAssignment } from "@/types/conversion";
 import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
 
 // Display order. true: error (red); false: reminder (yellow).
 const KINDS = {
-  missingSupport: true, shelfSupport: true, falling: true, attachmentSupport: true, transparentSupport: true, invalidSupport: true,
+  missingSupport: true, shelfSupport: true, falling: true, attachmentSupport: true,
+  autoSupport: true,
+  transparentSupport: true, invalidSupport: true,
   cropLight: false, mushroomLight: false, mushroomSpread: false, missingCover: true, growthCover: false, coralSupport: false,
   tntIgnition: true, tnt: false, fireSpread: true, grassSpread: true, iceMelt: true, snowMelt: true, iceSnowMelt: true, meltRisk: false, snowRisk: false, iceSnowRisk: false, frostedIce: false,
 };
@@ -176,7 +178,7 @@ export function getPlacementWarnings(
   // Geometry is immutable. Keep a few palette/state variants without retaining discarded images.
   // Unlike material counts, placement warnings must retain state tags in their key. Only blocks
   // a shape places enter its key, so palette edits for other tiles reuse its warnings.
-  const settingsKey = JSON.stringify([selections.minecraftVersion, assignments, assumeFloor, crubTech, mode === BuildMode.Flat]);
+  const settingsKey = JSON.stringify([selections.minecraftVersion, selections.autoPickSupports, assignments, assumeFloor, crubTech, mode === BuildMode.Flat]);
   const combined = new Map<string, ReturnType<typeof analyzePlacementWarnings>[number]>();
   for (const shape of shapes) {
     let cache = warningCache.get(shape);
@@ -184,7 +186,7 @@ export function getPlacementWarnings(
     const key = JSON.stringify([settingsKey, getShapePalettes(shape).map(({ colors }) => colors.map(color => resolveShapeColorBlockName(color, selections)))]);
     let warnings = cache.get(key);
     if (!warnings) {
-      warnings = analyzePlacementWarnings(shape, selections, assignments, assumeFloor, mode === BuildMode.Flat);
+      warnings = analyzePlacementWarnings(shape, selections, assignments, assumeFloor, crubTech, mode === BuildMode.Flat);
       if (cache.size === 8) cache.delete(cache.keys().next().value!);
       cache.set(key, warnings);
     }
@@ -212,7 +214,7 @@ export function getPlacementWarnings(
 
 function analyzePlacementWarnings(
   shape: GeneratedShape, selections: ColorBlockSelections, assignments: readonly FillerAssignment[],
-  assumeFloor: boolean, flat: boolean,
+  assumeFloor: boolean, crubTech: boolean, flat: boolean,
 ): Warning[] {
   const flatPlatform = flat && assumeFloor && shape.parts.every(part => part.supportFloorYs.size <= 1 && !hasWaterBelowFloor(part));
   const issues = Object.fromEntries(KIND_ORDER.map(kind => [kind, new Set<string>()])) as Record<Kind, Set<string>>;
@@ -222,6 +224,7 @@ function analyzePlacementWarnings(
     invalidSupports.get(support)!.add(block);
   };
   const fillers = buildFillerAssignmentMap(assignments);
+  const withAutoSupports = { ...selections, autoPickSupports: true };
   const dataVersion = MINECRAFT_VERSIONS[selections.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION].dataVersion;
   const descriptions = new Map<string, ReturnType<typeof describeBlock>>();
   const describe = (block: string) => {
@@ -285,9 +288,25 @@ function analyzePlacementWarnings(
         const below = at(x, y - 1, z);
         const floorBelow = assumeFloor && part.supportFloorYs.has(y - 1);
         const platform = !below.id && floorBelow;
-        const unsupportedBelow = () => {
-          if (transparentFloor(y - 1)) issues.transparentSupport.add(id);
-          else unsupported(id, below.name);
+        const unsupportedBelow = (fallback: "missingSupport" | "falling" = "missingSupport") => {
+          const belowCoord = toShapeCoordKey(x, y - 1, z);
+          const cellBelow = part.cells.get(belowCoord);
+          const rolesBelow = cellBelow && !isShapeColorCell(cellBelow) ? cellBelow : undefined;
+          if (!selections.autoPickSupports && !crubTech && !floorBelow && rolesBelow) {
+            const fixed = resolveShapeFiller(part, belowCoord, rolesBelow, withAutoSupports, fillers);
+            if (fixed?.constrainedBlock === id && fixed.blockName && describe(fixed.blockName).name !== below.name
+              && canSupportBlock(fixed.blockName, block.name, dataVersion)) {
+              issues.autoSupport.add(block.name);
+              return;
+            }
+          }
+          if (below.id) {
+            if (transparentFloor(y - 1)) issues.transparentSupport.add(id);
+            else if (fallback !== "missingSupport") issues[fallback].add(id);
+            else unsupported(id, below.name);
+            return;
+          }
+          issues[fallback].add(id);
         };
         const multiface = ["resin_clump", "glow_lichen", "sculk_vein"].includes(id);
         const crystal = id.includes("amethyst") || id === "ice_crystal";
@@ -313,10 +332,9 @@ function analyzePlacementWarnings(
           // A transparent platform may still be waterlogged; plain glass is only a face proxy.
           && !(id === "lily_pad" && transparentFloor(y - 1))
           && !canSupportBlock(below.name, block.name, dataVersion)) {
-          if (!below.id) issues.missingSupport.add(id);
-          else unsupportedBelow();
+          unsupportedBelow();
         }
-        if (block.falling && !platform && !canSupportBlock(below.name, block.name, dataVersion)) issues.falling.add(id);
+        if (block.falling && !platform && !canSupportBlock(below.name, block.name, dataVersion)) unsupportedBelow("falling");
         if (id === "shelf_mushroom") {
           const [dx, , dz] = FACING[props.get("facing") ?? "north"] ?? FACING.north;
           if (!attached(-dx, 0, -dz)) issues.shelfSupport.add(id);
