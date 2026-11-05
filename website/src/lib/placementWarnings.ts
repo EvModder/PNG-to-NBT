@@ -9,11 +9,11 @@
  * - src/Index.tsx
  */
 import { FRAGILE_SUPPORT_RULES, isFragileBlock, isFallingBlock } from "@/data/blockFragility";
-import { WATER_BASE_INDEX } from "@/data/mapColors";
-import { getLightEmission, isFlammable, isLightTransparent, MELT_LIGHT } from "@/data/blockEnvironment";
+import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
+import { getLightEmission, isFlammable, isLightTransparent, MELT_LIGHT, MUSHROOM_LIGHT_SUPPORTS } from "@/data/blockEnvironment";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
-import { resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
+import { resolveAssignedColorBlock, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
 import { environmentalRole, isGrowthCoverValid } from "./environmentalSupport";
 import { buildFillerAssignmentMap, isCoralSupportValid } from "./fillerRules";
 import { analyzeScaffoldingSupport } from "./shapeAnalysis";
@@ -35,7 +35,7 @@ const WORLD_KINDS = {
 };
 const KINDS = { ...SUPPORT_KINDS, ...WORLD_KINDS };
 type Kind = keyof typeof KINDS;
-type Warning = { kind: Kind; blocks: string[]; invalid: boolean; world: boolean; support?: string; missingPlacements?: number };
+type Warning = { kind: Kind; blocks: string[]; invalid: boolean; world: boolean; support?: string; missingPlacements?: number; canSelectPodzol?: boolean };
 const KIND_ORDER = Object.keys(KINDS) as Kind[];
 type Cold = keyof typeof MELT_LIGHT;
 const NEIGHBORS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -200,10 +200,21 @@ export function getPlacementWarnings(
       combined.set(group, previous ? { ...warning, blocks: [...new Set([...previous.blocks, ...warning.blocks])].sort(),
         invalid: previous.invalid || warning.invalid,
         ...(warning.missingPlacements && { missingPlacements: previous.missingPlacements! + warning.missingPlacements }),
+        canSelectPodzol: previous.canSelectPodzol && warning.canSelectPodzol,
       } : warning);
     }
   }
   const kindGroup = (kind: Kind) => JSON.stringify([kind, undefined]);
+  // Podzol must hold every selected block, so this check stays outside the per-shape cache.
+  const mushroomLight = combined.get(kindGroup("mushroomLight"));
+  if (mushroomLight) {
+    const dataVersion = MINECRAFT_VERSIONS[selections.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION].dataVersion;
+    // The notice lists the bases that allow bright light, not the mushrooms.
+    combined.set(kindGroup("mushroomLight"), { ...mushroomLight, blocks: [...MUSHROOM_LIGHT_SUPPORTS],
+      canSelectPodzol: mushroomLight.canSelectPodzol && [...BASE_COLORS.map((_, id) => ({ id, isCustom: false })),
+        ...selections.customColors.map((_, id) => ({ id, isCustom: true }))]
+        .every(color => canSupportBlock("podzol", resolveAssignedColorBlock(color, selections), dataVersion)) });
+  }
   // A detected hazard displaces its heads-up across selected tiles; fixing it reveals any remaining risk.
   if (combined.has(kindGroup("tntIgnition"))) combined.delete(kindGroup("tnt"));
   if (combined.has(kindGroup("iceMelt"))) combined.delete(kindGroup("meltRisk"));
@@ -228,6 +239,7 @@ function analyzePlacementWarnings(
   const issues = Object.fromEntries(KIND_ORDER.map(kind => [kind, new Set<string>()])) as Record<Kind, Set<string>>;
   const invalidSupports = new Map<string, Set<string>>();
   let missingPlacements = 0;
+  let editableMushroomBases = !crubTech;
   const unsupported = (block: string, support: string) => {
     if (!invalidSupports.has(support)) invalidSupports.set(support, new Set());
     invalidSupports.get(support)!.add(block);
@@ -406,7 +418,15 @@ function analyzePlacementWarnings(
       if (id === "wheat") issues.cropLight.add(id);
       if ((id === "brown_mushroom" || id === "red_mushroom")
         && dataVersion < MINECRAFT_VERSIONS["26.4"].dataVersion
-        && !["mycelium", "podzol", "crimson_nylium", "warped_nylium"].includes(at(x, y - 1, z).id)) issues.mushroomLight.add(id);
+        && !MUSHROOM_LIGHT_SUPPORTS.includes(at(x, y - 1, z).id)) {
+        issues.mushroomLight.add(id);
+        if (editableMushroomBases) {
+          const coordBelow = toShapeCoordKey(x, y - 1, z);
+          const cell = part.cells.get(coordBelow);
+          editableMushroomBases = !(assumeFloor && part.supportFloorYs.has(y - 1)) && !!cell && !isShapeColorCell(cell)
+            && resolveShapeFiller(part, coordBelow, cell, selections, fillers)?.constrainedBlock === id;
+        }
+      }
       // MushroomBlock: spreads unless 5 of its type, itself included, are within x/z +/-4 and y +/-1.
       // Where it can land depends on light and floor blocks outside the schematic, so only density is checked.
       if ((id === "brown_mushroom" || id === "red_mushroom") && !issues.mushroomSpread.has(id)) {
@@ -446,6 +466,8 @@ function analyzePlacementWarnings(
   return [
     ...KIND_ORDER.filter(kind => issues[kind].size).map(kind => ({ kind, blocks: [...issues[kind]].sort(), invalid: KINDS[kind], world: kind in WORLD_KINDS,
       ...(kind === "supportMode" && { missingPlacements }),
+      // Bases are editable here; getPlacementWarnings() checks that podzol can hold the palette.
+      ...(kind === "mushroomLight" && editableMushroomBases && { canSelectPodzol: true }),
     })),
     ...[...invalidSupports].map(([support, blocks]) => ({ kind: "invalidSupport" as const, blocks: [...blocks].sort(), support, invalid: true, world: false })),
   ];

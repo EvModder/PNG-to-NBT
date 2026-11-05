@@ -69,7 +69,7 @@ type PanelImagePreviewProps = {
   onSelectSupport: (block: string) => void;
   autoPickSupports: boolean;
   setAutoPickSupports: (enabled: boolean) => void;
-  placementWarnings: (PreviewWarning & { kind: PlacementWarningKind; world: boolean; suggestSupportModes: boolean })[];
+  placementWarnings: (PreviewWarning & { kind: PlacementWarningKind; world: boolean; suggestSupportModes: boolean; canSelectPodzol?: boolean })[];
   supportModeFix: { select: (mode: SupportMode) => void; fragile: boolean; all: boolean };
   vsFillerWarning: PreviewWarning | null;
   lateFillerWarning: PreviewWarning | null;
@@ -117,7 +117,10 @@ type PanelImagePreviewProps = {
 };
 
 // Shows as many blocks as fit on one line, then +N to expand. A list that cannot show any block collapses to the summary.
-function FittedBlockList({ before, blocks, after, summary, onSelect }: ListedBlocks & { onSelect?: (id: string) => void }) {
+function FittedBlockList({ before, blocks, after, summary, onSelect, selectable }: ListedBlocks & {
+  onSelect?: (id: string) => void;
+  selectable?: readonly string[];
+}) {
   const line = useRef<HTMLSpanElement>(null);
   const probe = useRef<HTMLSpanElement>(null);
   const [count, setCount] = useState(0);
@@ -152,7 +155,7 @@ function FittedBlockList({ before, blocks, after, summary, onSelect }: ListedBlo
     {!expanded && <span aria-hidden="true" className="pointer-events-none invisible absolute inset-0 overflow-hidden">
       <span ref={probe} className="inline-block whitespace-nowrap" />
     </span>}
-    {before}[{blocks.slice(0, visible).map((id, i) => <Fragment key={id}>{i > 0 && ", "}{onSelect
+    {before}[{blocks.slice(0, visible).map((id, i) => <Fragment key={id}>{i > 0 && ", "}{onSelect && (!selectable || selectable.includes(id))
       ? <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => onSelect(id)}>{id}</button> : id}</Fragment>)}
     {visible < blocks.length && <>{visible > 0 && ", "}<button type="button"
       className={`hover:text-foreground ${visible ? "" : "underline underline-offset-2"}`}
@@ -167,6 +170,7 @@ function WarningBanner({
   warningHeadline = false,
   detail,
   listedBlocks,
+  listedChoices,
   supportChoices,
   onSelectSupport,
   children,
@@ -177,6 +181,8 @@ function WarningBanner({
   warningHeadline?: boolean;
   detail?: string;
   listedBlocks?: ListedBlocks;
+  // Listed blocks that select a support when clicked.
+  listedChoices?: readonly string[];
   supportChoices?: readonly string[];
   onSelectSupport?: (block: string) => void;
   children?: ReactNode;
@@ -196,7 +202,8 @@ function WarningBanner({
   return (
     <div className={className} title={detail}>
       <p className={`text-xs font-medium whitespace-pre-line break-words ${textClassName}`}>
-        {listedBlocks ? <FittedBlockList key={text} {...listedBlocks} /> : headlineEnd < 0 ? text : <>
+        {listedBlocks ? <FittedBlockList key={text} {...listedBlocks}
+          onSelect={listedChoices?.length ? onSelectSupport : undefined} selectable={listedChoices} /> : headlineEnd < 0 ? text : <>
           <span className="text-warning-text">{text.slice(0, headlineEnd)}</span>
           {text.slice(headlineEnd)}
         </>}
@@ -644,7 +651,8 @@ export function PanelImagePreview({
           ))}]</>}
         </WarningBanner>)}
         {usesEyeblossoms && <WarningBanner text={messages.preview.eyeblossomWarning} tone="warning" />}
-        {placementWarnings.filter(w => w.world).map(warning => <WarningBanner key={warning.kind} {...warning} tone="warning" />)}
+        {placementWarnings.filter(w => w.world).map(warning => <WarningBanner key={warning.kind} {...warning} tone="warning"
+          listedChoices={warning.canSelectPodzol ? ["podzol"] : undefined} onSelectSupport={onSelectSupport} />)}
         {suppressNorthSouthWarning && <WarningBanner text={suppressNorthSouthWarning} tone="warning" />}
         {liftSupportWarning && <WarningBanner {...liftSupportWarning} tone="muted" />}
         {vsFillerWarning && !vsFillerWarning.invalid && <WarningBanner text={vsFillerWarning.text} tone="notice" />}

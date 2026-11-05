@@ -155,6 +155,7 @@ export function resolveExportBlockName(block: string): string {
 // - src/Index.tsx
 // - src/lib/environmentalSupport.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/shapeModel.ts
 export function resolveAssignedColorBlock(
   color: ColorRef,

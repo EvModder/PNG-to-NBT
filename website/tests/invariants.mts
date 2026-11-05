@@ -34,6 +34,7 @@ import { messages } from "@/lib/messages";
 import { enCatalog } from "@/data/i18n/en";
 import { esCatalog } from "@/data/i18n/es";
 import { normalizeBlockId, resolveExportBlockName, sanitizeUserBlockEntry, toDisplayName, type ColorBlockSelections } from "@/lib/blockId";
+import { MUSHROOM_LIGHT_SUPPORTS } from "@/data/blockEnvironment";
 import { parseShapeCoordKey, resolveShapeBlockName, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
@@ -2980,6 +2981,26 @@ function assertPlacementWarnings(): void {
   assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [4, 3, 0]]), ["brown_mushroom"], "Two blocks up is out of range");
   assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0]], [[4, 1, 0, "red_mushroom"]]), ["brown_mushroom", "red_mushroom"],
     "Other mushroom types do not count");
+  const editable = check([[0, 1, 0, "brown_mushroom"]]).shape;
+  editable.parts[0].cells.set(toShapeCoordKey(0, 0, 0), [FillerRole.SupportFragile]);
+  const lightWarning = (shapes: GeneratedShape[], block: string, floor = false) => getPlacementWarnings(shapes,
+    mushroom.selections, [{ role: FillerRole.SupportFragile, block }], floor, BuildMode.StaircaseGroup).find(w => w.kind === "mushroomLight");
+  assert(lightWarning([editable], "dirt")!.canSelectPodzol);
+  assert.deepEqual(lightWarning([editable], "dirt")!.blocks, ["podzol", "mycelium", "crimson_nylium", "warped_nylium"], "The notice lists bright-light bases");
+  assert.equal(messages.preview.placementWarning("mushroomLight", MUSHROOM_LIGHT_SUPPORTS).text,
+    "Mushrooms need light ≤ 12 unless on [podzol, mycelium, crimson_nylium, warped_nylium]");
+  for (const base of ["podzol", "mycelium", "crimson_nylium", "warped_nylium"]) assert.equal(lightWarning([editable], base), undefined);
+  assert(!lightWarning([editable], "dirt", true)!.canSelectPodzol, "Never offer to replace an assumed floor");
+  for (const shapes of [[editable, mushroom.shape], [mushroom.shape, editable]])
+    assert(!lightWarning(shapes, "dirt")!.canSelectPodzol, "A fixed color block in either tile needs manual advice");
+  for (const palette of [
+    { ...mushroom.selections, selectedBlocks: { ...mushroom.selections.selectedBlocks, 18: "wheat[age=7]" } },
+    { ...mushroom.selections, customColors: [{ name: "custom", r: 1, g: 2, b: 3, blocks: ["lily_pad"] }] },
+  ]) {
+    const warning = getPlacementWarnings([editable], palette, [{ role: FillerRole.SupportFragile, block: "dirt" }],
+      false, BuildMode.StaircaseGroup).find(w => w.kind === "mushroomLight");
+    assert(warning && !warning.canSelectPodzol, "An incompatible preset selection disables the podzol action even when absent from the tile");
+  }
   assert.deepEqual(getPlacementWarnings([mushroom.shape], { ...mushroom.selections, minecraftVersion: "26.4" }, [], false,
     BuildMode.StaircaseGroup).map(w => w.kind), ["mushroomSpread"], "26.4 mushrooms allow center support and no longer need low light");
   const cutoff = MINECRAFT_VERSIONS["26.4"].dataVersion;

@@ -5,6 +5,7 @@
  *
  * Public API:
  * - MELT_LIGHT
+ * - MUSHROOM_LIGHT_SUPPORTS
  * - getLightEmission()
  * - isLightTransparent()
  * - isFlammable()
@@ -15,6 +16,7 @@
 
 // Lowest block light, at the block's own position, that melts it.
 export const MELT_LIGHT = { ice: 11, snow: 12 };
+export const MUSHROOM_LIGHT_SUPPORTS = ["podzol", "mycelium", "crimson_nylium", "warped_nylium"];
 
 const LIGHT_LEVELS: Record<string, number> = {
   glowstone: 15, sea_lantern: 15, shroomlight: 15, ochre_froglight: 15, pearlescent_froglight: 15,

@@ -358,7 +358,7 @@ export const enCatalog = {
       snowRisk: "Snow needs block light level 11 or lower",
       iceSnowRisk: "Ice/snow needs block light level 10 or lower",
       cropLight: "Wheat needs light level 8 or higher",
-      mushroomLight: "Mushrooms need light level 12 or lower unless on podzol, mycelium or nylium",
+      mushroomLight: "Mushrooms need light ≤ 12 unless on {blocks}",
       mushroomSpread: "Mushrooms can spread onto nearby blocks",
       frostedIce: "Frosted ice is temporary and can melt",
       growthCover: "Growing plants' covers should be placed first",

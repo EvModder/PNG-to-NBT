@@ -133,6 +133,7 @@ export const WATER_BASE_INDEX = 12;
 // - src/lib/generationPolicy.ts
 // - src/lib/minecraftVersion.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/placementWarnings.ts
 // - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts
 // - src/utils/color.ts

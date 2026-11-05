@@ -354,7 +354,7 @@ export const esCatalog = {
       snowRisk: "La nieve necesita luz de bloque 11 o menos",
       iceSnowRisk: "El hielo/la nieve necesita luz de bloque 10 o menos",
       cropLight: "El trigo necesita un nivel de luz de 8 o más",
-      mushroomLight: "Los hongos necesitan nivel de luz 12 o menos salvo sobre podzol, micelio o necelio",
+      mushroomLight: "Los hongos necesitan luz ≤ 12 salvo sobre {blocks}",
       mushroomSpread: "Los hongos pueden extenderse a bloques cercanos",
       frostedIce: "El hielo escarchado es temporal y puede derretirse",
       growthCover: "Coloca primero las cubiertas de las plantas",
