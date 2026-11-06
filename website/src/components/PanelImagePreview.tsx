@@ -18,6 +18,7 @@ import {
   DESTRUCTIVE_SWATCH_SIZED_ICON_BUTTON_CLASS,
   MUTED_INLINE_TOGGLE_CONTROL_CLASS,
   PANEL_TITLE_TEXT_CLASS,
+  PREVIEW_WARNING_FRAME_CLASS,
 } from "@/data/uiClasses";
 
 type PreviewWarning = {
@@ -117,7 +118,7 @@ function WarningBanner({
     tone === "error"
       ? "mt-2 bg-destructive/25 border-2 border-destructive/50 rounded p-2"
       : tone === "warning"
-        ? "mt-2 bg-warning/20 border-2 border-warning/40 rounded p-2"
+        ? `mt-2 rounded p-2 ${PREVIEW_WARNING_FRAME_CLASS}`
         : "mt-2 bg-muted/30 border border-border rounded p-2";
   const textClassName =
     tone === "muted"
@@ -183,12 +184,6 @@ const RESIZE_NOTICE_DETAIL_KINDS: Partial<Record<PaletteNoticeKind, PaletteNotic
   [PaletteNoticeKind.PaddedImage]: PaletteNoticeKind.PaddedImageAddedPixels,
 };
 
-function getPaletteNoticeGroupContainerTone(notices: readonly PaletteNotice[]): "info" | "warning" | "error" {
-  const firstKind = notices[0]?.kind;
-  if (firstKind !== undefined && firstKind in RESIZE_NOTICE_DETAIL_KINDS) return "warning";
-  return messages.parsing.bannerTone([...notices]);
-}
-
 function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteNoticeGroup[] {
   const groups: PaletteNoticeGroup[] = [];
   let currentNonResizeGroup: PaletteNotice[] = [];
@@ -197,7 +192,7 @@ function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteN
     if (currentNonResizeGroup.length === 0) return;
     groups.push({
       notices: currentNonResizeGroup,
-      containerTone: getPaletteNoticeGroupContainerTone(currentNonResizeGroup),
+      containerTone: messages.parsing.bannerTone(currentNonResizeGroup),
     });
     currentNonResizeGroup = [];
   };
@@ -210,14 +205,11 @@ function groupPaletteNotices(paletteNotices: readonly PaletteNotice[]): PaletteN
       continue;
     }
     const detailKind = notice ? RESIZE_NOTICE_DETAIL_KINDS[notice.kind] : undefined;
-    if (detailKind !== undefined && paletteNotices[index + 1]?.kind === detailKind) {
+    if (detailKind !== undefined) {
       flushCurrentNonResizeGroup();
-      const notices = [notice, paletteNotices[index + 1]];
-      groups.push({
-        notices,
-        containerTone: getPaletteNoticeGroupContainerTone(notices),
-      });
-      ++index;
+      const notices: PaletteNotice[] = [notice];
+      if (paletteNotices[index + 1]?.kind === detailKind) notices.push(paletteNotices[++index]);
+      groups.push({ notices, containerTone: "warning" });
       continue;
     }
 
@@ -501,7 +493,7 @@ export function PanelImagePreview({
             group.containerTone === "error"
               ? "bg-destructive/25 border-2 border-destructive/50"
               : group.containerTone === "warning"
-                ? "bg-warning/20 border-2 border-warning/40"
+                ? PREVIEW_WARNING_FRAME_CLASS
                 : "bg-primary/10 border-2 border-primary/30"
           }`}
         >

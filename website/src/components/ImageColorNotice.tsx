@@ -7,6 +7,7 @@
  * - src/components/PanelImagePreview.tsx
  */
 import { Fragment } from "react";
+import { PREVIEW_WARNING_FRAME_CLASS } from "@/data/uiClasses";
 import { INVALID_COLORS_PALETTE_OPTIONS, type InvalidColorsPalette } from "@/data/defaultSettings";
 import { PaletteNoticeKind, messages, type PaletteNotice } from "@/lib/messages";
 import type { InputPaletteEquivalence } from "@/lib/colorGridParsingCore";
@@ -75,9 +76,9 @@ export function ImageColorNotice({
   ));
 
   return (
-    <div className={`mt-2 rounded p-2 border-2 ${blocking
-      ? "bg-destructive/25 border-destructive/50"
-      : "bg-warning/20 border-warning/40"}`}>
+    <div className={`mt-2 rounded p-2 ${blocking
+      ? "bg-destructive/25 border-2 border-destructive/50"
+      : PREVIEW_WARNING_FRAME_CLASS}`}>
       <p className={`text-xs font-medium whitespace-pre-wrap ${unsupported || !converted ? "text-destructive-text" : "text-warning-text"}`}>
         {headlineText.replace(/\.$/, "")}
         {!unsupported && actions && (

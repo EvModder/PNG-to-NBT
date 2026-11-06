@@ -10,11 +10,13 @@
  * - ACCENT_SMALL_LABEL_TEXT_CLASS
  * - MUTED_INLINE_TOGGLE_CONTROL_CLASS
  * - PANEL_TITLE_TEXT_CLASS
+ * - PREVIEW_WARNING_FRAME_CLASS
  *
  * Callers:
  * - src/components/ToolbarPresetSettings.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/components/PanelImagePreview.tsx
+ * - src/components/ImageColorNotice.tsx
  * - src/components/PanelCustomColors.tsx
  * - src/components/SecretsSettingsDialog.tsx
  * - src/components/PresetFallbackDialog.tsx
@@ -22,6 +24,11 @@
  * - src/components/PanelCredits.tsx
  * - src/components/PanelColorBlockTable.tsx
  */
+
+// Callers:
+// - src/components/ImageColorNotice.tsx
+// - src/components/PanelImagePreview.tsx
+export const PREVIEW_WARNING_FRAME_CLASS = "bg-warning/20 border-2 border-warning/40";
 
 const SWATCH_SIZED_ICON_BUTTON_BASE_CLASS =
   "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border";

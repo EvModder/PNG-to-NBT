@@ -507,8 +507,8 @@ export const enCatalog = {
     minecraftMapPalette: "the Minecraft map palette",
     flatColorsPalette: "Flat",
     conversionSummary: {
-      one: "Mapped {convertedCount} color to {palette}",
-      other: "Mapped {convertedCount} colors to {palette}",
+      one: "Converted {convertedCount} color to {palette}",
+      other: "Converted {convertedCount} colors to {palette}",
     } as PluralForms,
     upscaledImage: "Upscaled by {factor}× ({width}×{height} → {outputWidth}×{outputHeight}).",
     downscaledImage: "Downscaled by {factor}× ({width}×{height} → {outputWidth}×{outputHeight}).",
