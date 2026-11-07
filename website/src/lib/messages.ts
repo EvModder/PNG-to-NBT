@@ -252,6 +252,7 @@ export type PaletteNotice =
 // - src/components/PanelCredits.tsx
 // - src/components/PanelCustomColors.tsx
 // - src/components/PanelImagePreview.tsx
+// - src/components/PresetFallbackDialog.tsx
 // - src/components/SecretsSettingsDialog.tsx
 // - src/components/ToolbarBuildSettings.tsx
 // - src/components/ToolbarFillerSettings.tsx
@@ -259,7 +260,6 @@ export type PaletteNotice =
 // - src/lib/colorGridParsing.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/tileParsing.worker.ts
-// - src/components/PresetFallbackDialog.tsx
 export const messages = {
   locale: catalog.locale,
   common: catalog.common,

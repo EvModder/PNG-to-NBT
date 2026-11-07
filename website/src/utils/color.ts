@@ -11,7 +11,6 @@
  * - getHue()
  *
  * Callers:
- * - src/lib/tileGeometryWorkerClient.ts
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
@@ -27,19 +26,20 @@
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
+ * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/suppressSteps.ts
+ * - src/lib/tileGeometryWorkerClient.ts
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/utils/colorGridKey.ts
- * - src/lib/suppressClearance.ts
  */
 import { BASE_COLORS, SHADE_MULTIPLIERS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
 import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRef } from "@/types/color";
 
 // Callers:
-// - src/components/PreviewCanvas.tsx
 // - src/Index.tsx
+// - src/components/PreviewCanvas.tsx
 // - src/lib/codecColorGrid.ts
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsing.ts
@@ -51,12 +51,12 @@ import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRe
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
+// - src/lib/suppressClearance.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
 // - src/lib/tileParsing.worker.ts
 // - src/lib/tileParsingWorkerClient.ts
 // - src/utils/colorGridKey.ts
-// - src/lib/suppressClearance.ts
 export const MAP_SIZE = 128;
 
 // Callers:
@@ -87,8 +87,8 @@ export function isWaterColor(color: ShadedColorRef): boolean {
 }
 
 // Callers:
-// - src/lib/colorGridParsingCore.ts
 // - src/lib/colorGridParsing.ts
+// - src/lib/colorGridParsingCore.ts
 export function packRgb(r: number, g: number, b: number): number {
   return (r << 16) | (g << 8) | b;
 }
@@ -108,8 +108,8 @@ function resolveColorRgb(
 }
 
 // Callers:
-// - src/components/PanelCustomColors.tsx
 // - src/components/PanelColorBlockTable.tsx
+// - src/components/PanelCustomColors.tsx
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/previewImageEdits.ts
 export function getShadedRgb(

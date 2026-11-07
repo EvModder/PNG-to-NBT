@@ -11,8 +11,8 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/components/PreviewCanvas.tsx
  * - src/components/PanelImagePreview.tsx
+ * - src/components/PreviewCanvas.tsx
  */
 import { useMemo } from "react";
 import { BASE_COLORS, TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
@@ -32,8 +32,8 @@ import { isSuppressStepsBuildMode } from "@/utils/conversion";
 import type { ParsedColorGridTile } from "@/lib/colorGridParsing";
 
 // Callers:
-// - src/components/PreviewCanvas.tsx
 // - src/components/PanelImagePreview.tsx
+// - src/components/PreviewCanvas.tsx
 export interface PreviewPixelReplacement {
   x: number;
   z: number;
@@ -43,8 +43,8 @@ export interface PreviewPixelReplacement {
 }
 
 // Callers:
-// - src/components/PreviewCanvas.tsx
 // - src/components/PanelImagePreview.tsx
+// - src/components/PreviewCanvas.tsx
 export type PreviewPixelMask = Uint8Array;
 
 const BLOCK_BASE_COLOR_INDEX = new Map(Object.keys(MINECRAFT_VERSIONS).map(key => {

@@ -7,7 +7,6 @@
  * - BASE_COLORS
  *
  * Callers:
- * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
@@ -21,6 +20,7 @@
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/fillerRules.ts
+ * - src/lib/generationPolicy.ts
  * - src/lib/minecraftVersion.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
@@ -104,15 +104,15 @@ export const TRANSPARENCY_BASE_INDEX = 0;
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
+// - src/lib/colorGridAnalysis.ts
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/generationPolicy.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/suppressLoadMarkers.ts
-// - src/lib/mixedStepHeights.ts
 // - src/utils/color.ts
-// - src/lib/colorGridAnalysis.ts
-// - src/lib/generationPolicy.ts
-// - src/lib/previewImageEdits.ts
 export const WATER_BASE_INDEX = 12;
 
 // 62 base colors (index 0 = transparent/NONE)
@@ -128,14 +128,14 @@ export const WATER_BASE_INDEX = 12;
 // - src/lib/codecPreset.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/fillerRules.ts
-// - src/lib/mixedStepHeights.ts
 // - src/lib/generationPolicy.ts
+// - src/lib/minecraftVersion.ts
+// - src/lib/mixedStepHeights.ts
 // - src/lib/presetFallbacks.ts
 // - src/lib/previewImageEdits.ts
 // - src/utils/color.ts
 // - src/utils/colorTableLayout.ts
 // - src/utils/customColors.ts
-// - src/lib/minecraftVersion.ts
 // Latest catalog (26.4 Snapshot 5); lib/minecraftVersion.ts derives older catalogs without changing these colors.
 // Shared preset URLs use alphabetical indices filtered to their Minecraft DataVersion.
 // Register new-version blocks in BLOCK_INTRODUCTIONS before adding them here.

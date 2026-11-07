@@ -12,8 +12,8 @@
  * - aggregateOverrideCounts()
  *
  * Callers:
- * - src/lib/generationPolicy.ts
  * - src/Index.tsx
+ * - src/lib/generationPolicy.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysisCache.ts
  * - src/lib/suppressLoadMarkers.ts

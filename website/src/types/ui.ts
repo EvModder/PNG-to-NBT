@@ -7,7 +7,6 @@
  * - SortDir
  *
  * Callers:
- * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
  * - src/components/PanelCustomColors.tsx
@@ -17,6 +16,7 @@
  * - src/data/i18n/es.ts
  * - src/lib/codecPreset.ts
  * - src/lib/fillerRules.ts
+ * - src/lib/generationPolicy.ts
  * - src/lib/messages.ts
  * - src/lib/mixedStepHeights.ts
  */
@@ -29,9 +29,9 @@
 // - src/data/i18n/es.ts
 // - src/lib/codecPreset.ts
 // - src/lib/fillerRules.ts
+// - src/lib/generationPolicy.ts
 // - src/lib/messages.ts
 // - src/lib/mixedStepHeights.ts
-// - src/lib/generationPolicy.ts
 export enum SupportMode {
   None = "none",
   All = "all",
@@ -61,15 +61,15 @@ export type ColumnId = "clr" | "id" | "name" | "block" | "options" | "required";
 export type BlockDisplayMode = "names" | "textures";
 
 // Callers:
-// - src/data/defaultSettings.ts
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/PanelCustomColors.tsx
+// - src/data/defaultSettings.ts
 export type SortKey = "default" | "name" | "options" | "color" | "id" | "required";
 
 // Callers:
-// - src/data/defaultSettings.ts
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx
 // - src/components/PanelCustomColors.tsx
+// - src/data/defaultSettings.ts
 export type SortDir = "asc" | "desc";

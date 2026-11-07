@@ -21,13 +21,13 @@
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
 // Callers:
 // - src/Index.tsx
-// - src/components/SecretsSettingsDialog.tsx
-// - src/lib/minecraftVersion.ts
 // - src/components/PanelColorBlockTable.tsx
-// - src/lib/presetFallbacks.ts
-// - src/lib/nbtExport.ts
-// - src/lib/previewImageEdits.ts
+// - src/components/SecretsSettingsDialog.tsx
 // - src/lib/codecPreset.ts
+// - src/lib/minecraftVersion.ts
+// - src/lib/nbtExport.ts
+// - src/lib/presetFallbacks.ts
+// - src/lib/previewImageEdits.ts
 export const MINECRAFT_VERSIONS = {
   "1.21.4": { label: "1.21.4", dataVersion: 4189 },
   "1.21.5": { label: "1.21.5–1.21.8", dataVersion: 4440 },

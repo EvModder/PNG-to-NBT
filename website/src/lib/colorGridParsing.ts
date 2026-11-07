@@ -12,8 +12,8 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/previewImageEdits.ts
  * - src/components/PanelImagePreview.tsx
+ * - src/lib/previewImageEdits.ts
  */
 import type { InvalidDimensionsMode } from "@/data/defaultSettings";
 import { messages, PaletteNoticeKind, type PaletteNotice } from "@/lib/messages";

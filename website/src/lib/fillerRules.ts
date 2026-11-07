@@ -247,9 +247,9 @@ export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/shapeAnalysis.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
+// - src/lib/shapeAnalysis.ts
 export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[]): Map<FillerRole, string> {
   const byRole = new Map<FillerRole, string>();
   for (const assignment of assignments) {

@@ -4,8 +4,8 @@
  * - measureToolbarWidths()
  *
  * Callers:
- * - src/components/PanelColorBlockTable.tsx
  * - src/Index.tsx
+ * - src/components/PanelColorBlockTable.tsx
  */
 // Callers:
 // - src/components/PanelColorBlockTable.tsx

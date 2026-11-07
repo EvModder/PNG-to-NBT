@@ -94,8 +94,8 @@ export interface ColorBlockSelections {
 // Callers:
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
-// - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeModel.ts
+// - src/lib/suppressLoadMarkers.ts
 export function resolveExportBlockName(block: string): string {
   const bracketIdx = block.indexOf("[");
   const name = bracketIdx < 0 ? block : block.slice(0, bracketIdx);

@@ -17,16 +17,16 @@
  * - aggregateDerivedImageStats()
  *
  * Callers:
- * - src/lib/generationPolicy.ts
- * - src/lib/tileGeometry.ts
  * - src/Index.tsx
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
+ * - src/lib/generationPolicy.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/suppressSteps.ts
- * - src/lib/tileGeometryWorkerTypes.ts
+ * - src/lib/tileGeometry.ts
  * - src/lib/tileGeometryWorkerClient.ts
+ * - src/lib/tileGeometryWorkerTypes.ts
  * - src/lib/tileParsingWorkerTypes.ts
  */
 import { TRANSPARENCY_BASE_INDEX, WATER_BASE_INDEX } from "@/data/mapColors";
@@ -38,8 +38,8 @@ import { isSuppressStepsBuildMode } from "@/utils/conversion";
 
 // Callers:
 // - src/lib/colorGridParsingCore.ts
-// - src/lib/suppressLoadMarkers.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
 export enum PixelParity {
   Recessive = "recessive",
@@ -47,9 +47,9 @@ export enum PixelParity {
 }
 
 // Callers:
+// - src/lib/generationPolicy.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
-// - src/lib/generationPolicy.ts
 export type WaterDrops = readonly [dark: number, flat: number, light: number];
 
 // Callers:
@@ -81,10 +81,10 @@ type VoidShadowSummary = {
 // Callers:
 // - src/Index.tsx
 // - src/lib/colorGridParsingCore.ts
-// - src/lib/tileGeometryWorkerTypes.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/tileGeometry.ts
 // - src/lib/tileGeometryWorkerClient.ts
+// - src/lib/tileGeometryWorkerTypes.ts
 export enum FlatModeBehavior {
   None = "none",
   Plain = "plain",

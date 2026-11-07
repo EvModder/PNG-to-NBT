@@ -4,9 +4,9 @@
  * - isFragileBlock()
  *
  * Callers:
- * - src/lib/fillerRules.ts
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/shapeModel.ts
  *
@@ -181,9 +181,9 @@ function getBaseBlockId(blockId: string): string {
 // Callers:
 // - src/Index.tsx
 // - src/components/ToolbarFillerSettings.tsx
+// - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeModel.ts
-// - src/lib/fillerRules.ts
 export function isFragileBlock(blockId: string): boolean {
   return FRAGILE_BLOCKS.has(getBaseBlockId(blockId));
 }

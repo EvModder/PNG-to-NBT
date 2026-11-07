@@ -15,10 +15,10 @@
  * - cycleSuppressStepDirection()
  *
  * Callers:
- * - src/lib/generationPolicy.ts
  * - src/Index.tsx
  * - src/components/ToolbarBuildSettings.tsx
  * - src/lib/colorGridAnalysis.ts
+ * - src/lib/generationPolicy.ts
  * - src/lib/messages.ts
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
@@ -134,11 +134,11 @@ export function isSuppressBuildMode(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/components/ToolbarBuildSettings.tsx
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerClient.ts
-// - src/components/ToolbarBuildSettings.tsx
 export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.SuppressStepPairs:
@@ -153,10 +153,10 @@ export function isSuppressStepsBuildMode(buildMode: BuildMode): boolean {
 // - src/Index.tsx
 // - src/components/ToolbarBuildSettings.tsx
 // - src/lib/messages.ts
-// - src/lib/shapeGeneration.ts
-// - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/nbtExport.ts
+// - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
+// - src/lib/tileGeometryWorkerClient.ts
 export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Suppress2Layer:
@@ -170,9 +170,9 @@ export function buildModeUsesLayerGap(buildMode: BuildMode): boolean {
 
 // Callers:
 // - src/Index.tsx
+// - src/lib/generationPolicy.ts
 // - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
-// - src/lib/generationPolicy.ts
 export function isCrubTechBuildMode(buildMode: BuildMode): boolean {
   switch (buildMode) {
     case BuildMode.Suppress2Layer:

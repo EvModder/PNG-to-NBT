@@ -13,16 +13,16 @@
  * - PREVIEW_WARNING_FRAME_CLASS
  *
  * Callers:
- * - src/components/ToolbarPresetSettings.tsx
- * - src/components/ToolbarBuildSettings.tsx
- * - src/components/PanelImagePreview.tsx
  * - src/components/ImageColorNotice.tsx
- * - src/components/PanelCustomColors.tsx
- * - src/components/SecretsSettingsDialog.tsx
- * - src/components/PresetFallbackDialog.tsx
- * - src/components/ToolbarFillerSettings.tsx
- * - src/components/PanelCredits.tsx
  * - src/components/PanelColorBlockTable.tsx
+ * - src/components/PanelCredits.tsx
+ * - src/components/PanelCustomColors.tsx
+ * - src/components/PanelImagePreview.tsx
+ * - src/components/PresetFallbackDialog.tsx
+ * - src/components/SecretsSettingsDialog.tsx
+ * - src/components/ToolbarBuildSettings.tsx
+ * - src/components/ToolbarFillerSettings.tsx
+ * - src/components/ToolbarPresetSettings.tsx
  */
 
 // Callers:
@@ -43,15 +43,15 @@ const SQUARE_ICON_BUTTON_BASE_CLASS =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border";
 
 // Callers:
-// - src/components/ToolbarPresetSettings.tsx
-// - src/components/SecretsSettingsDialog.tsx
 // - src/components/PresetFallbackDialog.tsx
+// - src/components/SecretsSettingsDialog.tsx
+// - src/components/ToolbarPresetSettings.tsx
 export const MUTED_SQUARE_ICON_BUTTON_CLASS =
   `${SQUARE_ICON_BUTTON_BASE_CLASS} border-border text-muted-foreground hover:text-foreground hover:border-primary/60`;
 
 // Callers:
-// - src/components/ToolbarPresetSettings.tsx
 // - src/components/PanelCustomColors.tsx
+// - src/components/ToolbarPresetSettings.tsx
 export const PRIMARY_SQUARE_ICON_BUTTON_CLASS =
   `${SQUARE_ICON_BUTTON_BASE_CLASS} border-primary text-primary hover:bg-primary/20`;
 
@@ -68,10 +68,10 @@ export const INPUT_SQUARE_ICON_BUTTON_CLASS =
 const SMALL_LABEL_TEXT_CLASS = "text-xs font-semibold leading-none whitespace-nowrap";
 
 // Callers:
-// - src/components/ToolbarPresetSettings.tsx
+// - src/components/PanelCredits.tsx
 // - src/components/ToolbarBuildSettings.tsx
 // - src/components/ToolbarFillerSettings.tsx
-// - src/components/PanelCredits.tsx
+// - src/components/ToolbarPresetSettings.tsx
 export const ACCENT_SMALL_LABEL_TEXT_CLASS = `${SMALL_LABEL_TEXT_CLASS} text-accent`;
 
 // Callers:
@@ -82,8 +82,8 @@ export const MUTED_INLINE_TOGGLE_CONTROL_CLASS =
 
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
-// - src/components/PanelImagePreview.tsx
 // - src/components/PanelCustomColors.tsx
-// - src/components/SecretsSettingsDialog.tsx
+// - src/components/PanelImagePreview.tsx
 // - src/components/PresetFallbackDialog.tsx
+// - src/components/SecretsSettingsDialog.tsx
 export const PANEL_TITLE_TEXT_CLASS = "text-sm font-semibold leading-none text-accent";

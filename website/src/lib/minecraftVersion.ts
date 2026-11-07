@@ -9,11 +9,11 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx
- * - src/lib/nbtExport.ts
- * - src/lib/codecPreset.ts
- * - src/lib/previewImageEdits.ts
- * - src/lib/presetFallbacks.ts
  * - src/components/PresetFallbackDialog.tsx
+ * - src/lib/codecPreset.ts
+ * - src/lib/nbtExport.ts
+ * - src/lib/presetFallbacks.ts
+ * - src/lib/previewImageEdits.ts
  */
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { BASE_COLORS } from "@/data/mapColors";
@@ -71,8 +71,8 @@ const catalogs = new Map<number, ReturnType<typeof buildCatalog>>(Object.values(
 // Shared URLs can refer to versions no longer in the dropdown.
 // Callers:
 // - src/components/PanelColorBlockTable.tsx
-// - src/lib/previewImageEdits.ts
 // - src/lib/codecPreset.ts
+// - src/lib/previewImageEdits.ts
 export function getMinecraftCatalog(dataVersion: number = MINECRAFT_VERSIONS[DEFAULT_MINECRAFT_VERSION].dataVersion) {
   return catalogs.get(dataVersion) ?? buildCatalog(dataVersion);
 }

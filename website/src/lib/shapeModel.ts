@@ -26,8 +26,8 @@ import { MAP_SIZE } from "@/utils/color";
 import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
 
 // Callers:
-// - src/lib/shapeAnalysis.ts
 // - src/lib/nbtExport.ts
+// - src/lib/shapeAnalysis.ts
 export function resolveShapeFiller(
   part: ShapePart,
   coord: number,

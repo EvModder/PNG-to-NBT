@@ -61,8 +61,8 @@ export interface GeneratedShape {
 }
 
 // Callers:
-// - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/shapeModel.ts
 export type ShapeCell = ShapeColorRef | FillerRole[];
 
 // Callers:
@@ -75,16 +75,16 @@ export type ShapeCell = ShapeColorRef | FillerRole[];
 export type ShapeColorRef = ColorRef & { fillerRole?: FillerRole };
 
 // Callers:
-// - src/lib/shapeModel.ts
 // - src/lib/shapeGeneration.ts
+// - src/lib/shapeModel.ts
 export type ShapeCoordKey = number;
 
 // Callers:
-// - src/lib/suppressLoadMarkers.ts
-// - src/lib/shapeAnalysis.ts
-// - src/lib/shapeModel.ts
-// - src/lib/shapeGeneration.ts
 // - src/lib/nbtExport.ts
+// - src/lib/shapeAnalysis.ts
+// - src/lib/shapeGeneration.ts
+// - src/lib/shapeModel.ts
+// - src/lib/suppressLoadMarkers.ts
 export interface ShapePart {
   // Original phase index, unaffected by skipped empty steps or a water-preview part.
   suppressStepIndex?: number;
