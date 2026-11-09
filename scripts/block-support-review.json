@@ -1,0 +1,311 @@
+{
+  "target": {
+    "version": "26.4",
+    "label": "26.4.s5",
+    "dataVersion": 5125,
+    "catalogHash": "b942972c3d06427648dc9de66980ae74dba889ab45b10c64061aa27d401bca9c",
+    "policyHash": "ed64c806230497f6c44b6afafb6b92327b96440cb4d4efcc24167980200de63a"
+  },
+  "implementations": [
+    {
+      "kind": "independent",
+      "classes": [
+        "Block",
+        "BlockBehaviour"
+      ],
+      "note": "Default behavior has no substrate requirement; gravity is checked independently. Overrides/new implementations require review."
+    },
+    {
+      "kind": "independent",
+      "classes": [
+        "AbstractFurnaceBlock",
+        "AnvilBlock",
+        "BarrelBlock",
+        "BarrierBlock",
+        "BeehiveBlock",
+        "CalibratedSculkSensorBlock",
+        "CampfireBlock",
+        "CarvedPumpkinBlock",
+        "ChainBlock",
+        "ChestBlock",
+        "ChiseledBookShelfBlock",
+        "CommandBlock",
+        "ConcretePowderBlock",
+        "ConduitBlock",
+        "CopperChestBlock",
+        "CopperGolemStatueBlock",
+        "CoralBlock",
+        "CrafterBlock",
+        "CreakingHeartBlock",
+        "DecoratedPotBlock",
+        "DispenserBlock",
+        "DriedGhastBlock",
+        "EndPortalFrameBlock",
+        "EndRodBlock",
+        "EnderChestBlock",
+        "FenceBlock",
+        "FenceGateBlock",
+        "FlowerBedBlock",
+        "GlazedTerracottaBlock",
+        "HeavyCoreBlock",
+        "HopperBlock",
+        "HugeMushroomBlock",
+        "InfestedRotatedPillarBlock",
+        "IronBarsBlock",
+        "JigsawBlock",
+        "JukeboxBlock",
+        "LeavesBlock",
+        "LecternBlock",
+        "LightningRodBlock",
+        "LoomBlock",
+        "MangroveRootsBlock",
+        "NoteBlock",
+        "ObserverBlock",
+        "PistonBaseBlock",
+        "PotentSulfurBlock",
+        "RedstoneLampBlock",
+        "RotatedPillarBlock",
+        "SculkSensorBlock",
+        "SculkShriekerBlock",
+        "ShelfBlock",
+        "ShulkerBoxBlock",
+        "SkullBlock",
+        "SlabBlock",
+        "SnowyBlock",
+        "StairBlock",
+        "StonecutterBlock",
+        "TestBlock",
+        "TripWireBlock",
+        "TurtleEggBlock",
+        "VaultBlock",
+        "WallBlock",
+        "WallSkullBlock",
+        "WaterloggedTransparentBlock"
+      ],
+      "note": "Placement overrides handle orientation, connections, waterlogging, replacement or effects, not required supporting substrates. Gravity and separate environmental hazards still apply."
+    },
+    {
+      "kind": "ground",
+      "classes": [
+        "AbstractCrystalClusterBlock",
+        "BambooSaplingBlock",
+        "BannerBlock",
+        "BaseCoralPlantTypeBlock",
+        "BasePressurePlateBlock",
+        "BaseRailBlock",
+        "BaseTorchBlock",
+        "BellBlock",
+        "BigDripleafBlock",
+        "CakeBlock",
+        "CandleBlock",
+        "CandleCakeBlock",
+        "CarpetBlock",
+        "CropBlock",
+        "DiodeBlock",
+        "FaceAttachedHorizontalDirectionalBlock",
+        "IcicleBlock",
+        "LanternBlock",
+        "LeafLitterBlock",
+        "MangrovePropaguleBlock",
+        "MossyCarpetBlock",
+        "MultifaceBlock",
+        "MushroomBlock",
+        "RedstoneWireBlock",
+        "RepeaterBlock",
+        "ScaffoldingBlock",
+        "SeaPickleBlock",
+        "SnowLayerBlock",
+        "SpeleothemBlock",
+        "StandingSignBlock",
+        "VegetationBlock"
+      ],
+      "note": "Each block must be classified as requiring support, or explicitly omitted by ID. Only supported floor-facing states can use generated supports; attachments, fluids, light and scaffolding connectivity also need geometry/environment checks."
+    },
+    {
+      "kind": "context",
+      "classes": [
+        "BaseCoralWallFanBlock",
+        "CeilingHangingSignBlock",
+        "CocoaBlock",
+        "HangingMossBlock",
+        "HangingRootsBlock",
+        "LadderBlock",
+        "RedstoneWallTorchBlock",
+        "SporeBlossomBlock",
+        "TripWireHookBlock",
+        "VineBlock",
+        "WallBannerBlock",
+        "WallHangingSignBlock",
+        "WallSignBlock",
+        "WallTorchBlock"
+      ],
+      "note": "Custom-only side/ceiling attachments are not supported by the below-support generator. Their full neighborhood/state validation is intentionally omitted. Do not treat this as proof of survival."
+    },
+    {
+      "kind": "context",
+      "classes": [
+        "AbstractBedBlock",
+        "DoorBlock",
+        "DoublePlantBlock",
+        "PitcherCropBlock",
+        "SmallDripleafBlock",
+        "TallSeagrassBlock"
+      ],
+      "note": "Excluded compound blocks need matching halves, space and possibly water/soil. Arbitrary custom halves are not fully validated or generated."
+    },
+    {
+      "kind": "context",
+      "classes": [
+        "BambooStalkBlock",
+        "BigDripleafStemBlock",
+        "GrowingPlantBlock",
+        "GrowingPlantHeadBlock",
+        "KelpBlock",
+        "SeagrassBlock"
+      ],
+      "note": "Excluded plant segments and hanging/underwater plants have chain, fluid or side requirements beyond a below-only pair. Catalog twisting_vines heads retain their dedicated rule."
+    },
+    {
+      "kind": "context",
+      "classes": [
+        "BaseFireBlock",
+        "BubbleColumnBlock",
+        "CactusBlock",
+        "ChorusFlowerBlock",
+        "ChorusPlantBlock",
+        "FarmlandBlock",
+        "FireBlock",
+        "FrogspawnBlock",
+        "GrindstoneBlock",
+        "PathBlock",
+        "PistonHeadBlock",
+        "ShelfMushroomBlock",
+        "SoulFireBlock",
+        "SugarCaneBlock",
+        "TrapDoorBlock"
+      ],
+      "note": "Special geometry/environment cases: chorus branches/air, ceiling clearance, neighbor ignition, water, side attachments, matching pistons or placement-only constraints. Known catalog cases use dedicated checks; excluded custom cases are not a full world simulation."
+    }
+  ],
+  "omitted": {
+    "attached_melon_stem": "Excluded fruit/stem pairing and growth; custom placement is not fully validated.",
+    "attached_pumpkin_stem": "Excluded fruit/stem pairing and growth; custom placement is not fully validated.",
+    "melon_stem": "Excluded fruit growth and farmland requirements are not modeled for custom stems.",
+    "pumpkin_stem": "Excluded fruit growth and farmland requirements are not modeled for custom stems.",
+    "seagrass": "Excluded submerged plant; water and aquatic substrate validation are not implemented."
+  },
+  "shapeExceptions": [
+    {
+      "classes": [
+        "AmethystClusterBlock",
+        "BannerBlock",
+        "BaseCoralFanBlock",
+        "BaseCoralPlantBlock",
+        "BaseCoralWallFanBlock",
+        "CalibratedSculkSensorBlock",
+        "CampfireBlock",
+        "CandleCakeBlock",
+        "ChainBlock",
+        "ConduitBlock",
+        "CopperChestBlock",
+        "DriedGhastBlock",
+        "GrindstoneBlock",
+        "IcicleBlock",
+        "LanternBlock",
+        "LightningRodBlock",
+        "MovingPistonBlock",
+        "PistonHeadBlock",
+        "PointedDripstoneBlock",
+        "SculkSensorBlock",
+        "SculkShriekerBlock",
+        "SculkVeinBlock",
+        "StonecutterBlock",
+        "SulfurSpikeBlock",
+        "TrappedChestBlock",
+        "TurtleEggBlock",
+        "WallBannerBlock",
+        "WeatheringCopperChainBlock",
+        "WeatheringCopperChestBlock",
+        "WeatheringLanternBlock",
+        "WeatheringLightningRodBlock"
+      ],
+      "properties": [
+        "solid"
+      ],
+      "model": false,
+      "note": "Conservative omissions for niche sign/cake substrates: vanilla accepts more solid decorations than the runtime's short list. These may warn or miss reuse, not authorize an invalid base."
+    },
+    {
+      "classes": [
+        "CropBlock",
+        "DoublePlantBlock",
+        "EndGatewayBlock",
+        "FireBlock",
+        "FireflyBushBlock",
+        "GlowLichenBlock",
+        "KelpPlantBlock",
+        "MossyCarpetBlock",
+        "MultifaceBlock",
+        "SculkVeinBlock",
+        "SweetBerryBushBlock",
+        "TallFlowerBlock",
+        "VineBlock"
+      ],
+      "properties": [
+        "outline"
+      ],
+      "model": false,
+      "note": "Some unusual/invalid decoration states have full outline faces. They are not offered as attachment supports; runtime conservatively omits them."
+    },
+    {
+      "classes": [
+        "AmethystClusterBlock",
+        "BellBlock",
+        "CeilingHangingSignBlock",
+        "ChorusPlantBlock",
+        "EndPortalFrameBlock",
+        "GrindstoneBlock",
+        "IceCrystalBlock",
+        "IcicleBlock",
+        "PistonBaseBlock",
+        "PistonHeadBlock",
+        "PointedDripstoneBlock",
+        "SulfurSpikeBlock",
+        "WallBlock"
+      ],
+      "properties": [
+        "center",
+        "partial"
+      ],
+      "model": false,
+      "note": "Non-default orientations, branches, connected arms and small decorations can expose additional faces. These niche custom support shapes are not exhaustively modeled."
+    },
+    {
+      "classes": [
+        "BellBlock",
+        "CeilingHangingSignBlock",
+        "ChorusPlantBlock",
+        "WallBlock"
+      ],
+      "properties": [
+        "center",
+        "partial"
+      ],
+      "model": true,
+      "note": "Default-state approximations do not handle every bell attachment or connected wall/sign/chorus state. Exotic custom states can be incorrectly accepted; do not reuse this approximation as a general physics guarantee."
+    },
+    {
+      "classes": [
+        "FenceGateBlock",
+        "PistonBaseBlock",
+        "PistonHeadBlock"
+      ],
+      "properties": [
+        "solid"
+      ],
+      "model": false,
+      "note": "Open gates and some extended piston orientations remain vanilla solid materials. The runtime omits these custom sign/cake bases conservatively; piston movement is not simulated."
+    }
+  ],
+  "registryHash": "c27b6341838023751277f64ced562c9e988de8bb4e3b986e4a3ba0612795d54a"
+}

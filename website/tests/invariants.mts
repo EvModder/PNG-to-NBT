@@ -58,6 +58,7 @@ const CRUBTECH_EXPORT_CATCHER_CHAIN = "minecraft:iron_chain[axis=z]";
 const CRUBTECH_EXPORT_FALLING_WATER = "minecraft:water[level=8]";
 
 function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, label: string): void {
+  if (Buffer.compare(actual, expected) === 0) return;
   if (actual.length !== expected.length) {
     throw new Error(`${label}: byte lengths differ (${actual.length} !== ${expected.length})`);
   }
@@ -69,27 +70,19 @@ function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, label: strin
 }
 
 function assertBytesDiffer(left: Uint8Array, right: Uint8Array, label: string): void {
-  if (left.length !== right.length) return;
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) return;
-  }
+  if (Buffer.compare(left, right) !== 0) return;
   throw new Error(`${label}: expected differing bytes`);
 }
 
 function assertBytesContainAscii(bytes: Uint8Array, expected: string, label: string): void {
-  const needle = new TextEncoder().encode(expected);
-  for (let index = 0; index <= bytes.length - needle.length; index += 1) {
-    if (needle.every((byte, offset) => bytes[index + offset] === byte)) return;
+  if (!Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).includes(expected)) {
+    throw new Error(`${label}: expected bytes to contain ${expected}`);
   }
-  throw new Error(`${label}: expected bytes to contain ${expected}`);
 }
 
 function assertBytesDoNotContainAscii(bytes: Uint8Array, expected: string, label: string): void {
-  const needle = new TextEncoder().encode(expected);
-  for (let index = 0; index <= bytes.length - needle.length; index += 1) {
-    if (needle.every((byte, offset) => bytes[index + offset] === byte)) {
-      throw new Error(`${label}: expected bytes not to contain ${expected}`);
-    }
+  if (Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).includes(expected)) {
+    throw new Error(`${label}: expected bytes not to contain ${expected}`);
   }
 }
 

@@ -6,6 +6,7 @@
  * Support shape, collision shape and outline shape are different Minecraft properties.
  * Pair checks are shared by reuse and warnings; surroundings are checked separately.
  * Shapes use known IDs/families, not a general block-physics engine for arbitrary inputs.
+ * Maintenance coverage and intentional omissions: scripts/block-support-review.json.
  */
 import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/fragileBlocks";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
@@ -104,6 +105,8 @@ export function canSupportBlock(support: string, block: string, dataVersion?: nu
   const { id, props } = getBlockSupport(block, dataVersion);
   if (!id) return true;
   if (isFallingBlock(id)) return !base.fallThrough;
+  // This is not a survival guarantee for unknown/custom-only attachments or compound blocks;
+  // intentionally unmodeled vanilla cases are recorded in the maintenance support review.
   if (!isFragileBlock(id)) return true;
   if (props.get("hanging") === "true" || ["wall", "ceiling"].includes(props.get("face") ?? "") || props.get("vertical_direction") === "down") return false;
   if (id === "bell" && (props.get("attachment") ?? "floor") !== "floor") return false;

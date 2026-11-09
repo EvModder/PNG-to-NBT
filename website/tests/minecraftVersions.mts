@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { BASE_COLORS } from "@/data/mapColors";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
@@ -18,6 +19,40 @@ import { Shade, type ColorGrid } from "@/types/color";
 import { toShapeCoordKey } from "@/lib/shapeModel";
 import { BuildMode, FillerRole, SuppressStepDirection } from "@/types/conversion";
 import { ShapePartType, type GeneratedShape } from "@/types/shape";
+import { auditBlockSupport } from "../../scripts/audit-block-support.mjs";
+
+// Version updates and rule edits must retain a reviewed vanilla support model.
+{
+  const review = JSON.parse(readFileSync(new URL("../../scripts/block-support-review.json", import.meta.url), "utf8"));
+  assert.deepEqual(auditBlockSupport(review).errors, []);
+  for (const field of ["dataVersion", "policyHash"]) {
+    const stale = structuredClone(review);
+    stale.target[field] = "changed";
+    assert(auditBlockSupport(stale).errors.some(error => error.includes("stale")));
+  }
+  const duplicate = structuredClone(review);
+  duplicate.implementations[1].classes.push("Block");
+  assert(auditBlockSupport(duplicate).errors.some(error => error.includes("Duplicate implementation")));
+  const undocumented = structuredClone(review);
+  undocumented.omitted.example = "";
+  assert(auditBlockSupport(undocumented).errors.some(error => error.includes("Missing omission reason")));
+  const block = { class: "FutureCropBlock", survival: "CropBlock", placement: "Block", gravity: false,
+    default: "future_crop", on: { air: false }, states: { future_crop: { full: false } } };
+  const registry = { schema: 1, dataVersion: review.target.dataVersion, blocks: { future_crop: block } };
+  const errors = auditBlockSupport(review, registry).errors;
+  assert(errors.some(error => error.includes("Unclassified below-support requirement: future_crop")));
+  assert(errors.some(error => error.includes("registry/support facts changed")));
+  assert(errors.some(error => error.includes("Catalog block missing")));
+  block.survival = "FutureCropBlock";
+  assert(auditBlockSupport(review, registry).errors.some(error => error.includes("Unreviewed survival implementation: FutureCropBlock")));
+  registry.dataVersion++;
+  assert(auditBlockSupport(review, registry).errors.some(error => error.includes("DataVersion")));
+  const shape = { schema: 1, dataVersion: review.target.dataVersion, blocks: { stone: {
+    class: "Block", survival: "BlockBehaviour", placement: "Block", gravity: false, default: "stone", on: { air: true },
+    states: { stone: { full: false } },
+  } } };
+  assert(auditBlockSupport(review, shape).errors.some(error => error.includes("Unreviewed full shape difference: stone")));
+}
 
 const versions = Object.keys(MINECRAFT_VERSIONS) as MinecraftVersion[];
 assert.equal(getBlockIconAtlasEntry("primary", "sniffer_egg"), null);

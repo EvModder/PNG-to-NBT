@@ -14,6 +14,7 @@
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "test": "bun run test:typecheck && bun run test:rules && bun run test:versions && bun run test:presets && bun run test:pixel-art && bun run test:wiki",
     "test:typecheck": "tsc -p tests",
     "test:fixtures": "bun run tests/run.mts",
     "test:invariants": "bun run tests/invariants.mts",
@@ -26,10 +27,11 @@
     "test:workers": "bun run tests/workerPool.mts",
     "test:geometry-browser": "node tests/geometryWorkerBrowser.mjs",
     "test:wiki": "bun ../scripts/audit-block-wiki.mjs --offline",
-    "test:all": "bun run test:typecheck && bun run test:invariants && bun run test:versions && bun run test:presets && bun run test:pixel-art && bun run test:workers && bun run test:wiki && bun run test:fixtures",
+    "test:all": "bun run test && bun run test:invariants && bun run test:workers && bun run test:fixtures",
     "audit:block-wiki": "bun ../scripts/audit-block-wiki.mjs",
     "audit:mapcolors": "node ../scripts/audit-mapcolors.mjs",
     "audit:mapcolors:strict": "node ../scripts/audit-mapcolors.mjs --strict-missing",
+    "audit:block-support": "bun ../scripts/audit-block-support.mjs",
     "build:block-icons": "python3 ../scripts/generate-stateful-icon-overrides.py && node ../scripts/build-block-icon-files.mjs && python3 ../scripts/postprocess-block-icon-files.py && python3 ../scripts/render-shulker-icons.py && python3 ../scripts/build-icon-atlases.py"
   },
   "dependencies": {

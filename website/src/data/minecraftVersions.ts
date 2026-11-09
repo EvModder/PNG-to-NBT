@@ -21,6 +21,7 @@
 // Breakpoints reflect default-visible blocks only. Each range targets its newest listed build.
 // Keep ranges chronological; preset decoding locates ranges by DataVersion.
 // Local registry/state/support audit: work_files/version-audit/minecraft-versions.md.
+// Every version/catalog refresh must update audit:block-support; see website/tests/README.md.
 // Callers:
 // - src/Index.tsx
 // - src/components/PanelColorBlockTable.tsx

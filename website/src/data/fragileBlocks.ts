@@ -16,6 +16,7 @@
  * - Placement conditions checked against Minecraft block implementations.
  * - Includes placement-time support (e.g. trapdoors), even without a continued survival check.
  * - Catalog exclusion does not remove placement requirements for custom block inputs.
+ * - On version updates, run audit:block-support; see scripts/block-support-review.json.
  */
 const DIRT_SUPPORTED_FLOWERS = [
   "poppy", "dandelion", "golden_dandelion", "blue_orchid", "allium", "azure_bluet",
