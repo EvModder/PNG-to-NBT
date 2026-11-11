@@ -136,7 +136,7 @@ export const WATER_BASE_INDEX = 12;
 // - src/utils/color.ts
 // - src/utils/colorTableLayout.ts
 // - src/utils/customColors.ts
-// Latest catalog (26.4 Snapshot 5); lib/minecraftVersion.ts derives older catalogs without changing these colors.
+// Latest catalog (26.4 Snapshot 8); lib/minecraftVersion.ts derives older catalogs without changing these colors.
 // Shared preset URLs use alphabetical indices filtered to their Minecraft DataVersion.
 // Register new-version blocks in BLOCK_INTRODUCTIONS before adding them here.
 // Display reordering is safe. Adding/removing/renaming already-available blocks or
@@ -150,7 +150,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "ICE", r: 160, g: 160, b: 255, blocks: ["ice", "packed_ice", "packed_ice_bricks", "blue_ice", "frosted_ice", "brittle_ice", "ice_crystal"] },
   { name: "METAL", r: 167, g: 167, b: 167, blocks: ["iron_block", "heavy_weighted_pressure_plate", "lodestone", "pale_oak_leaves", "anvil", "closed_eyeblossom", "lantern", "soul_lantern", "waxed_copper_lantern", "waxed_exposed_copper_lantern", "waxed_weathered_copper_lantern", "waxed_oxidized_copper_lantern", "oxidized_copper_lantern"] },
   { name: "PLANT", r: 0, g: 124, b: 0, blocks: ["bamboo_block[axis=x]", "oak_leaves", "spruce_leaves", "birch_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "mangrove_leaves", "azalea_leaves", "flowering_azalea_leaves", "big_dripleaf", "fern", "short_grass", "bush", "firefly_bush", "pink_petals", "wildflowers", "poppy"] },
-  { name: "SNOW", r: 255, g: 255, b: 255, blocks: ["white_wool", "white_carpet", "white_concrete", "white_concrete_powder", "white_glazed_terracotta", "white_stained_glass", "powder_snow", "snow_block", "snow"] },
+  { name: "SNOW", r: 255, g: 255, b: 255, blocks: ["white_wool", "white_carpet", "white_concrete", "white_concrete_powder", "white_glazed_terracotta", "white_stained_glass", "powder_snow", "snow_block", "snow", "snow_bricks"] },
   { name: "CLAY", r: 164, g: 168, b: 184, blocks: ["clay"] },
   { name: "DIRT", r: 151, g: 109, b: 77, blocks: ["dirt", "coarse_dirt", "rooted_dirt", "granite", "polished_granite", "packed_mud", "jungle_log", "stripped_jungle_log", "jungle_wood", "stripped_jungle_wood", "jungle_planks", "jungle_pressure_plate", "brown_mushroom_block"] },
   { name: "STONE", r: 112, g: 112, b: 112, blocks: ["cobblestone", "mossy_cobblestone", "stone", "stone_pressure_plate", "smooth_stone", "stone_bricks", "mossy_stone_bricks", "andesite", "polished_andesite", "gravel", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "redstone_ore", "lapis_ore", "emerald_ore", "diamond_ore", "acacia_log[axis=x]", "pale_oak_log[axis=x]", "pale_oak_wood"] },
@@ -178,7 +178,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "EMERALD", r: 0, g: 217, b: 58, blocks: ["emerald_block"] },
   { name: "PODZOL", r: 129, g: 86, b: 49, blocks: ["podzol", "spruce_log", "stripped_spruce_log", "spruce_wood", "stripped_spruce_wood", "spruce_planks", "spruce_pressure_plate", "oak_log[axis=x]", "jungle_log[axis=x]", "mangrove_log[axis=x]", "poplar_log[axis=x]", "poplar_wood", "mangrove_roots", "muddy_mangrove_roots", "campfire", "soul_campfire"] },
   { name: "NETHER", r: 112, g: 2, b: 0, blocks: ["netherrack", "nether_bricks", "red_nether_bricks", "nether_gold_ore", "nether_quartz_ore", "magma_block", "crimson_roots", "crimson_fungus"] },
-  { name: "TERRACOTTA_WHITE", r: 209, g: 177, b: 161, blocks: ["white_terracotta", "calcite", "cherry_log", "stripped_cherry_log", "cherry_planks", "cherry_pressure_plate"] },
+  { name: "TERRACOTTA_WHITE", r: 209, g: 177, b: 161, blocks: ["white_terracotta", "calcite", "calcite_pillar", "polished_calcite", "polished_calcite_bricks", "cherry_log", "stripped_cherry_log", "cherry_planks", "cherry_pressure_plate"] },
   { name: "TERRACOTTA_ORANGE", r: 159, g: 82, b: 36, blocks: ["orange_terracotta", "redstone_lamp", "resin_block", "resin_bricks", "resin_clump[down=true]"] },
   { name: "TERRACOTTA_MAGENTA", r: 149, g: 87, b: 108, blocks: ["magenta_terracotta"] },
   { name: "TERRACOTTA_LIGHT_BLUE", r: 112, g: 108, b: 138, blocks: ["light_blue_terracotta"] },
@@ -198,7 +198,7 @@ export const BASE_COLORS: ColorRgbBase[] = [
   { name: "CRIMSON_STEM", r: 148, g: 63, b: 97, blocks: ["crimson_stem", "stripped_crimson_stem", "crimson_planks", "crimson_pressure_plate"] },
   { name: "CRIMSON_HYPHAE", r: 92, g: 25, b: 29, blocks: ["crimson_hyphae", "stripped_crimson_hyphae"] },
   { name: "WARPED_NYLIUM", r: 22, g: 126, b: 134, blocks: ["warped_nylium", "waxed_oxidized_copper", "waxed_oxidized_cut_copper", "oxidized_copper", "oxidized_cut_copper"] },
-  { name: "WARPED_STEM", r: 58, g: 142, b: 140, blocks: ["warped_stem", "stripped_warped_stem", "warped_planks", "warped_pressure_plate", "waxed_weathered_copper", "waxed_weathered_cut_copper"] },
+  { name: "WARPED_STEM", r: 58, g: 142, b: 140, blocks: ["warped_stem", "stripped_warped_stem", "warped_planks", "warped_pressure_plate", "waxed_weathered_copper", "waxed_weathered_cut_copper", "chiseled_soulshale"] },
   { name: "WARPED_HYPHAE", r: 86, g: 44, b: 62, blocks: ["warped_hyphae", "stripped_warped_hyphae"] },
   { name: "WARPED_WART_BLOCK", r: 20, g: 180, b: 133, blocks: ["warped_wart_block"] },
   { name: "DEEPSLATE", r: 100, g: 100, b: 100, blocks: ["deepslate", "cobbled_deepslate", "polished_deepslate", "deepslate_bricks", "deepslate_tiles", "deepslate_coal_ore", "deepslate_copper_ore", "deepslate_iron_ore", "deepslate_gold_ore", "deepslate_redstone_ore", "deepslate_lapis_ore", "deepslate_emerald_ore", "deepslate_diamond_ore"] },

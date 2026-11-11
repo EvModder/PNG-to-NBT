@@ -1,10 +1,10 @@
 {
   "target": {
     "version": "26.4",
-    "label": "26.4.s5",
-    "dataVersion": 5125,
-    "catalogHash": "b942972c3d06427648dc9de66980ae74dba889ab45b10c64061aa27d401bca9c",
-    "policyHash": "ed64c806230497f6c44b6afafb6b92327b96440cb4d4efcc24167980200de63a"
+    "label": "26.4.s8",
+    "dataVersion": 5128,
+    "catalogHash": "bb6c2c40781686832eeda6c440bc59855dd9c40d88bc9c9cc01d015d83c8151d",
+    "policyHash": "5ca82d26c24a9b9f299e83cd439635b58c400943613b85feb9a6e953ff299ba2"
   },
   "implementations": [
     {
@@ -307,5 +307,5 @@
       "note": "Open gates and some extended piston orientations remain vanilla solid materials. The runtime omits these custom sign/cake bases conservatively; piston movement is not simulated."
     }
   ],
-  "registryHash": "c27b6341838023751277f64ced562c9e988de8bb4e3b986e4a3ba0612795d54a"
+  "registryHash": "a84e2ffbe0b74851faec3994757094b00940a6476862d22a23711e572bcf6b32"
 }

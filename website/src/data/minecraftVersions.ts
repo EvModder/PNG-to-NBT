@@ -39,7 +39,7 @@ export const MINECRAFT_VERSIONS = {
   "1.21.9": { label: "1.21.9–26.1.2", dataVersion: 4790 },
   "26.2": { label: "26.2", dataVersion: 4903 },
   "26.3": { label: "26.3", dataVersion: 5023 },
-  "26.4": { label: "26.4.s5", dataVersion: 5125 },
+  "26.4": { label: "26.4.s8", dataVersion: 5128 },
 } as const;
 
 // Callers:
@@ -74,5 +74,7 @@ export const BLOCK_INTRODUCTIONS: readonly (readonly [pattern: RegExp, dataVersi
   [/(^|_)poplar(_|$)/, 5023, "26.3"],
   [/_(wool|concrete)_(slab|stairs)$/, 5023, "26.3"],
   [/^(red_shrub|shelf_mushroom|straw_bed)$/, 5023, "26.3"],
-  [/^(ice_crystal|icicle|brittle_ice|chiseled_packed_ice|packed_ice_bricks|packed_ice_brick_(slab|stairs|wall))$/, 5125, "26.4.s5"],
+  [/^(ice_crystal|icicle|brittle_ice|chiseled_packed_ice|packed_ice_bricks|packed_ice_brick_(slab|stairs|wall))$/, 5128, "26.4.s8"],
+  [/^(snow_bricks|snow_brick_(slab|stairs|wall)|chiseled_soulshale)$/, 5128, "26.4.s8"],
+  [/^(calcite_(pillar|slab|stairs|wall)|polished_calcite(_(slab|stairs|wall|bricks|brick_(slab|stairs|wall)))?)$/, 5128, "26.4.s8"],
 ];

@@ -89,7 +89,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   5: ["chiseled_packed_ice", "packed_ice_brick_slab", "packed_ice_brick_stairs", "packed_ice_brick_wall"],
   6: ["chipped_anvil", "damaged_anvil", "brewing_stand", "grindstone[face=floor]", "heavy_core", "iron_trapdoor", "pale_oak_sapling", "poplar_sapling"],
   7: ["oak_sapling", "spruce_sapling", "birch_sapling", "jungle_sapling", "acacia_sapling", "dark_oak_sapling", "mangrove_propagule[waterlogged=false]", "azalea", "flowering_azalea", "dandelion", "golden_dandelion", "blue_orchid", "allium", "azure_bluet", "red_tulip", "orange_tulip", "white_tulip", "pink_tulip", "oxeye_daisy", "cornflower", "lily_of_the_valley", "wither_rose", "torchflower", "lily_pad", "sweet_berry_bush[age=3]"],
-  8: ["white_wool_slab", "white_wool_stairs", "white_concrete_slab", "white_concrete_stairs", "white_shulker_box"],
+  8: ["white_wool_slab", "white_wool_stairs", "white_concrete_slab", "white_concrete_stairs", "white_shulker_box", "snow_brick_slab", "snow_brick_stairs", "snow_brick_wall"],
   9: [
     "infested_chiseled_stone_bricks",
     "infested_cobblestone",
@@ -211,7 +211,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   31: ["prismarine_brick_slab", "prismarine_brick_stairs", "dark_prismarine_slab", "dark_prismarine_stairs"],
   34: ["spruce_fence", "spruce_fence_gate", "spruce_sign", "spruce_slab", "spruce_stairs", "spruce_trapdoor", "spruce_shelf"],
   35: ["cracked_nether_bricks", "chiseled_nether_bricks", "nether_brick_fence", "nether_brick_slab", "nether_brick_stairs", "nether_brick_wall", "red_nether_brick_slab", "red_nether_brick_stairs", "red_nether_brick_wall"],
-  36: ["cherry_fence", "cherry_fence_gate", "cherry_sign", "cherry_slab", "cherry_stairs", "cherry_trapdoor", "cherry_shelf"],
+  36: ["cherry_fence", "cherry_fence_gate", "cherry_sign", "cherry_slab", "cherry_stairs", "cherry_trapdoor", "cherry_shelf", "calcite_slab", "calcite_stairs", "calcite_wall", "polished_calcite_slab", "polished_calcite_stairs", "polished_calcite_wall", "polished_calcite_brick_slab", "polished_calcite_brick_stairs", "polished_calcite_brick_wall"],
   37: ["chiseled_resin_bricks", "resin_brick_slab", "resin_brick_stairs", "resin_brick_wall"],
   // TODO: Generate shelf mushroom's sturdy side support. Intentionally offered as
   // a rare-color placeholder; exported placements do not yet ensure its survival.

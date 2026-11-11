@@ -55,7 +55,7 @@ export const EXCLUDED_BLOCK_PATTERNS = [
   /_shelf$/,
   /_sapling$/,
   /^(tube|brain|bubble|fire|horn)_coral(_block|_fan)?$/,
-  /(^|_)chiseled_/,
+  /(^|_)chiseled_(?!soulshale$)/, // Soulshale is standalone, not a redundant decorative variant.
   /(^|_)cracked_/,
   /^bamboo_mosaic($|_)/,
   /_stairs$/,

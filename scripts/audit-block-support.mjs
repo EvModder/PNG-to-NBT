@@ -120,7 +120,7 @@ export function auditBlockSupport(review, registry, previous) {
         }
       }
     }
-    if (previous && fingerprint(previous.blocks[id]) !== fingerprint(facts)) changedBlocks.push(id);
+    if (previous && (!previous.blocks[id] || fingerprint(previous.blocks[id]) !== fingerprint(facts))) changedBlocks.push(id);
   }
   for (const id of Object.keys(review.omitted)) if (!Object.hasOwn(registry.blocks, id)) errors.push(`Stale reviewed block: ${id}`);
   if (previous) for (const id of Object.keys(previous.blocks)) if (!Object.hasOwn(registry.blocks, id)) changedBlocks.push(id);

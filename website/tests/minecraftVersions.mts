@@ -43,6 +43,7 @@ import { auditBlockSupport } from "../../scripts/audit-block-support.mjs";
   assert(errors.some(error => error.includes("Unclassified below-support requirement: future_crop")));
   assert(errors.some(error => error.includes("registry/support facts changed")));
   assert(errors.some(error => error.includes("Catalog block missing")));
+  assert.deepEqual(auditBlockSupport(review, { ...registry, blockTags: {}, fluidTags: {} }, { blocks: {} }).changedBlocks, ["future_crop"]);
   block.survival = "FutureCropBlock";
   assert(auditBlockSupport(review, registry).errors.some(error => error.includes("Unreviewed survival implementation: FutureCropBlock")));
   registry.dataVersion++;
@@ -93,9 +94,25 @@ for (const block of [...added, ...addedHidden]) {
   assert(isBlockAvailable(block, 5023), block);
   for (const version of versions.filter(version => MINECRAFT_VERSIONS[version].dataVersion < 5023)) assert(!isBlockAvailable(block, MINECRAFT_VERSIONS[version].dataVersion), `${version}: ${block}`);
 }
-assert.deepEqual(latest.blocks.flat().filter(block => !wilderness.blocks.flat().includes(block)), ["packed_ice_bricks", "brittle_ice", "ice_crystal", "icicle[attached=true]"]);
+assert.deepEqual(latest.blocks.flat().filter(block => !wilderness.blocks.flat().includes(block)), ["packed_ice_bricks", "brittle_ice", "ice_crystal", "snow_bricks", "icicle[attached=true]", "calcite_pillar", "polished_calcite", "polished_calcite_bricks", "chiseled_soulshale"]);
+assert.deepEqual(latest.blocks[36].slice(1, 5), ["calcite", "calcite_pillar", "polished_calcite", "polished_calcite_bricks"]);
 const snapshotIce = ["chiseled_packed_ice", "packed_ice_brick_slab", "packed_ice_brick_stairs", "packed_ice_brick_wall"];
-assert.deepEqual(latest.excluded.flat().filter(block => !wilderness.excluded.flat().includes(block)), snapshotIce);
+const snapshotSnow = ["snow_brick_slab", "snow_brick_stairs", "snow_brick_wall"];
+const snapshotCalcite = ["calcite_slab", "calcite_stairs", "calcite_wall", "polished_calcite_slab", "polished_calcite_stairs", "polished_calcite_wall", "polished_calcite_brick_slab", "polished_calcite_brick_stairs", "polished_calcite_brick_wall"];
+assert.deepEqual(latest.excluded.flat().filter(block => !wilderness.excluded.flat().includes(block)), [...snapshotIce, ...snapshotSnow, ...snapshotCalcite]);
+const snapshotAdditions: [number, string[]][] = [
+  [8, ["snow_bricks", ...snapshotSnow]],
+  [36, ["calcite_pillar", "polished_calcite", "polished_calcite_bricks", ...snapshotCalcite]],
+  [56, ["chiseled_soulshale"]],
+];
+for (const [id, blocks] of snapshotAdditions) for (const block of blocks) {
+  const introduced = MINECRAFT_VERSIONS["26.4"].dataVersion;
+  assert(!isBlockAvailable(block, introduced - 1), block);
+  assert(isBlockAvailable(block, introduced), block);
+  assert.equal(getVersionedSelections({ [id]: block }, "26.3")[id], "");
+  assert.equal(getVersionedSelections({ [id]: block }, "26.4")[id], block);
+  assert([...latest.blocks[id], ...latest.excluded[id]].includes(block));
+}
 for (const block of ["brittle_ice", "packed_ice_bricks", ...snapshotIce]) {
   const introduced = MINECRAFT_VERSIONS["26.4"].dataVersion;
   assert(!isBlockAvailable(block, introduced - 1));
@@ -412,7 +429,7 @@ await assert.rejects(exportBytes("26.2", { 0: "glass", 6: "red_shrub" }), /unava
 const shrub = await exportBytes("26.3", { 0: "glass", 6: "red_shrub" }, "stone");
 assert(shrub.includes(Buffer.from("minecraft:red_shrub")));
 assert(shrub.includes(Buffer.from("minecraft:dirt")), "Red shrub needs a soil support replacement");
-for (const block of ["ice_crystal", "icicle[attached=true]", "brittle_ice", "packed_ice_bricks", ...snapshotIce]) {
+for (const block of ["ice_crystal", "icicle[attached=true]", "brittle_ice", "packed_ice_bricks", ...snapshotIce, ...snapshotAdditions.flatMap(([, blocks]) => blocks)]) {
   await assert.rejects(exportBytes("26.3", { 6: block }), /unavailable/);
   const bytes = await exportBytes("26.4", { 6: block }, "glass");
   assert(bytes.includes(Buffer.from(`minecraft:${block.split("[")[0]}`)));
