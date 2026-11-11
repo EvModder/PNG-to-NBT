@@ -6,9 +6,9 @@ import { messages } from "@/lib/messages";
 assert.equal(DEFAULT_AUTO_SCALE_PIXEL_ART, true);
 assert.equal(DEFAULT_PIXEL_ART_SCALE_MODE, "downscale");
 for (const [width, height, outputWidth, text, tone] of [
-  [64, 64, 128, "Upscaled by 2× (64×64 → 128×128).", "error"],
-  [512, 512, 128, "Downscaled by 4× (512×512 → 128×128).", "warning"],
-  [384, 192, 256, "Downscaled by 1.5× (384×192 → 256×128).", "warning"],
+  [64, 64, 128, "Upscaled by 2× (64×64 → 128×128)", "error"],
+  [512, 512, 128, "Downscaled by 4× (512×512 → 128×128)", "warning"],
+  [384, 192, 256, "Downscaled by 1.5× (384×192 → 256×128)", "warning"],
 ] as const) {
   const notice = messages.parsing.scaledImageNotice(width, height, outputWidth);
   assert.equal(messages.parsing.noticeText(notice), text);

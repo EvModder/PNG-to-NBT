@@ -516,7 +516,6 @@ export function PanelImagePreview({
                   currentMode={notice.kind === PaletteNoticeKind.CroppedImage ? "crop" : "pad"}
                   onResolveInvalidDimensions={onResolveInvalidDimensions}
                 />}
-                .
               </>}
             </p>
           ))}

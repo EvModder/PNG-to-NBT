@@ -80,11 +80,10 @@ export function ImageColorNotice({
       ? "bg-destructive/25 border-2 border-destructive/50"
       : PREVIEW_WARNING_FRAME_CLASS}`}>
       <p className={`text-xs font-medium whitespace-pre-wrap ${unsupported || !converted ? "text-destructive-text" : "text-warning-text"}`}>
-        {headlineText.replace(/\.$/, "")}
+        {headlineText}
         {!unsupported && actions && (
           <span className="text-warning-text"> ({actions})</span>
         )}
-        .
       </p>
       {unsupported && actions && (
         <p className="text-xs text-warning-text font-medium">
