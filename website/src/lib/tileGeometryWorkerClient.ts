@@ -154,8 +154,8 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
   const steps = isSuppressStepsBuildMode(input.buildMode);
   const independentStepSpacing = steps && !input.uniformSuppressStepSpacing;
   const mixSteps = steps && input.mixSteps;
-  const raisedSteps = mixSteps && input.mixedStepMaxHeight > 0
-    && (input.selectedStepDirection === SuppressStepDirection.EastToWest || input.selectedStepDirection === SuppressStepDirection.WestToEast);
+  const eastWest = input.selectedStepDirection === SuppressStepDirection.EastToWest || input.selectedStepDirection === SuppressStepDirection.WestToEast;
+  const raisedSteps = mixSteps && input.mixedStepMaxHeight > 0 && eastWest;
   // Ignore inactive settings, especially the large palette key when no blocks can be raised.
   return [
     tileCacheKey,
@@ -175,6 +175,7 @@ function getTileFinalGeometryCacheKey(tileCacheKey: string, input: TileFinalGeom
     mixSteps ? 1 : 0,
     raisedSteps ? input.mixedStepMaxHeight : 0,
     raisedSteps ? input.mixedStepPalette?.key ?? "" : "",
+    mixSteps && !eastWest ? input.groundedStepColors?.join() ?? "" : "",
     includesParty ? input.paletteSeed : 0,
     input.hasWater && !input.waterSetting && input.enableWaterConvenience ? 1 : 0,
     steps && input.skipEmptySuppressSteps ? 1 : 0,

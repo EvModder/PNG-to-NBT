@@ -68,6 +68,7 @@ export function analyzeFinalGeometry(input: TileFinalGeometryWorkerInput): TileF
       mixSteps: input.mixSteps,
       mixedStepMaxHeight: input.mixedStepMaxHeight,
       mixedStepPalette: input.mixedStepPalette,
+      groundedStepColors: input.groundedStepColors,
       includeTransparentBlocks: input.includeTransparentBlocks,
       paletteSeed: input.paletteSeed,
       waterSetting: input.waterSetting,

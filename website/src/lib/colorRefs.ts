@@ -17,6 +17,7 @@
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeGeneration.ts
+ * - src/lib/tileGeometryWorkerTypes.ts
  */
 import type { ColorRef } from "@/types/color";
 
@@ -34,6 +35,8 @@ import type { ColorRef } from "@/types/color";
 // - src/lib/environmentalSupport.ts
 // - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/shapeGeneration.ts
+// - src/lib/tileGeometryWorkerTypes.ts
 export type ColorRefKey = number;
 
 // Callers:

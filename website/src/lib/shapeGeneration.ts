@@ -25,7 +25,7 @@ import {
 } from "./shapeBlocks";
 import {
   buildBelowPlatformWaterPreviewBlocks, buildStepPhaseBlocks, buildSuppressDualLayerBlocks, buildSuppressSplitCheckerBlockSets,
-  buildSuppressSplitRowBlockSets, getSuppressStepAxis, type TwoLayerSuppressBuildMode,
+  buildSuppressSplitRowBlockSets, getSuppressStepAxis, type GroundedPixels, type TwoLayerSuppressBuildMode,
 } from "./shapeBlocksSuppress";
 import {
   addStaircaseWaterConvenienceFillers, applyColumnYOffsets, applyStaircaseVariantGroupPostProcess, applyStaircaseVariantParty,
@@ -34,7 +34,7 @@ import {
   type TransparentPlacementBuildMode,
 } from "./shapeBlocksStaircase";
 import { getSupportedStepHeights } from "./mixedStepHeights";
-import { getColorRefKey } from "./colorRefs";
+import { getColorRefKey, type ColorRefKey } from "./colorRefs";
 import type { getEnvironmentalSettings } from "./environmentalSupport";
 
 type ShapeBounds = ShapePart["bounds"];
@@ -577,6 +577,7 @@ function buildStepPhaseParts(
   skipEmptySuppressSteps: boolean,
   cache?: GridShapeCache,
   mixedStepPalette?: MixedStepPalette,
+  groundedStepColors?: readonly ColorRefKey[],
 ): StepPhasePartsBuildResult {
   const belowPlatformWater = waterDrops !== undefined;
   const specs = buildSuppressStepPhases(buildMode, stepDirection, centerOut);
@@ -591,6 +592,19 @@ function buildStepPhaseParts(
       for (let z = 0; z < MAP_SIZE; ++z) {
         yOffset = Math.max(yOffset, heights[z] + (colorGrid[x][z].shade === Shade.Dark ? 2 : 1));
       }
+    }
+  }
+  // Absent from most tiles, which then skip the extra planning.
+  let grounded: GroundedPixels | undefined;
+  if (groundedStepColors?.length) {
+    const colors = new Set(groundedStepColors);
+    for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+      if (!colors.has(getColorRefKey(colorGrid[x][z]))) continue;
+      grounded ??= { cells: new Map(), rows: new Set() };
+      const cells = grounded.cells.get(x);
+      if (cells) cells.push(z);
+      else grounded.cells.set(x, [z]);
+      grounded.rows.add(z);
     }
   }
   const previewWaterBlocks = belowPlatformWater
@@ -615,6 +629,7 @@ function buildStepPhaseParts(
       waterDrops,
       mixedColumnHeights,
       mixedStepPalette,
+      grounded,
     );
     const part = buildShapePart(blocks, [], true, new Set<number>([baseY - 1]), loweredWaterBlocks);
     const isEmptyPart = part.blocks.length === 0 && part.loweredWaterBlocks.length === 0 && part.fillerCandidates.length === 0;
@@ -703,11 +718,12 @@ type ShapeOptions = {
   transparentPlacementMode?: BuildMode;
   suppress2LayerLatePairY?: number;
   mixedStepPalette?: MixedStepPalette;
+  groundedStepColors?: readonly ColorRefKey[];
   stepSpacing?: SuppressStepSpacing;
 };
 
 function getShapeCacheKeyId({
-  buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette,
+  buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette, groundedStepColors,
   stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0,
   waterDrops, topAlignedWater = false, enableWaterConvenience = true, buildAtWorldMinY = false,
   skipEmptySuppressSteps = true, useCrubTech = false, includeTransparentBlocks = false,
@@ -720,6 +736,7 @@ function getShapeCacheKeyId({
   if (isSuppressStepsBuildMode(buildMode) && centerOut) id += "|center:1";
   if (isSuppressStepsBuildMode(buildMode) && mixSteps) id += "|mixsteps:1";
   if (isSuppressStepsBuildMode(buildMode) && mixSteps && mixedStepHeightKey) id += `|stepheight:${mixedStepHeightKey}`;
+  if (isSuppressStepsBuildMode(buildMode) && groundedStepColors) id += `|grounded:${groundedStepColors}`;
   if (isSuppressStepsBuildMode(buildMode)) id += `|skipempty:${skipEmptySuppressSteps ? 1 : 0}`;
   if (useCrubTech && buildModeUsesLayerGap(buildMode)) id += "|crubtech:1";
   if (buildMode === BuildMode.Suppress2LayerLatePairs) id += `|latepairy:${suppress2LayerLatePairY}`;
@@ -916,13 +933,14 @@ function getCachedSuppressStepParts(
   skipEmptySuppressSteps: boolean,
   waterDrops?: WaterDrops,
   mixedStepPalette?: MixedStepPalette,
+  groundedStepColors?: readonly ColorRefKey[],
 ): RawShapePart[] {
-  const keyOptions = { buildMode, mixSteps, mixedStepMaxHeight, mixedStepPalette, stepDirection, centerOut, waterDrops, skipEmptySuppressSteps };
+  const keyOptions = { buildMode, mixSteps, mixedStepMaxHeight, mixedStepPalette, groundedStepColors, stepDirection, centerOut, waterDrops, skipEmptySuppressSteps };
   const keyId = getShapeCacheKeyId(keyOptions);
   const cached = cache.rawParts.get(keyId);
   if (cached) return cached;
 
-  const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, waterDrops, skipEmptySuppressSteps, cache, mixedStepPalette);
+  const rawPartsBuild = buildStepPhaseParts(colorGrid, buildMode, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, waterDrops, skipEmptySuppressSteps, cache, mixedStepPalette, groundedStepColors);
   cache.rawParts.set(keyId, rawPartsBuild.parts);
   if (!rawPartsBuild.hasAnyEmptyPhase) {
     const alternateKeyId = getShapeCacheKeyId({ ...keyOptions, skipEmptySuppressSteps: !skipEmptySuppressSteps });
@@ -958,7 +976,7 @@ function buildRawShapeParts(
   colorGrid: ColorGrid,
   cache: GridShapeCache,
   {
-    buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette,
+    buildMode, layerGap = 0, mixSteps = false, mixedStepMaxHeight = 0, mixedStepPalette, groundedStepColors,
     stepDirection = SuppressStepDirection.EastToWest, centerOut = false, paletteSeed = 0,
     waterDrops, topAlignedWater = false, enableWaterConvenience = true, buildAtWorldMinY = false,
     skipEmptySuppressSteps = true, useCrubTech = false, includeTransparentBlocks = false,
@@ -971,9 +989,9 @@ function buildRawShapeParts(
     case BuildMode.SuppressSplitChecker:
       return getCachedSuppressSplitParts(colorGrid, cache, BuildMode.SuppressSplitChecker, waterDrops);
     case BuildMode.SuppressStepPairs:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops, mixedStepPalette);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepPairs, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops, mixedStepPalette, groundedStepColors);
     case BuildMode.SuppressStepChecker:
-      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops, mixedStepPalette);
+      return getCachedSuppressStepParts(colorGrid, cache, BuildMode.SuppressStepChecker, stepDirection, centerOut, mixSteps, mixedStepMaxHeight, skipEmptySuppressSteps, waterDrops, mixedStepPalette, groundedStepColors);
     case BuildMode.Suppress2LayerLateFillers:
       return getCachedSuppress2LayerParts(
         colorGrid,
@@ -1148,6 +1166,8 @@ export function generateShapeMap(
     suppressCenterOut?: boolean;
     mixedStepMaxHeight?: number;
     mixedStepPalette?: MixedStepPalette;
+    // From getGroundedStepColors(): colors that N/S step reuse must not lift.
+    groundedStepColors?: readonly ColorRefKey[];
     paletteSeed?: number;
     waterSetting?: StaircaseWaterSetting;
     enableWaterConvenience?: boolean;
@@ -1173,6 +1193,8 @@ export function generateShapeMap(
   const stepDirection = options.selectedStepDirection;
   const mixedStepPalette = mixSteps && mixedStepMaxHeight > 0 && getSuppressStepAxis(stepDirection) === "x"
     ? options.mixedStepPalette : undefined;
+  const groundedStepColors = mixSteps && getSuppressStepAxis(stepDirection) === "z" && options.groundedStepColors?.length
+    ? options.groundedStepColors : undefined;
   const paletteSeed = options.paletteSeed ?? 0;
   const waterDrops = options.waterSetting?.kind === "below-platform" ? options.waterSetting.drops : undefined;
   const topAlignedWater = options.waterSetting?.kind === "top-aligned";
@@ -1215,7 +1237,7 @@ export function generateShapeMap(
       centerOut: options.suppressCenterOut === true && isSuppressStepsBuildMode(buildMode),
       paletteSeed, waterDrops, topAlignedWater, enableWaterConvenience, buildAtWorldMinY,
       skipEmptySuppressSteps, useCrubTech, includeTransparentBlocks, transparentPlacementMode: buildMode,
-      suppress2LayerLatePairY, mixedStepPalette,
+      suppress2LayerLatePairY, mixedStepPalette, groundedStepColors,
       stepSpacing: isSuppressStepsBuildMode(buildMode) && (minimumStepOffset !== 1 || !uniformStepSpacing || !!options.environmentalPalette)
         ? { minimum: minimumStepOffset, uniform: uniformStepSpacing, keepExtras: options.keepSuppressExtras === true }
         : undefined,

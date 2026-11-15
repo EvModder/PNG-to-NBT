@@ -22,7 +22,7 @@ import { buildFillerAssignmentMap, createFillerAssignments, getSupportModeFiller
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
-import { getMixedStepSettings, getMixedStepReuse, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
+import { getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { canSupportBlock } from "@/lib/blockSupport";
@@ -1678,6 +1678,70 @@ async function assertMixedStepSupportPairs(): Promise<void> {
   }
 }
 
+function assertGroundedStepReuse(): void {
+  const selections = { selectedBlocks: { 1: "stone", 2: "white_carpet", 3: "dandelion" }, selectedBlocksCustom: {}, customColors: [] };
+  const grounded = (mode: SupportMode, support: string) => getGroundedStepColors([2, 4, 6], selections, mode, support);
+  assert.deepEqual(grounded(SupportMode.None, "stone"), [4, 6], "Without supports, fragile colors stay at their required height");
+  assert.deepEqual(grounded(SupportMode.Steps, "stone"), [4, 6]);
+  assert.deepEqual(grounded(SupportMode.Fragile, "stone"), [6], "A lifted block needs a compatible support");
+  assert.deepEqual(grounded(SupportMode.Fragile, "dirt"), []);
+  assert.deepEqual(grounded(SupportMode.Fragile, "air"), [4, 6]);
+  assert.deepEqual(grounded(SupportMode.Fragile, "white_carpet"), [4, 6], "A fragile support cannot be stacked under a second lift");
+  assert.deepEqual(grounded(SupportMode.All, "stone"), [6]);
+  assert.deepEqual(grounded(SupportMode.All, "sand"), [2, 4, 6]);
+
+  // Carpet (id 2) only on odd x: even lines keep their reuse.
+  const grid: ColorGrid = Array.from({ length: MAP_SIZE }, (_, x) => Array.from({ length: MAP_SIZE }, (_, z) => ({
+    id: x % 2 && (x * 7 + z * 5) % 3 ? 2 : 1, isCustom: false, shade: (x * 11 + z * 13) % 3 as Shade,
+  })));
+  for (const mode of [BuildMode.SuppressStepChecker, BuildMode.SuppressStepPairs] as const) {
+    for (const direction of [SuppressStepDirection.NorthToSouth, SuppressStepDirection.SouthToNorth]) for (const suppressCenterOut of [false, true]) {
+      const specs = buildSuppressStepPhases(mode, direction, suppressCenterOut);
+      const generate = (mixSteps: boolean, groundedStepColors?: number[]) => generateShapeMap(grid, undefined, false, false, false, {
+        layerGap: 5, selectedMode: mode, selectedStepDirection: direction, suppressCenterOut, mixSteps, groundedStepColors,
+      })[mode]!;
+      // Lifted carpets by phase and position, and the number of placed color blocks.
+      const survey = (shape: GeneratedShape) => {
+        const lifted = new Set<string>();
+        let colors = 0;
+        for (const part of shape.parts) for (const [key, cell] of part.cells) {
+          if (Array.isArray(cell)) continue;
+          ++colors;
+          const [x, y, z] = parseShapeCoordKey(key);
+          const height = y - Math.min(...part.supportFloorYs) - 1;
+          if (cell.id === 2 && height > 0) lifted.add(`${part.suppressStepIndex}:${x}:${height}:${z}`);
+        }
+        return { lifted, colors };
+      };
+      const label = `${mode}, ${direction}, center-out=${suppressCenterOut}`;
+      const separate = survey(generate(false)), reused = survey(generate(true)), shape = generate(true, [4]), kept = survey(shape);
+      assert.deepEqual([...kept.lifted].filter(cell => !separate.lifted.has(cell)), [], `${label}: reuse lifts no grounded color`);
+      if (mode === BuildMode.SuppressStepChecker) {
+        assert([...reused.lifted].some(cell => !separate.lifted.has(cell)), `${label}: unrestricted reuse lifts carpets`);
+        assert(kept.colors > separate.colors && kept.colors < reused.colors, `${label}: other lines keep their reuse`);
+      }
+      // Every phase still shows its own pixels with the requested shade.
+      for (const part of shape.parts) {
+        const floorY = Math.min(...part.supportFloorYs);
+        const tops = new Map<number, { y: number; id: number }>();
+        for (const [key, cell] of part.cells) {
+          if (Array.isArray(cell) && !cell.some(role => role === FillerRole.ShadeNorthRow || role === FillerRole.ShadeSuppress)) continue;
+          const [x, y, z] = parseShapeCoordKey(key);
+          const column = x * (MAP_SIZE + 1) + z + 1;
+          if (y > (tops.get(column)?.y ?? -Infinity)) tops.set(column, { y, id: Array.isArray(cell) ? -1 : cell.id });
+        }
+        for (let x = 0; x < MAP_SIZE; ++x) for (let z = 0; z < MAP_SIZE; ++z) {
+          if (!specs[part.suppressStepIndex!].includeAt(x, z)) continue;
+          const column = x * (MAP_SIZE + 1) + z + 1;
+          const top = tops.get(column), northY = tops.get(column - 1)?.y ?? floorY;
+          assert.equal(top && `${top.id}:${top.y > northY ? Shade.Light : top.y < northY ? Shade.Dark : Shade.Flat}`,
+            `${grid[x][z].id}:${grid[x][z].shade}`, `${label}: map pixel (${x}, ${z})`);
+        }
+      }
+    }
+  }
+}
+
 function assertMixedStepMarkerInvariants(): void {
   const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array(MAP_SIZE).fill(TRANSPARENT_COLOR));
   // Water-only phases borrow the northern color from another phase when mixing is enabled.
@@ -2271,6 +2335,7 @@ async function main(): Promise<number> {
   assertVsSparseMarkerInvariants();
   await assertMixedStepSupportInvariants();
   await assertMixedStepSupportPairs();
+  assertGroundedStepReuse();
   assertMixedStepMarkerInvariants();
   await assertCenterOutInvariants();
   await assertCenterOutTwoLayerInvariants();

@@ -8,6 +8,7 @@
  * - buildSuppressSplitCheckerBlockSets()
  * - buildSuppressDualLayerBlocks()
  * - buildBelowPlatformWaterPreviewBlocks()
+ * - GroundedPixels
  * - buildStepPhaseBlocks()
  *
  * Callers:
@@ -388,6 +389,13 @@ export function buildBelowPlatformWaterPreviewBlocks(
 // Count initial construction and final cleanup, not just transitions between phases.
 // Callers:
 // - src/lib/shapeGeneration.ts
+//
+// Pixels of grounded colors: z by x line, and the z rows that hold any.
+export type GroundedPixels = { cells: Map<number, number[]>; rows: Set<number> };
+const ALL_LINES: ReadonlySet<number> = new Set(Array.from({ length: MAP_SIZE }, (_, line) => line));
+
+// Callers:
+// - src/lib/shapeGeneration.ts
 export function buildStepPhaseBlocks(
   colorGrid: ColorGrid,
   currentSpec: SuppressStepPhase,
@@ -398,6 +406,7 @@ export function buildStepPhaseBlocks(
   waterDrops?: WaterDrops,
   mixedColumnHeights?: ReadonlyMap<number, Uint8Array>,
   mixedStepPalette?: MixedStepPalette,
+  grounded?: GroundedPixels,
 ): ShapeBlockSet {
   const belowPlatformWater = waterDrops !== undefined;
   const stepBlocks: ShapeBlock[] = [];
@@ -459,12 +468,13 @@ export function buildStepPhaseBlocks(
     shadedParity: PixelParity,
     northParity: PixelParity,
     adjacentSpec: SuppressStepPhase | undefined,
+    skipLines?: ReadonlySet<number>,
   ) => {
     if (!adjacentSpec) return;
     const scanX = currentSpec.axis === "x" ? currentSpec.lines : Array.from({ length: MAP_SIZE }, (_, index) => index);
     for (const x of scanX) {
       if (x < 0 || x >= MAP_SIZE) continue;
-      if (mixedColumnHeights?.has(x)) continue;
+      if (mixedColumnHeights?.has(x) || skipLines?.has(x)) continue;
       for (let z = 1; z < MAP_SIZE; ++z) {
         if (!currentSpec.includeAt(x, z) || getPixelParity(x, z) !== shadedParity) continue;
         const color = colorGrid[x][z];
@@ -588,13 +598,39 @@ export function buildStepPhaseBlocks(
     }
   };
 
-  collectRepeatedNorthBlocks(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
-  collectRepeatedNorthBlocks(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
-  collectSharedNorthColumnsForWater(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
-  collectSharedNorthColumnsForWater(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
-  collectCurrentPhaseNorthReuse();
-  collectBelowPlatformWaterColumns();
-  propagateCurrentPhaseYOffsets();
+  const planReuse = (skipLines?: ReadonlySet<number>) => {
+    for (const plan of [repeatedNorthShaderColumns, repeatedNorthSharedColumns, repeatedBelowPlatformWaterColumns,
+      shadedByRepeatedNorth, shadedByCurrentNorth, currentPhaseColorYOffsets, repeatedPhaseColorYOffsets]) plan.clear();
+    collectRepeatedNorthBlocks(PixelParity.Dominant, PixelParity.Recessive, previousSpec, skipLines);
+    collectRepeatedNorthBlocks(PixelParity.Recessive, PixelParity.Dominant, nextSpec, skipLines);
+    collectSharedNorthColumnsForWater(PixelParity.Dominant, PixelParity.Recessive, previousSpec);
+    collectSharedNorthColumnsForWater(PixelParity.Recessive, PixelParity.Dominant, nextSpec);
+    collectCurrentPhaseNorthReuse();
+    collectBelowPlatformWaterColumns();
+    propagateCurrentPhaseYOffsets();
+  };
+  // N/S heights chain along one x. Where reusing a neighboring phase's color block lifts a
+  // grounded color above the height its own shading requires, that x keeps separate fillers.
+  let requiredOffsets: Map<ColumnCoordKey, number> | undefined;
+  // Only this phase's rows, and their northern neighbors, can be reused or offset.
+  if (grounded && currentSpec.axis === "z" && (previousSpec || nextSpec)
+    && currentSpec.lines.some(z => grounded.rows.has(z) || grounded.rows.has(z - 1))) {
+    planReuse(ALL_LINES);
+    requiredOffsets = new Map(currentPhaseColorYOffsets);
+  }
+  planReuse();
+  if (requiredOffsets) {
+    const liftedLines = new Set<number>();
+    for (const [x, cells] of grounded!.cells) for (const z of cells) {
+      const key = cellKey(x, z);
+      if ((repeatedNorthShaderColumns.has(key) && repeatedPhaseColorYOffsets.get(key))
+        || (currentPhaseColorYOffsets.get(key) ?? 0) > (requiredOffsets.get(key) ?? 0)) {
+        liftedLines.add(x);
+        break;
+      }
+    }
+    if (liftedLines.size) planReuse(liftedLines);
+  }
 
   if (currentSpec.axis === "x") {
     for (const x of currentSpec.lines) {

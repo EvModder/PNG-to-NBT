@@ -2,6 +2,7 @@
  * Public API:
  * - getMixedStepSettings()
  * - scopeMixedStepPalette()
+ * - getGroundedStepColors()
  * - getSupportedStepHeights()
  * - getMixedStepReuse()
  * - getMixedStepColor()
@@ -43,6 +44,29 @@ function canRaiseStepBlocks(
     if (color.isCustom || needsRaisedStepSupport(resolveAssignedColorBlock(color, selections))) return false;
   }
   return true;
+}
+
+// Callers:
+// - src/Index.tsx
+//
+// Colors that N/S step reuse must leave at their required height: lifted, they would
+// need a support these settings do not place, or one that cannot hold them.
+export function getGroundedStepColors(
+  usedColorKeys: Iterable<ColorRefKey>,
+  selections: ColorBlockSelections,
+  supportMode: SupportMode,
+  supportFiller: string,
+): ColorRefKey[] {
+  const support = resolveExportBlockName(supportFiller);
+  const dataVersion = MINECRAFT_VERSIONS[selections.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION].dataVersion;
+  // A support that needs its own support cannot be stacked under a second lift.
+  const placed = (supportMode === SupportMode.Fragile || supportMode === SupportMode.All)
+    && !!normalizeBlockId(supportFiller) && !isFillerDisabled(supportFiller) && !needsRaisedStepSupport(support);
+  return [...usedColorKeys].filter(key => {
+    const block = resolveAssignedColorBlock(parseColorRefKey(key), selections);
+    if (!needsRaisedStepSupport(block) && supportMode !== SupportMode.All) return false;
+    return !placed || !canSupportBlock(support, block, dataVersion);
+  }).sort((a, b) => a - b);
 }
 
 // Verified floor-supported shapes: jump directly onto <=1/4-height tops, or

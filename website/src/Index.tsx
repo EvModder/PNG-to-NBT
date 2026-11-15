@@ -176,7 +176,7 @@ import {
   type WaterDropShade,
   getPaletteSeedOffset,
 } from "@/lib/generationPolicy";
-import { getMixedStepSettings, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
+import { getGroundedStepColors, getMixedStepSettings, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import {
   offsetPreviewPixelReplacements,
   buildPreviewVisibleMask,
@@ -1254,15 +1254,21 @@ const Index = () => {
     () => ({ [TRANSPARENCY_BASE_INDEX]: activeTransparentBlock }),
     [activeTransparentBlock],
   );
+  // Auto-hiding unused supports must not undo the reuse plan that made them unnecessary.
+  const stepReuseSupportMode = supportMode === SupportMode.None && preferredSupportMode === SupportMode.Fragile ? preferredSupportMode : supportMode;
   const { maxHeight: mixedStepMaxHeight, palette: mixedStepPalette } = useMemo(
     () => getMixedStepSettings(
-      // Auto-hiding unused supports must not undo the reuse plan that made them unnecessary.
-      usedColorKeys, colorBlockSelections, supportMode === SupportMode.None && preferredSupportMode === SupportMode.Fragile
-        ? preferredSupportMode : supportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock,
+      usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock,
       applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop,
     ),
-    [usedColorKeys, colorBlockSelections, supportMode, preferredSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock, applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop],
+    [usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock, applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop],
   );
+  // Usually empty. Keyed by content, so palette edits that leave the list alone do not recompute geometry.
+  const groundedStepColorKey = useMemo(
+    () => getGroundedStepColors(usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveSupportFillerBlock).join(),
+    [usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveSupportFillerBlock],
+  );
+  const groundedStepColors = useMemo(() => groundedStepColorKey ? groundedStepColorKey.split(",").map(Number) : undefined, [groundedStepColorKey]);
   useEffect(() => {
     if (!imageValid || parsedTiles.length === 0) {
       if (!isParsingImage) {
@@ -1473,6 +1479,7 @@ const Index = () => {
               mixedStepMaxHeight,
               // Scoped to the tile, so changes to colors used only elsewhere keep its cached geometry.
               mixedStepPalette: scopeMixedStepPalette(mixedStepPalette, tile.derivedImageStats.usedShadesByColorKey.keys()),
+              groundedStepColors: groundedStepColors?.filter(key => tile.derivedImageStats.usedShadesByColorKey.has(key)),
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
               skipEmptySuppressSteps: skipEmptySuppressSteps && !calcKeepSuppressExtras,
@@ -1551,6 +1558,7 @@ const Index = () => {
     supportMode,
     mixedStepMaxHeight,
     mixedStepPalette,
+    groundedStepColors,
     environmentalPalette,
     skipEmptySuppressSteps,
     minSuppressStepOffset,
