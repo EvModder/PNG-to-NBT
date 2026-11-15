@@ -91,8 +91,11 @@ export type MixedStepPalette = {
   // Compatibility with this palette's shade filler, not a universal sturdy-top flag.
   canSupport: readonly boolean[];
   needsSupport: readonly boolean[];
+  // Drops its own item once the block below is broken, saving its own break action.
+  dropsUnsupported: readonly boolean[];
   floorOnlySupport: boolean;
   shadeNeedsSupport: boolean;
+  shadeDropsUnsupported: boolean;
   shadeCanSupport: boolean;
   supportCanShade: boolean;
   shadeColor: number;

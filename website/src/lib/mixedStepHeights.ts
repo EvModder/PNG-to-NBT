@@ -99,6 +99,15 @@ function canRaiseReachableBlock(block: string, growthCover: string): boolean {
   return false;
 }
 
+// Fragile blocks that return their own item when the block below is broken; scaffolding does once its whole
+// connected group is unsupported. The rest, and any unverified block, take a break action or are lost: they
+// stay (trapdoors), drop something else or nothing (amethyst, snow, cake, coral), or need shears or silk touch.
+function dropsUnsupported(block: string): boolean {
+  const id = normalizeBlockId(block);
+  return isFragileBlock(id) && !/(_trapdoor|_amethyst_bud|coral|coral_fan)$/.test(id)
+    && !/^(lily_pad|turtle_egg|sculk_sensor|calibrated_sculk_sensor|sculk_vein|chorus_plant|chorus_flower|amethyst_cluster|snow|cake|fire|soul_fire|fern|short_grass|short_dry_grass|tall_dry_grass|dead_bush|bush|nether_sprouts|glow_lichen|twisting_vines|icicle|ice_crystal|sulfur_spike|red_shrub)$/.test(id);
+}
+
 // Callers:
 // - src/Index.tsx
 export function getMixedStepSettings(
@@ -146,11 +155,13 @@ export function getMixedStepSettings(
   const supportColor = fillerColor(support);
   const supportCanShade = supportColor > 0;
   const shadeNeedsSupport = isFragileBlock(normalizeBlockId(shade));
+  const drops = blocks.map(dropsUnsupported);
+  const shadeDropsUnsupported = dropsUnsupported(shade);
   const shadeCanSupport = canSupportBlock(shade, shade, dataVersion);
   const palette = (canRaise: boolean[]): MixedStepPalette => ({
-    blocks, canRaise, canSupport, needsSupport, floorOnlySupport, shadeNeedsSupport, shadeCanSupport,
+    blocks, canRaise, canSupport, needsSupport, dropsUnsupported: drops, floorOnlySupport, shadeNeedsSupport, shadeDropsUnsupported, shadeCanSupport,
     supportCanShade, shadeColor, supportColor, shade, support,
-    key: JSON.stringify([reachableTop, blocks, canRaise, canSupport, needsSupport, shadeNeedsSupport, shadeCanSupport, shadeColor, supportColor, shade, support]),
+    key: JSON.stringify([reachableTop, blocks, canRaise, canSupport, needsSupport, drops, shadeNeedsSupport, shadeDropsUnsupported, shadeCanSupport, shadeColor, supportColor, shade, support]),
   });
   // Blocks kept on the floor only because this support block cannot hold them.
   const kept = [...new Set([...(shadeHeld ? [] : [shade]),
@@ -213,6 +224,10 @@ export function getMixedStepReuse(
       || (north.fillerRole === FillerRole.ShadeSuppress ? palette.shadeCanSupport : palette.canSupport[north.id]))) return "color-support";
 }
 
+// More than the break actions of one line and its north-edge shader, so placements always decide first.
+const PLACEMENT_COST = 4 * (MAP_SIZE + 1) + 1;
+
+// Placements, then break actions: a block that drops itself when unsupported goes with the block below it.
 function getMixedStepCost(
   north: (ShadedColorRef & ShapeColorRef) | undefined, height: number, south: ShadedColorRef | undefined, southHeight: number,
   palette: MixedStepPalette, reuseSupport = true,
@@ -220,14 +235,19 @@ function getMixedStepCost(
   const block = !north || isTransparentColor(north) ? "" : north.fillerRole === FillerRole.SupportRetained ? palette.support
     : north.fillerRole === FillerRole.ShadeSuppress ? palette.shade : palette.blocks[north.id];
   const ownSupport = !!north && !!block && height > 0 && needsStepSupport(north, palette);
-  const own = block ? 1 + Number(ownSupport) : 0;
-  if (!south || isTransparentColor(south) || south.shade === Shade.Light) return own;
-  const reuse = getMixedStepReuse(north, height, south, southHeight, palette);
-  if (reuse === "color" || (reuseSupport && reuse === "support")) return own;
-  const shaderHeight = southHeight + Number(south.shade === Shade.Dark);
-  return own + Number(height !== shaderHeight || block !== palette.shade)
-    + Number(palette.shadeNeedsSupport && shaderHeight > 0 && !(ownSupport && height === shaderHeight)
-      && !(block === palette.support && height === shaderHeight - 1) && !(reuseSupport && reuse === "color-support"));
+  let placed = block ? 1 + Number(ownSupport) : 0;
+  let dropped = Number(ownSupport && (north!.fillerRole === FillerRole.ShadeSuppress ? palette.shadeDropsUnsupported
+    : !north!.fillerRole && palette.dropsUnsupported[north!.id]));
+  const reuse = !south || isTransparentColor(south) || south.shade === Shade.Light ? "color" : getMixedStepReuse(north, height, south, southHeight, palette);
+  if (reuse !== "color" && !(reuseSupport && reuse === "support")) {
+    const shaderHeight = southHeight + Number(south!.shade === Shade.Dark);
+    const shader = height !== shaderHeight || block !== palette.shade;
+    placed += Number(shader)
+      + Number(palette.shadeNeedsSupport && shaderHeight > 0 && !(ownSupport && height === shaderHeight)
+        && !(block === palette.support && height === shaderHeight - 1) && !(reuseSupport && reuse === "color-support"));
+    dropped += Number(shader && palette.shadeNeedsSupport && palette.shadeDropsUnsupported && shaderHeight > 0);
+  }
+  return placed * PLACEMENT_COST + placed - dropped;
 }
 
 // Callers:
@@ -261,7 +281,7 @@ export function getSupportedStepHeights(
   const lowerMinima = new Uint8Array(states);
   const higherMinima = new Uint8Array(states);
   const candidates = new Uint8Array(6);
-  // Minimize placements, then substitutions, then raised pixels.
+  // Minimize placements, then break actions, then substitutions, then raised pixels.
   const preferenceWeight = MAP_SIZE * maxHeight + 1;
   const weight = preferenceWeight * (MAP_SIZE + 1);
   // Costs depend on the north color, south shade and two heights, not pixel position.

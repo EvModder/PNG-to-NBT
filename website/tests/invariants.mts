@@ -1631,12 +1631,12 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
     }
   }
   // Lifts that only the support block prevents are counted and their blocks listed; other causes are not.
-  const lift = (support: string, shade: string, jumpable: boolean) => getMixedStepSettings([4, 6, 22],
-    { ...selections, selectedBlocks: { 2: "candle", 3: "dandelion", 11: "stone" } }, SupportMode.Fragile, shade, support, true, 1, jumpable);
+  const lift = (support: string, shade: string, jumpable: boolean, block = "candle") => getMixedStepSettings([4, 6, 22],
+    { ...selections, selectedBlocks: { 2: block, 3: "dandelion", 11: "stone" } }, SupportMode.Fragile, shade, support, true, 1, jumpable);
   const liftGrid: ColorGrid = Array.from({ length: MAP_SIZE }, (_, x) => Array.from({ length: MAP_SIZE }, (_, z) => (
     { id: x < 2 ? 2 : 11, isCustom: false, shade: x < 2 ? z % 3 as Shade : Shade.Flat })));
-  const blocked = (support: string, shade: string, jumpable: boolean) => {
-    const { palette, unsupported } = lift(support, shade, jumpable);
+  const blocked = (support: string, shade: string, jumpable: boolean, block?: string) => {
+    const { palette, unsupported } = lift(support, shade, jumpable, block);
     return unsupported && [unsupported.blocks, countUnsupportedLifts(liftGrid, palette, unsupported)];
   };
   assert.equal(blocked("dirt", "scaffolding", true), undefined);
@@ -1645,7 +1645,8 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
   assert.deepEqual(blocked("oak_slab", "scaffolding", true), [["scaffolding", "candle", "dandelion"], 84]);
   assert.deepEqual(lift("oak_slab", "stone", true), { maxHeight: 0 }, "An unreachable shade filler is not a support problem");
   assert.equal(lift("oak_slab", "stone", false).palette!.canRaise[2], false);
-  assert.deepEqual(blocked("oak_slab", "stone", false), [["candle"], 0], "A lift that would not pay off is not counted");
+  assert.deepEqual(blocked("oak_slab", "stone", false), [["candle"], 84], "Equal placements, but a lifted candle drops with its support");
+  assert.deepEqual(blocked("oak_slab", "stone", false, "short_grass"), [["short_grass"], 0], "A lift that would not pay off is not counted");
 }
 
 async function assertMixedStepSupportPairs(): Promise<void> {
@@ -1686,6 +1687,12 @@ async function assertMixedStepSupportPairs(): Promise<void> {
     assert.equal(settings("stone", "poppy", soil, false).maxHeight, Number(holds), `Poppy shade filler over ${soil} support`);
   }
   assert.equal(getMixedStepReuse(north, 0, south, 0, settings("muddy_mangrove_roots", "poppy", "dirt", false).palette!), "color-support");
+  // Only blocks that return their own item are lifted to save a break action.
+  for (const [block, drops] of [["poppy", true], ["white_carpet", true], ["candle", true], ["stone_pressure_plate", true],
+    ["amethyst_cluster", false], ["small_amethyst_bud", false], ["snow", false], ["oak_trapdoor", false], ["scaffolding", true],
+    ["dead_tube_coral_fan[waterlogged=false]", false], ["short_grass", false], ["stone", false]] as const) {
+    assert.equal(settings(block, "candle", "resin_block", false).palette!.dropsUnsupported[50], drops, `${block} drops itself`);
+  }
   // Jumpable tops: plants have no collision box, so only the support and a solid growth cover matter.
   for (const [plant, soil, jumpable, cover] of [["poppy", "dirt", true], ["poppy", "resin_block", false], ["red_mushroom", "mycelium", true],
     ["short_grass", "moss_block", true], ["nether_wart", "soul_sand", true], ["sweet_berry_bush", "dirt", true],
