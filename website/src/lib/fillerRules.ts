@@ -44,7 +44,6 @@ const DISABLED_FILLER_ALIASES = new Set<string>(["air", "none", "n/a", "na"]);
 
 // Callers:
 // - src/components/ToolbarFillerSettings.tsx
-// - src/lib/mixedStepHeights.ts
 export function getFillerFloorAttachmentFix(block: string): string | null {
   const id = normalizeBlockId(block);
   if (id !== "resin_clump" && id !== "glow_lichen" && id !== "sculk_vein") return null;

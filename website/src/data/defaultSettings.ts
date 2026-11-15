@@ -45,6 +45,7 @@ import { SupportMode, type BlockDisplayMode, type ColumnId, type SortDir, type S
 // - src/components/ToolbarFillerSettings.tsx
 // - src/lib/environmentalSupport.ts
 // - src/lib/fillerRules.ts
+// - src/lib/mixedStepHeights.ts
 export const DEFAULT_ACTIVE_PRESET_NAME = "Fullblock";
 export const DEFAULT_SUPPORT_FILLER_BLOCK = "cobblestone";
 export const DEFAULT_GROWTH_COVER_BLOCK = "tripwire";

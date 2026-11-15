@@ -13,13 +13,14 @@
  * - src/lib/shapeBlocksSuppress.ts
  * - src/lib/shapeGeneration.ts
  */
-import { DEFAULT_MINECRAFT_VERSION, MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defaultSettings";
+import { DEFAULT_GROWTH_COVER_BLOCK, DEFAULT_MINECRAFT_VERSION, MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
+import { isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
-import { canSupportBlock, getBlockSupport } from "./blockSupport";
+import { canSupportBlock, getBlockSupport, standsOnFloor } from "./blockSupport";
+import { environmentalRole, isGrowthCoverEnabled } from "./environmentalSupport";
 import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, stripDefaultBlockNamespace, type ColorBlockSelections } from "@/lib/blockId";
-import { getFillerFloorAttachmentFix, isFillerDisabled } from "@/lib/fillerRules";
+import { isFillerDisabled } from "@/lib/fillerRules";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { FillerRole, type MixedStepPalette } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
@@ -75,17 +76,24 @@ export function getGroundedStepColors(
 
 // Verified floor-supported shapes: jump directly onto <=1/4-height tops, or
 // land on exposed support and step onto inset tops <=1/2 high. Unknowns stay down.
-function canRaiseReachableBlock(block: string): boolean {
-  const { id, props } = getBlockSupport(block);
-  if (!isFragileBlock(id)) return false;
-  if (props.get("waterlogged") === "true") return false;
+function canRaiseReachableBlock(block: string, growthCover: string): boolean {
+  const { id, props, passable } = getBlockSupport(block);
+  if (!isFragileBlock(id) || !standsOnFloor(block)) return false;
+  // Coral and sea pickles default to waterlogged, so only an explicitly dry state counts.
+  if (/coral|sea_pickle/.test(id) ? props.get("waterlogged") !== "false" : props.get("waterlogged") === "true") return false;
+  // Living coral already has a generated support of its own below it.
+  if (environmentalRole(id) === FillerRole.CoralSupport) return false;
+  // Without a collision box the bot lands on the support itself. Fire would burn it there.
+  if (passable && id !== "fire" && id !== "soul_fire") {
+    // A growing plant's cover is in the bot's head space, so it must be passable too.
+    return environmentalRole(id) !== FillerRole.GrowthCover || !isGrowthCoverEnabled(growthCover) || getBlockSupport(growthCover).passable;
+  }
   // Passable from the side despite its sturdy top; still requires support.
   if (id === "scaffolding") return true;
-  if (id === "resin_clump" || id === "glow_lichen" || id === "sculk_vein") return getFillerFloorAttachmentFix(block) === null;
-  if (id === "sea_pickle" || /^dead_(tube|brain|bubble|fire|horn)_coral_fan$/.test(id)) return props.get("waterlogged") === "false";
+  if (id === "sea_pickle") return true;
   if (id.endsWith("_carpet")) return props.get("bottom") !== "false";
-  if (id.endsWith("_pressure_plate") || id === "candle" || id.endsWith("_candle")) return true;
-  if (id === "amethyst_cluster" || /^(small|medium|large)_amethyst_bud$/.test(id) || id === "ice_crystal") return (props.get("facing") ?? "up") === "up";
+  if (id === "candle" || id.endsWith("_candle")) return true;
+  if (id === "amethyst_cluster" || /^(small|medium|large)_amethyst_bud$/.test(id) || id === "ice_crystal") return true;
   if (id === "snow") return ["1", "2", "3"].includes(props.get("layers") ?? "1");
   if (id.endsWith("_trapdoor")) return props.get("open") !== "true" && (props.get("half") ?? "bottom") === "bottom";
   return false;
@@ -102,6 +110,7 @@ export function getMixedStepSettings(
   assumeFloor: boolean,
   maxColorBlockLift = MAX_STEP_COLOR_BLOCK_LIFT,
   reachableTop = MIXED_STEP_REACHABLE_TOP,
+  growthCover = DEFAULT_GROWTH_COVER_BLOCK,
 ): { maxHeight: number; palette?: MixedStepPalette; unsupported?: UnsupportedLifts } {
   reachableTop &&= maxColorBlockLift === 1;
   if (!reachableTop && supportMode === SupportMode.None) return {
@@ -123,12 +132,12 @@ export function getMixedStepSettings(
   // Exact catalog states only: arbitrary input tags can change a block's map color.
   const fillerColor = (name: string) => BASE_COLORS.findIndex((color, id) => id > 0 && id !== WATER_BASE_INDEX
     && color.blocks.some(block => resolveExportBlockName(block) === name));
-  const fits = (block: string) => reachableTop ? canRaiseReachableBlock(block)
-    : canRaiseStepBlocks([], selections, block) || (isFragileBlock(normalizeBlockId(block))
-      && !FRAGILE_SUPPORT_RULES.has(normalizeBlockId(block)) && fillerColor(block) > 0);
+  // Covers go above palette blocks only, so the shade filler is checked without one.
+  const fits = (block: string, cover = "") => reachableTop ? canRaiseReachableBlock(block, cover)
+    : canRaiseStepBlocks([], selections, block) || (isFragileBlock(normalizeBlockId(block)) && fillerColor(block) > 0);
   if (isFillerDisabled(shade) || !fits(shade)) return { maxHeight: 0 };
   const holds = (block: string) => canSupportBlock(support, block, dataVersion);
-  const fit = blocks.map(fits);
+  const fit = blocks.map(block => fits(block, growthCover));
   const canRaise = fit.map((ok, id) => ok && holds(blocks[id]));
   const shadeHeld = holds(shade);
   const canSupport = blocks.map(block => canSupportBlock(block, shade, dataVersion));

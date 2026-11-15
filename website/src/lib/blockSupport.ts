@@ -6,6 +6,7 @@
  *
  * Public API:
  * - getBlockSupport()
+ * - standsOnFloor()
  * - canSupportBlock()
  *
  * Callers:
@@ -136,6 +137,23 @@ export function getBlockSupport(block: string, dataVersion: number = MINECRAFT_V
   return result;
 }
 
+// Callers:
+// - src/lib/mixedStepHeights.ts
+//
+// False for states that hang, or attach to a wall or ceiling, rather than resting on the block below.
+export function standsOnFloor(block: string): boolean {
+  const { id, props } = getBlockSupport(block);
+  // Buttons and levers default to a wall face.
+  const face = props.get("face") ?? (id.endsWith("_button") || id === "lever" ? "wall" : "floor");
+  if (/(^|_)wall_|_hanging_sign$|^(weeping_vines|cave_vines)(_plant)?$|^(hanging_roots|spore_blossom|pale_hanging_moss)$/.test(id)
+    || props.get("hanging") === "true" || face !== "floor" || props.get("vertical_direction") === "down") return false;
+  if (id === "bell") return (props.get("attachment") ?? "floor") === "floor";
+  if (["resin_clump", "glow_lichen", "sculk_vein"].includes(id)) return props.get("down") === "true"
+    && !["north", "south", "east", "west", "up"].some(side => props.get(side) === "true");
+  if (id.includes("amethyst") || id === "ice_crystal") return (props.get("facing") ?? "up") === "up";
+  return true;
+}
+
 // Whether this exact block can use this exact base, without help from other neighbors.
 // Scaffolding connectivity, chorus branches and side/ceiling attachments need geometry checks.
 // Chorus is treated as independently floor-supported: dense branches can still violate
@@ -149,11 +167,9 @@ export function canSupportBlock(support: string, block: string, dataVersion?: nu
   // This is not a survival guarantee for unknown/custom-only attachments or compound blocks;
   // intentionally unmodeled vanilla cases are recorded in the maintenance support review.
   if (!isFragileBlock(id)) return true;
-  if (props.get("hanging") === "true" || ["wall", "ceiling"].includes(props.get("face") ?? "") || props.get("vertical_direction") === "down") return false;
-  if (id === "bell" && (props.get("attachment") ?? "floor") !== "floor") return false;
-  if (["resin_clump", "glow_lichen", "sculk_vein"].includes(id)) return base.outline && props.get("down") === "true"
-    && !["north", "south", "east", "west", "up"].some(face => props.get(face) === "true");
-  if (id.includes("amethyst") || id === "ice_crystal") return base.full && (props.get("facing") ?? "up") === "up";
+  if (!standsOnFloor(block)) return false;
+  if (["resin_clump", "glow_lichen", "sculk_vein"].includes(id)) return base.outline;
+  if (id.includes("amethyst") || id === "ice_crystal") return base.full;
   if (id === "brown_mushroom" || id === "red_mushroom") return base.modern ? base.center
     : FRAGILE_SUPPORT_RULES.get(id)!.validSupportBlocks.includes(base.id) || base.full;
   if (id === "lily_pad") return base.water && (base.id !== "water" || (base.props.get("level") ?? "0") === "0")

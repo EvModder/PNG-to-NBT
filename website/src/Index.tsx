@@ -1270,9 +1270,9 @@ const Index = () => {
   const { maxHeight: mixedStepMaxHeight, palette: mixedStepPalette, unsupported: liftUnsupported } = useMemo(
     () => getMixedStepSettings(
       usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock,
-      applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop,
+      applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop, growthCoverBlock,
     ),
-    [usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock, applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop],
+    [usedColorKeys, colorBlockSelections, stepReuseSupportMode, effectiveShadeFillerBlock, effectiveSupportFillerBlock, applySupportFloorYs, maxStepColorBlockLift, mixedStepReachableTop, growthCoverBlock],
   );
   // Usually empty. Keyed by content, so palette edits that leave the list alone do not recompute geometry.
   const groundedStepColorKey = useMemo(

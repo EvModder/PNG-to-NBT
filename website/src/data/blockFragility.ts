@@ -145,7 +145,6 @@ type FragileSupportRule = Readonly<FragileSupportRuleValue>;
 // Callers:
 // - src/Index.tsx
 // - src/lib/blockSupport.ts
-// - src/lib/mixedStepHeights.ts
 // - src/lib/placementWarnings.ts
 // - src/lib/shapeModel.ts
 // Modern substrate rules are used for every target version.

@@ -25,7 +25,7 @@ import { generateShapeMap } from "@/lib/shapeGeneration";
 import { countUnsupportedLifts, getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, getMixedStepColor, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { analyzeFillerNeeds, analyzeMaterialNeeds, analyzeScaffoldingSupport } from "@/lib/shapeAnalysis";
-import { getBlockSupport, canSupportBlock } from "@/lib/blockSupport";
+import { getBlockSupport, canSupportBlock, standsOnFloor } from "@/lib/blockSupport";
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getPlacementWarnings } from "@/lib/placementWarnings";
@@ -1639,9 +1639,10 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
     const { palette, unsupported } = lift(support, shade, jumpable);
     return unsupported && [unsupported.blocks, countUnsupportedLifts(liftGrid, palette, unsupported)];
   };
-  assert.equal(blocked("resin_block", "scaffolding", true), undefined);
+  assert.equal(blocked("dirt", "scaffolding", true), undefined);
+  assert.deepEqual(blocked("resin_block", "scaffolding", true), [["dandelion"], 0], "Listed, but unused in this image");
   assert.equal(lift("oak_slab", "scaffolding", true).maxHeight, 0);
-  assert.deepEqual(blocked("oak_slab", "scaffolding", true), [["scaffolding", "candle"], 84]);
+  assert.deepEqual(blocked("oak_slab", "scaffolding", true), [["scaffolding", "candle", "dandelion"], 84]);
   assert.deepEqual(lift("oak_slab", "stone", true), { maxHeight: 0 }, "An unreachable shade filler is not a support problem");
   assert.equal(lift("oak_slab", "stone", false).palette!.canRaise[2], false);
   assert.deepEqual(blocked("oak_slab", "stone", false), [["candle"], 0], "A lift that would not pay off is not counted");
@@ -1651,9 +1652,9 @@ async function assertMixedStepSupportPairs(): Promise<void> {
   const north = { id: 50, isCustom: false, shade: Shade.Light };
   const south = { id: 11, isCustom: false, shade: Shade.Dark };
   const selections = { selectedBlocks: { 50: "decorated_pot", 11: "stone" }, selectedBlocksCustom: {}, customColors: [] };
-  const settings = (block: string, shade: string, support = "resin_block", jumpable = true, colorId = 50) =>
+  const settings = (block: string, shade: string, support = "resin_block", jumpable = true, colorId = 50, cover?: string) =>
     getMixedStepSettings([], { ...selections, selectedBlocks: { ...selections.selectedBlocks, [colorId]: block } },
-      SupportMode.Fragile, shade, support, true, 1, jumpable);
+      SupportMode.Fragile, shade, support, true, 1, jumpable, cover);
   for (const [block, shade, compatible] of [
     ["decorated_pot", "heavy_weighted_pressure_plate", true],
     ["decorated_pot", "candle", true], ["decorated_pot", "sea_pickle[waterlogged=false]", true],
@@ -1677,6 +1678,45 @@ async function assertMixedStepSupportPairs(): Promise<void> {
     || settings("amethyst_cluster[facing=north]", "candle", "resin_block", false).palette?.canRaise[50]) {
     throw new Error("Raised blocks must have compatible below-only support, including configured supports");
   }
+  // Plants with a soil requirement lift onto any block that satisfies it: the support
+  // filler below a lifted color, or a color block below a plant used as the shade filler.
+  for (const [soil, holds] of [["muddy_mangrove_roots", true], ["dirt", true], ["resin_block", false]] as const) {
+    assert.equal(settings("poppy", "candle", soil, false).palette!.canRaise[50], holds, `Lifted poppy on ${soil}`);
+    assert.equal(settings(soil, "poppy", "dirt", false).palette!.canSupport[50], holds, `Poppy shade filler on ${soil}`);
+    assert.equal(settings("stone", "poppy", soil, false).maxHeight, Number(holds), `Poppy shade filler over ${soil} support`);
+  }
+  assert.equal(getMixedStepReuse(north, 0, south, 0, settings("muddy_mangrove_roots", "poppy", "dirt", false).palette!), "color-support");
+  // Jumpable tops: plants have no collision box, so only the support and a solid growth cover matter.
+  for (const [plant, soil, jumpable, cover] of [["poppy", "dirt", true], ["poppy", "resin_block", false], ["red_mushroom", "mycelium", true],
+    ["short_grass", "moss_block", true], ["nether_wart", "soul_sand", true], ["sweet_berry_bush", "dirt", true],
+    ["wither_rose", "dirt", true], ["wheat", "farmland", true], ["azalea", "dirt", false],
+    ["oak_sapling", "dirt", true], ["oak_sapling", "dirt", true, "tripwire"], ["oak_sapling", "dirt", true, "air"],
+    ["oak_sapling", "dirt", false, "glass"], ["mangrove_propagule", "mud", false, "glass"], ["bamboo_sapling", "dirt", false, "glass"],
+    ["poppy", "dirt", true, "glass"]] as const) {
+    assert.equal(!!settings(plant, plant, soil, true, 50, cover).palette?.canRaise[50], jumpable, `Jumpable ${plant} on ${soil}, cover ${cover}`);
+  }
+  assert.equal(settings("stone", "poppy", "dirt").maxHeight, 1, "A passable plant is a jumpable shade filler");
+  // A solid cover keeps a palette sapling down without stopping other lifts, and never applies to
+  // the shade filler, which gets no cover.
+  const covered = settings("oak_sapling", "candle", "dirt", true, 50, "glass");
+  assert.deepEqual([covered.maxHeight, covered.palette!.canRaise[50]], [1, false]);
+  for (const shade of ["oak_sapling", "twisting_vines[age=25]"]) {
+    assert.equal(settings("candle", shade, "dirt", true, 50, "glass").palette?.canRaise[50], true, `Uncovered ${shade} shade filler`);
+  }
+  // Hanging, wall and ceiling states, and coral that defaults to waterlogged, are never jumpable lifts;
+  // other passable floor blocks are.
+  const jumpable = (block: string, support: string) => {
+    const result = getMixedStepSettings([100], { ...selections, selectedBlocks: { 50: block, 11: "stone" } }, SupportMode.Fragile, "candle", support, true, 1, true);
+    return !!result.palette?.canRaise[50] || !!result.unsupported?.blocks.includes(block);
+  };
+  for (const [block, support, expected] of [["mangrove_propagule[hanging=true]", "mud", false], ["mangrove_propagule", "mud", true],
+    ["oak_button", "resin_block", false], ["oak_button[face=floor]", "resin_block", true], ["lantern[hanging=true]", "resin_block", false],
+    ["dead_tube_coral_fan", "resin_block", false], ["dead_tube_coral_fan[waterlogged=false]", "resin_block", true],
+    ["tube_coral[waterlogged=false]", "resin_block", false], ["oak_sign", "resin_block", true], ["fire", "netherrack", false]] as const) {
+    assert.equal(standsOnFloor(block), !/hanging|button$/.test(block), `Floor state ${block}`);
+    assert.equal(jumpable(block, support), expected, `Jumpable ${block}`);
+  }
+  for (const block of ["weeping_vines", "cave_vines_plant", "spore_blossom", "oak_hanging_sign", "oak_wall_sign"]) assert(!standsOnFloor(block), block);
   const grid: ColorGrid = Array.from({ length: MAP_SIZE }, () => Array(MAP_SIZE).fill(TRANSPARENT_COLOR));
   grid[64][3] = south;
   for (const [block, shade, reused] of [

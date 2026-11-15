@@ -9,6 +9,7 @@
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx
+ * - src/lib/mixedStepHeights.ts
  * - src/lib/placementWarnings.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/tileGeometryWorkerTypes.ts
