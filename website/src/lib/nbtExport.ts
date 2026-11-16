@@ -32,6 +32,7 @@ import {
   isWithinShapeBounds,
   NO_SUPPORT_FLOORS,
   parseShapeCoordKey,
+  toShapeCoordKey,
   resolveShapeFiller,
 } from "./shapeModel";
 import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
@@ -417,7 +418,7 @@ function appendCrubTechPlatformBlocks(
     [Shade.Flat]: bottomPlatformY - DEFAULT_CRUBTECH_FLAT_WATER_DROP,
     [Shade.Light]: bottomPlatformY - DEFAULT_CRUBTECH_LIGHT_WATER_DROP,
   } as const;
-  const waterShadeByCoord = new Map<string, Shade>();
+  const waterShadeByCoord = new Map<number, Shade>();
   for (const part of shape.parts) {
     for (const [coord, cell] of part.cells) {
       if (!isShapeColorCell(cell) || cell.isCustom || cell.id !== WATER_BASE_INDEX) continue;
@@ -430,7 +431,7 @@ function appendCrubTechPlatformBlocks(
           : y === shadeLayerYs[Shade.Dark]
             ? Shade.Dark
             : null;
-      if (shade !== null) waterShadeByCoord.set(`${x},${z}`, shade);
+      if (shade !== null) waterShadeByCoord.set(x * MAP_SIZE + z, shade);
     }
   }
   if (waterShadeByCoord.size === 0) {
@@ -438,9 +439,9 @@ function appendCrubTechPlatformBlocks(
     if (platformYs.size === 0) return;
   }
 
-  const blockIndexByCoord = new Map<string, number>(blocks.map((block, index) => [`${block.x},${block.y},${block.z}`, index]));
+  const blockIndexByCoord = new Map<number, number>(blocks.map((block, index) => [toShapeCoordKey(block.x, block.y, block.z), index]));
   const upsertBlock = (x: number, y: number, z: number, blockName: string, replace = false) => {
-    const key = `${x},${y},${z}`;
+    const key = toShapeCoordKey(x, y, z);
     const existingIndex = blockIndexByCoord.get(key);
     if (existingIndex !== undefined) {
       if (replace) {
@@ -467,7 +468,7 @@ function appendCrubTechPlatformBlocks(
     const y = shadeLayerYs[shade];
     for (let x = 0; x < MAP_SIZE; x += 1) {
       for (let z = 0; z < MAP_SIZE; z += 1) {
-        const blockName = waterShadeByCoord.get(`${x},${z}`) === shade
+        const blockName = waterShadeByCoord.get(x * MAP_SIZE + z) === shade
           ? CRUBTECH_WATERLOGGED_GLASS_PANE_BLOCK_NAME
           : CRUBTECH_GLASS_PANE_BLOCK_NAME;
         upsertBlock(x, y, z, blockName, true);
@@ -487,7 +488,7 @@ function appendCrubTechPlatformBlocks(
     }
     for (const [coord, shade] of waterShadeByCoord) {
       if (shade !== waterShade) continue;
-      const [x, z] = coord.split(",").map(Number);
+      const x = Math.floor(coord / MAP_SIZE), z = coord % MAP_SIZE;
       for (let y = waterY - 1; y > catcherPaneY; y -= 1) {
         upsertBlock(x, y, z, CRUBTECH_FALLING_WATER_BLOCK_NAME, true);
       }

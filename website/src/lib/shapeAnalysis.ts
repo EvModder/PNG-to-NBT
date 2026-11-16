@@ -412,7 +412,7 @@ export function collectFillerRolePixels(
   zColumnRange?: [number, number],
 ): FillerRolePixel[] {
   const roleSet = new Set<FillerRole>(roles);
-  const pixels = new Map<string, FillerRole>();
+  const pixels = new Map<number, FillerRole>();
 
   for (const part of shape.parts) {
     for (const [coord, cell] of part.cells) {
@@ -425,14 +425,11 @@ export function collectFillerRolePixels(
       if (zColumnRange && (z < zColumnRange[0] || z > zColumnRange[1])) continue;
       if (x < 0 || x >= MAP_SIZE || z < 0 || z >= MAP_SIZE) continue;
 
-      pixels.set(`${x},${z}`, role);
+      pixels.set(x * MAP_SIZE + z, role);
     }
   }
 
-  return Array.from(pixels.entries(), ([key, role]) => {
-    const [x, z] = key.split(",").map(Number);
-    return { x, z, role };
-  });
+  return Array.from(pixels, ([key, role]) => ({ x: Math.floor(key / MAP_SIZE), z: key % MAP_SIZE, role }));
 }
 
 // Callers:

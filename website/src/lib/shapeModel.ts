@@ -70,6 +70,7 @@ const SHAPE_COORD_Z_SIZE = 512;
 const SHAPE_COORD_Y_SIZE = 8192;
 
 // Callers:
+// - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeGeneration.ts
