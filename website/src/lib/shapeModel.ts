@@ -19,7 +19,7 @@
  * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
  */
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
 import { resolveAssignedFillerName } from "@/lib/fillerRules";
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { BASE_COLORS } from "@/data/mapColors";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
 import { EXCLUDED_BLOCKS } from "@/data/mapColorsExcluded";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { BUILTIN_PRESET_NAMES, getBuiltinPreset } from "@/data/presets";

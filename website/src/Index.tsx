@@ -205,7 +205,7 @@ import {
 import { getClipboardImageFile } from "@/utils/imageInput";
 import { formatStacks } from "@/utils/minecraft";
 import { BuildMode, SuppressStepDirection, FillerRole } from "@/types/conversion";
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getVersionedSelections } from "@/lib/minecraftVersion";
 import { areBlockFallbacksEqual, normalizeBlockFallbacks, updatePresetBlockSelection } from "@/lib/presetFallbacks";

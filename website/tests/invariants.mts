@@ -26,7 +26,7 @@ import { getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, scopeMi
 import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { canSupportBlock } from "@/lib/blockSupport";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
 import { normalizeBlockId, sanitizeUserBlockEntry, type ColorBlockSelections } from "@/lib/blockId";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";

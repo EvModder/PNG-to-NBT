@@ -14,7 +14,7 @@
  */
 import { DEFAULT_MINECRAFT_VERSION, MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defaultSettings";
 import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
 import { canSupportBlock, getBlockSupport } from "./blockSupport";
 import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";

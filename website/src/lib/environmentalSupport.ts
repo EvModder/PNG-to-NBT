@@ -11,7 +11,7 @@
  * - src/lib/shapeGeneration.ts
  * - src/lib/tileGeometryWorkerTypes.ts
  */
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { isFragileBlock } from "@/data/blockFragility";
 import { DEFAULT_GROWTH_COVER_BLOCK } from "@/data/defaultSettings";
 import { normalizeBlockId, resolveAssignedColorBlock, type ColorBlockSelections } from "./blockId";
 import { parseColorRefKey, type ColorRefKey } from "./colorRefs";

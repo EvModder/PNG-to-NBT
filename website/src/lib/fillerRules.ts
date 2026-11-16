@@ -28,7 +28,7 @@ import { BASE_COLORS, TRANSPARENCY_BASE_INDEX } from "../data/mapColors";
 import { normalizeBlockId, resolveExportBlockName } from "@/lib/blockId";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
-import { isFragileBlock } from "@/data/fragileBlocks";
+import { isFragileBlock } from "@/data/blockFragility";
 import { DEFAULT_GROWTH_COVER_BLOCK } from "@/data/defaultSettings";
 
 const TRANSPARENT_FILLER_BLOCKS = new Set<string>(["chain", ...BASE_COLORS[TRANSPARENCY_BASE_INDEX].blocks.map(normalizeBlockId)]);

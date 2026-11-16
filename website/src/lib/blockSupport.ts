@@ -11,7 +11,7 @@
  * Callers:
  * - src/lib/mixedStepHeights.ts
  */
-import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/fragileBlocks";
+import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/blockFragility";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
 import { normalizeBlockId } from "./blockId";

@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { MINECRAFT_VERSIONS } from "../website/src/data/minecraftVersions.ts";
-import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "../website/src/data/fragileBlocks.ts";
+import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "../website/src/data/blockFragility.ts";
 import { canSupportBlock, getBlockSupport } from "../website/src/lib/blockSupport.ts";
 import { getMinecraftCatalog } from "../website/src/lib/minecraftVersion.ts";
 
@@ -24,7 +24,7 @@ const fingerprint = value => createHash("sha256").update(JSON.stringify(value, (
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)).digest("hex");
 const transpiler = new Bun.Transpiler({ loader: "ts", minifyWhitespace: true });
 // Ignore comments/formatting, but require a cached registry recheck after rule changes.
-const policyHash = fingerprint(await Promise.all(["data/fragileBlocks.ts", "lib/blockSupport.ts"].map(async file =>
+const policyHash = fingerprint(await Promise.all(["data/blockFragility.ts", "lib/blockSupport.ts"].map(async file =>
   transpiler.transformSync(await fs.readFile(new URL(`../website/src/${file}`, import.meta.url), "utf8")))));
 
 function command(program, args, cwd) {
