@@ -1,5 +1,10 @@
 /**
- * Public API: isGrowthCoverEnabled(), getEnvironmentalSettings(), scopeEnvironmentalPalette(), isGrowthCoverValid()
+ * Public API:
+ * - isGrowthCoverEnabled()
+ * - getEnvironmentalSettings()
+ * - scopeEnvironmentalPalette()
+ * - isGrowthCoverValid()
+ *
  * Callers:
  * - src/Index.tsx
  * - src/components/ToolbarFillerSettings.tsx

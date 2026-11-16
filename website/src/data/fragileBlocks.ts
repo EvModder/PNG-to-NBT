@@ -1,4 +1,10 @@
 /**
+ * Notes:
+ * - Placement conditions checked against Minecraft block implementations.
+ * - Includes placement-time support (e.g. trapdoors), even without a continued survival check.
+ * - Catalog exclusion does not remove placement requirements for custom block inputs.
+ * - On version updates, run audit:block-support; see scripts/block-support-review.json.
+ *
  * Public API:
  * - FRAGILE_SUPPORT_RULES
  * - isFragileBlock()
@@ -11,12 +17,6 @@
  * - src/lib/fillerRules.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/shapeModel.ts
- *
- * Notes:
- * - Placement conditions checked against Minecraft block implementations.
- * - Includes placement-time support (e.g. trapdoors), even without a continued survival check.
- * - Catalog exclusion does not remove placement requirements for custom block inputs.
- * - On version updates, run audit:block-support; see scripts/block-support-review.json.
  */
 const DIRT_SUPPORTED_FLOWERS = [
   "poppy", "dandelion", "golden_dandelion", "blue_orchid", "allium", "azure_bluet",

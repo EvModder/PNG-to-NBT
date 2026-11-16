@@ -3,10 +3,10 @@
  * - BlockPreset
  * - BUILTIN_PRESET_NAMES
  * - CRUBTECH_PRESET_NAME
- * - arePresetBlocksEqual
- * - findMatchingBuiltinPresetName
- * - getBuiltinPreset
- * - isAutoCustomPresetName
+ * - arePresetBlocksEqual()
+ * - findMatchingBuiltinPresetName()
+ * - getBuiltinPreset()
+ * - isAutoCustomPresetName()
  *
  * Callers:
  * - src/Index.tsx

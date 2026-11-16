@@ -113,7 +113,8 @@ export function getMixedStepSettings(
   } };
 }
 
-// Callers: src/Index.tsx
+// Callers:
+// - src/Index.tsx
 //
 // The palette covers every base color. Keying a tile's geometry by only the colors it
 // uses (plus the fillers placed in it) keeps block changes elsewhere from regenerating it.

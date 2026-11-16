@@ -3,6 +3,7 @@
  * - normalizeBlockFallbacks()
  * - areBlockFallbacksEqual()
  * - updatePresetBlockSelection()
+ *
  * Callers:
  * - src/Index.tsx
  * - src/lib/codecPreset.ts

@@ -1,5 +1,8 @@
 /**
- * Public API: analyzeBaseGeometry(), analyzeFinalGeometry()
+ * Public API:
+ * - analyzeBaseGeometry()
+ * - analyzeFinalGeometry()
+ *
  * Callers:
  * - src/lib/tileGeometry.worker.ts
  */

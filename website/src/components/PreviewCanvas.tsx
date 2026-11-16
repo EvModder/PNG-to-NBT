@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - PreviewCanvas()
+ *
  * Callers:
  * - src/components/PanelImagePreview.tsx
  */

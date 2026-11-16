@@ -4,7 +4,8 @@
  * - toggleTheme()
  * - observeTheme()
  *
- * Callers: src/Index.tsx
+ * Callers:
+ * - src/Index.tsx
  */
 import { STORAGE_KEYS } from "@/data/storageKeys";
 

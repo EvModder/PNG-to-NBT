@@ -1,12 +1,15 @@
 /**
- * Public API: getBlockSupport(), canSupportBlock()
- * Callers:
- * - src/lib/mixedStepHeights.ts
- *
  * Support shape, collision shape and outline shape are different Minecraft properties.
  * Pair checks are shared by reuse and warnings; surroundings are checked separately.
  * Shapes use known IDs/families, not a general block-physics engine for arbitrary inputs.
  * Maintenance coverage and intentional omissions: scripts/block-support-review.json.
+ *
+ * Public API:
+ * - getBlockSupport()
+ * - canSupportBlock()
+ *
+ * Callers:
+ * - src/lib/mixedStepHeights.ts
  */
 import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/fragileBlocks";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";

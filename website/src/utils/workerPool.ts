@@ -2,7 +2,9 @@
  * Public API:
  * - createWorkerPool()
  *
- * Callers: src/lib/tileGeometryWorkerClient.ts, src/lib/tileParsingWorkerClient.ts
+ * Callers:
+ * - src/lib/tileGeometryWorkerClient.ts
+ * - src/lib/tileParsingWorkerClient.ts
  */
 export function createWorkerPool<Request, Result>(createWorker: () => Worker) {
   type Options = { transfer?: Transferable[]; affinity?: object; onProgress?: (completed: number) => void; signal?: AbortSignal };

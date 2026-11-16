@@ -7,9 +7,13 @@ Routine offline checks:
 bun run test
 ```
 
-Runs test typechecking, support rules, versions, presets, pixel scaling and offline
-catalog audits. No geometry/export matrices, real workers, browsers, downloads or Java.
-Builds, previews and deployment do not trigger these suites automatically.
+Runs test typechecking, file headers, support rules, versions, presets, pixel scaling
+and offline catalog audits. No geometry/export matrices, real workers, browsers,
+downloads or Java. Builds, previews and deployment do not trigger these suites automatically.
+
+`test:headers` checks each source file's purpose, Public API and Callers lists against
+its exports and importers. After moving code, `bun run tests/fileHeaders.mts --fix`
+rewrites the lists; it never invents purpose text.
 
 Use the smallest relevant command while editing. Full engine/export coverage is
 explicit, for broad changes or publication review, not every edit:

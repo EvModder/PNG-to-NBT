@@ -3,6 +3,7 @@
  * - MINECRAFT_VERSIONS
  * - MinecraftVersion
  * - BLOCK_INTRODUCTIONS
+ *
  * Callers:
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx

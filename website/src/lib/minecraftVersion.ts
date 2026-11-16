@@ -6,6 +6,7 @@
  * - isBlockCompatible()
  * - getBlockFallbackVersion()
  * - getVersionedSelections()
+ *
  * Callers:
  * - src/Index.tsx
  * - src/components/PanelColorBlockTable.tsx

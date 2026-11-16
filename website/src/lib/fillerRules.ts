@@ -255,7 +255,6 @@ export function isWaterSideSupportFillerValid(fillerBlock: string): boolean {
 }
 
 // Callers:
-// - src/Index.tsx
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts

@@ -247,6 +247,5 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
 };
 
 // Callers:
-// - src/lib/codecPreset.ts
 // - src/lib/minecraftVersion.ts
 export const EXCLUDED_BLOCKS: string[][] = BASE_COLORS.map((_, idx) => EXCLUDED_BY_ID[idx] ?? []);

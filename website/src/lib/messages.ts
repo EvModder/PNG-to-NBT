@@ -1,4 +1,8 @@
 /**
+ * Notes:
+ * - Selects the active locale catalog and applies interpolation/plural formatting at runtime.
+ * - Locale catalogs live under `src/data/i18n/` and are intended to remain pure data only.
+ *
  * Public API:
  * - PaletteNoticeKind
  * - PaletteNotice
@@ -28,10 +32,6 @@
  * - src/lib/tileParsing.worker.ts
  * - src/lib/tileParsingWorkerClient.ts
  * - src/lib/tileParsingWorkerTypes.ts
- *
- * Notes:
- * - Selects the active locale catalog and applies interpolation/plural formatting at runtime.
- * - Locale catalogs live under `src/data/i18n/` and are intended to remain pure data only.
  */
 import { STORAGE_KEYS } from "@/data/storageKeys";
 import type { InvalidColorsPalette } from "@/data/defaultSettings";

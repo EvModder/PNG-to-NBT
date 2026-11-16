@@ -60,8 +60,6 @@ export const DEFAULT_NBT_AUTHOR = "evmodder.net/PNG-to-NBT";
 // Callers:
 // - src/Index.tsx
 // - src/lib/generationPolicy.ts
-// - src/lib/mixedStepHeights.ts
-// - src/lib/nbtExport.ts
 // - src/lib/suppressLoadMarkers.ts
 export const DEFAULT_BUILD_MODE = BuildMode.StaircaseGroup;
 export const DEFAULT_SUPPORT_MODE = SupportMode.None;
@@ -146,7 +144,6 @@ export const DEFAULT_PIXEL_ART_SCALE_MODE: PixelArtScaleMode = "downscale";
 // - src/Index.tsx
 // - src/components/PanelImagePreview.tsx
 // - src/components/SecretsSettingsDialog.tsx
-// - src/lib/colorGridParsing.ts
 export const DEFAULT_AUTO_FIX_INVALID_DIMENSIONS = false;
 export const INVALID_DIMENSIONS_STRATEGY_OPTIONS = ["crop", "pad"] as const;
 export type InvalidDimensionsStrategy = typeof INVALID_DIMENSIONS_STRATEGY_OPTIONS[number];
