@@ -22,6 +22,7 @@
  *
  * Callers:
  * - src/lib/shapeBlocksStaircase.ts
+ * - src/lib/shapeBlocksSuppress.ts
  * - src/lib/shapeGeneration.ts
  */
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
@@ -56,12 +57,14 @@ export const COLUMN_COORD_Z_SIZE = 512;
 
 // Callers:
 // - src/lib/shapeBlocksStaircase.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 export function toColumnCoordKey(x: number, z: number): ColumnCoordKey {
   return (x + 1) * COLUMN_COORD_Z_SIZE + (z + COLUMN_COORD_Z_OFFSET);
 }
 
 // Callers:
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 export function parseColumnCoordKey(key: ColumnCoordKey): [number, number] {
   return [Math.floor(key / COLUMN_COORD_Z_SIZE) - 1, (key % COLUMN_COORD_Z_SIZE) - COLUMN_COORD_Z_OFFSET];
@@ -140,6 +143,7 @@ export function isWaterBlock(block: ShapeBlock): boolean {
 
 // Callers:
 // - src/lib/shapeBlocksStaircase.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 export function makeFillerBlock(x: number, y: number, z: number, role: FillerRole): ShapeBlock {
   return { x, y, z, ref: { kind: "filler", role } };
@@ -147,6 +151,7 @@ export function makeFillerBlock(x: number, y: number, z: number, role: FillerRol
 
 // Callers:
 // - src/lib/shapeBlocksStaircase.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 export function getWaterDepth(shade: Shade, x: number, z: number): number {
   switch (shade) {
@@ -163,7 +168,7 @@ export function getWaterDepth(shade: Shade, x: number, z: number): number {
 
 // Callers:
 // - src/lib/shapeBlocksStaircase.ts
-// - src/lib/shapeGeneration.ts
+// - src/lib/shapeBlocksSuppress.ts
 export function getWaterDrop(waterDrops: WaterDrops, shade: Shade): number {
   const waterDrop = (waterDrops as readonly (number | undefined)[])[shade];
   if (waterDrop === undefined) throw new Error(`Unexpected water shade for drop lookup: ${shade}`);

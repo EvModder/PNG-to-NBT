@@ -8,6 +8,7 @@
  *
  * Callers:
  * - src/Index.tsx
+ * - src/lib/shapeBlocksSuppress.ts
  * - src/lib/shapeGeneration.ts
  */
 import { DEFAULT_MINECRAFT_VERSION, MAX_STEP_COLOR_BLOCK_LIFT, MIXED_STEP_REACHABLE_TOP } from "@/data/defaultSettings";
@@ -132,7 +133,7 @@ function needsStepSupport(color: ShapeColorRef, palette: MixedStepPalette): bool
 }
 
 // Callers:
-// - src/lib/shapeGeneration.ts
+// - src/lib/shapeBlocksSuppress.ts
 export function getMixedStepReuse(
   north: (ShadedColorRef & ShapeColorRef) | undefined,
   northHeight: number,
@@ -168,7 +169,7 @@ function getMixedStepCost(
 }
 
 // Callers:
-// - src/lib/shapeGeneration.ts
+// - src/lib/shapeBlocksSuppress.ts
 export function getMixedStepColor(
   color: ShadedColorRef, height: number, south: ShadedColorRef | undefined, southHeight: number, palette: MixedStepPalette,
 ): ShadedColorRef & ShapeColorRef {

@@ -5,6 +5,7 @@
  * - SuppressStepPhase
  *
  * Callers:
+ * - src/lib/shapeBlocksSuppress.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
@@ -21,7 +22,7 @@ type SuppressStepFront = {
 };
 
 // Callers:
-// - src/lib/shapeGeneration.ts
+// - src/lib/shapeBlocksSuppress.ts
 export type SuppressStepPhase = {
   axis: "x" | "z";
   lines: readonly number[];

@@ -25,6 +25,7 @@
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeBlocks.ts
  * - src/lib/shapeBlocksStaircase.ts
+ * - src/lib/shapeBlocksSuppress.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
  * - src/lib/suppressLoadMarkers.ts
@@ -49,6 +50,7 @@
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeBlocksStaircase.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
@@ -78,6 +80,7 @@ export enum BuildMode {
 
 // Callers:
 // - src/lib/mixedStepHeights.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 export type MixedStepPalette = {
@@ -107,6 +110,7 @@ export type MixedStepPalette = {
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/messages.ts
 // - src/lib/nbtExport.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
@@ -133,6 +137,7 @@ export enum SuppressStepDirection {
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeBlocks.ts
 // - src/lib/shapeBlocksStaircase.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
 // - src/lib/suppressLoadMarkers.ts

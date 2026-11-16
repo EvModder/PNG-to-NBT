@@ -18,6 +18,7 @@
  * - src/lib/shapeAnalysisCache.ts
  * - src/lib/shapeBlocks.ts
  * - src/lib/shapeBlocksStaircase.ts
+ * - src/lib/shapeBlocksSuppress.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
  * - src/lib/suppressClearance.ts
@@ -79,6 +80,7 @@ export type ShapeColorRef = ColorRef & { fillerRole?: FillerRole };
 
 // Callers:
 // - src/lib/shapeBlocksStaircase.ts
+// - src/lib/shapeBlocksSuppress.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
 export type ShapeCoordKey = number;
