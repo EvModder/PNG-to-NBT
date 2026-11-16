@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { MINECRAFT_VERSIONS } from "../website/src/data/minecraftVersions.ts";
 import { FRAGILE_SUPPORT_RULES, isFragileBlock } from "../website/src/data/blockFragility.ts";
+import { getLightEmission, isFlammable, isLightTransparent } from "../website/src/data/blockEnvironment.ts";
 import { canSupportBlock, getBlockSupport } from "../website/src/lib/blockSupport.ts";
 import { getMinecraftCatalog } from "../website/src/lib/minecraftVersion.ts";
 
@@ -24,7 +25,7 @@ const fingerprint = value => createHash("sha256").update(JSON.stringify(value, (
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)).digest("hex");
 const transpiler = new Bun.Transpiler({ loader: "ts", minifyWhitespace: true });
 // Ignore comments/formatting, but require a cached registry recheck after rule changes.
-const policyHash = fingerprint(await Promise.all(["data/blockFragility.ts", "lib/blockSupport.ts"].map(async file =>
+const policyHash = fingerprint(await Promise.all(["data/blockEnvironment.ts", "data/blockFragility.ts", "lib/blockSupport.ts"].map(async file =>
   transpiler.transformSync(await fs.readFile(new URL(`../website/src/${file}`, import.meta.url), "utf8")))));
 
 function command(program, args, cwd) {
@@ -86,7 +87,7 @@ export function auditBlockSupport(review, registry, previous) {
     }
   }
   if (!registry) return { errors, changedBlocks, changedTags, shapeDifferences };
-  if (registry.schema !== 1 || registry.dataVersion !== target.dataVersion) {
+  if (registry.schema !== 2 || registry.dataVersion !== target.dataVersion) {
     errors.push("Probe schema/DataVersion does not match the current target");
     return { errors, changedBlocks, changedTags, shapeDifferences };
   }
@@ -117,13 +118,25 @@ export function auditBlockSupport(review, registry, previous) {
     }
     for (const [entry, state] of Object.entries(facts.states)) {
       const support = getBlockSupport(entry, target.dataVersion);
-      const different = Object.keys(state).filter(key => state[key] !== support[key]);
+      // Faces may be missing (warnings stay conservative), but never claimed beyond vanilla.
+      const different = Object.keys(state).filter(key => key === "faces" ? [...support.faces].some(face => !state.faces.includes(face))
+        : state[key] !== support[key]);
       if (different.length) {
         shapeDifferences.push({ entry, different, vanilla: state, model: Object.fromEntries(Object.keys(state).map(key => [key, support[key]])) });
         for (const key of different) if (!review.shapeExceptions.some(exception => exception.classes.includes(facts.class)
           && exception.properties.includes(key) && exception.model === support[key])) {
           errors.push(`Unreviewed ${key} shape difference: ${id} (${facts.class})`);
         }
+      }
+    }
+    for (const [entry, vanilla] of Object.entries(facts.environment)) {
+      if (rereads(entry)) continue;
+      const { id: stateId, props, full } = getBlockSupport(entry, target.dataVersion);
+      if (getLightEmission(stateId, props) !== vanilla.light) errors.push(`Light emission differs from vanilla: ${id}`);
+      if (isFlammable(stateId, props) !== vanilla.flammable) errors.push(`Flammability differs from vanilla: ${id}`);
+      // Warnings treat sturdy blocks as light-stopping unless listed; partial faces stay approximate.
+      if (!vanilla.shapeOcclusion && (full ? !isLightTransparent(stateId) : false) !== (vanilla.dampening === 15)) {
+        errors.push(`Light transparency differs from vanilla: ${id}`);
       }
     }
     if (previous && (!previous.blocks[id] || fingerprint(previous.blocks[id]) !== fingerprint(facts))) changedBlocks.push(id);

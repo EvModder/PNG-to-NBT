@@ -37,10 +37,12 @@ import { auditBlockSupport } from "../../scripts/audit-block-support.mjs";
   undocumented.omitted.example = "";
   assert(auditBlockSupport(undocumented).errors.some(error => error.includes("Missing omission reason")));
   const block = { class: "FutureCropBlock", survival: "CropBlock", placement: "Block", gravity: false,
-    default: "future_crop", on: { air: false }, states: { future_crop: { full: false } } };
-  const registry = { schema: 1, dataVersion: review.target.dataVersion, blocks: { future_crop: block } };
+    default: "future_crop", on: { air: false }, states: { future_crop: { full: false } },
+    environment: { future_crop: { light: 5, dampening: 0, shapeOcclusion: false, flammable: false } } };
+  const registry = { schema: 2, dataVersion: review.target.dataVersion, blocks: { future_crop: block } };
   const errors = auditBlockSupport(review, registry).errors;
   assert(errors.some(error => error.includes("Unclassified below-support requirement: future_crop")));
+  assert(errors.some(error => error.includes("Light emission differs from vanilla: future_crop")));
   assert(errors.some(error => error.includes("registry/support facts changed")));
   assert(errors.some(error => error.includes("Catalog block missing")));
   assert.deepEqual(auditBlockSupport(review, { ...registry, blockTags: {}, fluidTags: {} }, { blocks: {} }).changedBlocks, ["future_crop"]);
@@ -48,9 +50,9 @@ import { auditBlockSupport } from "../../scripts/audit-block-support.mjs";
   assert(auditBlockSupport(review, registry).errors.some(error => error.includes("Unreviewed survival implementation: FutureCropBlock")));
   registry.dataVersion++;
   assert(auditBlockSupport(review, registry).errors.some(error => error.includes("DataVersion")));
-  const shape = { schema: 1, dataVersion: review.target.dataVersion, blocks: { stone: {
+  const shape = { schema: 2, dataVersion: review.target.dataVersion, blocks: { stone: {
     class: "Block", survival: "BlockBehaviour", placement: "Block", gravity: false, default: "stone", on: { air: true },
-    states: { stone: { full: false } },
+    states: { stone: { full: false } }, environment: {},
   } } };
   assert(auditBlockSupport(review, shape).errors.some(error => error.includes("Unreviewed full shape difference: stone")));
 }

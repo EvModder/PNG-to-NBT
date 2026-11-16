@@ -49,6 +49,14 @@ class BlockSupportProbe {
             throw new UnsupportedOperationException("Unmodeled world query: " + name);
         });
     }
+    // Sturdy (full) faces as letters in down, up, north, south, west, east order.
+    static String faces(Object s, Object world) throws Exception {
+        var result = new StringBuilder();
+        for (String side : new String[]{"DOWN", "UP", "NORTH", "SOUTH", "WEST", "EAST"}) {
+            if ((boolean)call(STATE, "isFaceSturdy", s, world, zero, field("net.minecraft.core.Direction", side))) result.append(side.toLowerCase(Locale.ROOT).charAt(0));
+        }
+        return result.toString();
+    }
     static String owner(Object block, String name) {
         for (Class<?> c = block.getClass(); c != null; c = c.getSuperclass()) {
             for (Method m : c.getDeclaredMethods()) if (m.getName().equals(name)) return c.getSimpleName();
@@ -101,6 +109,10 @@ class BlockSupportProbe {
         zero = field("net.minecraft.core.BlockPos", "ZERO");
         up = field("net.minecraft.core.Direction", "UP");
         var supports = Files.readAllLines(Path.of(args[2]));
+        // Fire spreads to blocks with ignite odds; FireBlock returns 0 for waterlogged states.
+        Object fire = blocks.get("fire");
+        Method igniteOdds = cls("net.minecraft.world.level.block.FireBlock").getDeclaredMethod("getIgniteOdds", cls("net.minecraft.world.level.block.state.BlockState"));
+        igniteOdds.setAccessible(true);
         try (var jar = new ZipFile(args[0])) {
             var blockTags = bindTags(jar, "block", BLOCK);
             var fluidTags = bindTags(jar, "fluid", "net.minecraft.world.level.material.Fluid");
@@ -114,6 +126,7 @@ class BlockSupportProbe {
                 facts.put("survival", owner(block.getValue(), "canSurvive"));
                 facts.put("placement", owner(block.getValue(), "getStateForPlacement"));
                 var states = new TreeMap<String, Object>();
+                var environment = new TreeMap<String, Object>();
                 Object definition = call(BLOCK, "getStateDefinition", block.getValue());
                 for (Object s : (Iterable<?>)call("net.minecraft.world.level.block.state.StateDefinition", "getPossibleStates", definition)) {
                     Object collision = call(STATE, "getCollisionShape", s, empty, zero);
@@ -125,9 +138,17 @@ class BlockSupportProbe {
                         "outline", call(BLOCK, "isFaceFull", null, call(STATE, "getShape", s, empty, zero), up),
                         "partial", !(boolean)call("net.minecraft.world.phys.shapes.VoxelShape", "isEmpty", call("net.minecraft.world.phys.shapes.VoxelShape", "getFaceShape", collision, up)),
                         "solid", call(STATE, "isSolid", s),
-                        "fallThrough", call("net.minecraft.world.level.block.FallingBlock", "isFree", null, s)));
+                        "fallThrough", call("net.minecraft.world.level.block.FallingBlock", "isFree", null, s),
+                        "faces", faces(s, empty),
+                        "conductor", call(STATE, "isRedstoneConductor", s, empty, zero)));
+                    environment.put(entry(s), Map.of(
+                        "light", call(STATE, "getLightEmission", s),
+                        "dampening", call(STATE, "getLightDampening", s),
+                        "shapeOcclusion", call(STATE, "useShapeForLightOcclusion", s),
+                        "flammable", (int)igniteOdds.invoke(fire, s) > 0));
                 }
                 facts.put("states", states);
+                facts.put("environment", environment);
                 facts.put("default", entry(state(block.getValue())));
                 // A positive result is only a lower bound: this does not simulate every neighborhood.
                 var survival = new TreeMap<String, Object>();
@@ -143,7 +164,7 @@ class BlockSupportProbe {
                 facts.put("on", survival);
                 output.put(block.getKey(), facts);
             }
-            Files.writeString(Path.of(args[1]), gson.toJson(Map.of("schema", 1, "version", version.get("id").getAsString(),
+            Files.writeString(Path.of(args[1]), gson.toJson(Map.of("schema", 2, "version", version.get("id").getAsString(),
                 "dataVersion", version.get("world_version").getAsInt(), "blocks", output, "blockTags", blockTags, "fluidTags", fluidTags)));
         }
     }
