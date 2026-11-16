@@ -15,7 +15,7 @@ import { FillerRole, BuildMode, SuppressStepDirection, type MixedStepPalette } f
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
-import { createHashState, getHashId, mixUint32 } from "@/utils/hash";
+import { createHashState, getHashId, mixUint32, mulberry32 } from "@/utils/hash";
 import { PixelParity, getPixelParity, type WaterDrops } from "./colorGridAnalysis";
 import { parseShapeCoordKey, toShapeCoordKey } from "./shapeModel";
 import { buildSuppressStepPhases, type SuppressStepPhase } from "./suppressSteps";
@@ -867,13 +867,8 @@ function buildTransparentStaircaseBlocks(
     return y;
   };
 
-  const randomFor = (x: number, z: number) => {
-    let t = (((x + 1) * 73856093) ^ ((z + 1) * 19349663) ^ ((paletteSeed + 1) * 83492791)) >>> 0;
-    t = (t + 0x6d2b79f5) >>> 0;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  const randomFor = (x: number, z: number) =>
+    mulberry32((((x + 1) * 73856093) ^ ((z + 1) * 19349663) ^ ((paletteSeed + 1) * 83492791)) >>> 0)();
 
   const transparentBlocks: ShapeBlock[] = [];
   let suppressedTransparentVsCollisionCount = 0;
@@ -1629,12 +1624,6 @@ function applyStaircaseVariantParty<T extends PositionedEntry>(
   excludeWater = false,
 ) {
   const seedBase = (42 ^ paletteSeed) >>> 0;
-  const mulberry32 = (seed: number) => () => {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 
   // Reuse per-column heights; undefined distinguishes missing rows from height zero.
   const origMaxY = Array<number | undefined>(MAP_SIZE);
