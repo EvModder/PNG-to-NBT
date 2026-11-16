@@ -23,6 +23,8 @@
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeBlocks.ts
+ * - src/lib/shapeBlocksStaircase.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
  * - src/lib/suppressLoadMarkers.ts
@@ -46,6 +48,7 @@
 // - src/lib/messages.ts
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
@@ -128,6 +131,8 @@ export enum SuppressStepDirection {
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
 // - src/lib/suppressLoadMarkers.ts

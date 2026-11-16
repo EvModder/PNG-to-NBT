@@ -13,6 +13,7 @@
  * - src/lib/nbtExport.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeBlocksStaircase.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressClearance.ts
  * - src/lib/suppressLoadMarkers.ts
@@ -73,6 +74,7 @@ const SHAPE_COORD_Y_SIZE = 8192;
 // - src/lib/nbtExport.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressClearance.ts
 export function toShapeCoordKey(x: number, y: number, z: number): ShapeCoordKey {

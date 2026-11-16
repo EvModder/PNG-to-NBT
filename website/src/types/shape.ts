@@ -16,6 +16,8 @@
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
  * - src/lib/shapeAnalysisCache.ts
+ * - src/lib/shapeBlocks.ts
+ * - src/lib/shapeBlocksStaircase.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
  * - src/lib/suppressClearance.ts
@@ -69,12 +71,14 @@ export type ShapeCell = ShapeColorRef | FillerRole[];
 // - src/lib/blockId.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
+// - src/lib/shapeBlocks.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
 // Keep pixel identity when a configured filler supplies its color.
 export type ShapeColorRef = ColorRef & { fillerRole?: FillerRole };
 
 // Callers:
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
 export type ShapeCoordKey = number;

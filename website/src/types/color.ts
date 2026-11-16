@@ -26,6 +26,8 @@
  * - src/lib/mixedStepHeights.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeBlocks.ts
+ * - src/lib/shapeBlocksStaircase.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/tileGeometry.worker.ts
  * - src/lib/tileGeometryWorkerClient.ts
@@ -52,6 +54,8 @@
 // - src/lib/mixedStepHeights.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerClient.ts
 // - src/lib/tileGeometryWorkerTypes.ts
@@ -80,6 +84,7 @@ export interface ColorRef {
 // - src/lib/codecColorGrid.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/mixedStepHeights.ts
+// - src/lib/shapeBlocks.ts
 // - src/lib/shapeGeneration.ts
 // - src/utils/color.ts
 export interface ShadedColorRef extends ColorRef {
@@ -95,6 +100,8 @@ export interface ShadedColorRef extends ColorRef {
 // - src/lib/generationPolicy.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometry.worker.ts
 // - src/lib/tileGeometryWorkerTypes.ts

@@ -6,6 +6,7 @@
  * - mulberry32()
  *
  * Callers:
+ * - src/lib/shapeBlocksStaircase.ts
  * - src/lib/shapeGeneration.ts
  * - src/utils/colorGridKey.ts
  */
@@ -37,7 +38,7 @@ export function getHashId(state: HashState): string {
 }
 
 // Callers:
-// - src/lib/shapeGeneration.ts
+// - src/lib/shapeBlocksStaircase.ts
 //
 // Seeded uniform values in [0, 1).
 export function mulberry32(seed: number): () => number {

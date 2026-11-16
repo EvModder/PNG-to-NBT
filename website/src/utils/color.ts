@@ -24,6 +24,8 @@
  * - src/lib/pixelArtScaling.ts
  * - src/lib/previewImageEdits.ts
  * - src/lib/shapeAnalysis.ts
+ * - src/lib/shapeBlocks.ts
+ * - src/lib/shapeBlocksStaircase.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/shapeModel.ts
  * - src/lib/suppressClearance.ts
@@ -49,6 +51,8 @@ import { Shade, type ColorGrid, type ColorRef, type ColorRgb, type ShadedColorRe
 // - src/lib/pixelArtScaling.ts
 // - src/lib/previewImageEdits.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/shapeModel.ts
 // - src/lib/suppressClearance.ts
@@ -63,6 +67,7 @@ export const MAP_SIZE = 128;
 // - src/lib/codecColorGrid.ts
 // - src/lib/colorGridParsingCore.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/utils/colorGridKey.ts
 export const TRANSPARENT_COLOR: ShadedColorRef = Object.freeze({ isCustom: false, id: TRANSPARENCY_BASE_INDEX, shade: Shade.Dark });
@@ -71,6 +76,8 @@ export const TRANSPARENT_COLOR: ShadedColorRef = Object.freeze({ isCustom: false
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerClient.ts
 export function isTransparentColor(cell: ShadedColorRef): boolean {
@@ -81,6 +88,8 @@ export function isTransparentColor(cell: ShadedColorRef): boolean {
 // - src/lib/colorGridAnalysis.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/shapeAnalysis.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 export function isWaterColor(color: ShadedColorRef): boolean {
   return !color.isCustom && color.id === WATER_BASE_INDEX;

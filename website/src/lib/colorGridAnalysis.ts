@@ -21,6 +21,8 @@
  * - src/lib/colorGridParsing.ts
  * - src/lib/colorGridParsingCore.ts
  * - src/lib/generationPolicy.ts
+ * - src/lib/shapeBlocks.ts
+ * - src/lib/shapeBlocksStaircase.ts
  * - src/lib/shapeGeneration.ts
  * - src/lib/suppressLoadMarkers.ts
  * - src/lib/suppressSteps.ts
@@ -38,6 +40,8 @@ import { isSuppressStepsBuildMode } from "@/utils/conversion";
 
 // Callers:
 // - src/lib/colorGridParsingCore.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
@@ -48,6 +52,8 @@ export enum PixelParity {
 
 // Callers:
 // - src/lib/generationPolicy.ts
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/tileGeometryWorkerTypes.ts
 export type WaterDrops = readonly [dark: number, flat: number, light: number];
@@ -92,6 +98,8 @@ export enum FlatModeBehavior {
 }
 
 // Callers:
+// - src/lib/shapeBlocks.ts
+// - src/lib/shapeBlocksStaircase.ts
 // - src/lib/shapeGeneration.ts
 // - src/lib/suppressLoadMarkers.ts
 // - src/lib/suppressSteps.ts
