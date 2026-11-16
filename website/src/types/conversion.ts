@@ -12,7 +12,6 @@
  * - src/data/defaultSettings.ts
  * - src/data/i18n/en.ts
  * - src/data/i18n/es.ts
- * - src/lib/blockId.ts
  * - src/lib/codecPreset.ts
  * - src/lib/colorGridAnalysis.ts
  * - src/lib/environmentalSupport.ts
@@ -133,7 +132,6 @@ export enum SuppressStepDirection {
 
 // Callers:
 // - src/Index.tsx
-// - src/lib/blockId.ts
 // - src/lib/environmentalSupport.ts
 // - src/lib/fillerRules.ts
 // - src/lib/mixedStepHeights.ts

@@ -8,7 +8,6 @@
  * - hasAssignedColorBlock()
  * - resolveExportBlockName()
  * - toDisplayName()
- * - resolveShapeColorBlockName()
  *
  * Callers:
  * - src/Index.tsx
@@ -32,8 +31,6 @@
 import { BASE_COLORS } from "@/data/mapColors";
 import type { MinecraftVersion } from "@/data/minecraftVersions";
 import type { ColorRef, ColorRgb } from "@/types/color";
-import type { FillerRole } from "@/types/conversion";
-import type { ShapeColorRef } from "@/types/shape";
 import { getSelectedCustomColorBlock } from "@/utils/customColors";
 
 const DEFAULT_NAMESPACE = "minecraft:";
@@ -183,18 +180,4 @@ export function toDisplayName(blockName: string): string {
   const name = stripped.slice(0, bracketIdx);
   const props = stripped.slice(bracketIdx + 1, -1).split(",").filter(part => part.trim() !== "persistent=true");
   return props.length > 0 ? `${name}[${props.join(",")}]` : name;
-}
-
-// Callers:
-// - src/lib/nbtExport.ts
-// - src/lib/placementWarnings.ts
-// - src/lib/shapeAnalysis.ts
-// - src/lib/shapeModel.ts
-export function resolveShapeColorBlockName(
-  color: ShapeColorRef,
-  selections: ColorBlockSelections,
-  fillerAssignments?: ReadonlyMap<FillerRole, string>,
-): string | null {
-  const block = color.fillerRole ? fillerAssignments?.get(color.fillerRole) : resolveAssignedColorBlock(color, selections);
-  return block ? resolveExportBlockName(block) : null;
 }

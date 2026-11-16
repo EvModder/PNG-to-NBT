@@ -9,7 +9,6 @@
  *
  * Callers:
  * - src/Index.tsx
- * - src/lib/blockId.ts
  * - src/lib/generationPolicy.ts
  * - src/lib/mixedStepHeights.ts
  * - src/lib/nbtExport.ts
@@ -71,7 +70,6 @@ export interface GeneratedShape {
 export type ShapeCell = ShapeColorRef | FillerRole[];
 
 // Callers:
-// - src/lib/blockId.ts
 // - src/lib/mixedStepHeights.ts
 // - src/lib/nbtExport.ts
 // - src/lib/placementWarnings.ts

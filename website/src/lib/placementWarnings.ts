@@ -13,12 +13,12 @@ import { BASE_COLORS, WATER_BASE_INDEX } from "@/data/mapColors";
 import { getLightEmission, isFlammable, isLightTransparent, MELT_LIGHT, MUSHROOM_LIGHT_SUPPORTS } from "@/data/blockEnvironment";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
-import { resolveAssignedColorBlock, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
+import { resolveAssignedColorBlock, type ColorBlockSelections } from "./blockId";
 import { environmentalRole, isGrowthCoverValid } from "./environmentalSupport";
 import { buildFillerAssignmentMap, isCoralSupportValid } from "./fillerRules";
 import { analyzeScaffoldingSupport } from "./shapeAnalysis";
 import { canSupportBlock, getBlockSupport } from "./blockSupport";
-import { isShapeColorCell, parseShapeCoordKey, resolveShapeBlockName, resolveShapeFiller, toShapeCoordKey } from "./shapeModel";
+import { isShapeColorCell, parseShapeCoordKey, resolveShapeBlockName, resolveShapeColorBlockName, resolveShapeFiller, toShapeCoordKey } from "./shapeModel";
 import { BuildMode, FillerRole, type FillerAssignment } from "@/types/conversion";
 import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
 

@@ -7,6 +7,7 @@
  * - NO_SUPPORT_FLOORS
  * - isWithinShapeBounds()
  * - shouldIncludeFragileSupportCell()
+ * - resolveShapeColorBlockName()
  * - resolveShapeFiller()
  * - resolveShapeBlockName()
  *
@@ -29,7 +30,24 @@ import { isCoralSupportValid, resolveAssignedFillerName } from "@/lib/fillerRule
 import { FillerRole } from "@/types/conversion";
 import { type ShapeCell, type ShapeColorRef, type ShapeCoordKey, type ShapePart } from "@/types/shape";
 import { MAP_SIZE } from "@/utils/color";
-import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, resolveShapeColorBlockName, type ColorBlockSelections } from "@/lib/blockId";
+import { normalizeBlockId, resolveAssignedColorBlock, resolveExportBlockName, type ColorBlockSelections } from "@/lib/blockId";
+
+// Callers:
+// - src/lib/nbtExport.ts
+// - src/lib/placementWarnings.ts
+// - src/lib/shapeAnalysis.ts
+//
+// The block a color cell places: its assigned block, or for filler-role cells the
+// filler assignment, with the same validity rules as filler cells.
+export function resolveShapeColorBlockName(
+  color: ShapeColorRef,
+  selections: ColorBlockSelections,
+  fillerAssignments?: ReadonlyMap<FillerRole, string>,
+): string | null {
+  if (color.fillerRole) return fillerAssignments ? resolveAssignedFillerName(fillerAssignments, color.fillerRole) : null;
+  const block = resolveAssignedColorBlock(color, selections);
+  return block ? resolveExportBlockName(block) : null;
+}
 
 // Resolve actual exports, including omitted floors, optional supports and soil overrides.
 // Callers:
@@ -156,10 +174,7 @@ function getSupportedBlockAbove(
   // One Y step spans the packed Z range; no coordinate decoding is needed.
   const above = part.cells.get(coord + SHAPE_COORD_Z_SIZE);
   if (!above) return null;
-  if (isShapeColorCell(above)) {
-    const block = above.fillerRole ? resolveAssignedFillerName(fillerAssignments, above.fillerRole) : resolveAssignedColorBlock(above, options);
-    return block || null;
-  }
+  if (isShapeColorCell(above)) return resolveShapeColorBlockName(above, options, fillerAssignments);
   // Assignment order also determines which filler wins during export.
   for (const role of fillerAssignments.keys()) {
     if (!above.includes(role)) continue;

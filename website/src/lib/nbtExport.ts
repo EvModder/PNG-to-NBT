@@ -18,7 +18,7 @@ import {
 } from "@/data/defaultSettings";
 import type { GeneratedShape, ShapeColorRef, ShapePart } from "@/types/shape";
 import { CRUBTECH_NOOBLINE_FILLER_BLOCK, buildFillerAssignmentMap } from "./fillerRules";
-import { type ColorBlockSelections, resolveShapeColorBlockName } from "./blockId";
+import { type ColorBlockSelections } from "./blockId";
 import { gzipCompress, writeStructureNbt } from "@/utils/nbtWriter";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import { getVersionedBlockName, isBlockAvailable } from "./minecraftVersion";
@@ -33,6 +33,7 @@ import {
   NO_SUPPORT_FLOORS,
   parseShapeCoordKey,
   toShapeCoordKey,
+  resolveShapeColorBlockName,
   resolveShapeFiller,
 } from "./shapeModel";
 import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";

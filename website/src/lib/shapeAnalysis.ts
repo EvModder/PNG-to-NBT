@@ -27,11 +27,12 @@ import { Shade, type ColorGrid } from "@/types/color";
 import { MAP_SIZE, TRANSPARENT_COLOR, isTransparentColor, isWaterColor } from "@/utils/color";
 import { FillerRole, type FillerAssignment } from "@/types/conversion";
 import { buildFillerAssignmentMap, resolveAssignedFillerName } from "./fillerRules";
-import { normalizeBlockId, resolveShapeColorBlockName, type ColorBlockSelections } from "./blockId";
+import { normalizeBlockId, type ColorBlockSelections } from "./blockId";
 import { getColorRefKey } from "./colorRefs";
 import { ShapePartType, type GeneratedShape, type ShapePart } from "@/types/shape";
 import { forEachSuppressClearanceCell, getSuppressClearancePlan } from "./suppressClearance";
 import {
+  resolveShapeColorBlockName,
   resolveShapeFiller,
   isShapeColorCell,
   isShapeFillerCell,

@@ -245,7 +245,7 @@ export function buildFillerAssignmentMap(assignments: readonly FillerAssignment[
 // Callers:
 // - src/lib/shapeAnalysis.ts
 // - src/lib/shapeModel.ts
-export function resolveAssignedFillerName(assignments: Map<FillerRole, string>, role: FillerRole): string | null {
+export function resolveAssignedFillerName(assignments: ReadonlyMap<FillerRole, string>, role: FillerRole): string | null {
   const block = assignments.get(role) ?? "";
   if (!block) return null;
   if (role === FillerRole.SupportWaterSides && !isWaterSideSupportFillerValid(block)) return null;
