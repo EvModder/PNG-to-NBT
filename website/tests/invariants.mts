@@ -22,7 +22,7 @@ import { buildFillerAssignmentMap, createFillerAssignments, getSupportModeFiller
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
-import { getMixedStepSettings, getMixedStepReuse } from "@/lib/mixedStepHeights";
+import { getMixedStepSettings, getMixedStepReuse, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
 import { canSupportBlock } from "@/lib/blockSupport";
@@ -1542,6 +1542,12 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
     || settings("scaffolding", true, "scaffolding").maxHeight !== 1
     || settings("scaffolding", false, "resin_block", SupportMode.None).maxHeight !== 0) {
     throw new Error("Scaffolding must not bypass fragile-support requirements");
+  }
+  const cobble = getMixedStepSettings([], { ...selections, selectedBlocks: { ...selections.selectedBlocks, 11: "cobblestone" } },
+    SupportMode.Fragile, "scaffolding", "resin_block", true, 1, true).palette;
+  const scoped = (palette: typeof cobble, colorId: number) => scopeMixedStepPalette(palette, [colorId * 2])!.key;
+  if (scoped(settings("scaffolding").palette, 2) !== scoped(cobble, 2) || scoped(settings("scaffolding").palette, 11) === scoped(cobble, 11)) {
+    throw new Error("A tile's step palette key must change only with the colors it uses");
   }
   const north = { id: 2, isCustom: false, shade: Shade.Light };
   const south = { id: 11, isCustom: false, shade: Shade.Dark };

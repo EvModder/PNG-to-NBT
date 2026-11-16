@@ -176,7 +176,7 @@ import {
   type WaterDropShade,
   getPaletteSeedOffset,
 } from "@/lib/generationPolicy";
-import { getMixedStepSettings } from "@/lib/mixedStepHeights";
+import { getMixedStepSettings, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import {
   offsetPreviewPixelReplacements,
   buildPreviewVisibleMask,
@@ -1471,7 +1471,8 @@ const Index = () => {
               mixSteps: isSuppressStepsBuildMode(nextResolvedBuildMode) && calcMixSteps,
               suppressCenterOut: calcSuppressCenterOut,
               mixedStepMaxHeight,
-              mixedStepPalette,
+              // Scoped to the tile, so changes to colors used only elsewhere keep its cached geometry.
+              mixedStepPalette: scopeMixedStepPalette(mixedStepPalette, tile.derivedImageStats.usedShadesByColorKey.keys()),
               paletteSeed: paletteSeedOffset,
               enableWaterConvenience: supportMode !== SupportMode.None,
               skipEmptySuppressSteps: skipEmptySuppressSteps && !calcKeepSuppressExtras,

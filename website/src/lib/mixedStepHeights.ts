@@ -1,6 +1,7 @@
 /**
  * Public API:
  * - getMixedStepSettings()
+ * - scopeMixedStepPalette()
  * - getSupportedStepHeights()
  * - getMixedStepReuse()
  * - getMixedStepColor()
@@ -110,6 +111,18 @@ export function getMixedStepSettings(
     supportCanShade, shadeColor, supportColor, shade, support,
     key: JSON.stringify([reachableTop, blocks, canRaise, canSupport, needsSupport, shadeNeedsSupport, shadeCanSupport, shadeColor, supportColor, shade, support]),
   } };
+}
+
+// Callers: src/Index.tsx
+//
+// The palette covers every base color. Keying a tile's geometry by only the colors it
+// uses (plus the fillers placed in it) keeps block changes elsewhere from regenerating it.
+export function scopeMixedStepPalette(palette: MixedStepPalette | undefined, usedColorKeys: Iterable<ColorRefKey>): MixedStepPalette | undefined {
+  if (!palette) return undefined;
+  const ids = new Set(Array.from(usedColorKeys, key => parseColorRefKey(key).id)).add(palette.shadeColor).add(palette.supportColor);
+  const key = JSON.stringify(Object.entries(palette).map(([name, value]) => name === "key" ? 0
+    : Array.isArray(value) ? value.map((entry, id) => ids.has(id) ? entry : 0) : value));
+  return { ...palette, key };
 }
 
 function needsStepSupport(color: ShapeColorRef, palette: MixedStepPalette): boolean {
