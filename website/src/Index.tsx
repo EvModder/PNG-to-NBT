@@ -768,7 +768,12 @@ const Index = () => {
   useEffect(() => {
     const openSecrets = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.repeat || event.defaultPrevented) return;
-      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable], [role=dialog], dialog")) return;
+      // Text entry keeps Escape while focused; one that blurs itself on Escape hands it on.
+      // Closed dropdowns, checkboxes and buttons keep focus after a click but do not use Escape.
+      if (event.target instanceof HTMLElement && event.target === document.activeElement && event.target.closest(
+        "textarea, [contenteditable], input:not([type=checkbox], [type=radio], [type=range], [type=button], [type=submit], [type=reset], [type=color], [type=file])",
+      )) return;
+      if (event.target instanceof HTMLElement && event.target.closest("[role=dialog], dialog")) return;
       setShowSecretsDialog(true);
     };
     window.addEventListener("keydown", openSecrets);

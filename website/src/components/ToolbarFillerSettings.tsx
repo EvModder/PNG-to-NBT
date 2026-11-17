@@ -126,8 +126,9 @@ function FillerField({
               return;
             }
             if (e.key === "Escape") {
-              setDraftValue(null);
-              e.currentTarget.blur();
+              // First discard an unsaved edit; with none, leave the field so Escape opens settings.
+              if (draftValue !== null && draftValue !== value) setDraftValue(null);
+              else e.currentTarget.blur();
             }
           }}
           placeholder={placeholder}
