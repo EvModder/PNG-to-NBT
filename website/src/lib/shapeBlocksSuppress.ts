@@ -203,7 +203,7 @@ export function buildSuppressDualLayerBlocks(
   const isRecessive = (x: number, z: number) => getPixelParity(x, z) === PixelParity.Recessive;
   const isDominant = (x: number, z: number) => getPixelParity(x, z) === PixelParity.Dominant;
   const shadeDeltaFromSouth = (shade: Shade) => (shade === Shade.Light ? -1 : shade === Shade.Flat ? 0 : 1);
-  // Keep the north pixel correct during the full update, then add its provider for the dominant-only update.
+  // Keep the north pixel correct in the full update, then add its provider for the dominant-only update.
   const needsLateDominantShade = (x: number, z: number, color: ShadedColorRef) => {
     if (
       !isDominant(x, z) ||

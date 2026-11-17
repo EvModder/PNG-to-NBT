@@ -143,7 +143,7 @@ interface GridShapeCache extends ColumnPixelCache {
   shapes: Map<ShapeCacheKeyId, CachedGeneratedShape>;
   rawParts: Map<ShapeCacheKeyId, RawShapePart[]>;
   staircaseBaseBlocks: Map<number, ShapeBlock[]>;
-  // Per-mode staircase layouts before water convenience fillers or lowered-water overlays are added.
+  // Per-mode staircase layouts, before water convenience fillers and lowered-water overlays.
   staircaseVariantBlocks: Map<string, ShapeBlock[]>;
   // Cached vertical spacing between suppress step phases for this image.
   stepPhaseYOffsets: Map<number, number>;

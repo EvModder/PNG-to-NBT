@@ -129,8 +129,7 @@ export function buildStaircaseBlocks(
           case Shade.Light:
             if (buildAtWorldMinY || (topRowHasNorthlineFiller && z === 0)) colorY = north.y + 1;
             break;
-          // case Shade.Darkest:
-          //   break; // Unreachable: the darkest shade should never survive color conversion.
+          // Shade.Darkest is unreachable: it never survives color conversion.
           default:
             throw new Error(`Unexpected staircase shade: ${color.shade}`);
         }
@@ -158,8 +157,7 @@ export function buildStaircaseBlocks(
           addBlock(x, north.y + 1, z, colorRef);
           north = { y: north.y + 1, transparent: false };
           break;
-        // case Shade.Darkest:
-        //   break; // Unreachable: the darkest shade should never survive color conversion.
+        // Shade.Darkest is unreachable: it never survives color conversion.
         default:
           throw new Error(`Unexpected staircase shade: ${color.shade}`);
       }

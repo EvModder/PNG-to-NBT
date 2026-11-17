@@ -145,8 +145,7 @@ type ImageSizeActionsProps = {
   onResolveInvalidDimensions: (strategy: InvalidDimensionsStrategy) => void;
 };
 
-// A mode is only offered when it would actually reshape this image: cropping cannot
-// help an image with a side under 128, and neither helps a zero-sized one.
+// Offers only modes that would reshape this image: cropping cannot help a side under 128, and neither helps a zero size.
 function ImageSizeActions({ width, height, currentMode, onResolveInvalidDimensions }: ImageSizeActionsProps) {
   const padded = getTargetTileDimensions(width, height, "pad");
   const cropped = getTargetTileDimensions(width, height, "crop");

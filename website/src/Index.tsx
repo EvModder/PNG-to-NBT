@@ -459,8 +459,8 @@ const PAGE_CONTENT_PADDING_PX = 8; // from outer wrapper `p-2`
 const LAYOUT_GAP_PX = 8;
 const MAIN_THREAD_PROGRESS_INTERVAL_MS = 32;
 const PREVIEW_PAGE_COLUMN_MIN_WIDTH_PX = 320;
-// Approximates the non-preview vertical chrome on the page (header, layout padding, and panel text/buttons)
-// so the square preview can expand with viewport height on wide displays without forcing obvious vertical overflow.
+// Approximate page chrome around the preview (header, padding, panel text and buttons), so the square
+// preview can grow with viewport height on wide displays without overflowing vertically.
 const PREVIEW_PAGE_COLUMN_VERTICAL_OFFSET_PX = 120;
 const PREVIEW_PAGE_COLUMN_MAX_WIDTH_CSS = `calc(100vh - ${PREVIEW_PAGE_COLUMN_VERTICAL_OFFSET_PX}px)`;
 
@@ -554,7 +554,6 @@ function getSuppressModeOptionsForState(
   });
 }
 
-// ── Component ──
 const Index = () => {
   const [presets, setPresets] = useState<BlockPreset[]>(loadPresets);
   const [savedPresetNames, setSavedPresetNames] = useState(() =>
@@ -3631,8 +3630,7 @@ const Index = () => {
     };
   }, [recalcCreditsFloatGap]);
 
-  // Some image-driven layout updates do not always trigger a reliable resize event chain.
-  // Nudge a follow-up recalc after key state transitions so credits updates stay immediate.
+  // Image-driven layout changes may fire no resize event; re-measure after key state changes.
   useLayoutEffect(() => {
     let r1 = 0, r2 = 0;
     r1 = requestAnimationFrame(() => {

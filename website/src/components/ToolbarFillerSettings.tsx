@@ -93,8 +93,7 @@ function FillerField({
   requiredTooltip,
   requiredCountLabel,
 }: FillerFieldProps) {
-  // Only edits in progress; otherwise the field shows the committed (sanitized) value,
-  // even when sanitizing leaves it unchanged.
+  // Null unless editing, so the field always falls back to the committed, sanitized value.
   const [draftValue, setDraftValue] = useState<string | null>(null);
   const supportRequiresSupport = isSupport && isSupportFillerFragile(value);
   const floorAttachmentFix = isSupport ? null : getFillerFloorAttachmentFix(value);

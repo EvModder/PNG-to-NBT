@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Run from website/: bun run audit:block-wiki. --offline checks catalog coverage only.
 // Live checks need Chromium: bunx playwright install chromium (in website/).
-// Network checks are maintenance-only; review corrections in data/blockWiki.ts, never auto-retarget links.
+// Maintenance-only: review link corrections in data/blockWiki.ts, never auto-retarget them.
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";

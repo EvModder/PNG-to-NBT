@@ -77,7 +77,7 @@ export const DEFAULT_KEEP_SUPPRESS_EXTRAS = false;
 // Experimental E/W land-height cap (0-10). At 0, colors stay on the floor and
 // shaders may reach +1. Positive caps apply to both; water is unchanged.
 export const MAX_STEP_COLOR_BLOCK_LIFT: number = 0;
-// Restrict raised blocks to remain one-jump-reachable; requires Fragile support and an assumed floor.
+// Keep raised blocks one-jump-reachable; requires Fragile support and an assumed floor.
 export const MIXED_STEP_REACHABLE_TOP = false;
 export const DEFAULT_LIGHT_WATER_DROP = 0;
 export const DEFAULT_FLAT_WATER_DROP = 2;

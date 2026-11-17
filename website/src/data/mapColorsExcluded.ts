@@ -213,8 +213,7 @@ const EXCLUDED_BY_ID: Partial<Record<number, string[]>> = {
   35: ["cracked_nether_bricks", "chiseled_nether_bricks", "nether_brick_fence", "nether_brick_slab", "nether_brick_stairs", "nether_brick_wall", "red_nether_brick_slab", "red_nether_brick_stairs", "red_nether_brick_wall"],
   36: ["cherry_fence", "cherry_fence_gate", "cherry_sign", "cherry_slab", "cherry_stairs", "cherry_trapdoor", "cherry_shelf", "calcite_slab", "calcite_stairs", "calcite_wall", "polished_calcite_slab", "polished_calcite_stairs", "polished_calcite_wall", "polished_calcite_brick_slab", "polished_calcite_brick_stairs", "polished_calcite_brick_wall"],
   37: ["chiseled_resin_bricks", "resin_brick_slab", "resin_brick_stairs", "resin_brick_wall"],
-  // TODO: Generate shelf mushroom's sturdy side support. Intentionally offered as
-  // a rare-color placeholder; exported placements do not yet ensure its survival.
+  // TODO: Generate shelf mushroom's sturdy side support. Offered as a rare-color placeholder that exports do not yet keep alive.
   40: ["shelf_mushroom"],
   43: ["polished_tuff_slab", "polished_tuff_stairs", "polished_tuff_wall", "chiseled_tuff_bricks", "tuff_brick_slab", "tuff_brick_stairs", "tuff_brick_wall", "chiseled_tuff", "tuff_slab", "tuff_stairs", "tuff_wall"],
   44: ["mud_brick_slab", "mud_brick_stairs", "mud_brick_wall", "waxed_exposed_chiseled_copper", "waxed_exposed_cut_copper_slab", "waxed_exposed_cut_copper_stairs", "waxed_exposed_copper_grate", "waxed_exposed_copper_trapdoor", "waxed_exposed_copper_bulb", "waxed_exposed_lightning_rod", "waxed_exposed_copper_chest", "waxed_exposed_copper_golem_statue"],

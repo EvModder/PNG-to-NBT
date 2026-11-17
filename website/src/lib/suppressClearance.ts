@@ -52,7 +52,7 @@ export function forEachSuppressClearanceCell(
   for (const column of columns) {
     const x = Math.floor(column / (MAP_SIZE + 1));
     const z = column % (MAP_SIZE + 1) - 1;
-    // Never clear the glass platform or below-platform water; taller leftovers need manual clearing.
+    // Keep the glass platform and below-platform water; taller leftovers need manual clearing.
     for (let y = floor; y <= floor + maxHeight; ++y) visit(toShapeCoordKey(x, y, z), x, y, z);
   }
 }

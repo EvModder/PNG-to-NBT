@@ -53,9 +53,7 @@ import { PackedBlockIcon } from "@/components/PackedBlockIcon";
 const COLOR_TABLE_HEADER_GROUP_GAP_PX = 6;
 const CUSTOM_OPTION_GROUP_CLASS =
   "shrink-0 inline-flex items-center gap-0.5 rounded bg-cyan-600/[0.08] ring-1 ring-cyan-700/55 dark:bg-cyan-300/[0.12] dark:ring-cyan-300/55";
-// Initial collapsed-width estimate before the block-header toggle button is measured.
-// This matches the current collapsed Block-header control closely enough to avoid a first-render
-// width jump while still letting the real measurement take over immediately afterward.
+// Collapsed width until the block-header toggle is measured; close enough to avoid a first-render jump.
 const INITIAL_COLLAPSED_BLOCK_COLUMN_WIDTH_PX = 44;
 // `gap-1` in the row grid.
 const COLOR_TABLE_GRID_GAP_PX = 4;

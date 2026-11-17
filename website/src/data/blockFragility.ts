@@ -159,8 +159,7 @@ export const FRAGILE_SUPPORT_RULES = new Map<string, FragileSupportRule>([
   ...SAPLINGS.map(block => [block, { validSupportBlocks: DIRT_LIKE_SUPPORT_BLOCKS, replacementBlock: "dirt" }] as const),
   ["mangrove_propagule", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS, "clay"], replacementBlock: "dirt" }],
   ["bamboo_sapling", { validSupportBlocks: [...DIRT_LIKE_SUPPORT_BLOCKS.filter(block => block !== "farmland"), "sand", "red_sand", "gravel", "suspicious_sand", "suspicious_gravel", "bamboo", "bamboo_sapling"], replacementBlock: "dirt" }],
-  // Low-light-capable substrates only. This intentionally does not try to model every possible
-  // full-top support block mushrooms can use at low light.
+  // Low-light substrates only; other full-top blocks that hold mushrooms in low light are not modeled.
   ["brown_mushroom", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["red_mushroom", { validSupportBlocks: MUSHROOM_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
   ["crimson_fungus", { validSupportBlocks: NETHER_PLANT_SUPPORT_BLOCKS, replacementBlock: "dirt" }],
