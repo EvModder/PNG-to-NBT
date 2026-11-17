@@ -47,22 +47,14 @@ export function isSupportFillerFragile(block: string): boolean {
 export function getFillerFloorAttachmentFix(block: string): string | null {
   const id = normalizeBlockId(block);
   if (id !== "resin_clump" && id !== "glow_lichen" && id !== "sculk_vein") return null;
+  // Export names carry the implicit down=true of a bare block.
+  const props = new Map([...resolveExportBlockName(block).matchAll(/(\w+)\s*=\s*([^,\]]+)/g)].map(([, key, value]) => [key, value.trim()]));
+  const faces = ["down", "up", "north", "south", "east", "west"];
+  if (faces.filter(face => props.get(face) === "true").join() === "down") return null;
 
-  const bracket = block.indexOf("[");
-  const props = new Map<string, string>();
-  if (bracket >= 0) {
-    for (const part of block.slice(bracket + 1, -1).split(",")) {
-      const [key, value] = part.split("=").map(text => text.trim());
-      if (key && value) props.set(key, value);
-    }
-  }
-  const otherFaces = ["up", "north", "south", "east", "west"];
-  if (props.get("down") === "true" && !otherFaces.some(face => props.get(face) === "true")) return null;
-
-  // Generated supports are below the filler, never beside or above it.
-  for (const face of otherFaces) props.delete(face);
-  props.set("down", "true");
-  return `${id}[${Array.from(props, ([key, value]) => `${key}=${value}`).join(",")}]`;
+  // Generated supports are below the filler, never beside or above it; the bare block attaches below.
+  const rest = [...props].filter(([key]) => !faces.includes(key)).map(([key, value]) => `${key}=${value}`);
+  return rest.length ? `${id}[${rest.join(",")}]` : id;
 }
 
 function isShadeCriticalFillerRole(role: FillerRole): boolean {

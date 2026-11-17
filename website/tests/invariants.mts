@@ -18,17 +18,17 @@ import { getBuildModeDownloadSuffix } from "@/utils/conversion";
 import { BuildMode, FillerRole, SuppressStepDirection, type FillerAssignment } from "@/types/conversion";
 import { requiresTwoLayerLateShading, type WaterDrops } from "@/lib/colorGridAnalysis";
 import { convertToCrubTechLayerSplitNbtEntries, convertToNbt } from "@/lib/nbtExport";
-import { buildFillerAssignmentMap, createFillerAssignments, getSupportModeFillerRoles } from "@/lib/fillerRules";
+import { buildFillerAssignmentMap, createFillerAssignments, getFillerFloorAttachmentFix, getSupportModeFillerRoles } from "@/lib/fillerRules";
 import { buildSuppressLoadSpotMarkers } from "@/lib/suppressLoadMarkers";
 import { buildSuppressStepPhases, buildTwoLayerLoadPhases } from "@/lib/suppressSteps";
 import { generateShapeMap } from "@/lib/shapeGeneration";
 import { getGroundedStepColors, getMixedStepSettings, getMixedStepReuse, scopeMixedStepPalette } from "@/lib/mixedStepHeights";
 import { analyzeFillerNeeds, analyzeMaterialNeeds } from "@/lib/shapeAnalysis";
 import { getEnvironmentalSettings, isGrowthCoverEnabled, isGrowthCoverValid } from "@/lib/environmentalSupport";
-import { canSupportBlock } from "@/lib/blockSupport";
+import { canSupportBlock, getBlockSupport } from "@/lib/blockSupport";
 import { isFragileBlock } from "@/data/blockFragility";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
-import { normalizeBlockId, sanitizeUserBlockEntry, type ColorBlockSelections } from "@/lib/blockId";
+import { normalizeBlockId, resolveExportBlockName, sanitizeUserBlockEntry, toDisplayName, type ColorBlockSelections } from "@/lib/blockId";
 import { parseShapeCoordKey, toShapeCoordKey } from "@/lib/shapeModel";
 import { Shade, type ColorGrid, type ShadedColorRef } from "@/types/color";
 import { ShapePartType, type GeneratedShape, type ShapeCell } from "@/types/shape";
@@ -376,7 +376,24 @@ async function assertTripwireInvariants(): Promise<void> {
     ["string[powered=false]", "tripwire[powered=false]"],
     ["minecraft:string[attached=true]", "tripwire[attached=true]"],
     ["mod:string", "mod:string"], ["string_block", "string_block"], ["tripwire", "tripwire"],
+    // Multiface blocks without a true face get down=true; false faces never count.
+    ["glow_lichen", "glow_lichen[down=true]"], ["glow_lichen[down=true]", "glow_lichen[down=true]"],
+    ["minecraft:sculk_vein[north=false]", "sculk_vein[down=true]"], ["glow_lichen[down=false]", "glow_lichen[down=true]"],
+    ["resin_clump[waterlogged=true]", "resin_clump[waterlogged=true,down=true]"],
+    ["glow_lichen[north=true]", "glow_lichen[north=true]"], ["glow_lichen[north=true,down=false]", "glow_lichen[north=true,down=false]"],
+    ["glow_lichen[down=true,up=true]", "glow_lichen[down=true,up=true]"],
   ]) assert.equal(sanitizeUserBlockEntry(input), expected);
+  // Entries that skip input sanitizing still export a face.
+  for (const [input, exported] of [
+    ["glow_lichen", "minecraft:glow_lichen[down=true]"], ["resin_clump[waterlogged=true]", "minecraft:resin_clump[waterlogged=true,down=true]"],
+    ["glow_lichen[down=false,waterlogged=true]", "minecraft:glow_lichen[waterlogged=true,down=true]"], ["sculk_vein[up=true]", "minecraft:sculk_vein[up=true]"],
+  ]) assert.equal(resolveExportBlockName(input), exported);
+  assert.equal(toDisplayName("minecraft:glow_lichen[down=true]"), "glow_lichen[down=true]");
+  assert.equal(getBlockSupport("glow_lichen").props.get("down"), "true");
+  for (const [input, fix] of [
+    ["glow_lichen", null], ["glow_lichen[down=true]", null], ["glow_lichen[down=false]", null],
+    ["resin_clump[north=true,waterlogged=true]", "resin_clump[waterlogged=true]"], ["stone", null],
+  ] as const) assert.equal(getFillerFloorAttachmentFix(input), fix, input);
   const wireCells: TestExportCell[] = [
     { x: 1, y: 0, z: 1, cell: [FillerRole.SupportAll] },
     { x: 2, y: 0, z: 1, cell: { id: 1, isCustom: false } },
@@ -1525,7 +1542,7 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
     ["sea_pickle[waterlogged=false]", true, false], ["sea_pickle[waterlogged=true]", false, false],
     ["snow[layers=3]", true, false], ["snow[layers=4]", false, false],
     ["oak_trapdoor[half=bottom]", true, false], ["oak_trapdoor[half=top]", false, true],
-    ["oak_trapdoor[open=true]", false, false], ["resin_clump[down=true]", true, false],
+    ["oak_trapdoor[open=true]", false, false], ["resin_clump[down=true]", true, false], ["resin_clump", true, false],
     ["resin_clump[north=true]", false, false], ["amethyst_cluster[facing=up]", true, false],
     ["amethyst_cluster[facing=north]", false, false], ["honey_block", false, false],
   ] as const) {

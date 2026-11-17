@@ -96,6 +96,12 @@ export function auditBlockSupport(review, registry, previous) {
     if (!Object.hasOwn(registry.blocks, id)) errors.push(`Catalog block missing from vanilla probe: ${entry}`);
     if (review.omitted[id]) errors.push(`Catalog block needs a real rule, not an omission: ${id}`);
   }
+  // The site reads some vanilla states as another (a faceless multiface block as down=true,
+  // leaves as persistent); those states never reach an export, so there is nothing to compare.
+  const rereads = entry => {
+    const { props } = getBlockSupport(entry, target.dataVersion);
+    return [...entry.matchAll(/(\w+)=([^,\]]+)/g)].some(([, key, value]) => props.get(key) !== value);
+  };
   for (const [id, facts] of Object.entries(registry.blocks)) {
     for (const field of ["survival", "placement"]) {
       if (!kinds.has(facts[field])) errors.push(`Unreviewed ${field} implementation: ${facts[field]} (${id})`);
@@ -105,7 +111,7 @@ export function auditBlockSupport(review, registry, previous) {
     if (facts.on.air === false && !isFragileBlock(id) && !review.omitted[id] && kinds.get(facts.survival) !== "context") {
       errors.push(`Vanilla rejects air below unclassified block: ${id}`);
     }
-    if (ground && !facts.gravity && isFragileBlock(id)) for (const [base, expected] of Object.entries(facts.on)) {
+    if (ground && !facts.gravity && isFragileBlock(id) && !rereads(facts.default)) for (const [base, expected] of Object.entries(facts.on)) {
       if (typeof expected !== "boolean") errors.push(`Unmodeled survival probe: ${id} on ${base}`);
       else if (canSupportBlock(base, facts.default, target.dataVersion) !== expected) errors.push(`Below-support rule differs from vanilla: ${id} on ${base}`);
     }

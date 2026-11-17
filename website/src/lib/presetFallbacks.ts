@@ -11,6 +11,7 @@
 import { BASE_COLORS } from "@/data/mapColors";
 import { MINECRAFT_VERSIONS, type MinecraftVersion } from "@/data/minecraftVersions";
 import type { BlockPreset } from "@/data/presets";
+import { sanitizeUserBlockEntry } from "@/lib/blockId";
 import { getVersionedBlockName, isBlockCompatible } from "@/lib/minecraftVersion";
 
 type BlockFallbacks = NonNullable<BlockPreset["blockFallbacks"]>;
@@ -24,9 +25,8 @@ export function normalizeBlockFallbacks(value: unknown, selected: Record<number,
   for (const [key, blocks] of Object.entries(value)) {
     const id = Number(key);
     if (!Number.isInteger(id) || !BASE_COLORS[id] || !selected[id] || !Array.isArray(blocks)) continue;
-    const unique = [...new Set(blocks.filter((block): block is string =>
-      typeof block === "string" && block !== "" && block !== selected[id],
-    ))];
+    const unique = [...new Set(blocks.filter((block): block is string => typeof block === "string")
+      .map(sanitizeUserBlockEntry).filter(block => block !== "" && block !== selected[id]))];
     if (unique.length) result[id] = unique;
   }
   return Object.keys(result).length ? result : undefined;

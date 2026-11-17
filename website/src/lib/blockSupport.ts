@@ -14,7 +14,7 @@
 import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/blockFragility";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
-import { normalizeBlockId } from "./blockId";
+import { normalizeBlockId, resolveExportBlockName } from "./blockId";
 
 const FULL_TOP_BLOCKS = new Set([
   "stone", "granite", "polished_granite", "diorite", "polished_diorite", "andesite", "polished_andesite",
@@ -49,7 +49,8 @@ const FALL_THROUGH_BLOCKS = new Set([
 
 function describe(block: string, modern: boolean) {
   const id = normalizeBlockId(block);
-  const props = new Map([...block.matchAll(/(\w+)\s*=\s*([^,\]]+)/g)].map(([, key, value]) => [key, value.trim()]));
+  // Export names carry implicit states, such as down=true on multiface blocks.
+  const props = new Map([...resolveExportBlockName(block).matchAll(/(\w+)\s*=\s*([^,\]]+)/g)].map(([, key, value]) => [key, value.trim()]));
   const full = id === "honey_block" ? modern
     : id.endsWith("_slab") ? ["top", "double"].includes(props.get("type") ?? "bottom")
     : id.endsWith("_stairs") ? props.get("half") === "top"

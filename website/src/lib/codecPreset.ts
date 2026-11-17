@@ -16,6 +16,7 @@ import { BuildMode, SuppressStepDirection } from "@/types/conversion";
 import { SupportMode } from "@/types/ui";
 import { decodeUrlParamBytes, encodeUrlParamBytes } from "@/lib/codecUrlParam";
 import { getSelectedCustomColorBlock } from "@/utils/customColors";
+import { sanitizeUserBlockEntry } from "@/lib/blockId";
 import { getMinecraftCatalog } from "@/lib/minecraftVersion";
 import { normalizeBlockFallbacks } from "@/lib/presetFallbacks";
 
@@ -478,11 +479,13 @@ export function loadPresets(): BlockPreset[] {
             && typeof preset.selectedBlocks === "object" && !Array.isArray(preset.selectedBlocks)
             && Object.values(preset.selectedBlocks).every(block => typeof block === "string"))),
         )
-        .map(({ name, selectedBlocks, blockFallbacks, customColors, selectedBlocksCustom }) => {
-          const fallbacks = normalizeBlockFallbacks(blockFallbacks, selectedBlocks ?? {});
+        .map(({ name, selectedBlocks: stored, blockFallbacks, customColors, selectedBlocksCustom }) => {
+          // Saved entries may predate default states (e.g. a bare glow_lichen).
+          const selectedBlocks = Object.fromEntries(Object.entries(stored ?? {}).map(([id, block]) => [id, sanitizeUserBlockEntry(block)]));
+          const fallbacks = normalizeBlockFallbacks(blockFallbacks, selectedBlocks);
           return {
             name,
-            selectedBlocks: selectedBlocks ?? {},
+            selectedBlocks,
             ...(fallbacks ? { blockFallbacks: fallbacks } : {}),
             customColors,
             selectedBlocksCustom,
