@@ -5,7 +5,7 @@
  * Callers:
  * - src/Index.tsx
  */
-import { Fragment, useEffect, useState, type MutableRefObject, type ReactNode } from "react";
+import { Fragment, useState, type MutableRefObject, type ReactNode } from "react";
 import {
   DEFAULT_SUPPORT_FILLER_BLOCK,
   DEFAULT_SHADE_FILLER_BLOCK,
@@ -93,17 +93,16 @@ function FillerField({
   requiredTooltip,
   requiredCountLabel,
 }: FillerFieldProps) {
-  const [draftValue, setDraftValue] = useState(value);
+  // Only edits in progress; otherwise the field shows the committed (sanitized) value,
+  // even when sanitizing leaves it unchanged.
+  const [draftValue, setDraftValue] = useState<string | null>(null);
   const supportRequiresSupport = isSupport && isSupportFillerFragile(value);
   const floorAttachmentFix = isSupport ? null : getFillerFloorAttachmentFix(value);
-
-  useEffect(() => {
-    setDraftValue(value);
-  }, [value]);
 
   const commitValue = (nextValue: string) => {
     if (nextValue !== value) setValue(nextValue);
     onCommit?.(nextValue);
+    setDraftValue(null);
   };
 
   return (
@@ -117,17 +116,17 @@ function FillerField({
       <div className="inline-flex items-center gap-0 shrink-0">
         <input
           type="text"
-          value={draftValue}
+          value={draftValue ?? value}
           onChange={e => setDraftValue(e.target.value)}
-          onBlur={() => commitValue(draftValue)}
+          onBlur={() => commitValue(draftValue ?? value)}
           onKeyDown={e => {
             if (e.key === "Enter") {
-              commitValue(draftValue);
+              commitValue(draftValue ?? value);
               e.currentTarget.blur();
               return;
             }
             if (e.key === "Escape") {
-              setDraftValue(value);
+              setDraftValue(null);
               e.currentTarget.blur();
             }
           }}
@@ -157,7 +156,6 @@ function FillerField({
             title={`${messages.fillers.floorAttachmentWarning}\n${floorAttachmentFix}`}
             className="underline underline-offset-2 hover:text-foreground"
             onClick={() => {
-              setDraftValue(floorAttachmentFix);
               commitValue(floorAttachmentFix);
             }}
           >
