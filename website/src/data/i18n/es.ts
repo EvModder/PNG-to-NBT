@@ -319,6 +319,10 @@ export const esCatalog = {
       other: "{count} colocaciones necesitan soporte:",
     },
     invalidSupportDetail: "No puede apoyarse sobre {support}",
+    mushroomSpreadCount: {
+      one: "1 hongo puede extenderse: menos de 5 de su tipo en su área de 9×3×9",
+      other: "{count} hongos pueden extenderse: menos de 5 de su tipo en su área de 9×3×9",
+    } as PluralForms,
     liftSupport: {
       one: "{support} no puede sostener {count} elevación",
       other: "{support} no puede sostener {count} elevaciones",

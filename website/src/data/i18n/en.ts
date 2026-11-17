@@ -323,6 +323,10 @@ export const enCatalog = {
       other: "{count} placements need support:",
     } as PluralForms,
     invalidSupportDetail: "Cannot be supported by {support}",
+    mushroomSpreadCount: {
+      one: "1 mushroom can spread: fewer than 5 of a kind in its 9×3×9 area",
+      other: "{count} mushrooms can spread: fewer than 5 of a kind in their 9×3×9 area",
+    } as PluralForms,
     liftSupport: {
       one: "{support} cannot support {count} lift",
       other: "{support} cannot support {count} lifts",

@@ -3506,8 +3506,8 @@ const Index = () => {
     const warnings = imageValid ? getPlacementWarnings(activeOutputTileAnalyses.flatMap(tile => tile.supportShape ? [tile.supportShape] : []),
       buildSelections, uiFillerAssignments, effectiveApplySupportFloorYs, effectiveBuildMode, crubTechControlsActive2LayerSettings) : [];
     let supportChoiceWarning: ReturnType<typeof messages.preview.fragileSupportOverrideWarning> | null = null;
-    const placementWarnings = warnings.flatMap(({ kind, blocks, invalid, world, support, missingPlacements, canSelectPodzol }) => {
-      const message = messages.preview.placementWarning(kind, blocks, support, missingPlacements);
+    const placementWarnings = warnings.flatMap(({ kind, blocks, invalid, world, support, missingPlacements, canSelectPodzol, spreadable }) => {
+      const message = messages.preview.placementWarning(kind, blocks, support, missingPlacements, spreadable);
       if (kind === "autoSupport" && hasCurrentMaterialAnalysis) {
         supportChoiceWarning = messages.preview.fragileSupportOverrideWarning(getCommonSupportChoices(blocks,
           activeOutputTileAnalyses.flatMap(tile => [...tile.materialNeedStats?.supportNeeds.constrainedBlocks ?? []]),

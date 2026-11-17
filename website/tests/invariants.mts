@@ -2978,6 +2978,11 @@ function assertPlacementWarnings(): void {
   assert.equal(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [4, 1, 0]]), undefined);
   assert.equal(patch([[0, 1, 0], [1, 2, 1], [2, 1, 2], [3, 2, 3], [4, 1, 4]]), undefined);
   assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [5, 1, 0]]), ["brown_mushroom"], "The ends are more than 4 apart");
+  const ends = check([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [5, 1, 0]].map(([x, y, z]): Placement => [x, y, z, "brown_mushroom"]))
+    .warnings.find(w => w.kind === "mushroomSpread");
+  assert.equal(ends?.spreadable, 2, "Only the two ends have fewer than 5 within reach");
+  assert.equal(messages.preview.placementWarning("mushroomSpread", ends.blocks, undefined, undefined, ends.spreadable).detail,
+    "2 mushrooms can spread: fewer than 5 of a kind in their 9×3×9 area");
   assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0], [4, 3, 0]]), ["brown_mushroom"], "Two blocks up is out of range");
   assert.deepEqual(patch([[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 0]], [[4, 1, 0, "red_mushroom"]]), ["brown_mushroom", "red_mushroom"],
     "Other mushroom types do not count");

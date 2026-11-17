@@ -35,7 +35,11 @@ const WORLD_KINDS = {
 };
 const KINDS = { ...SUPPORT_KINDS, ...WORLD_KINDS };
 type Kind = keyof typeof KINDS;
-type Warning = { kind: Kind; blocks: string[]; invalid: boolean; world: boolean; support?: string; missingPlacements?: number; canSelectPodzol?: boolean };
+type Warning = {
+  kind: Kind; blocks: string[]; invalid: boolean; world: boolean; support?: string; missingPlacements?: number; canSelectPodzol?: boolean;
+  // Mushrooms below the spread density limit.
+  spreadable?: number;
+};
 const KIND_ORDER = Object.keys(KINDS) as Kind[];
 type Cold = keyof typeof MELT_LIGHT;
 const NEIGHBORS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -200,6 +204,7 @@ export function getPlacementWarnings(
       combined.set(group, previous ? { ...warning, blocks: [...new Set([...previous.blocks, ...warning.blocks])].sort(),
         invalid: previous.invalid || warning.invalid,
         ...(warning.missingPlacements && { missingPlacements: previous.missingPlacements! + warning.missingPlacements }),
+        ...(warning.spreadable && { spreadable: previous.spreadable! + warning.spreadable }),
         canSelectPodzol: previous.canSelectPodzol && warning.canSelectPodzol,
       } : warning);
     }
@@ -238,7 +243,7 @@ function analyzePlacementWarnings(
     && part.bounds.maxY <= Math.min(...part.supportFloorYs) + 1 && !hasWaterBelowFloor(part));
   const issues = Object.fromEntries(KIND_ORDER.map(kind => [kind, new Set<string>()])) as Record<Kind, Set<string>>;
   const invalidSupports = new Map<string, Set<string>>();
-  let missingPlacements = 0;
+  let missingPlacements = 0, spreadable = 0;
   let editableMushroomBases = !crubTech;
   const unsupported = (block: string, support: string) => {
     if (!invalidSupports.has(support)) invalidSupports.set(support, new Set());
@@ -429,13 +434,16 @@ function analyzePlacementWarnings(
       }
       // MushroomBlock: spreads unless 5 of its type, itself included, are within x/z +/-4 and y +/-1.
       // Where it can land depends on light and floor blocks outside the schematic, so only density is checked.
-      if ((id === "brown_mushroom" || id === "red_mushroom") && !issues.mushroomSpread.has(id)) {
+      if (id === "brown_mushroom" || id === "red_mushroom") {
         let nearby = 0;
         // Its own layer first: that is where a dense patch reaches 5 soonest.
         for (const dy of [0, -1, 1]) for (let dx = -4; dx <= 4 && nearby < 5; ++dx) for (let dz = -4; dz <= 4 && nearby < 5; ++dz) {
           if (part.cells.has(toShapeCoordKey(x + dx, y + dy, z + dz)) && at(x + dx, y + dy, z + dz).id === id) ++nearby;
         }
-        if (nearby < 5) issues.mushroomSpread.add(id);
+        if (nearby < 5) {
+          issues.mushroomSpread.add(id);
+          ++spreadable;
+        }
       }
       // Icicles are skipped: only stacked segments melt, and only a typed icicle support stacks them.
       if (id === "frosted_ice") issues.frostedIce.add(id);
@@ -466,6 +474,7 @@ function analyzePlacementWarnings(
   return [
     ...KIND_ORDER.filter(kind => issues[kind].size).map(kind => ({ kind, blocks: [...issues[kind]].sort(), invalid: KINDS[kind], world: kind in WORLD_KINDS,
       ...(kind === "supportMode" && { missingPlacements }),
+      ...(kind === "mushroomSpread" && { spreadable }),
       // Bases are editable here; getPlacementWarnings() checks that podzol can hold the palette.
       ...(kind === "mushroomLight" && editableMushroomBases && { canSelectPodzol: true }),
     })),

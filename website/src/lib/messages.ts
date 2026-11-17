@@ -500,7 +500,8 @@ export const messages = {
     autoPickSupports: catalog.preview.autoPickSupports,
     disableAutoSupports: catalog.preview.disableAutoSupports,
     autoSupportsEnabled: catalog.preview.autoSupportsEnabled,
-    placementWarning(kind: keyof MessageCatalog["preview"]["placementWarnings"], blocks: readonly string[], support?: string, missingPlacements?: number) {
+    placementWarning(kind: keyof MessageCatalog["preview"]["placementWarnings"], blocks: readonly string[], support?: string,
+      missingPlacements?: number, spreadable?: number) {
       const { text: description, listedBlocks } = formatListedBlocks(
         selectPluralTemplate(catalog.preview.placementWarnings[kind], blocks.length), "blocks", blocks);
       const blockIds = kind === "supportBlock" ? [...new Set(blocks.map(normalizeBlockId))] : null;
@@ -513,6 +514,7 @@ export const messages = {
         detail: [
           summary ? description : undefined,
           support && formatTemplate(catalog.preview.invalidSupportDetail, { support }),
+          spreadable && formatPlural(catalog.preview.mushroomSpreadCount, spreadable),
         ].filter(Boolean).join("\n") || undefined,
       };
     },
