@@ -130,6 +130,8 @@ function FillerField({
             }
           }}
           placeholder={placeholder}
+          // Committed value; the toolbar sizes the input to fit it.
+          data-fit-value={value}
           title={tooltip}
           className="w-[var(--filler-input-width,100px)] h-6 text-xs font-mono px-1.5 bg-input border border-border rounded"
         />

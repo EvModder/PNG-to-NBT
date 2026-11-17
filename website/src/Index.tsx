@@ -3606,10 +3606,10 @@ const Index = () => {
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
     if (presetToolbarSectionRef.current) ro?.observe(presetToolbarSectionRef.current);
     if (fillerToolbarSectionRef.current) ro?.observe(fillerToolbarSectionRef.current);
-    // Counts and controls can change intrinsic width without resizing the section.
+    // Counts, controls and committed filler values can change intrinsic width without resizing the section.
     const mo = new MutationObserver(scheduleMeasure);
     for (const el of [presetToolbarSectionRef.current, fillerToolbarSectionRef.current]) {
-      if (el) mo.observe(el, { childList: true, subtree: true, characterData: true });
+      if (el) mo.observe(el, { childList: true, subtree: true, characterData: true, attributeFilter: ["data-fit-value"] });
     }
     window.addEventListener("resize", scheduleMeasure);
     return () => {
