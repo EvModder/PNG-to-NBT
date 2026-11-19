@@ -37,8 +37,6 @@ export const enCatalog = {
     remove: "Remove",
     close: "Close",
     copied: "Copied!",
-    clearSelectionSymbol: "∅",
-    missingTextureSymbol: "?",
     openSecretsSettings: "Open secret settings",
     toggleThemeAriaLabel: "Toggle theme",
     languageAriaLabel: "Language",
@@ -52,7 +50,6 @@ export const enCatalog = {
   blocks: {
     iceWaterTooltip:
       "Ice can be built in place of water or waterlogged blocks, but must be converted to water in-game to get the correct map colors.",
-    iceWaterOptionTitle: "{blockId} - {tooltip}",
   },
   presets: {
     label: "Preset:",
@@ -65,7 +62,6 @@ export const enCatalog = {
     fallbackSelected: "New:",
     fallbackPrevious: "Old:",
     fallbackQuestion: "Apply:",
-    fallbackKeep: "MC {operator} {version}",
     fallbackReplace: "Everywhere",
     saveTitle: "Save current preset edits",
     shareTitle: "Copy URL to clipboard",
@@ -518,22 +514,10 @@ export const enCatalog = {
   },
   credits: {
     title: "Credits",
-    evModderName: "ÉvModder",
-    evModderUrl: "https://www.youtube.com/@evmodder",
     evModderRole: "Creator of PNG-to-NBT &",
-    mapToolsName: "MapTools",
-    mapToolsUrl: "https://evmodder.net/EvMod/",
-    crubleighName: "crubleigh",
-    crubleighUrl: "https://www.youtube.com/@crubleigh",
     crubleighRole: "MapArt Platform technical wizard",
-    gu2t4vName: "Gu2t4v_",
-    gu2t4vUrl: "https://youtube.com/@gust4v_",
     gu2t4vRole: "Inventor of 2-Layer suppression",
-    rebaneName: "Rebane",
-    rebaneUrl: "https://rebane2001.com/",
     rebaneRole: "Creator of {name}",
-    mapArtCraftName: "MapArtCraft",
-    mapArtCraftUrl: "https://mike2b2t.github.io/mapartcraft/",
     gptNote: "Selective coding tasks",
   },
   parsing: {

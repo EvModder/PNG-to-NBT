@@ -30,8 +30,6 @@ export const esCatalog = {
     remove: "Quitar",
     close: "Cerrar",
     copied: "¡Copiado!",
-    clearSelectionSymbol: "∅",
-    missingTextureSymbol: "?",
     openSecretsSettings: "Abrir ajustes secretos",
     toggleThemeAriaLabel: "Cambiar tema",
     languageAriaLabel: "Idioma",
@@ -45,7 +43,6 @@ export const esCatalog = {
   blocks: {
     iceWaterTooltip:
       "El hielo puede colocarse en lugar de agua o bloques anegados, pero debe convertirse a agua dentro del juego para obtener los colores correctos del mapa.",
-    iceWaterOptionTitle: "{blockId} - {tooltip}",
   },
   presets: {
     label: "Preset:",
@@ -58,7 +55,6 @@ export const esCatalog = {
     fallbackSelected: "Nueva:",
     fallbackPrevious: "Anterior:",
     fallbackQuestion: "Aplicar:",
-    fallbackKeep: "MC {operator} {version}",
     fallbackReplace: "En todas las versiones",
     saveTitle: "Guardar las ediciones actuales del preset",
     shareTitle: "Copiar la URL compartible al portapapeles",
@@ -514,22 +510,10 @@ export const esCatalog = {
   },
   credits: {
     title: "Créditos",
-    evModderName: "ÉvModder",
-    evModderUrl: "https://www.youtube.com/@evmodder",
     evModderRole: "Creador de PNG-to-NBT y",
-    mapToolsName: "MapTools",
-    mapToolsUrl: "https://evmodder.net/EvMod/",
-    crubleighName: "crubleigh",
-    crubleighUrl: "https://www.youtube.com/@crubleigh",
     crubleighRole: "Mago técnico de MapArt Platform",
-    gu2t4vName: "Gu2t4v_",
-    gu2t4vUrl: "https://youtube.com/@gust4v_",
     gu2t4vRole: "Inventor de la supresión 2-Layer",
-    rebaneName: "Rebane",
-    rebaneUrl: "https://rebane2001.com/",
     rebaneRole: "Creadora original de {name}",
-    mapArtCraftName: "MapArtCraft",
-    mapArtCraftUrl: "https://mike2b2t.github.io/mapartcraft/",
     gptNote: "Tareas selectivas de código",
   },
   parsing: {

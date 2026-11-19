@@ -274,20 +274,17 @@ export type PaletteNotice =
 // - src/lib/tileParsing.worker.ts
 export const messages = {
   locale: catalog.locale,
-  common: catalog.common,
+  common: { ...catalog.common, clearSelectionSymbol: "∅", missingTextureSymbol: "?" },
   app: catalog.app,
   blocks: {
     iceWaterTooltip: catalog.blocks.iceWaterTooltip,
     iceWaterOptionTitle(blockId: string): string {
-      return formatTemplate(catalog.blocks.iceWaterOptionTitle, {
-        blockId,
-        tooltip: catalog.blocks.iceWaterTooltip,
-      });
+      return `${blockId} - ${catalog.blocks.iceWaterTooltip}`;
     },
   },
   presets: {
     ...catalog.presets,
-    fallbackKeep: (operator: "<" | ">", version: string) => formatTemplate(catalog.presets.fallbackKeep, { operator, version }),
+    fallbackKeep: (operator: "<" | ">", version: string) => `MC ${operator} ${version}`,
     builtinTooltip(name: string): string | undefined {
       return Object.prototype.hasOwnProperty.call(catalog.presets.builtinTooltips, name)
         ? catalog.presets.builtinTooltips[name as keyof typeof catalog.presets.builtinTooltips]
@@ -627,6 +624,19 @@ export const messages = {
   dialogs: catalog.dialogs,
   credits: {
     ...catalog.credits,
+    // Names and links are the same in every language.
+    evModderName: "ÉvModder",
+    evModderUrl: "https://www.youtube.com/@evmodder",
+    mapToolsName: "MapTools",
+    mapToolsUrl: "https://evmodder.net/EvMod/",
+    crubleighName: "crubleigh",
+    crubleighUrl: "https://www.youtube.com/@crubleigh",
+    gu2t4vName: "Gu2t4v_",
+    gu2t4vUrl: "https://youtube.com/@gust4v_",
+    rebaneName: "Rebane",
+    rebaneUrl: "https://rebane2001.com/",
+    mapArtCraftName: "MapArtCraft",
+    mapArtCraftUrl: "https://mike2b2t.github.io/mapartcraft/",
     rebaneRole(name: string): string {
       return formatTemplate(catalog.credits.rebaneRole, { name });
     },
