@@ -44,6 +44,7 @@ path; omit flags only when intending to run the whole invariant suite.
 invalidate its review; comments and formatting do not. Game probes remain explicit:
 ```bash
 bun run audit:block-support --server <vanilla-server.jar>
+bun run build:block-passability
 bun run audit:block-support --input <probe.json> --update-review
 ```
 
@@ -59,6 +60,12 @@ differences; fix rules or document intentional limits in
 implement its rule. Only then use `--update-review`; unclassified cases still fail.
 Use `--compare <previous-probe.json>` for block/tag diffs. Rule-only edits can reuse
 cached `--input` data; game/probe changes require a fresh Java run.
+
+Passability (no collision box) is generated, not hand-kept: `build:block-passability`
+rewrites `src/data/blockPassability.ts` from the cached probe (or `--input <probe.json>`)
+and prints what changed since the previous version. The audit then requires every
+block state to match. The data describes the target version; if a block's passability
+changes between supported versions, add a version rule in `src/lib/blockSupport.ts`.
 
 The probe samples below-support survival at light 15, not every world/tick state.
 Side/ceiling attachments, compound blocks and exotic custom shapes retain documented

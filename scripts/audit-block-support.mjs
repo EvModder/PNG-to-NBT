@@ -25,7 +25,7 @@ const fingerprint = value => createHash("sha256").update(JSON.stringify(value, (
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)).digest("hex");
 const transpiler = new Bun.Transpiler({ loader: "ts", minifyWhitespace: true });
 // Ignore comments/formatting, but require a cached registry recheck after rule changes.
-const policyHash = fingerprint(await Promise.all(["data/blockEnvironment.ts", "data/blockFragility.ts", "lib/blockSupport.ts"].map(async file =>
+const policyHash = fingerprint(await Promise.all(["data/blockEnvironment.ts", "data/blockFragility.ts", "data/blockPassability.ts", "lib/blockSupport.ts"].map(async file =>
   transpiler.transformSync(await fs.readFile(new URL(`../website/src/${file}`, import.meta.url), "utf8")))));
 
 function command(program, args, cwd) {
@@ -87,7 +87,7 @@ export function auditBlockSupport(review, registry, previous) {
     }
   }
   if (!registry) return { errors, changedBlocks, changedTags, shapeDifferences };
-  if (registry.schema !== 2 || registry.dataVersion !== target.dataVersion) {
+  if (registry.schema !== 3 || registry.dataVersion !== target.dataVersion) {
     errors.push("Probe schema/DataVersion does not match the current target");
     return { errors, changedBlocks, changedTags, shapeDifferences };
   }

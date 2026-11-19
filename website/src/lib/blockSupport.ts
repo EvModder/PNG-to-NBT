@@ -15,6 +15,7 @@
  * - src/lib/shapeAnalysis.ts
  */
 import { FRAGILE_SUPPORT_RULES, isFallingBlock, isFragileBlock } from "@/data/blockFragility";
+import { PASSABLE_BLOCKS, PASSABLE_WHEN } from "@/data/blockPassability";
 import { DEFAULT_MINECRAFT_VERSION } from "@/data/defaultSettings";
 import { MINECRAFT_VERSIONS } from "@/data/minecraftVersions";
 import { normalizeBlockId, resolveExportBlockName } from "./blockId";
@@ -49,6 +50,13 @@ const FALL_THROUGH_BLOCKS = new Set([
   "short_dry_grass", "tall_dry_grass", "seagrass", "tall_seagrass", "vine", "glow_lichen", "resin_clump",
   "light", "structure_void", "warped_roots", "nether_sprouts", "crimson_roots", "leaf_litter", "hanging_roots",
 ]);
+
+// No collision box, so entities move through it. Generated from vanilla and checked by the support audit.
+const PASSABLE_STATES = new Map(PASSABLE_WHEN.flatMap(([ids, when]) => ids.map(id => [id, Object.entries(when)] as const)));
+function isPassable(id: string, props: ReadonlyMap<string, string>): boolean {
+  const when = PASSABLE_STATES.get(id);
+  return when ? when.every(([key, [value, fallback]]) => (props.get(key) ?? fallback) === value) : PASSABLE_BLOCKS.has(id);
+}
 
 const FACE_LETTERS = "dunswe";
 const OPPOSITE: Record<string, string> = { d: "u", u: "d", n: "s", s: "n", w: "e", e: "w" };
@@ -109,7 +117,7 @@ function describe(block: string, modern: boolean) {
   // Redstone conductors: full cubes, except these see-through or power-handling blocks.
   const conductor = faces === FACE_LETTERS && !/(^|_)(glass|copper_bulb)$|_grate$/.test(id) && !["beacon", "ice", "frosted_ice",
     "brittle_ice", "honey_block", "glowstone", "sea_lantern", "observer", "piston", "sticky_piston", "redstone_block", "snow", "tnt"].includes(id);
-  return { id, props, full, center, rigid, collision, outline, partial, solid, modern, faces, conductor,
+  return { id, props, full, center, rigid, collision, passable: isPassable(id, props), outline, partial, solid, modern, faces, conductor,
     water: id === "water" || props.get("waterlogged") === "true",
     fallThrough: !id || FALL_THROUGH_BLOCKS.has(id) };
 }

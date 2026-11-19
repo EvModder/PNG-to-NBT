@@ -130,17 +130,19 @@ class BlockSupportProbe {
                 Object definition = call(BLOCK, "getStateDefinition", block.getValue());
                 for (Object s : (Iterable<?>)call("net.minecraft.world.level.block.state.StateDefinition", "getPossibleStates", definition)) {
                     Object collision = call(STATE, "getCollisionShape", s, empty, zero);
-                    states.put(entry(s), Map.of(
-                        "full", call(STATE, "isFaceSturdy", s, empty, zero, up),
-                        "center", call(STATE, "isFaceSturdy", s, empty, zero, up, field("net.minecraft.world.level.block.SupportType", "CENTER")),
-                        "rigid", call(STATE, "isFaceSturdy", s, empty, zero, up, field("net.minecraft.world.level.block.SupportType", "RIGID")),
-                        "collision", call(BLOCK, "isFaceFull", null, collision, up),
-                        "outline", call(BLOCK, "isFaceFull", null, call(STATE, "getShape", s, empty, zero), up),
-                        "partial", !(boolean)call("net.minecraft.world.phys.shapes.VoxelShape", "isEmpty", call("net.minecraft.world.phys.shapes.VoxelShape", "getFaceShape", collision, up)),
-                        "solid", call(STATE, "isSolid", s),
-                        "fallThrough", call("net.minecraft.world.level.block.FallingBlock", "isFree", null, s),
-                        "faces", faces(s, empty),
-                        "conductor", call(STATE, "isRedstoneConductor", s, empty, zero)));
+                    states.put(entry(s), Map.ofEntries(
+                        Map.entry("full", call(STATE, "isFaceSturdy", s, empty, zero, up)),
+                        Map.entry("center", call(STATE, "isFaceSturdy", s, empty, zero, up, field("net.minecraft.world.level.block.SupportType", "CENTER"))),
+                        Map.entry("rigid", call(STATE, "isFaceSturdy", s, empty, zero, up, field("net.minecraft.world.level.block.SupportType", "RIGID"))),
+                        Map.entry("collision", call(BLOCK, "isFaceFull", null, collision, up)),
+                        // No collision box at all, so an entity moves through the block.
+                        Map.entry("passable", call("net.minecraft.world.phys.shapes.VoxelShape", "isEmpty", collision)),
+                        Map.entry("outline", call(BLOCK, "isFaceFull", null, call(STATE, "getShape", s, empty, zero), up)),
+                        Map.entry("partial", !(boolean)call("net.minecraft.world.phys.shapes.VoxelShape", "isEmpty", call("net.minecraft.world.phys.shapes.VoxelShape", "getFaceShape", collision, up))),
+                        Map.entry("solid", call(STATE, "isSolid", s)),
+                        Map.entry("fallThrough", call("net.minecraft.world.level.block.FallingBlock", "isFree", null, s)),
+                        Map.entry("faces", faces(s, empty)),
+                        Map.entry("conductor", call(STATE, "isRedstoneConductor", s, empty, zero))));
                     environment.put(entry(s), Map.of(
                         "light", call(STATE, "getLightEmission", s),
                         "dampening", call(STATE, "getLightDampening", s),
@@ -164,7 +166,7 @@ class BlockSupportProbe {
                 facts.put("on", survival);
                 output.put(block.getKey(), facts);
             }
-            Files.writeString(Path.of(args[1]), gson.toJson(Map.of("schema", 2, "version", version.get("id").getAsString(),
+            Files.writeString(Path.of(args[1]), gson.toJson(Map.of("schema", 3, "version", version.get("id").getAsString(),
                 "dataVersion", version.get("world_version").getAsInt(), "blocks", output, "blockTags", blockTags, "fluidTags", fluidTags)));
         }
     }
