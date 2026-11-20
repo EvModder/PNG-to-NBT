@@ -39,6 +39,7 @@ import {
 } from "./shapeModel";
 import { buildSuppressLoadSpotMarkers } from "./suppressLoadMarkers";
 import { appendSuppressClearanceMarkers } from "./suppressClearance";
+import { getScaffoldingDistances } from "./shapeAnalysis";
 
 interface ExportOptions extends ColorBlockSelections {
   blockUnavailableMessage?: (block: string, version: MinecraftVersion) => string;
@@ -324,10 +325,40 @@ function materializePart(part: ShapePart, options: ExportOptions, supportFloorYs
   return resolved.toSorted(comparePaletteSourceBlocks);
 }
 
+const SCAFFOLDING = "minecraft:scaffolding";
+
+// Write the support state the game derives, since bare scaffolding loads as distance=7 and
+// verifiers flag every grounded scaffold. Only non-default values are added; unsupported
+// scaffolds keep the default, as the game breaks them anyway. Runs per part, before any slope
+// or split moves blocks away from the floor coordinates.
+function setScaffoldingStates(blocks: readonly PaletteSourceBlock[], supportFloorYs: ReadonlySet<number>, dataVersion: number): void {
+  const scaffolds = new Map(blocks.filter(block => block.blockName.startsWith(SCAFFOLDING))
+    .map(block => [toShapeCoordKey(block.x, block.y, block.z), block]));
+  if (!scaffolds.size) return;
+  // Only the blocks under scaffolds matter; a large joined export can hold millions.
+  const under = new Map([...scaffolds.values()].map(({ x, y, z }) => [toShapeCoordKey(x, y - 1, z), ""]));
+  for (const block of blocks) {
+    const key = toShapeCoordKey(block.x, block.y, block.z);
+    if (under.has(key)) under.set(key, block.blockName);
+  }
+  for (const [coord, distance] of getScaffoldingDistances(scaffolds, coord => under.get(coord), supportFloorYs, dataVersion)) {
+    const scaffold = scaffolds.get(coord)!;
+    const props = scaffold.blockName.slice(SCAFFOLDING.length + 1, -1).split(",")
+      .filter(prop => prop && !/^\s*(distance|bottom)\s*=/.test(prop));
+    props.push(`distance=${distance}`);
+    if (distance > 0 && !scaffolds.has(toShapeCoordKey(scaffold.x, scaffold.y - 1, scaffold.z))) props.push("bottom=true");
+    scaffold.blockName = `${SCAFFOLDING}[${props.join(",")}]`;
+  }
+}
+
 function materializeShapeParts(shape: GeneratedShape, options: ExportOptions): PaletteSourceBlock[][] {
-  const parts = shape.parts.map(part =>
-    materializePart(part, options, options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS),
-  );
+  const dataVersion = MINECRAFT_VERSIONS[options.minecraftVersion ?? DEFAULT_MINECRAFT_VERSION].dataVersion;
+  const parts = shape.parts.map(part => {
+    const supportFloorYs = options.applySupportFloorYs ? part.supportFloorYs : NO_SUPPORT_FLOORS;
+    const blocks = materializePart(part, options, supportFloorYs);
+    setScaffoldingStates(blocks, supportFloorYs, dataVersion);
+    return blocks;
+  });
   if (options.keepSuppressExtras) {
     appendSuppressClearanceMarkers(shape, parts);
   }

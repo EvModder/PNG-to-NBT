@@ -447,6 +447,40 @@ async function assertTripwireInvariants(): Promise<void> {
   assert.equal(wireAt(3, 1), "minecraft:tripwire[disarmed=true]", "A different height must not connect");
 }
 
+// Bare scaffolding loads as distance=7, so verifiers flag grounded scaffolds unless the export
+// writes the state the game derives from their support.
+async function assertScaffoldingStateInvariants(): Promise<void> {
+  const cells: TestExportCell[] = [
+    { x: 0, y: 0, z: 0, cell: { id: 2, isCustom: false } }, // on the assumed floor
+    { x: 0, y: 1, z: 0, cell: { id: 2, isCustom: false } }, // stacked
+    { x: 1, y: 1, z: 0, cell: { id: 2, isCustom: false } }, // held from the side
+    { x: 3, y: 0, z: 0, cell: { id: 11, isCustom: false } },
+    { x: 3, y: 1, z: 0, cell: { id: 2, isCustom: false } }, // on stone
+    { x: 6, y: 3, z: 0, cell: { id: 2, isCustom: false } }, // unsupported
+  ];
+  for (const assumeFloor of [true, false]) {
+    const shape = buildTestShape(cells);
+    shape.parts[0].supportFloorYs = new Set([-1]);
+    const { data } = await convertToNbt(shape, {
+      selectedBlocks: { 2: "scaffolding[waterlogged=true]", 11: "stone" }, selectedBlocksCustom: {}, customColors: [], fillerAssignments: [],
+      applySupportFloorYs: assumeFloor, collapseDuplicatePaletteStates: true, forceXZ128: false, forceZ129: false, baseName: "test",
+      buildMode: BuildMode.StaircaseClassic, suppressStepDirection: SuppressStepDirection.EastToWest,
+      markSuppressLoadSpotsInSchematic: false, suppressLoadSpotMarkerBlock: "jigsaw",
+    });
+    const blocks = parseStructureBlocks(new Uint8Array(gunzipSync(data)));
+    const minX = Math.min(...blocks.map(b => b.x)), minY = Math.min(...blocks.map(b => b.y));
+    const at = (x: number, y: number) => blocks.find(b => b.x - minX === x && b.y - minY === y)?.blockName;
+    const bare = "minecraft:scaffolding[waterlogged=true]";
+    assert.deepEqual([at(0, 0), at(0, 1), at(1, 1), at(3, 1), at(6, 3)], [
+      assumeFloor ? `${bare.slice(0, -1)},distance=0]` : bare,
+      assumeFloor ? `${bare.slice(0, -1)},distance=0]` : bare,
+      assumeFloor ? `${bare.slice(0, -1)},distance=1,bottom=true]` : bare,
+      `${bare.slice(0, -1)},distance=0]`,
+      bare,
+    ], `assumeFloor=${assumeFloor}`);
+  }
+}
+
 async function assertPaletteCollapseModeInvariants(): Promise<void> {
   const noDuplicateCells: TestExportCell[] = [
     { x: 0, y: 2, z: 0, cell: { id: 1, isCustom: false } },
@@ -1634,14 +1668,16 @@ async function assertMixedStepSupportInvariants(): Promise<void> {
       for (const part of shape.parts) {
         const phase = await convertToNbt({ ...shape, parts: [part] }, options);
         const cells = parseStructureBlocks(new Uint8Array(gunzipSync(phase.data)));
-        const at = new Map(cells.map(block => [`${block.x},${block.y},${block.z}`, block.blockName]));
-        for (const block of cells) if (block.blockName === "minecraft:scaffolding") {
+        // Block IDs only: scaffolding carries its derived support state.
+        const blockId = (name = "") => name.split("[", 1)[0];
+        const at = new Map(cells.map(block => [`${block.x},${block.y},${block.z}`, blockId(block.blockName)]));
+        for (const block of cells) if (blockId(block.blockName) === "minecraft:scaffolding") {
           const below = at.get(`${block.x},${block.y - 1},${block.z}`);
           hasStack ||= below === "minecraft:scaffolding";
           hasSupport ||= below === "minecraft:resin_block";
         }
         for (const id of ["scaffolding", "resin_block"]) {
-          maximum[id] = Math.max(maximum[id] ?? 0, cells.filter(block => block.blockName === `minecraft:${id}`).length);
+          maximum[id] = Math.max(maximum[id] ?? 0, cells.filter(block => blockId(block.blockName) === `minecraft:${id}`).length);
         }
       }
       if (!hasStack || !hasSupport) throw new Error("Expected both reused scaffolding and explicit fragile support in export");
@@ -3082,6 +3118,7 @@ async function main(): Promise<number> {
   await assertCrubTechLatePairPauseMarkerInvariants();
   assertDefaultLatePairYInvariant();
   await assertTripwireInvariants();
+  await assertScaffoldingStateInvariants();
   await assertPaletteCollapseModeInvariants();
   await assertWestEastSlopeExportInvariant();
   await assertEnvironmentalSupport();
